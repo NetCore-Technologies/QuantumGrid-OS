@@ -65,6 +65,7 @@ jobs:
             **Netcore Technologies**
 
             ### Supported devices
+
             | Target | SOC | Notes |
             |--------|-----|-------|
             | arcadyan-aw1000 | IPQ8072A | Primary — AW1000 + 5G |
@@ -74,9 +75,8 @@ jobs:
             | generic-ipq807x | IPQ807x | Older devices |
 
             ### Flash instructions
-        # Sysupgrade (already on OpenWrt)
-        scp quantumgrid-*-sysupgrade.bin root@192.168.1.1:/tmp/
-        ssh root@192.168.1.1 sysupgrade -v /tmp/*.bin
+            # Sysupgrade (already on OpenWrt)
+            scp quantumgrid-*-sysupgrade.bin root@192.168.1.1:/tmp/
+            ssh root@192.168.1.1 sysupgrade -v /tmp/*.bin
 
-        # Or use the flash script
-        bash scripts/flash.sh arcadyan-aw1000 192.168.1.1
+            bash scripts/flash.sh arcadyan-aw1000 192.168.1.1
