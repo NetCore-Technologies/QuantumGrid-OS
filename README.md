@@ -1,99 +1,53 @@
-﻿<div align="center">
+# QuantumGrid OS
+**by Netcore Technologies**
 
-# NoobWRT for Arcadyan AW1000
+High-performance OpenWrt-based firmware for Qualcomm IPQ807x routers.
+Gaming-focused. CLI-first. Multi-device.
 
-High-performance Fully Customized OpenWrt firmware for the Arcadyan AW1000
+## Supported devices
 
-[![Release](https://img.shields.io/github/v/release/nooblk-98/noobwrt-arcadyan-aw1k?style=for-the-badge)](https://github.com/nooblk-98/noobwrt-arcadyan-aw1k/releases)
-[![Issues](https://img.shields.io/github/issues/nooblk-98/noobwrt-arcadyan-aw1k?style=for-the-badge)](https://github.com/nooblk-98/noobwrt-arcadyan-aw1k/issues)
-[![Target](https://img.shields.io/badge/target-Arcadyan%20AW1000-blue?style=for-the-badge)](https://github.com/nooblk-98/noobwrt-arcadyan-aw1k)
-[![Base](https://img.shields.io/badge/base-OpenWRT-green?style=for-the-badge)](https://github.com/nooblk-98/noobwrt-arcadyan-aw1k)
+| Device | SOC | WiFi | 5G Modem | Status |
+|--------|-----|------|----------|--------|
+| Arcadyan AW1000 | IPQ8072A | AX3600 | ✓ | Primary |
+| Xiaomi AX3600 | IPQ8071A | AX3600 | ✗ | Supported |
+| Xiaomi AX9000 | IPQ8072A | AX7800 | ✗ | Supported |
+| Xiaomi AX10000 | IPQ8072A | AX10000 | ✗ | Supported |
+| Generic IPQ807x | IPQ807x | varies | ✗ | Best effort |
 
+## Features
 
+- CAKE anti-bufferbloat
+- BBR congestion control
+- Gaming QoS + device priority
+- 5G modem management (AW1000)
+- Auto internet recovery
+- NSS hardware acceleration
+- Network diagnostics CLI
+- Automated builds (GitHub Actions)
 
-![NoobWRT Dashboard](/images/logo.png)
+## Build
 
-<p align="center">
-   <img src="https://img.shields.io/github/downloads/nooblk-98/noobwrt-arcadyan-aw1k/total?style=for-the-badge&logo=openwrt" alt="GitHub Downloads (all assets, all releases)">
-</p>
+```bash
+# One target
+bash scripts/build.sh arcadyan-aw1000
 
-</div>
+# All targets
+bash scripts/build.sh all
+```
 
+## Flash
 
+```bash
+bash scripts/flash.sh arcadyan-aw1000 192.168.1.1
+```
 
----
+## Diagnostics (run from your laptop)
 
-## Preview ( click to play in youtube)
-
-[![Watch on YouTube](https://img.youtube.com/vi/pxMpUKWQ3nU/maxresdefault.jpg)](https://www.youtube.com/watch?v=pxMpUKWQ3nU)
-
----
-
-## Documentation
-
-For full documentation, visit: [https://aw1k-docs.itsnooblk.com](https://aw1k-docs.itsnooblk.com)
-
----
-
-## Overview
-
-NoobWRT transforms the Arcadyan AW1000 into a fast, secure, and highly customizable router. Built on the OpenWRT foundation, it is tuned for:
-
-- Performance: wire-speed routing with minimal latency
-- Security: hardened firewall and regular security updates
-- Stability: tested configuration for 24/7 reliability
-- Flexibility: curated app ecosystem with sensible defaults
-- Latest package updates from upstream OpenWRT
-- Security patches applied automatically
-- Bug fixes integrated as soon as they are available
-- Transparent build process: [view build status and history](https://jk.itsnooblk.com/job/noobwrt-builder/)
-
----
-
-<div align="center">
-
-![Dashboard](/images/dash.png)
-
-</div>
-
----
-
-## Screenshots
-
-<div align="center">
-
-| Login | Dashboard |
-| :---: | :---: |
-| ![Login](/images/01-login.png) | ![Dashboard](/images/02-dashboard.png) |
-
-| Passwall | Network Status |
-| :---: | :---: |
-| ![Passwall](/images/03-passwall.png) | ![Network Status](/images/04-netstat.png) |
-
-| Bandix | Theme |
-| :---: | :---: |
-| ![Bandix](/images/05-bandix.png) | ![Theme](/images/06-theme.png) |
-
-</div>
-
----
-
-## Lite Firmware Discontinuation Notice
-
-Lite firmware releases are discontinued.
-
-- There are no new lite firmware builds in current releases.
-- Existing lite users can continue using older lite releases.
-- If there is enough demand and I get requests to release lite firmware again, I will resume lite releases.
-
-## Acknowledgement
-
-This firmware is compiled by **Lahiru Sandaruwan ([NoobLK](https://www.linkedin.com/in/lahiru-sandaruwan-liyanage/))**
-
-It is provided **free of charge** and is **open source**. You are **not permitted to sell** this firmware or any derivative of it. It was built for the community and must remain free.
-
-If you find this project useful, don't forget to [star this project](https://github.com/nooblk-98/noobwrt-arcadyan-aw1k) on GitHub!
+```bash
+bash scripts/diag.sh 192.168.1.1
+```
 
 ## License
 
-Based on OpenWrt and distributed under GPL-2.0.
+GPL-2.0. Built on OpenWrt and NoobWRT Pro.
+Not for sale.
