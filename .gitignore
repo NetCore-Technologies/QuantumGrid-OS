@@ -1,0 +1,37 @@
+# OpenWrt source/build tree
+openwrt/
+
+# OpenWrt build output/cache
+dl/
+bin/
+build_dir/
+staging_dir/
+tmp/
+
+# Local configuration/backups
+.config
+.config.*
+*.config
+*.tmp
+*.log
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node/UI
+node_modules/
+dist/
+build/
