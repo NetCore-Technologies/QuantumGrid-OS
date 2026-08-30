@@ -12,6 +12,7 @@ import {
   Gamepad2,
   Globe2,
   HardDrive,
+  KeyRound,
   Lock,
   Menu,
   Monitor,
@@ -20,6 +21,7 @@ import {
   Router,
   Settings,
   Shield,
+  SlidersHorizontal,
   Signal,
   Sparkles,
   Thermometer,
@@ -153,10 +155,7 @@ function Welcome({
 
       <div className="welcome-wordmark">QUANTUMGRID</div>
       <div className="welcome-subtitle">NETWORK OPERATING SYSTEM</div>
-
-      <div className="welcome-kicker">WELCOME</div>
-
-      <h1>
+<h1>
         Welcome to <span>QuantumGrid.</span>
       </h1>
 
@@ -409,6 +408,7 @@ function Rule({
   );
 }
 
+
 function WifiSetup({
   ssid,
   setSsid,
@@ -424,111 +424,298 @@ function WifiSetup({
   next: () => void;
   back: () => void;
 }) {
-  const [show, setShow] = useState(false);
-  const good = ssid.trim().length >= 2 && password.length >= 8;
+  const [mode, setMode] = useState<"steering" | "standalone">("steering");
+
+  const [ssid24, setSsid24] = useState("QuantumGrid-2.4G");
+  const [ssid5, setSsid5] = useState("QuantumGrid-5G");
+
+  const [pass24, setPass24] = useState("");
+  const [pass5, setPass5] = useState("");
+
+  const [security24, setSecurity24] = useState<"wpa2" | "wpa3">("wpa2");
+  const [security5, setSecurity5] = useState<"wpa2" | "wpa3">("wpa2");
+
+  const steeringValid =
+    ssid.trim().length >= 2 &&
+    password.length >= 8;
+
+  const standaloneValid =
+    ssid24.trim().length >= 2 &&
+    ssid5.trim().length >= 2 &&
+    pass24.length >= 8 &&
+    pass5.length >= 8;
+
+  const valid = mode === "steering" ? steeringValid : standaloneValid;
 
   return (
     <SetupFrame progress={70} step={2}>
       <div className="wifi-setup">
         <div className="wifi-heading">
-          <div className="setup-kicker">STEP 2 OF 3 • WIRELESS</div>
+          <div className="setup-kicker">
+            STEP 2 OF 3 • WIRELESS CONFIGURATION
+          </div>
 
           <div className="wifi-icon">
             <Wifi size={27} />
           </div>
 
           <h1>
-            Make your network
-            <span> yours.</span>
+            Configure your
+            <span> wireless network.</span>
           </h1>
 
           <p>
-            Configure both wireless radios from one place.
-            QuantumGrid will optimize channels automatically.
+            Choose one intelligent network across both radios, or configure
+            each band independently.
           </p>
         </div>
 
-        <div className="wifi-grid">
-          <section className="wifi-card">
-            <div className="card-heading">
-              <span>PRIMARY WI-FI</span>
-              <Status>WI-FI 6 READY</Status>
+        <div className="wifi-mode-switch">
+          <button
+            className={mode === "steering" ? "selected" : ""}
+            onClick={() => setMode("steering")}
+          >
+            <Sparkles size={17} />
+            <div>
+              <strong>Band Steering</strong>
+              <span>
+                One SSID across 2.4 GHz and 5 GHz with automatic client steering.
+              </span>
             </div>
+            {mode === "steering" && <Check size={17} />}
+          </button>
 
-            <Field
-              label="NETWORK NAME • 2.4 GHz + 5 GHz"
-              icon={Wifi}
-              value={ssid}
-              placeholder="QuantumGrid"
-              onChange={setSsid}
-              valid={ssid.trim().length >= 2}
-            />
+          <button
+            className={mode === "standalone" ? "selected" : ""}
+            onClick={() => setMode("standalone")}
+          >
+            <SlidersHorizontal size={17} />
+            <div>
+              <strong>Standalone Bands</strong>
+              <span>
+                Separate SSIDs, passwords and security settings for each radio.
+              </span>
+            </div>
+            {mode === "standalone" && <Check size={17} />}
+          </button>
+        </div>
 
-            <label className="setup-field">
-              <span>NETWORK PASSWORD</span>
+        {mode === "steering" ? (
+          <div className="wifi-grid">
+            <section className="wifi-card">
+              <div className="card-heading">
+                <span>SMART NETWORK</span>
+                <Status>2 RADIOS</Status>
+              </div>
 
-              <div className={password.length >= 8 ? "input-shell valid" : "input-shell"}>
-                <div className="input-icon">
+              <label className="setup-field">
+                <span>SHARED NETWORK NAME</span>
+
+                <div className={ssid.trim().length >= 2 ? "input-shell valid" : "input-shell"}>
+                  <Wifi size={17} />
+
+                  <input
+                    value={ssid}
+                    onChange={(e) => setSsid(e.target.value)}
+                    placeholder="QuantumGrid"
+                  />
+
+                  {ssid.trim().length >= 2 && (
+                    <Check size={17} className="input-success" />
+                  )}
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>SHARED NETWORK PASSWORD</span>
+
+                <div className={password.length >= 8 ? "input-shell valid" : "input-shell"}>
                   <Lock size={17} />
+
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Create a secure Wi-Fi password"
+                  />
+
+                  {password.length >= 8 && (
+                    <Check size={17} className="input-success" />
+                  )}
+                </div>
+              </label>
+
+              <div className="security-select-row">
+                <div>
+                  <span>SECURITY</span>
+                  <strong>WPA2 / WPA3</strong>
                 </div>
 
-                <input
-                  type={show ? "text" : "password"}
-                  value={password}
-                  placeholder="Create a secure Wi-Fi password"
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="security-chip active">
+                  <Shield size={13} />
+                  Protected
+                </div>
+              </div>
 
-                <button
-                  type="button"
-                  className="show-password"
-                  onClick={() => setShow(!show)}
+              <div className="steering-features">
+                <Rule text="2.4 GHz + 5 GHz" valid={true} />
+                <Rule text="Automatic client steering" valid={true} />
+                <Rule text="Priority and signal aware" valid={true} />
+              </div>
+            </section>
+
+            <section className="wifi-card wifi-preview-card">
+              <div className="wifi-halo" />
+
+              <div className="router-visual">
+                <Wifi size={31} />
+              </div>
+
+              <div className="preview-label">
+                QUANTUMGRID SMART WI-FI
+              </div>
+
+              <strong>{ssid.trim() || "QuantumGrid"}</strong>
+
+              <span className="secured">
+                <Lock size={12} />
+                WPA2 / WPA3 protected
+              </span>
+
+              <div className="radio-preview">
+                <div>
+                  <span>2.4 GHz</span>
+                  <b>SMART</b>
+                </div>
+
+                <div>
+                  <span>5 GHz</span>
+                  <b>PRIORITY</b>
+                </div>
+              </div>
+
+              <div className="preview-message">
+                <Sparkles size={14} />
+                QuantumGrid will automatically move clients between bands
+                according to signal quality, device priority and performance.
+              </div>
+            </section>
+          </div>
+        ) : (
+          <div className="wifi-grid standalone-grid">
+            <section className="wifi-card">
+              <div className="card-heading">
+                <span>2.4 GHz RADIO</span>
+                <Status>ACTIVE</Status>
+              </div>
+
+              <label className="setup-field">
+                <span>SSID</span>
+
+                <div className={ssid24.trim().length >= 2 ? "input-shell valid" : "input-shell"}>
+                  <Wifi size={17} />
+                  <input
+                    value={ssid24}
+                    onChange={(e) => setSsid24(e.target.value)}
+                    placeholder="QuantumGrid-2.4G"
+                  />
+                  {ssid24.trim().length >= 2 && (
+                    <Check size={17} className="input-success" />
+                  )}
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>PASSWORD</span>
+
+                <div className={pass24.length >= 8 ? "input-shell valid" : "input-shell"}>
+                  <Lock size={17} />
+                  <input
+                    type="password"
+                    value={pass24}
+                    onChange={(e) => setPass24(e.target.value)}
+                    placeholder="8+ characters"
+                  />
+                  {pass24.length >= 8 && (
+                    <Check size={17} className="input-success" />
+                  )}
+                </div>
+              </label>
+
+              <label className="security-select">
+                <span>SECURITY</span>
+                <select
+                  value={security24}
+                  onChange={(e) =>
+                    setSecurity24(e.target.value as "wpa2" | "wpa3")
+                  }
                 >
-                  {show ? "HIDE" : "SHOW"}
-                </button>
-              </div>
-            </label>
+                  <option value="wpa2">WPA2-PSK</option>
+                  <option value="wpa3">WPA3-SAE</option>
+                </select>
+              </label>
+            </section>
 
-            <div className="rules">
-              <Rule text="2.4 GHz network" valid={ssid.trim().length >= 2} />
-              <Rule text="5 GHz network" valid={ssid.trim().length >= 2} />
-              <Rule text="8+ character password" valid={password.length >= 8} />
-            </div>
-          </section>
-
-          <section className="wifi-card wifi-preview-card">
-            <div className="wifi-halo" />
-
-            <div className="router-visual">
-              <Wifi size={31} />
-            </div>
-
-            <div className="preview-label">NETWORK PREVIEW</div>
-
-            <strong>{ssid.trim() || "QuantumGrid"}</strong>
-
-            <span className="secured">
-              <Lock size={12} />
-              WPA2 / WPA3 protected
-            </span>
-
-            <div className="radio-preview">
-              <div>
-                <span>2.4 GHz</span>
-                <b>AX</b>
+            <section className="wifi-card">
+              <div className="card-heading">
+                <span>5 GHz RADIO</span>
+                <Status>ACTIVE</Status>
               </div>
 
-              <div>
-                <span>5 GHz</span>
-                <b>AX</b>
-              </div>
-            </div>
+              <label className="setup-field">
+                <span>SSID</span>
 
-            <div className="preview-message">
-              <Sparkles size={14} />
-              Smart channel selection and band steering ready.
-            </div>
-          </section>
+                <div className={ssid5.trim().length >= 2 ? "input-shell valid" : "input-shell"}>
+                  <Wifi size={17} />
+                  <input
+                    value={ssid5}
+                    onChange={(e) => setSsid5(e.target.value)}
+                    placeholder="QuantumGrid-5G"
+                  />
+                  {ssid5.trim().length >= 2 && (
+                    <Check size={17} className="input-success" />
+                  )}
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>PASSWORD</span>
+
+                <div className={pass5.length >= 8 ? "input-shell valid" : "input-shell"}>
+                  <Lock size={17} />
+                  <input
+                    type="password"
+                    value={pass5}
+                    onChange={(e) => setPass5(e.target.value)}
+                    placeholder="8+ characters"
+                  />
+                  {pass5.length >= 8 && (
+                    <Check size={17} className="input-success" />
+                  )}
+                </div>
+              </label>
+
+              <label className="security-select">
+                <span>SECURITY</span>
+                <select
+                  value={security5}
+                  onChange={(e) =>
+                    setSecurity5(e.target.value as "wpa2" | "wpa3")
+                  }
+                >
+                  <option value="wpa2">WPA2-PSK</option>
+                  <option value="wpa3">WPA3-SAE</option>
+                </select>
+              </label>
+            </section>
+          </div>
+        )}
+
+        <div className="wifi-footer-note">
+          <Shield size={15} />
+          <span>
+            WPA2/WPA3 security will be enforced on the configured radios.
+          </span>
         </div>
       </div>
 
@@ -540,7 +727,7 @@ function WifiSetup({
 
         <button
           className="hero-button"
-          disabled={!good}
+          disabled={!valid}
           onClick={next}
         >
           Continue
@@ -550,6 +737,7 @@ function WifiSetup({
     </SetupFrame>
   );
 }
+
 
 function WanSetup({
   type,
@@ -562,11 +750,38 @@ function WanSetup({
   next: () => void;
   back: () => void;
 }) {
+  const [pppoeUser, setPppoeUser] = useState("");
+  const [pppoePassword, setPppoePassword] = useState("");
+
+  const [staticIp, setStaticIp] = useState("");
+  const [staticMask, setStaticMask] = useState("");
+  const [staticGateway, setStaticGateway] = useState("");
+  const [staticDns, setStaticDns] = useState("");
+
+  const pppoeValid =
+    pppoeUser.trim().length >= 1 &&
+    pppoePassword.length >= 1;
+
+  const staticValid =
+    staticIp.trim().length > 0 &&
+    staticMask.trim().length > 0 &&
+    staticGateway.trim().length > 0 &&
+    staticDns.trim().length > 0;
+
+  const valid =
+    type === "dhcp"
+      ? true
+      : type === "pppoe"
+        ? pppoeValid
+        : staticValid;
+
   return (
     <SetupFrame progress={91} step={3}>
       <div className="wan-setup">
         <div className="wan-heading">
-          <div className="setup-kicker">STEP 3 OF 3 • INTERNET</div>
+          <div className="setup-kicker">
+            STEP 3 OF 3 • INTERNET CONFIGURATION
+          </div>
 
           <div className="wan-icon">
             <Globe2 size={27} />
@@ -578,20 +793,27 @@ function WanSetup({
           </h1>
 
           <p>
-            Choose how your WAN connection receives its address.
+            Select your WAN connection type. QuantumGrid will only ask for
+            the information required by that connection.
           </p>
         </div>
 
         <div className="wan-options">
           {[
-            ["dhcp", "Automatic DHCP", "Recommended for most connections", Globe2],
+            ["dhcp", "Automatic DHCP", "IP address supplied automatically", Globe2],
             ["pppoe", "PPPoE", "ISP username and password", Network],
-            ["static", "Static IP", "Manually configured WAN", Settings],
+            ["static", "Static IP", "Manually assigned network settings", Settings],
           ].map(([id, title, description, Icon]) => (
             <button
               key={id as string}
-              className={type === id ? "wan-option selected" : "wan-option"}
-              onClick={() => setType(id as "dhcp" | "pppoe" | "static")}
+              className={
+                type === id
+                  ? "wan-option selected"
+                  : "wan-option"
+              }
+              onClick={() =>
+                setType(id as "dhcp" | "pppoe" | "static")
+              }
             >
               <div className="wan-option-icon">
                 <Icon size={19} />
@@ -611,10 +833,139 @@ function WanSetup({
           ))}
         </div>
 
+        {type === "dhcp" && (
+          <section className="wan-detail-card dhcp-detail">
+            <div className="wan-detail-icon">
+              <Check size={21} />
+            </div>
+
+            <div>
+              <strong>Automatic DHCP selected.</strong>
+              <span>
+                No additional information is required. Your ISP will provide
+                the WAN address automatically.
+              </span>
+            </div>
+
+            <Status>READY</Status>
+          </section>
+        )}
+
+        {type === "pppoe" && (
+          <section className="wan-detail-card">
+            <div className="wan-detail-title">
+              <div className="wan-detail-icon">
+                <KeyRound size={19} />
+              </div>
+
+              <div>
+                <strong>ISP authentication</strong>
+                <span>Enter the credentials supplied by your ISP.</span>
+              </div>
+            </div>
+
+            <div className="wan-fields">
+              <label className="setup-field">
+                <span>ISP USERNAME</span>
+
+                <div className="input-shell">
+                  <User size={17} />
+
+                  <input
+                    value={pppoeUser}
+                    onChange={(e) => setPppoeUser(e.target.value)}
+                    placeholder="ISP username"
+                  />
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>ISP PASSWORD</span>
+
+                <div className="input-shell">
+                  <Lock size={17} />
+
+                  <input
+                    type="password"
+                    value={pppoePassword}
+                    onChange={(e) => setPppoePassword(e.target.value)}
+                    placeholder="ISP password"
+                  />
+                </div>
+              </label>
+            </div>
+          </section>
+        )}
+
+        {type === "static" && (
+          <section className="wan-detail-card">
+            <div className="wan-detail-title">
+              <div className="wan-detail-icon">
+                <Settings size={19} />
+              </div>
+
+              <div>
+                <strong>Static WAN configuration</strong>
+                <span>Enter the network settings provided by your ISP.</span>
+              </div>
+            </div>
+
+            <div className="wan-static-grid">
+              <label className="setup-field">
+                <span>IP ADDRESS</span>
+                <div className="input-shell">
+                  <Network size={17} />
+                  <input
+                    value={staticIp}
+                    onChange={(e) => setStaticIp(e.target.value)}
+                    placeholder="203.0.113.10"
+                  />
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>SUBNET MASK</span>
+                <div className="input-shell">
+                  <Network size={17} />
+                  <input
+                    value={staticMask}
+                    onChange={(e) => setStaticMask(e.target.value)}
+                    placeholder="255.255.255.0"
+                  />
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>GATEWAY</span>
+                <div className="input-shell">
+                  <Globe2 size={17} />
+                  <input
+                    value={staticGateway}
+                    onChange={(e) => setStaticGateway(e.target.value)}
+                    placeholder="203.0.113.1"
+                  />
+                </div>
+              </label>
+
+              <label className="setup-field">
+                <span>DNS SERVER</span>
+                <div className="input-shell">
+                  <Activity size={17} />
+                  <input
+                    value={staticDns}
+                    onChange={(e) => setStaticDns(e.target.value)}
+                    placeholder="1.1.1.1"
+                  />
+                </div>
+              </label>
+            </div>
+          </section>
+        )}
+
         <div className="wan-ready">
           <Sparkles size={16} />
           <span>
-            QuantumGrid will automatically run diagnostics after setup.
+            QuantumGrid will automatically test the WAN after first login.
           </span>
         </div>
       </div>
@@ -625,7 +976,11 @@ function WanSetup({
           Back
         </button>
 
-        <button className="hero-button" onClick={next}>
+        <button
+          className="hero-button"
+          disabled={!valid}
+          onClick={next}
+        >
           Jump In
           <ArrowRight size={17} />
         </button>
@@ -633,6 +988,7 @@ function WanSetup({
     </SetupFrame>
   );
 }
+
 
 function Login({
   username,
@@ -654,137 +1010,182 @@ function Login({
   }, [error]);
 
   return (
-    <div className="login-screen">
-      <div className="atmosphere atmosphere-red" />
-      <div className="atmosphere atmosphere-blue" />
-      <div className="atmosphere atmosphere-purple" />
-      <div className="grid-overlay" />
+    <div className="login-landscape">
+      <div className="login-landscape-red" />
+      <div className="login-landscape-blue" />
+      <div className="login-landscape-purple" />
+      <div className="login-landscape-grid" />
 
-      <div className="login-content">
-        <div className="login-logo-shell">
-          <div className="login-logo-q">Q</div>
-        </div>
-
-        <div className="login-wordmark">QUANTUMGRID</div>
-        <div className="login-subtitle">NETWORK OPERATING SYSTEM</div>
-
-        <div className="login-kicker">SECURE ACCESS</div>
-
-        <h1>
-          Welcome
-          <span> back.</span>
-        </h1>
-
-        <p className="login-copy">
-          Sign in to your QuantumGrid command center.
-        </p>
-
-        <div className="login-fields">
-          <div className="login-field">
-            <div className="input-icon">
-              <User size={17} />
-            </div>
-
-            <div className="login-field-inner">
-              <span>USERNAME</span>
-              <input value={username} readOnly />
-            </div>
-
-            <Check size={16} className="input-success" />
+      <div className="login-landscape-layout">
+        <section className="login-brand-side">
+          <div className="login-brand-q-wrap">
+            <div className="login-brand-q">Q</div>
           </div>
 
-          <div className="login-field">
-            <div className="input-icon">
+          <div className="login-brand-name">QUANTUMGRID</div>
+          <div className="login-brand-sub">NETWORK OPERATING SYSTEM</div>
+
+          <div className="login-brand-line" />
+
+          <div className="login-brand-kicker">SECURE NETWORK ACCESS</div>
+
+          <h1>
+            Welcome
+            <span> back.</span>
+          </h1>
+
+          <p>
+            Your network command center is ready.
+            Access real-time performance, gaming,
+            wireless, security and advanced controls.
+          </p>
+
+          <div className="login-brand-status">
+            <span />
+            <strong>QUANTUMGRID SYSTEMS ONLINE</strong>
+          </div>
+        </section>
+
+        <section className="login-access-side">
+          <div className="login-access-heading">
+            <div>
+              <span>ADMINISTRATOR ACCESS</span>
+              <strong>Sign in to continue</strong>
+            </div>
+
+            <div className="login-lock-badge">
               <Lock size={17} />
             </div>
+          </div>
 
-            <div className="login-field-inner">
+          <div className="login-landscape-fields">
+            <label className="login-landscape-field">
+              <span>USERNAME</span>
+
+              <div>
+                <div className="login-field-icon">
+                  <User size={17} />
+                </div>
+
+                <input value={username} readOnly />
+
+                <Check size={17} className="input-success" />
+              </div>
+            </label>
+
+            <label className="login-landscape-field">
               <span>PASSWORD</span>
-              <input
-                type="password"
-                value={password}
-                placeholder="Enter your password"
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  setShowError(false);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") login();
-                }}
-                autoFocus
-              />
-            </div>
-          </div>
-        </div>
 
-        {error && showError && (
-          <div className="login-error">
+              <div>
+                <div className="login-field-icon">
+                  <Lock size={17} />
+                </div>
+
+                <input
+                  type="password"
+                  value={password}
+                  placeholder="Enter your password"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    setShowError(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") login();
+                  }}
+                  autoFocus
+                />
+              </div>
+            </label>
+          </div>
+
+          {error && showError && (
+            <div className="login-landscape-error">
+              <div className="login-error-symbol">
+                !
+              </div>
+
+              <div>
+                <strong>Access denied</strong>
+                <span>{error}</span>
+              </div>
+
+              <button onClick={() => setShowError(false)}>
+                <X size={15} />
+              </button>
+            </div>
+          )}
+
+          <button className="login-landscape-button" onClick={login}>
+            <span>Enter QuantumGrid</span>
+            <ArrowRight size={18} />
+          </button>
+
+          <div className="login-landscape-footer">
             <div>
-              <AlertIcon />
+              <Shield size={13} />
+              Protected management session
             </div>
 
-            <span>{error}</span>
-
-            <button onClick={() => setShowError(false)}>
-              <X size={15} />
-            </button>
+            <div>
+              <span className="footer-status-dot" />
+              Router ready
+            </div>
           </div>
-        )}
-
-        <button className="login-button" onClick={login}>
-          Enter QuantumGrid
-          <ArrowRight size={18} />
-        </button>
-
-        <div className="login-security">
-          <Lock size={12} />
-          Protected management session
-        </div>
+        </section>
       </div>
     </div>
   );
 }
 
-function AlertIcon() {
-  return (
-    <span className="alert-icon">
-      !
-    </span>
-  );
-}
 
 function Dashboard({
   stats,
   refresh,
+  secondsUntilRefresh,
   collapsed,
   setCollapsed,
   page,
   setPage,
+  logout,
 }: {
   stats: Stats;
   refresh: () => void;
+  secondsUntilRefresh: number;
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
   page: Page;
   setPage: (v: Page) => void;
+  logout: () => void;
 }) {
   const [mobile, setMobile] = useState(false);
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${collapsed ? "app-shell-collapsed" : ""}`}>
       <aside className={mobile ? "sidebar mobile-open" : "sidebar"}>
         <div className="sidebar-brand">
-          <div className="brand-q">Q</div>
+          <button
+            className="brand-q-button"
+            onClick={() => setCollapsed(!collapsed)}
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <span className="brand-q">Q</span>
+          </button>
+
           {!collapsed && (
-            <div>
+            <div className="sidebar-brand-text">
               <strong>QUANTUMGRID</strong>
               <span>NETWORK OS</span>
             </div>
           )}
 
           {mobile && (
-            <button className="mobile-close" onClick={() => setMobile(false)}>
-              <X size={18} />
+            <button
+              className="mobile-close"
+              onClick={() => setMobile(false)}
+              aria-label="Close navigation"
+            >
+              <X size={16} />
             </button>
           )}
         </div>
@@ -858,13 +1259,6 @@ function Dashboard({
               <Menu size={19} />
             </button>
 
-            <button
-              className="collapse-toggle"
-              onClick={() => setCollapsed(!collapsed)}
-            >
-              <Menu size={18} />
-            </button>
-
             <span>QUANTUMGRID</span>
             <ChevronRight size={14} />
             <strong>{page.toUpperCase()}</strong>
@@ -873,13 +1267,28 @@ function Dashboard({
           <div className="header-right">
             <Status>SYSTEM OPTIMAL</Status>
 
-            <button className="refresh-button" onClick={refresh}>
+            <div className="refresh-countdown">
+              NEXT REFRESH
+              <strong>{secondsUntilRefresh}s</strong>
+            </div>
+
+            <button
+              className="refresh-button"
+              onClick={refresh}
+              title="Refresh now"
+              aria-label="Refresh now"
+            >
               <RefreshCw size={16} />
             </button>
 
-            <div className="header-security">
+            <button
+              className="header-security"
+              onClick={logout}
+              title="Lock / sign out"
+              aria-label="Lock / sign out"
+            >
               <Lock size={15} />
-            </div>
+            </button>
           </div>
         </header>
 
@@ -1247,9 +1656,9 @@ function App() {
 
   const [setupStep, setSetupStep] = useState<SetupStep>("welcome");
 
-  const [username, setUsername] = useState(
-    () => localStorage.getItem("quantumgrid-username") || "",
-  );
+  // Setup username must always start blank.
+  // The saved username is loaded separately for the login screen.
+  const [username, setUsername] = useState("");
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -1263,6 +1672,7 @@ function App() {
 
   const [page, setPage] = useState<Page>("dashboard");
   const [collapsed, setCollapsed] = useState(false);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(3);
 
   const [stats, setStats] = useState<Stats>({
     latency: 8,
@@ -1276,6 +1686,8 @@ function App() {
   });
 
   function refresh() {
+    setSecondsUntilRefresh(3);
+
     setStats((s) => ({
       latency: clamp(s.latency + (Math.random() - 0.5) * 4, 5, 18),
       jitter: clamp(s.jitter + (Math.random() - 0.5) * 0.5, 0.3, 4),
@@ -1291,8 +1703,23 @@ function App() {
   useEffect(() => {
     if (!setupComplete || !loggedIn) return;
 
-    const timer = window.setInterval(refresh, 3000);
-    return () => window.clearInterval(timer);
+    setSecondsUntilRefresh(3);
+
+    const refreshTimer = window.setInterval(() => {
+      refresh();
+      setSecondsUntilRefresh(3);
+    }, 3000);
+
+    const countdownTimer = window.setInterval(() => {
+      setSecondsUntilRefresh((value) =>
+        value <= 1 ? 3 : value - 1,
+      );
+    }, 1000);
+
+    return () => {
+      window.clearInterval(refreshTimer);
+      window.clearInterval(countdownTimer);
+    };
   }, [setupComplete, loggedIn]);
 
   function finishSetup() {
@@ -1305,6 +1732,14 @@ function App() {
     setSetupStep("welcome");
   }
 
+  function logout() {
+    setLoggedIn(false);
+    setLoginPassword("");
+    setLoginError("");
+    setPage("dashboard");
+    setCollapsed(false);
+  }
+
   function login() {
     const saved = localStorage.getItem("quantumgrid-username") || "";
 
@@ -1312,7 +1747,7 @@ function App() {
      * Development-only credential handling.
      * Production firmware will authenticate against the router backend.
      */
-    if (username === saved && loginPassword === password) {
+    if (saved.length > 0 && loginPassword === password) {
       setLoggedIn(true);
       setLoginError("");
       return;
@@ -1367,7 +1802,7 @@ function App() {
   if (!loggedIn) {
     return (
       <Login
-        username={username}
+        username={localStorage.getItem("quantumgrid-username") || ""}
         password={loginPassword}
         setPassword={setLoginPassword}
         login={login}
@@ -1380,10 +1815,12 @@ function App() {
     <Dashboard
       stats={stats}
       refresh={refresh}
+      secondsUntilRefresh={secondsUntilRefresh}
       collapsed={collapsed}
       setCollapsed={setCollapsed}
       page={page}
       setPage={setPage}
+      logout={logout}
     />
   );
 }
