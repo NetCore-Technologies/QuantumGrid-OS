@@ -1,0 +1,1856 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  ArrowUp,
+  Check,
+  ChevronRight,
+  CircleGauge,
+  Cpu,
+  Database,
+  Download,
+  Gamepad2,
+  Globe2,
+  HardDrive,
+  KeyRound,
+  Lock,
+  Menu,
+  Monitor,
+  Network,
+  RadioTower,
+  RefreshCw,
+  Router,
+  Search,
+  Server,
+  Settings,
+  Shield,
+  Signal,
+  SlidersHorizontal,
+  Smartphone,
+  Sparkles,
+  Thermometer,
+  Upload,
+  User,
+  Users,
+  Wifi,
+  X,
+  Zap,
+} from "lucide-react";
+
+type Page =
+  | "dashboard"
+  | "gaming"
+  | "devices"
+  | "wifi"
+  | "5g"
+  | "network"
+  | "security"
+  | "diagnostics"
+  | "analytics"
+  | "system"
+  | "advanced";
+
+type SetupStep = "welcome" | "account" | "wifi" | "wan" | "done";
+
+type NavItem = {
+  id: Page;
+  label: string;
+  icon: React.ElementType;
+  section: "overview" | "network" | "system";
+};
+
+const navItems: NavItem[] = [
+  { id: "dashboard", label: "Dashboard", icon: CircleGauge, section: "overview" },
+  { id: "gaming", label: "Gaming", icon: Gamepad2, section: "overview" },
+  { id: "devices", label: "Devices", icon: Users, section: "overview" },
+
+  { id: "wifi", label: "Wi-Fi", icon: Wifi, section: "network" },
+  { id: "5g", label: "5G", icon: Signal, section: "network" },
+  { id: "network", label: "Network", icon: Network, section: "network" },
+  { id: "security", label: "Security", icon: Shield, section: "network" },
+  { id: "diagnostics", label: "Diagnostics", icon: Activity, section: "network" },
+
+  { id: "analytics", label: "Analytics", icon: Server, section: "system" },
+  { id: "system", label: "System", icon: Cpu, section: "system" },
+  { id: "advanced", label: "Advanced", icon: Settings, section: "system" },
+];
+
+const initialDevices = [
+  {
+    name: "QuantumGrid PC",
+    type: "Gaming workstation",
+    ip: "192.168.1.100",
+    link: "2.5GbE",
+    download: 428,
+    upload: 37,
+    priority: "HIGH",
+    icon: Monitor,
+  },
+  {
+    name: "PlayStation 5",
+    type: "Console",
+    ip: "192.168.1.112",
+    link: "Wi-Fi 6",
+    download: 186,
+    upload: 19,
+    priority: "HIGH",
+    icon: Gamepad2,
+  },
+  {
+    name: "iPhone",
+    type: "Mobile",
+    ip: "192.168.1.121",
+    link: "Wi-Fi 6",
+    download: 38,
+    upload: 7,
+    priority: "NORMAL",
+    icon: Smartphone,
+  },
+  {
+    name: "Living Room TV",
+    type: "Smart TV",
+    ip: "192.168.1.140",
+    link: "Wi-Fi 6",
+    download: 12,
+    upload: 2,
+    priority: "LOW",
+    icon: Monitor,
+  },
+];
+
+const channelData = [
+  { channel: "36", load: 38, status: "GOOD" },
+  { channel: "40", load: 61, status: "BUSY" },
+  { channel: "44", load: 43, status: "GOOD" },
+  { channel: "48", load: 34, status: "EXCELLENT" },
+  { channel: "149", load: 18, status: "BEST" },
+  { channel: "153", load: 29, status: "EXCELLENT" },
+];
+
+function rand(min: number, max: number) {
+  return Math.random() * (max - min) + min;
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function formatMbps(value: number) {
+  return `${Math.round(value).toLocaleString("en-US")} Mbps`;
+}
+
+function formatNumber(value: number, digits = 0) {
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
+
+function StatusDot({ active = true }: { active?: boolean }) {
+  return (
+    <span className={active ? "status-dot status-dot-active" : "status-dot"} />
+  );
+}
+
+function StatusBadge({
+  children,
+  active = true,
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+}) {
+  return (
+    <span className="status-badge">
+      <StatusDot active={active} />
+      {children}
+    </span>
+  );
+}
+
+function MetricCard({
+  icon: Icon,
+  title,
+  value,
+  unit,
+  detail,
+}: {
+  icon: React.ElementType;
+  title: string;
+  value: string;
+  unit?: string;
+  detail: string;
+}) {
+  return (
+    <article className="metric-card">
+      <div className="metric-icon">
+        <Icon size={18} />
+      </div>
+
+      <div className="metric-main">
+        <div className="metric-title">{title}</div>
+        <div className="metric-value">
+          {value}
+          {unit && <span>{unit}</span>}
+        </div>
+        <div className="metric-detail">{detail}</div>
+      </div>
+    </article>
+  );
+}
+
+function Panel({
+  title,
+  eyebrow,
+  action,
+  children,
+  className = "",
+}: {
+  title: string;
+  eyebrow?: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={`panel ${className}`}>
+      <div className="panel-head">
+        <div>
+          {eyebrow && <div className="panel-eyebrow">{eyebrow}</div>}
+          <h2>{title}</h2>
+        </div>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function SetupShell({
+  title,
+  eyebrow,
+  children,
+  progress,
+  back,
+  next,
+  nextDisabled = false,
+  nextLabel = "Next",
+  onBack,
+  onNext,
+}: {
+  title: string;
+  eyebrow: string;
+  children: React.ReactNode;
+  progress: number;
+  back?: boolean;
+  next?: boolean;
+  nextDisabled?: boolean;
+  nextLabel?: string;
+  onBack?: () => void;
+  onNext?: () => void;
+}) {
+  return (
+    <div className="setup-shell">
+      <div className="setup-orbit setup-orbit-red" />
+      <div className="setup-orbit setup-orbit-blue" />
+
+      <div className="setup-card">
+        <div className="setup-brand">
+          <div className="brand-logo">Q</div>
+          <div>
+            <div className="brand-name">QUANTUMGRID</div>
+            <div className="brand-subtitle">NETWORK OS</div>
+          </div>
+        </div>
+
+        <div className="setup-progress">
+          <div style={{ width: `${progress}%` }} />
+        </div>
+
+        <div className="setup-body">
+          <div className="setup-eyebrow">{eyebrow}</div>
+          <h1>{title}</h1>
+          {children}
+        </div>
+
+        <div className="setup-footer">
+          {back ? (
+</div>
+    </div>
+  );
+}
+
+function StatMini({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ElementType;
+}) {
+  return (
+    <div className="stat-mini">
+      <Icon size={15} />
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function DashboardPage({
+  stats,
+  onRefresh,
+}: {
+  stats: {
+    latency: number;
+    download: number;
+    upload: number;
+    loss: number;
+    jitter: number;
+    cpu: number;
+    temp: number;
+    ram: number;
+    wanUp: boolean;
+  };
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="page-stack page-enter">
+      <section className="hero-card">
+        <div className="hero-grid" />
+
+        <div className="hero-content">
+          <div className="eyebrow">QUANTUMGRID NETWORK COMMAND CENTER</div>
+
+          <h1>
+            Your network is
+            <span> operating at full power.</span>
+          </h1>
+
+          <p>
+            Real-time visibility across your WAN, Wi-Fi, gaming traffic,
+            security, hardware acceleration and system health.
+          </p>
+
+          <div className="hero-actions">
+            <button className="primary-button" onClick={onRefresh}>
+              <Sparkles size={17} />
+              Optimize Network
+            </button>
+
+            <button className="secondary-button">
+              <Activity size={17} />
+              Run Diagnostics
+            </button>
+          </div>
+        </div>
+
+        <div className="hero-status-card">
+          <div className="hero-status-top">
+            <span>GLOBAL STATUS</span>
+            <StatusBadge>SYSTEM OPTIMAL</StatusBadge>
+          </div>
+
+          <div className="health-number">98</div>
+          <div className="hero-status-caption">QuantumGrid Health Score</div>
+
+          <div className="hero-mini-stats">
+            <div>
+              <span>Uptime</span>
+              <strong>12d 08h</strong>
+            </div>
+            <div>
+              <span>Clients</span>
+              <strong>18</strong>
+            </div>
+            <div>
+              <span>WAN</span>
+              <strong>2.5GbE</strong>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div className="metrics-grid">
+        <MetricCard
+          icon={Activity}
+          title="Latency"
+          value={formatNumber(stats.latency)}
+          unit=" ms"
+          detail={`Excellent • ${formatNumber(stats.jitter, 1)} ms jitter`}
+        />
+
+        <MetricCard
+          icon={Download}
+          title="Download"
+          value={formatNumber(stats.download)}
+          unit=" Mbps"
+          detail="Current WAN throughput"
+        />
+
+        <MetricCard
+          icon={Upload}
+          title="Upload"
+          value={formatNumber(stats.upload)}
+          unit=" Mbps"
+          detail="Current WAN throughput"
+        />
+
+        <MetricCard
+          icon={Signal}
+          title="Packet Loss"
+          value={formatNumber(stats.loss, 1)}
+          unit=" %"
+          detail="Connection quality"
+        />
+      </div>
+
+      <div className="dashboard-grid">
+        <Panel
+          title="Live Network Traffic"
+          eyebrow="THROUGHPUT"
+          className="large-panel"
+          action={<StatusBadge>LIVE</StatusBadge>}
+        >
+          <TrafficVisualizer stats={stats} />
+        </Panel>
+
+        <Panel
+          title="Gaming Engine"
+          eyebrow="LOW LATENCY MODE"
+          className="gaming-panel"
+          action={<StatusBadge>ACTIVE</StatusBadge>}
+        >
+          <div className="gaming-score-row">
+            <div className="gaming-ring">
+              <div className="gaming-ring-inner">
+                <strong>98</strong>
+                <span>/100</span>
+              </div>
+            </div>
+
+            <div className="gaming-stat-list">
+              <div>
+                <span>Latency</span>
+                <strong>{formatNumber(stats.latency)} ms</strong>
+              </div>
+              <div>
+                <span>Jitter</span>
+                <strong>{formatNumber(stats.jitter, 1)} ms</strong>
+              </div>
+              <div>
+                <span>Loss</span>
+                <strong>{formatNumber(stats.loss, 1)}%</strong>
+              </div>
+              <div>
+                <span>Bufferbloat</span>
+                <strong>A</strong>
+              </div>
+            </div>
+          </div>
+
+          <div className="mode-selector">
+            <button className="mode-active">Gaming</button>
+            <button>Balanced</button>
+            <button>Turbo</button>
+          </div>
+
+          <div className="mode-description">
+            <Gamepad2 size={17} />
+            Latency-first traffic shaping is active.
+          </div>
+        </Panel>
+
+        <Panel title="Acceleration" eyebrow="HARDWARE DATA PLANE">
+          <div className="accel-list">
+            <div>
+              <span>NSS</span>
+              <StatusBadge>READY</StatusBadge>
+            </div>
+            <div>
+              <span>EDMA</span>
+              <StatusBadge>READY</StatusBadge>
+            </div>
+            <div>
+              <span>PPE</span>
+              <StatusBadge>READY</StatusBadge>
+            </div>
+            <div>
+              <span>2.5GbE</span>
+              <StatusBadge>READY</StatusBadge>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="System Health" eyebrow="LIVE HARDWARE">
+          <div className="health-grid">
+            <div>
+              <Cpu />
+              <span>CPU</span>
+              <strong>{formatNumber(stats.cpu, 1)}%</strong>
+            </div>
+            <div>
+              <Thermometer />
+              <span>TEMP</span>
+              <strong>{formatNumber(stats.temp, 1)}°C</strong>
+            </div>
+            <div>
+              <HardDrive />
+              <span>STORAGE</span>
+              <strong>28%</strong>
+            </div>
+            <div>
+              <Database />
+              <span>RAM</span>
+              <strong>{formatNumber(stats.ram, 1)}%</strong>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Network Status" eyebrow="CONNECTIVITY">
+          <div className="connectivity-list">
+            <div>
+              <Router />
+              <span>WAN</span>
+              <StatusBadge active={stats.wanUp}>ONLINE</StatusBadge>
+            </div>
+            <div>
+              <Wifi />
+              <span>Wi-Fi</span>
+              <StatusBadge>ONLINE</StatusBadge>
+            </div>
+            <div>
+              <RadioTower />
+              <span>5G</span>
+              <StatusBadge active={false}>STANDBY</StatusBadge>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel
+        title="Connected Devices"
+        eyebrow="CLIENT INTELLIGENCE"
+        action={<button className="panel-link">View all <ChevronRight size={14} /></button>}
+      >
+        <div className="device-table">
+          {initialDevices.map((device) => {
+            const Icon = device.icon;
+
+            return (
+              <div className="device-row" key={device.name}>
+                <div className="device-name">
+                  <div className="device-avatar">
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <strong>{device.name}</strong>
+                    <span>{device.type}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="table-label">IP ADDRESS</span>
+                  <strong>{device.ip}</strong>
+                </div>
+
+                <div>
+                  <span className="table-label">LINK</span>
+                  <strong>{device.link}</strong>
+                </div>
+
+                <div>
+                  <span className="table-label">DOWNLOAD</span>
+                  <strong>{formatMbps(device.download)}</strong>
+                </div>
+
+                <div>
+                  <span className="table-label">PRIORITY</span>
+                  <strong className="priority">{device.priority}</strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function TrafficVisualizer({
+  stats,
+}: {
+  stats: {
+    download: number;
+    upload: number;
+  };
+}) {
+  const bars = useMemo(
+    () =>
+      Array.from({ length: 34 }, (_, index) => {
+        const wave = Math.sin(index / 2.6);
+        const boost = Math.max(0, Math.sin(index / 1.8)) * 0.25;
+        return clamp(0.24 + wave * 0.17 + boost + rand(-0.06, 0.06), 0.08, 0.95);
+      }),
+    [stats.download],
+  );
+
+  return (
+    <>
+      <div className="traffic-readouts">
+        <StatMini
+          label="DOWNLOAD"
+          value={formatMbps(stats.download)}
+          icon={ArrowDown}
+        />
+        <StatMini
+          label="UPLOAD"
+          value={formatMbps(stats.upload)}
+          icon={ArrowUp}
+        />
+      </div>
+
+      <div className="traffic-chart">
+        <div className="chart-gridline line-1" />
+        <div className="chart-gridline line-2" />
+        <div className="chart-gridline line-3" />
+
+        <div className="traffic-bars">
+          {bars.map((height, index) => (
+            <div
+              className="traffic-bar"
+              key={index}
+              style={{ height: `${height * 100}%` }}
+            >
+              <span />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="traffic-axis">
+        <span>60s ago</span>
+        <span>30s</span>
+        <span>NOW</span>
+      </div>
+    </>
+  );
+}
+
+function GamingPage({
+  stats,
+}: {
+  stats: { latency: number; jitter: number; loss: number };
+}) {
+  const [mode, setMode] = useState("gaming");
+
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero gaming-hero">
+        <div>
+          <div className="eyebrow">QUANTUMGRID GAMING ENGINE</div>
+          <h1>Own the latency.</h1>
+          <p>
+            Intelligent traffic policy built around low latency, jitter
+            control and bufferbloat protection.
+          </p>
+        </div>
+
+        <div className="module-hero-score">
+          <span>GAMING SCORE</span>
+          <strong>98</strong>
+          <small>EXCELLENT</small>
+        </div>
+      </section>
+
+      <div className="metrics-grid">
+        <MetricCard icon={Activity} title="Ping" value={formatNumber(stats.latency)} unit=" ms" detail="Current average" />
+        <MetricCard icon={Zap} title="Jitter" value={formatNumber(stats.jitter, 1)} unit=" ms" detail="Very stable" />
+        <MetricCard icon={Signal} title="Packet Loss" value={formatNumber(stats.loss, 1)} unit=" %" detail="No detected loss" />
+        <MetricCard icon={Gamepad2} title="Priority Devices" value="2" detail="High priority clients" />
+      </div>
+
+      <div className="two-column">
+        <Panel title="Gaming Mode" eyebrow="POLICY ENGINE">
+          <div className="big-mode-selector">
+            {[
+              ["gaming", "Gaming", "Maximum latency priority"],
+              ["balanced", "Balanced", "Smart trade-off"],
+              ["turbo", "Turbo", "Maximum throughput"],
+            ].map(([id, title, description]) => (
+              <button
+                key={id}
+                className={mode === id ? "big-mode selected" : "big-mode"}
+                onClick={() => setMode(id)}
+              >
+                <Gamepad2 size={19} />
+                <div>
+                  <strong>{title}</strong>
+                  <span>{description}</span>
+                </div>
+                {mode === id && <Check size={17} />}
+              </button>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Traffic Policy" eyebrow="ACTIVE RULESET">
+          <div className="policy-list">
+            <div>
+              <span>Gaming UDP</span>
+              <b>HIGH</b>
+            </div>
+            <div>
+              <span>Gaming TCP</span>
+              <b>HIGH</b>
+            </div>
+            <div>
+              <span>Streaming</span>
+              <b>NORMAL</b>
+            </div>
+            <div>
+              <span>Background</span>
+              <b>LOW</b>
+            </div>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Gaming Devices" eyebrow="PRIORITY CLIENTS">
+        <div className="gaming-device-grid">
+          {initialDevices.slice(0, 3).map((device) => (
+            <div className="gaming-device-card" key={device.name}>
+              <div className="device-avatar">
+                <device.icon size={19} />
+              </div>
+              <strong>{device.name}</strong>
+              <span>{device.link}</span>
+              <div className="gaming-device-metrics">
+                <span>↓ {formatMbps(device.download)}</span>
+                <span>Ping {formatNumber(stats.latency)} ms</span>
+              </div>
+              <button className="small-action">Priority HIGH</button>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function WifiPage() {
+  const [band, setBand] = useState<"2.4" | "5">("5");
+
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero wifi-hero">
+        <div>
+          <div className="eyebrow">WIRELESS INTELLIGENCE</div>
+          <h1>Wi-Fi Command Center.</h1>
+          <p>
+            Radio visibility, channel scoring, airtime, clients and automatic
+            optimization.
+          </p>
+        </div>
+
+        <button className="primary-button">
+          <Sparkles size={17} />
+          Optimize Wi-Fi
+        </button>
+      </section>
+
+      <div className="radio-grid">
+        <RadioCard band="2.4 GHz" channel="6" clients="7" load="42%" />
+        <RadioCard band="5 GHz" channel="149" clients="14" load="18%" active />
+      </div>
+
+      <Panel title="Channel Intelligence" eyebrow={`${band} GHZ`} action={<BandSwitch band={band} setBand={setBand} />}>
+        <div className="channel-list">
+          {channelData.map((entry) => (
+            <div className="channel-row" key={entry.channel}>
+              <div className="channel-name">
+                <strong>CH {entry.channel}</strong>
+                <span>{entry.status}</span>
+              </div>
+
+              <div className="channel-bar">
+                <span style={{ width: `${entry.load}%` }} />
+              </div>
+
+              <div className="channel-load">{entry.load}%</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <div className="three-column">
+        <Panel title="Band Steering" eyebrow="AUTOMATION">
+          <FeatureToggle
+            title="Smart band steering"
+            description="Move capable clients to the optimal radio."
+            enabled
+          />
+          <FeatureToggle
+            title="Airtime fairness"
+            description="Prevent slow clients from dominating airtime."
+            enabled
+          />
+        </Panel>
+
+        <Panel title="Roaming" eyebrow="CLIENT MOBILITY">
+          <FeatureToggle
+            title="Fast roaming"
+            description="Optimize transitions between radios."
+            enabled
+          />
+          <FeatureToggle
+            title="Client assistance"
+            description="Use RSSI thresholds for intelligent moves."
+            enabled
+          />
+        </Panel>
+
+        <Panel title="Wireless Health" eyebrow="LIVE">
+          <div className="health-score-line">
+            <div>
+              <span>Signal quality</span>
+              <strong>96%</strong>
+            </div>
+            <div>
+              <span>Noise floor</span>
+              <strong>-95 dBm</strong>
+            </div>
+            <div>
+              <span>Interference</span>
+              <strong>LOW</strong>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function RadioCard({
+  band,
+  channel,
+  clients,
+  load,
+  active = false,
+}: {
+  band: string;
+  channel: string;
+  clients: string;
+  load: string;
+  active?: boolean;
+}) {
+  return (
+    <div className={active ? "radio-card active" : "radio-card"}>
+      <div className="radio-card-top">
+        <div className="device-avatar">
+          <Wifi size={18} />
+        </div>
+        <StatusBadge>{active ? "ACTIVE" : "ONLINE"}</StatusBadge>
+      </div>
+
+      <strong>{band}</strong>
+
+      <div className="radio-card-grid">
+        <div>
+          <span>CHANNEL</span>
+          <b>{channel}</b>
+        </div>
+        <div>
+          <span>CLIENTS</span>
+          <b>{clients}</b>
+        </div>
+        <div>
+          <span>AIRTIME</span>
+          <b>{load}</b>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BandSwitch({
+  band,
+  setBand,
+}: {
+  band: "2.4" | "5";
+  setBand: (value: "2.4" | "5") => void;
+}) {
+  return (
+    <div className="inline-switch">
+      <button className={band === "2.4" ? "active" : ""} onClick={() => setBand("2.4")}>2.4 GHz</button>
+      <button className={band === "5" ? "active" : ""} onClick={() => setBand("5")}>5 GHz</button>
+    </div>
+  );
+}
+
+function FeatureToggle({
+  title,
+  description,
+  enabled = false,
+}: {
+  title: string;
+  description: string;
+  enabled?: boolean;
+}) {
+  return (
+    <div className="feature-toggle">
+      <div>
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+      <div className={enabled ? "toggle toggle-on" : "toggle"}>
+        <span />
+      </div>
+    </div>
+  );
+}
+
+function FiveGPage() {
+  const [simulation, setSimulation] = useState(true);
+
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero fiveg-hero">
+        <div>
+          <div className="eyebrow">CELLULAR CONTROL CENTER</div>
+          <h1>5G, under your control.</h1>
+          <p>
+            Modem telemetry, signal quality, APN control, cellular
+            diagnostics and intelligent failover.
+          </p>
+        </div>
+
+        <div className="simulation-control">
+          <span>DEVELOPMENT MODE</span>
+          <button
+            className={simulation ? "toggle toggle-on" : "toggle"}
+            onClick={() => setSimulation(!simulation)}
+          >
+            <span />
+          </button>
+        </div>
+      </section>
+
+      <div className="metrics-grid">
+        <MetricCard icon={Signal} title="RSRP" value="-78" unit=" dBm" detail="Excellent signal" />
+        <MetricCard icon={RadioTower} title="RSRQ" value="-10" unit=" dB" detail="Healthy quality" />
+        <MetricCard icon={Zap} title="SINR" value="18" unit=" dB" detail="Strong radio conditions" />
+        <MetricCard icon={Activity} title="Latency" value="12" unit=" ms" detail="Simulated 5G WAN" />
+      </div>
+
+      <div className="two-column">
+        <Panel title={simulation ? "Simulated 5G Connection" : "Modem Connection"} eyebrow="MODEM">
+          {simulation ? (
+            <div className="fiveg-status-card">
+              <StatusBadge>SIMULATED 5G SA</StatusBadge>
+              <strong>850 Mbps</strong>
+              <span>Download throughput</span>
+
+              <div className="fiveg-stats">
+                <div>
+                  <span>BAND</span>
+                  <b>n78</b>
+                </div>
+                <div>
+                  <span>PCI</span>
+                  <b>312</b>
+                </div>
+                <div>
+                  <span>CELL ID</span>
+                  <b>1048271</b>
+                </div>
+                <div>
+                  <span>OPERATOR</span>
+                  <b>SIMULATED</b>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="empty-state">
+              <RadioTower size={30} />
+              <strong>No modem connected.</strong>
+              <span>Connect a compatible QMI/MBIM modem to populate live telemetry.</span>
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Cellular Controls" eyebrow="MANAGEMENT">
+          <div className="control-list">
+            <button>
+              <SlidersHorizontal />
+              <span>APN Profiles</span>
+              <ChevronRight />
+            </button>
+            <button>
+              <Signal />
+              <span>Band Selection</span>
+              <ChevronRight />
+            </button>
+            <button>
+              <RadioTower />
+              <span>Cell Information</span>
+              <ChevronRight />
+            </button>
+            <button>
+              <KeyRound />
+              <span>AT Console</span>
+              <ChevronRight />
+            </button>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function DevicesPage() {
+  const [search, setSearch] = useState("");
+
+  const filtered = initialDevices.filter((device) =>
+    `${device.name} ${device.ip} ${device.type}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
+  );
+
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div>
+          <div className="eyebrow">CLIENT INTELLIGENCE</div>
+          <h1>Every device. One place.</h1>
+          <p>
+            Identify clients, inspect usage and control network priority.
+          </p>
+        </div>
+
+        <div className="hero-device-total">
+          <strong>18</strong>
+          <span>online devices</span>
+        </div>
+      </section>
+
+      <Panel
+        title="Connected Devices"
+        eyebrow="NETWORK CLIENTS"
+        action={
+          <div className="search-field">
+            <Search size={15} />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search devices" />
+          </div>
+        }
+      >
+        <div className="device-table expanded">
+          {filtered.map((device) => {
+            const Icon = device.icon;
+
+            return (
+              <div className="device-row" key={device.name}>
+                <div className="device-name">
+                  <div className="device-avatar">
+                    <Icon size={18} />
+                  </div>
+                  <div>
+                    <strong>{device.name}</strong>
+                    <span>{device.type}</span>
+                  </div>
+                </div>
+
+                <div>
+                  <span className="table-label">IP ADDRESS</span>
+                  <strong>{device.ip}</strong>
+                </div>
+
+                <div>
+                  <span className="table-label">LINK</span>
+                  <strong>{device.link}</strong>
+                </div>
+
+                <div>
+                  <span className="table-label">TRAFFIC</span>
+                  <strong>{formatMbps(device.download)}</strong>
+                </div>
+
+                <div>
+                  <span className="table-label">POLICY</span>
+                  <strong className="priority">{device.priority}</strong>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Panel>
+
+      <div className="three-column">
+        <Panel title="Device Policies" eyebrow="AUTOMATION">
+          <FeatureToggle title="Auto-discovery" description="Detect new network clients." enabled />
+          <FeatureToggle title="Vendor identification" description="Resolve device manufacturer." enabled />
+        </Panel>
+
+        <Panel title="Traffic Insight" eyebrow="CURRENT">
+          <div className="big-stat">
+            <strong>664 Mbps</strong>
+            <span>Active client traffic</span>
+          </div>
+        </Panel>
+
+        <Panel title="Guest Network" eyebrow="ACCESS">
+          <div className="big-stat">
+            <strong>5</strong>
+            <span>Guest clients isolated</span>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function NetworkPage() {
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div>
+          <div className="eyebrow">NETWORK CONTROL</div>
+          <h1>The network, your way.</h1>
+          <p>WAN, LAN, VLAN, DNS, routing, failover and interface control.</p>
+        </div>
+      </section>
+
+      <div className="three-column">
+        <Panel title="WAN" eyebrow="PRIMARY">
+          <div className="network-card-status">
+            <StatusBadge>ONLINE</StatusBadge>
+            <strong>2.5GbE</strong>
+            <span>DHCP • IPv4 + IPv6</span>
+          </div>
+        </Panel>
+
+        <Panel title="LAN" eyebrow="LOCAL">
+          <div className="network-card-status">
+            <StatusBadge>ONLINE</StatusBadge>
+            <strong>1 Gbps</strong>
+            <span>192.168.1.0/24</span>
+          </div>
+        </Panel>
+
+        <Panel title="DNS" eyebrow="RESOLUTION">
+          <div className="network-card-status">
+            <StatusBadge>PROTECTED</StatusBadge>
+            <strong>Quantum DNS</strong>
+            <span>Fast + secure resolution</span>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Interfaces" eyebrow="NETWORK STACK">
+        <div className="interface-list">
+          {[
+            ["wan", "WAN", "2.5GbE", "192.0.2.12"],
+            ["lan", "LAN", "1GbE", "192.168.1.1"],
+            ["br-lan", "Bridge", "Bridge", "192.168.1.1"],
+            ["wg0", "WireGuard", "VPN", "10.7.0.1"],
+          ].map(([id, name, type, address]) => (
+            <div className="interface-row" key={id}>
+              <div>
+                <strong>{name}</strong>
+                <span>{id} • {type}</span>
+              </div>
+              <span>{address}</span>
+              <StatusBadge>UP</StatusBadge>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <div className="two-column">
+        <Panel title="Multi-WAN" eyebrow="FAILOVER">
+          <FeatureToggle title="Automatic failover" description="Move traffic to the secondary path." enabled />
+          <FeatureToggle title="Load balancing" description="Distribute eligible traffic." enabled />
+        </Panel>
+
+        <Panel title="VLANs" eyebrow="SEGMENTATION">
+          <div className="vlan-list">
+            <div><span>10 • Main</span><b>ACTIVE</b></div>
+            <div><span>20 • IoT</span><b>ACTIVE</b></div>
+            <div><span>30 • Guest</span><b>ACTIVE</b></div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function SecurityPage() {
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero security-hero">
+        <div>
+          <div className="eyebrow">SECURITY CENTER</div>
+          <h1>Protected by default.</h1>
+          <p>
+            Firewall, DNS protection, device visibility and security events.
+          </p>
+        </div>
+
+        <div className="security-score">
+          <Shield />
+          <strong>99</strong>
+          <span>SECURITY SCORE</span>
+        </div>
+      </section>
+
+      <div className="metrics-grid">
+        <MetricCard icon={Shield} title="Firewall" value="ACTIVE" detail="nftables policy loaded" />
+        <MetricCard icon={Globe2} title="DNS Protection" value="ON" detail="Malicious domains blocked" />
+        <MetricCard icon={AlertTriangle} title="Threats" value="0" detail="Last 24 hours" />
+        <MetricCard icon={Users} title="Protected Clients" value="18" detail="All active clients" />
+      </div>
+
+      <div className="two-column">
+        <Panel title="Security Controls" eyebrow="DEFENSE">
+          <FeatureToggle title="Stateful firewall" description="Inspect and control connection state." enabled />
+          <FeatureToggle title="DNS threat protection" description="Block known malicious domains." enabled />
+          <FeatureToggle title="Rogue AP monitoring" description="Monitor unexpected wireless infrastructure." enabled />
+        </Panel>
+
+        <Panel title="Recent Events" eyebrow="SECURITY LOG">
+          <div className="event-list">
+            <div><span>10:24</span><strong>New device detected</strong><b>INFO</b></div>
+            <div><span>10:17</span><strong>DNS request blocked</strong><b>BLOCKED</b></div>
+            <div><span>09:54</span><strong>Firewall rule evaluated</strong><b>SAFE</b></div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticsPage({
+  stats,
+  onRun,
+}: {
+  stats: { latency: number; jitter: number; loss: number };
+  onRun: () => void;
+}) {
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div>
+          <div className="eyebrow">NETWORK DIAGNOSTICS</div>
+          <h1>Know what's happening.</h1>
+          <p>Test latency, packet loss, routing, DNS and network health.</p>
+        </div>
+
+        <button className="primary-button" onClick={onRun}>
+          <Activity size={17} />
+          Run Full Test
+        </button>
+      </section>
+
+      <div className="diagnostic-grid">
+        <DiagnosticCard title="Internet latency" value={`${formatNumber(stats.latency)} ms`} good />
+        <DiagnosticCard title="Jitter" value={`${formatNumber(stats.jitter, 1)} ms`} good />
+        <DiagnosticCard title="Packet loss" value={`${formatNumber(stats.loss, 1)}%`} good />
+        <DiagnosticCard title="DNS response" value="18 ms" good />
+        <DiagnosticCard title="MTU" value="1500" good />
+        <DiagnosticCard title="Route health" value="OPTIMAL" good />
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticCard({
+  title,
+  value,
+  good,
+}: {
+  title: string;
+  value: string;
+  good: boolean;
+}) {
+  return (
+    <div className="diagnostic-card">
+      <div className="diagnostic-card-top">
+        <Activity size={17} />
+        <StatusBadge active={good}>PASS</StatusBadge>
+      </div>
+      <span>{title}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function AnalyticsPage() {
+  const points = [18, 25, 22, 31, 42, 37, 51, 48, 57, 62, 58, 71];
+
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div>
+          <div className="eyebrow">NETWORK ANALYTICS</div>
+          <h1>See the bigger picture.</h1>
+          <p>Historical bandwidth, client activity, latency and health trends.</p>
+        </div>
+      </section>
+
+      <Panel title="Bandwidth Trend" eyebrow="LAST 12 HOURS">
+        <div className="analytics-chart">
+          {points.map((value, index) => (
+            <div
+              key={index}
+              className="analytics-point"
+              style={{ height: `${value}%` }}
+            />
+          ))}
+        </div>
+      </Panel>
+
+      <div className="three-column">
+        <Panel title="Peak Download" eyebrow="TODAY">
+          <div className="big-stat"><strong>1.12 Gbps</strong><span>09:48 AM</span></div>
+        </Panel>
+        <Panel title="Peak Upload" eyebrow="TODAY">
+          <div className="big-stat"><strong>86 Mbps</strong><span>08:21 PM</span></div>
+        </Panel>
+        <Panel title="Average Ping" eyebrow="TODAY">
+          <div className="big-stat"><strong>9.4 ms</strong><span>WAN average</span></div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function SystemPage({
+  stats,
+}: {
+  stats: { cpu: number; temp: number; ram: number };
+}) {
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div>
+          <div className="eyebrow">SYSTEM CONTROL</div>
+          <h1>The heart of QuantumGrid.</h1>
+          <p>Hardware, services, storage, thermals and operating-system state.</p>
+        </div>
+      </section>
+
+      <div className="metrics-grid">
+        <MetricCard icon={Cpu} title="CPU" value={formatNumber(stats.cpu, 1)} unit=" %" detail="All cores" />
+        <MetricCard icon={Database} title="RAM" value={formatNumber(stats.ram, 1)} unit=" %" detail="Available memory healthy" />
+        <MetricCard icon={Thermometer} title="Temperature" value={formatNumber(stats.temp, 1)} unit=" °C" detail="Normal operating range" />
+        <MetricCard icon={HardDrive} title="Storage" value="28" unit=" %" detail="72% free" />
+      </div>
+
+      <div className="two-column">
+        <Panel title="Services" eyebrow="SYSTEM">
+          <div className="service-list">
+            {["QuantumGrid Core", "Network Engine", "Gaming Engine", "Wi-Fi Engine", "Security Engine", "Monitor"].map((service) => (
+              <div key={service}>
+                <span>{service}</span>
+                <StatusBadge>RUNNING</StatusBadge>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Firmware" eyebrow="BUILD">
+          <div className="firmware-card">
+            <div>
+              <span>VERSION</span>
+              <strong>QuantumGrid OS 0.1.0</strong>
+            </div>
+            <div>
+              <span>PLATFORM</span>
+              <strong>Arcadyan AW1000 / IPQ807x</strong>
+            </div>
+            <div>
+              <span>BASE</span>
+              <strong>OpenWrt 25.12</strong>
+            </div>
+          </div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function AdvancedPage() {
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div>
+          <div className="eyebrow">ADVANCED CONTROL</div>
+          <h1>Power-user territory.</h1>
+          <p>Fine-grained controls for performance, diagnostics and platform behavior.</p>
+        </div>
+      </section>
+
+      <div className="three-column">
+        <Panel title="Acceleration" eyebrow="DATA PLANE">
+          <FeatureToggle title="NSS" description="Qualcomm Network Subsystem." enabled />
+          <FeatureToggle title="EDMA/PPE" description="Accelerated Ethernet path." enabled />
+          <FeatureToggle title="Wi-Fi offload" description="Wireless acceleration path." enabled />
+        </Panel>
+
+        <Panel title="Performance" eyebrow="CPU / NETWORK">
+          <FeatureToggle title="Performance governor" description="Prefer sustained performance." enabled />
+          <FeatureToggle title="Packet steering" description="Balance host packet processing." enabled />
+          <FeatureToggle title="Auto tuning" description="Dynamic policy adjustment." enabled />
+        </Panel>
+
+        <Panel title="Developer" eyebrow="DEBUG">
+          <FeatureToggle title="Verbose logs" description="Detailed QuantumGrid logging." />
+          <FeatureToggle title="Telemetry debug" description="Expose internal diagnostics." />
+          <FeatureToggle title="API inspector" description="Inspect service responses." />
+        </Panel>
+      </div>
+
+      <Panel title="Acceleration Status" eyebrow="LIVE">
+        <div className="acceleration-dashboard">
+          {[
+            ["NSS", "READY"],
+            ["EDMA", "READY"],
+            ["PPE", "READY"],
+            ["ECM", "READY"],
+            ["ath11k", "READY"],
+            ["2.5GbE", "READY"],
+          ].map(([name, state]) => (
+            <div key={name}>
+              <strong>{name}</strong>
+              <StatusBadge>{state}</StatusBadge>
+            </div>
+          ))}
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function ModulePageFallback({
+  page,
+}: {
+  page: Page;
+}) {
+  const metadata: Record<Page, [string, string, React.ElementType, string]> = {
+    dashboard: ["Dashboard", "OVERVIEW", CircleGauge, "Network command center."],
+    gaming: ["Gaming", "GAMING", Gamepad2, "Gaming intelligence."],
+    devices: ["Devices", "CLIENTS", Users, "Connected device management."],
+    wifi: ["Wi-Fi", "WIRELESS", Wifi, "Wireless management."],
+    "5g": ["5G", "CELLULAR", Signal, "Cellular management."],
+    network: ["Network", "NETWORK", Network, "Network management."],
+    security: ["Security", "SECURITY", Shield, "Security center."],
+    diagnostics: ["Diagnostics", "DIAGNOSTICS", Activity, "Network diagnostics."],
+    analytics: ["Analytics", "ANALYTICS", Server, "Network analytics."],
+    system: ["System", "SYSTEM", Cpu, "System control."],
+    advanced: ["Advanced", "ADVANCED", Settings, "Advanced settings."],
+  };
+
+  const [title, eyebrow, Icon, description] = metadata[page];
+
+  return (
+    <div className="page-stack page-enter">
+      <section className="module-hero">
+        <div className="module-icon">
+          <Icon size={24} />
+        </div>
+        <div>
+          <div className="eyebrow">{eyebrow}</div>
+          <h1>{title}</h1>
+          <p>{description}</p>
+        </div>
+      </section>
+
+      <Panel title="Live Status" eyebrow="QUANTUMGRID">
+        <div className="module-placeholder-stat">
+          <StatusBadge>MODULE ONLINE</StatusBadge>
+          <strong>Ready for QuantumGrid services.</strong>
+        </div>
+      </Panel>
+    </div>
+  );
+}
+
+function App() {
+  const forceFirstBoot =
+    new URLSearchParams(window.location.search).get("firstboot") === "1";
+
+  const [setupComplete, setSetupComplete] = useState(
+    () =>
+      !forceFirstBoot &&
+      localStorage.getItem("quantumgrid-setup-complete") === "1",
+  );
+
+  const [setupStep, setSetupStep] = useState<SetupStep>(
+    forceFirstBoot ? "welcome" : "done",
+  );
+
+  const [loginUsername, setLoginUsername] = useState(
+    () => localStorage.getItem("quantumgrid-username") || "",
+  );
+
+  const [accountUsername, setAccountUsername] = useState(
+    () => localStorage.getItem("quantumgrid-username") || "",
+  );
+
+  const [accountPassword, setAccountPassword] = useState("");
+  const [accountConfirm, setAccountConfirm] = useState("");
+  const [wifiSsid, setWifiSsid] = useState("QuantumGrid");
+  const [wifiPassword, setWifiPassword] = useState("");
+  const [wanType, setWanType] = useState<"dhcp" | "pppoe" | "static">("dhcp");
+
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginError, setLoginError] = useState("");
+
+  const [page, setPage] = useState<Page>("dashboard");
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileNav, setMobileNav] = useState(false);
+
+  const [stats, setStats] = useState({
+    latency: 8,
+    download: 942,
+    upload: 41,
+    loss: 0,
+    jitter: 1.1,
+    cpu: 21,
+    temp: 51,
+    ram: 34,
+    wanUp: true,
+  });
+
+  const refreshStats = useCallback(() => {
+    setStats((current) => ({
+      ...current,
+      latency: clamp(current.latency + rand(-2.5, 2.5), 5, 18),
+      download: clamp(current.download + rand(-45, 45), 720, 1100),
+      upload: clamp(current.upload + rand(-7, 7), 28, 75),
+      loss: clamp(current.loss + rand(-0.08, 0.08), 0, 0.6),
+      jitter: clamp(current.jitter + rand(-0.35, 0.35), 0.3, 3.5),
+      cpu: clamp(current.cpu + rand(-4, 4), 8, 55),
+      temp: clamp(current.temp + rand(-0.8, 0.8), 43, 67),
+      ram: clamp(current.ram + rand(-2, 2), 24, 58),
+    }));
+  }, []);
+
+  useEffect(() => {
+    if (!setupComplete || !loggedIn) return;
+
+    const interval = window.setInterval(refreshStats, 3000);
+    return () => window.clearInterval(interval);
+  }, [setupComplete, loggedIn, refreshStats]);
+
+  const completeSetup = () => {
+    localStorage.setItem("quantumgrid-setup-complete", "1");
+    localStorage.setItem("quantumgrid-username", accountUsername.trim());
+    localStorage.setItem("quantumgrid-wifi-ssid", wifiSsid);
+    localStorage.setItem("quantumgrid-wan-type", wanType);
+
+    setLoginUsername(accountUsername.trim());
+    setSetupComplete(true);
+    setSetupStep("done");
+  };
+
+  const login = () => {
+    const savedUsername =
+      localStorage.getItem("quantumgrid-username") || accountUsername;
+
+    if (
+      loginUsername.trim() === savedUsername &&
+      loginPassword === accountPassword
+    ) {
+      setLoggedIn(true);
+      setLoginError("");
+      setLoginPassword("");
+      return;
+    }
+
+    /*
+     * Development fallback:
+     * If the original account was created before refresh/reload and the
+     * plaintext password is no longer in this running session, the UI
+     * accepts the typed development password "quantumgrid".
+     *
+     * Replace this with backend authentication before production firmware.
+     */
+    if (loginUsername.trim() === savedUsername && loginPassword === "quantumgrid") {
+      setLoggedIn(true);
+      setLoginError("");
+      setLoginPassword("");
+      return;
+    }
+
+    setLoginError("Incorrect username or password.");
+  };
+
+  const renderPage = () => {
+    switch (page) {
+      case "dashboard":
+        return <DashboardPage stats={stats} onRefresh={refreshStats} />;
+      case "gaming":
+        return <GamingPage stats={stats} />;
+      case "devices":
+        return <DevicesPage />;
+      case "wifi":
+        return <WifiPage />;
+      case "5g":
+        return <FiveGPage />;
+      case "network":
+        return <NetworkPage />;
+      case "security":
+        return <SecurityPage />;
+      case "diagnostics":
+        return <DiagnosticsPage stats={stats} onRun={refreshStats} />;
+      case "analytics":
+        return <AnalyticsPage />;
+      case "system":
+        return <SystemPage stats={stats} />;
+      case "advanced":
+        return <AdvancedPage />;
+      default:
+        return <ModulePageFallback page={page} />;
+    }
+  };
+
+  if (!setupComplete || !loggedIn) {
+    if (setupStep === "welcome") {
+      return <WelcomeScreen onNext={() => setSetupStep("account")} />;
+    }
+
+    if (setupStep === "account") {
+      return (
+        <AccountScreen
+          username={accountUsername}
+          setUsername={setAccountUsername}
+          password={accountPassword}
+          setPassword={setAccountPassword}
+          confirm={accountConfirm}
+          setConfirm={setAccountConfirm}
+          onBack={() => setSetupStep("welcome")}
+          onNext={() => setSetupStep("wifi")}
+        />
+      );
+    }
+
+    if (setupStep === "wifi") {
+      return (
+        <WifiSetupScreen
+          ssid={wifiSsid}
+          setSsid={setWifiSsid}
+          password={wifiPassword}
+          setPassword={setWifiPassword}
+          onBack={() => setSetupStep("account")}
+          onNext={() => setSetupStep("wan")}
+        />
+      );
+    }
+
+    if (setupStep === "wan") {
+      return (
+        <WanSetupScreen
+          type={wanType}
+          setType={setWanType}
+          onBack={() => setSetupStep("wifi")}
+          onNext={completeSetup}
+        />
+      );
+    }
+
+    return (
+      <LoginScreen
+        username={loginUsername}
+        password={loginPassword}
+        setPassword={setLoginPassword}
+        onLogin={login}
+        error={loginError}
+      />
+    );
+  }
+
+  const grouped = {
+    overview: navItems.filter((item) => item.section === "overview"),
+    network: navItems.filter((item) => item.section === "network"),
+    system: navItems.filter((item) => item.section === "system"),
+  };
+
+  return (
+    <div className={`app ${collapsed ? "sidebar-collapsed" : ""}`}>
+      <div className="ambient ambient-red" />
+      <div className="ambient ambient-blue" />
+
+      <aside className={`sidebar ${mobileNav ? "sidebar-open" : ""}`}>
+        <div className="brand">
+          <div className="brand-logo">Q</div>
+
+          {!collapsed && (
+            <div>
+              <div className="brand-name">QUANTUMGRID</div>
+              <div className="brand-subtitle">NETWORK OS</div>
+            </div>
+          )}
+
+          <button
+            className="mobile-close"
+            onClick={() => setMobileNav(false)}
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="side-scroll">
+          <nav className="nav">
+            <NavGroup
+              title="Overview"
+              items={grouped.overview}
+              page={page}
+              collapsed={collapsed}
+              onSelect={(id) => {
+                setPage(id);
+                setMobileNav(false);
+              }}
+            />
+
+            <NavGroup
+              title="Network"
+              items={grouped.network}
+              page={page}
+              collapsed={collapsed}
+              onSelect={(id) => {
+                setPage(id);
+                setMobileNav(false);
+              }}
+            />
+
+            <NavGroup
+              title="System"
+              items={grouped.system}
+              page={page}
+              collapsed={collapsed}
+              onSelect={(id) => {
+                setPage(id);
+                setMobileNav(false);
+              }}
+            />
+          </nav>
+        </div>
+
+        <div className="sidebar-bottom">
+          {!collapsed && (
+            <div className="router-card">
+              <div className="router-icon">
+                <Router size={18} />
+              </div>
+
+              <div>
+                <strong>AW1000</strong>
+                <span>IPQ807x PLATFORM</span>
+              </div>
+
+              <StatusDot />
+            </div>
+          )}
+
+          {collapsed && (
+            <div className="router-card router-card-collapsed">
+              <Router size={18} />
+              <StatusDot />
+            </div>
+          )}
+        </div>
+      </aside>
+
+      <main className="main">
+        <header className="topbar">
+          <div className="topbar-left">
+            <button
+              className="mobile-menu"
+              onClick={() => setMobileNav(true)}
+            >
+              <Menu size={20} />
+            </button>
+
+            <button
+              className="collapse-button"
+              onClick={() => setCollapsed((value) => !value)}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <Menu size={18} />
+            </button>
+
+            <div className="breadcrumb">
+              QUANTUMGRID
+              <ChevronRight size={14} />
+              <span>{page.toUpperCase()}</span>
+            </div>
+          </div>
+
+          <div className="topbar-right">
+            <StatusBadge>SYSTEM OPTIMAL</StatusBadge>
+
+            <button
+              className="refresh-button"
+              onClick={refreshStats}
+              title="Refresh telemetry"
+            >
+              <RefreshCw size={17} />
+            </button>
+
+            <button className="icon-button" title="Security">
+              <Lock size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="content">{renderPage()}</div>
+
+        <footer className="footer">
+          <span>QUANTUMGRID OS</span>
+          <span>AW1000 • IPQ807x</span>
+          <span>Development Build</span>
+        </footer>
+      </main>
+    </div>
+  );
+}
+
+function NavGroup({
+  title,
+  items,
+  page,
+  collapsed,
+  onSelect,
+}: {
+  title: string;
+  items: NavItem[];
+  page: Page;
+  collapsed: boolean;
+  onSelect: (id: Page) => void;
+}) {
+  return (
+    <div className="nav-group">
+      {!collapsed && <div className="nav-title">{title}</div>}
+
+      {items.map(({ id, label, icon: Icon }) => (
+        <button
+          key={id}
+          className={`nav-item ${page === id ? "nav-item-active" : ""}`}
+          onClick={() => onSelect(id)}
+          title={collapsed ? label : undefined}
+        >
+          <Icon size={18} strokeWidth={1.8} />
+          {!collapsed && <span>{label}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default App;
