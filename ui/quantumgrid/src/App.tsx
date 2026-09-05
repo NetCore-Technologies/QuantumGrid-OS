@@ -10,6 +10,8 @@ import {
   Database,
   Download,
   Gamepad2,
+  Bot,
+  GripVertical,
   Globe2,
   HardDrive,
   KeyRound,
@@ -31,6 +33,7 @@ import {
   Wifi,
   X,
   Zap,
+  RadioTower,
 } from "lucide-react";
 
 type Page =
@@ -1518,8 +1521,1047 @@ function DashboardPage({
     advanced: ["Advanced", "Advanced Control", Settings],
   };
 
-  const [title, eyebrow, Icon] = titles[page as Exclude<Page, "dashboard">];
+  if (page === "gaming") {
+    return <GamingControlPage />;
+  }
 
+  if (page === "wifi") {
+    return <WifiControlPage />;
+  }
+
+  const [title, eyebrow, Icon] =
+    titles[page as Exclude<Page, "dashboard">];
+
+  return (
+    <GenericModulePage
+      title={title}
+      eyebrow={eyebrow}
+      Icon={Icon}
+    />
+  );
+}
+
+
+function WifiControlPage() {
+  const [bandSteering, setBandSteering] = useState(true);
+  const [autoChannel, setAutoChannel] = useState(true);
+
+  const [radio24, setRadio24] = useState(true);
+  const [radio5, setRadio5] = useState(true);
+
+  const [power24, setPower24] = useState("High");
+  const [power5, setPower5] = useState("High");
+
+  const [clients, setClients] = useState([
+    {
+      name: "QuantumGrid PC",
+      band: "5 GHz",
+      signal: "-39 dBm",
+      rate: "842 Mbps",
+      priority: "HIGH",
+    },
+    {
+      name: "PlayStation 5",
+      band: "5 GHz",
+      signal: "-46 dBm",
+      rate: "486 Mbps",
+      priority: "HIGH",
+    },
+    {
+      name: "iPhone",
+      band: "2.4 GHz",
+      signal: "-48 dBm",
+      rate: "312 Mbps",
+      priority: "NORMAL",
+    },
+    {
+      name: "Living Room TV",
+      band: "2.4 GHz",
+      signal: "-61 dBm",
+      rate: "186 Mbps",
+      priority: "LOW",
+    },
+  ]);
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  function moveClient(from: number, to: number) {
+    if (
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= clients.length ||
+      to >= clients.length
+    ) {
+      return;
+    }
+
+    setClients((current) => {
+      const next = [...current];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }
+
+  return (
+    <div className="real-page wifi-control-page">
+      <section className="real-page-header wifi-real-header">
+        <div>
+          <div className="setup-kicker">WIRELESS INTELLIGENCE • LIVE</div>
+
+          <h1>
+            Wi-Fi
+            <span> Control Center.</span>
+          </h1>
+
+          <p>
+            Control your radios, intelligent band steering, channels,
+            security, transmit power and connected clients.
+          </p>
+
+          <div className="wifi-header-controls">
+            <AdvancedToggle
+              icon={Sparkles}
+              title="Band Steering"
+              description="Automatic"
+              enabled={bandSteering}
+              setEnabled={setBandSteering}
+            />
+
+            <AdvancedToggle
+              icon={Bot}
+              title="Auto Channel"
+              description="Intelligent"
+              enabled={autoChannel}
+              setEnabled={setAutoChannel}
+            />
+          </div>
+        </div>
+
+        <div className="wifi-health-card">
+          <Status>WIRELESS HEALTH</Status>
+
+          <strong>98</strong>
+
+          <span>
+            Excellent wireless environment
+          </span>
+
+          <div className="wifi-health-bar">
+            <span style={{ width: "98%" }} />
+          </div>
+        </div>
+      </section>
+
+      <div className="radio-overview-grid">
+        <WifiRadioPanel
+          band="2.4 GHz"
+          enabled={radio24}
+          setEnabled={setRadio24}
+          channel={autoChannel ? "AUTO" : "6"}
+          width="20 MHz"
+          clients={2}
+          power={power24}
+          setPower={setPower24}
+        />
+
+        <WifiRadioPanel
+          band="5 GHz"
+          enabled={radio5}
+          setEnabled={setRadio5}
+          channel={autoChannel ? "AUTO" : "36"}
+          width="80 MHz"
+          clients={2}
+          power={power5}
+          setPower={setPower5}
+          primary
+        />
+      </div>
+
+      <div className="wifi-feature-grid">
+        <Panel title="Band Steering" eyebrow="CLIENT INTELLIGENCE">
+          <div className="feature-big-toggle">
+            <div className="feature-icon">
+              <Sparkles size={23} />
+            </div>
+
+            <div>
+              <strong>
+                Intelligent client steering
+              </strong>
+
+              <span>
+                QuantumGrid can move compatible clients between
+                2.4 GHz and 5 GHz based on signal, capabilities,
+                utilization and priority.
+              </span>
+            </div>
+
+            <button
+              className={
+                bandSteering
+                  ? "qg-switch enabled large"
+                  : "qg-switch large"
+              }
+              onClick={() => setBandSteering(!bandSteering)}
+            >
+              <span />
+            </button>
+          </div>
+
+          <div className="steering-rule-grid">
+            <div>
+              <span>SIGNAL</span>
+              <strong>SMART</strong>
+            </div>
+
+            <div>
+              <span>CAPABILITY</span>
+              <strong>SMART</strong>
+            </div>
+
+            <div>
+              <span>PRIORITY</span>
+              <strong>SMART</strong>
+            </div>
+
+            <div>
+              <span>LOAD</span>
+              <strong>SMART</strong>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Wireless Security" eyebrow="PROTECTION">
+          <div className="security-status-card">
+            <div className="security-status-icon">
+              <Shield size={21} />
+            </div>
+
+            <div>
+              <strong>WPA2 / WPA3</strong>
+              <span>
+                Protected wireless authentication
+              </span>
+            </div>
+
+            <Status>SECURE</Status>
+          </div>
+
+          <div className="security-option-row">
+            <div>
+              <span>PRIMARY SECURITY</span>
+              <strong>WPA3-SAE</strong>
+            </div>
+
+            <button className="secondary-button">
+              Configure
+              <ChevronRight size={15} />
+            </button>
+          </div>
+
+          <div className="security-option-row">
+            <div>
+              <span>COMPATIBILITY</span>
+              <strong>WPA2/WPA3</strong>
+            </div>
+
+            <button className="secondary-button">
+              Advanced
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Connected Clients" eyebrow="DRAG TO PRIORITIZE">
+        <div className="wifi-client-help">
+          <GripVertical size={14} />
+          Drag a device to change its network priority.
+        </div>
+
+        <div className="wifi-client-table">
+          <div className="wifi-client-table-head">
+            <span>DEVICE</span>
+            <span>BAND</span>
+            <span>SIGNAL</span>
+            <span>RATE</span>
+            <span>PRIORITY</span>
+          </div>
+
+          {clients.map((client, index) => (
+            <div
+              key={client.name}
+              className={
+                dragIndex === index
+                  ? "wifi-client-table-row dragging"
+                  : "wifi-client-table-row"
+              }
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragIndex !== null) {
+                  moveClient(dragIndex, index);
+                }
+
+                setDragIndex(null);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+            >
+              <div className="wifi-client-name">
+                <div className="drag-handle">
+                  <GripVertical size={16} />
+                </div>
+
+                <div className="device-icon">
+                  <Monitor size={16} />
+                </div>
+
+                <div>
+                  <strong>{client.name}</strong>
+                  <span>Connected</span>
+                </div>
+              </div>
+
+              <b>{client.band}</b>
+              <b>{client.signal}</b>
+              <b>{client.rate}</b>
+
+              <span
+                className={
+                  client.priority === "HIGH"
+                    ? "priority-pill high"
+                    : client.priority === "LOW"
+                      ? "priority-pill low"
+                      : "priority-pill normal"
+                }
+              >
+                {client.priority}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <div className="wifi-bottom-actions premium-bottom-actions">
+        <div>
+          <div className="bottom-action-icon">
+            <RadioTower size={16} />
+          </div>
+
+          <div>
+            <strong>Wireless environment monitored</strong>
+            <span>
+              QuantumGrid is continuously evaluating radio conditions.
+            </span>
+          </div>
+        </div>
+
+        <button
+          className="hero-button"
+          onClick={() => window.location.reload()}
+        >
+          <RefreshCw size={16} />
+          Rescan Environment
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WifiRadioPanel({
+  band,
+  enabled,
+  setEnabled,
+  channel,
+  width,
+  clients,
+  power,
+  setPower,
+  primary = false,
+}: {
+  band: string;
+  enabled: boolean;
+  setEnabled: (value: boolean) => void;
+  channel: string;
+  width: string;
+  clients: number;
+  power: string;
+  setPower: (value: string) => void;
+  primary?: boolean;
+}) {
+  return (
+    <section className={primary ? "radio-card primary wifi-radio-real" : "radio-card wifi-radio-real"}>
+      <div className="radio-card-header">
+        <div>
+          <div className="panel-eyebrow">
+            WIRELESS RADIO
+          </div>
+
+          <h2>{band}</h2>
+        </div>
+
+        <button
+          className={
+            enabled
+              ? "radio-power active"
+              : "radio-power"
+          }
+          onClick={() => setEnabled(!enabled)}
+        >
+          <span />
+          {enabled ? "ACTIVE" : "OFF"}
+        </button>
+      </div>
+
+      <div className="radio-live-line">
+        <Status>
+          {enabled ? "RADIO ONLINE" : "RADIO DISABLED"}
+        </Status>
+
+        <span>
+          802.11AX
+        </span>
+      </div>
+
+      <div className="radio-stats">
+        <div>
+          <span>CHANNEL</span>
+          <strong>{channel}</strong>
+        </div>
+
+        <div>
+          <span>WIDTH</span>
+          <strong>{width}</strong>
+        </div>
+
+        <div>
+          <span>CLIENTS</span>
+          <strong>{clients}</strong>
+        </div>
+
+        <div>
+          <span>POWER</span>
+          <strong>{power}</strong>
+        </div>
+      </div>
+
+      <div className="radio-controls">
+        <label>
+          <span>TRANSMIT POWER</span>
+
+          <select
+            value={power}
+            onChange={(e) => setPower(e.target.value)}
+          >
+            <option>Low</option>
+            <option>Medium</option>
+            <option>High</option>
+          </select>
+        </label>
+
+        <button className="secondary-button">
+          <SlidersHorizontal size={14} />
+          Configure Radio
+        </button>
+      </div>
+    </section>
+  );
+}
+
+
+
+function GamingControlPage() {
+  const [engine, setEngine] = useState(true);
+  const [smartQueue, setSmartQueue] = useState(true);
+  const [gamingPriority, setGamingPriority] = useState(true);
+  const [autoOptimize, setAutoOptimize] = useState(true);
+  const [scheduled, setScheduled] = useState(false);
+  const [optimizing, setOptimizing] = useState(false);
+
+  const [mode, setMode] = useState<
+    "latency" | "balanced" | "throughput"
+  >("latency");
+
+  const [downloadLimit, setDownloadLimit] = useState("950");
+  const [uploadLimit, setUploadLimit] = useState("45");
+
+  const [latency, setLatency] = useState(8);
+  const [jitter, setJitter] = useState(1.1);
+  const [packetLoss, setPacketLoss] = useState(0);
+  const [score, setScore] = useState(98);
+
+  const [clients, setClients] = useState([
+    {
+      name: "QuantumGrid PC",
+      ip: "192.168.1.100",
+      link: "2.5GbE",
+      latency: 8,
+      priority: "HIGH",
+    },
+    {
+      name: "PlayStation 5",
+      ip: "192.168.1.112",
+      link: "Wi-Fi 6",
+      latency: 11,
+      priority: "HIGH",
+    },
+    {
+      name: "Xbox",
+      ip: "192.168.1.118",
+      link: "Wi-Fi 6",
+      latency: 14,
+      priority: "NORMAL",
+    },
+    {
+      name: "Gaming Laptop",
+      ip: "192.168.1.119",
+      link: "Wi-Fi 6",
+      latency: 17,
+      priority: "NORMAL",
+    },
+  ]);
+
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+
+  const [telemetry, setTelemetry] = useState<number[]>(
+    Array.from({ length: 42 }, (_, i) =>
+      9 +
+      Math.sin(i / 2.8) * 3 +
+      Math.sin(i / 5.4) * 2,
+    ),
+  );
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setLatency((value) =>
+        Math.max(
+          5,
+          Math.min(
+            18,
+            value + (Math.random() - 0.5) * (autoOptimize ? 1.5 : 3),
+          ),
+        ),
+      );
+
+      setJitter((value) =>
+        Math.max(
+          0.3,
+          Math.min(
+            3.8,
+            value + (Math.random() - 0.5) * (autoOptimize ? 0.2 : 0.45),
+          ),
+        ),
+      );
+
+      setPacketLoss((value) =>
+        Math.max(
+          0,
+          Math.min(0.8, value + (Math.random() - 0.5) * 0.08),
+        ),
+      );
+
+      setScore((value) =>
+        Math.max(
+          91,
+          Math.min(
+            100,
+            value + (Math.random() - 0.5) * (autoOptimize ? 1.1 : 2),
+          ),
+        ),
+      );
+
+      setTelemetry((values) => [
+        ...values.slice(1),
+        8 +
+          Math.random() * 4 +
+          Math.sin(Date.now() / 1100) * 2,
+      ]);
+    }, 1800);
+
+    return () => window.clearInterval(timer);
+  }, [autoOptimize]);
+
+  function optimize() {
+    if (optimizing) return;
+
+    setOptimizing(true);
+
+    setEngine(true);
+    setSmartQueue(true);
+    setGamingPriority(true);
+    setAutoOptimize(true);
+
+    setMode("latency");
+    setDownloadLimit("950");
+    setUploadLimit("45");
+
+    setLatency(7);
+    setJitter(0.9);
+    setPacketLoss(0);
+    setScore(99);
+
+    window.setTimeout(() => {
+      setOptimizing(false);
+    }, 2200);
+  }
+
+  function moveClient(from: number, to: number) {
+    if (
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= clients.length ||
+      to >= clients.length
+    ) {
+      return;
+    }
+
+    setClients((current) => {
+      const next = [...current];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+  }
+
+  return (
+    <div className="gaming-page">
+      {optimizing && (
+        <div className="optimization-overlay">
+          <div className="optimization-orbit">
+            <Zap size={27} />
+          </div>
+
+          <strong>Optimizing QuantumGrid</strong>
+
+          <span>
+            Rebalancing latency, queues and client priorities...
+          </span>
+
+          <div className="optimization-progress">
+            <span />
+          </div>
+        </div>
+      )}
+
+      <section className="gaming-hero premium-hero">
+        <div className="gaming-hero-copy">
+          <div className="setup-kicker">GAMING ENGINE • LIVE</div>
+
+          <h1>
+            Maximum
+            <span> gaming performance.</span>
+          </h1>
+
+          <p>
+            QuantumGrid continuously monitors latency, jitter, packet loss,
+            bufferbloat and client traffic to keep gaming traffic responsive.
+          </p>
+
+          <div className="gaming-engine-controls">
+            <ToggleButton
+              label="Gaming Engine"
+              enabled={engine}
+              onClick={() => setEngine(!engine)}
+            />
+
+            <ToggleButton
+              label="Auto Optimize"
+              enabled={autoOptimize}
+              onClick={() => setAutoOptimize(!autoOptimize)}
+            />
+
+            <Status>
+              {engine ? "LATENCY OPTIMIZED" : "STANDARD ROUTING"}
+            </Status>
+          </div>
+        </div>
+
+        <div className="gaming-score-card premium-score">
+          <div className="gaming-score-ring large">
+            <strong>{Math.round(score)}</strong>
+            <span>/100</span>
+          </div>
+
+          <div className="gaming-score-label">GAMING SCORE</div>
+
+          <p>
+            {optimizing
+              ? "Optimization in progress"
+              : "Excellent connection quality"}
+          </p>
+        </div>
+      </section>
+
+      <div className="gaming-metrics premium-metrics">
+        <MetricTile
+          label="LATENCY"
+          value={latency.toFixed(0)}
+          unit="ms"
+          detail="Excellent"
+          good
+        />
+        <MetricTile
+          label="JITTER"
+          value={jitter.toFixed(1)}
+          unit="ms"
+          detail="Stable"
+          good
+        />
+        <MetricTile
+          label="PACKET LOSS"
+          value={packetLoss.toFixed(1)}
+          unit="%"
+          detail="Perfect"
+          good
+        />
+        <MetricTile
+          label="BUFFERBLOAT"
+          value="A"
+          detail="Excellent"
+          good
+        />
+      </div>
+
+      <div className="gaming-main-grid">
+        <Panel title="Gaming Mode" eyebrow="TRAFFIC POLICY">
+          <div className="gaming-mode-grid">
+            {[
+              [
+                "latency",
+                "Latency First",
+                "Minimum delay",
+                "Best for competitive gaming",
+              ],
+              [
+                "balanced",
+                "Balanced",
+                "Latency + throughput",
+                "General gaming",
+              ],
+              [
+                "throughput",
+                "Throughput",
+                "Maximum bandwidth",
+                "Large downloads",
+              ],
+            ].map(([id, title, description, detail]) => (
+              <button
+                key={id}
+                className={
+                  mode === id ? "gaming-mode selected" : "gaming-mode"
+                }
+                onClick={() =>
+                  setMode(
+                    id as "latency" | "balanced" | "throughput",
+                  )
+                }
+              >
+                <div className="gaming-mode-icon">
+                  <Zap size={18} />
+                </div>
+
+                <strong>{title}</strong>
+                <span>{description}</span>
+                <small>{detail}</small>
+
+                {mode === id && (
+                  <div className="gaming-mode-check">
+                    <Check size={14} />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Smart Queue Control" eyebrow="BUFFERBLOAT">
+          <div className="advanced-toggle-stack">
+            <AdvancedToggle
+              icon={Gamepad2}
+              title="Smart Queue Management"
+              description="Shape WAN traffic dynamically to reduce latency under load."
+              enabled={smartQueue}
+              setEnabled={setSmartQueue}
+            />
+
+            <AdvancedToggle
+              icon={Gamepad2}
+              title="Gaming Priority"
+              description="Prioritize gaming traffic above normal network traffic."
+              enabled={gamingPriority}
+              setEnabled={setGamingPriority}
+            />
+
+            <AdvancedToggle
+              icon={Sparkles}
+              title="Auto Optimization"
+              description="Continuously adjust queue behaviour using live network conditions."
+              enabled={autoOptimize}
+              setEnabled={setAutoOptimize}
+            />
+          </div>
+        </Panel>
+      </div>
+
+      <div className="gaming-policy-grid">
+        <Panel title="Bandwidth Policy" eyebrow="WAN CONTROL">
+          <div className="bandwidth-policy premium-bandwidth">
+            <label>
+              <span>DOWNLOAD LIMIT</span>
+
+              <div>
+                <input
+                  type="number"
+                  value={downloadLimit}
+                  onChange={(e) => setDownloadLimit(e.target.value)}
+                />
+                <b>Mbps</b>
+              </div>
+            </label>
+
+            <label>
+              <span>UPLOAD LIMIT</span>
+
+              <div>
+                <input
+                  type="number"
+                  value={uploadLimit}
+                  onChange={(e) => setUploadLimit(e.target.value)}
+                />
+                <b>Mbps</b>
+              </div>
+            </label>
+          </div>
+
+          <div className="policy-summary">
+            <div>
+              <span>MODE</span>
+              <strong>
+                {mode === "latency" ? "LATENCY FIRST" : mode.toUpperCase()}
+              </strong>
+            </div>
+
+            <div>
+              <span>AUTO ADJUST</span>
+              <strong>{autoOptimize ? "ENABLED" : "DISABLED"}</strong>
+            </div>
+          </div>
+        </Panel>
+
+        <Panel title="Gaming Client Priority" eyebrow="DRAG TO REORDER">
+          <div className="priority-help">
+            <GripVertical size={14} />
+            Drag clients to change their priority order.
+          </div>
+
+          <div className="gaming-priority-list">
+            {clients.map((client, index) => (
+              <div
+                key={client.name}
+                className={
+                  dragIndex === index
+                    ? "gaming-priority-row dragging"
+                    : "gaming-priority-row"
+                }
+                draggable
+                onDragStart={() => setDragIndex(index)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={() => {
+                  if (dragIndex !== null) {
+                    moveClient(dragIndex, index);
+                  }
+                  setDragIndex(null);
+                }}
+                onDragEnd={() => setDragIndex(null)}
+              >
+                <div className="drag-handle">
+                  <GripVertical size={17} />
+                </div>
+
+                <div className="priority-number">{index + 1}</div>
+
+                <div className="priority-device">
+                  <div className="device-icon">
+                    <Gamepad2 size={16} />
+                  </div>
+
+                  <div>
+                    <strong>{client.name}</strong>
+                    <span>
+                      {client.ip} • {client.link}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="priority-latency">
+                  <span>LATENCY</span>
+                  <strong>{client.latency} ms</strong>
+                </div>
+
+                <span
+                  className={
+                    index < 2
+                      ? "priority-pill high"
+                      : "priority-pill normal"
+                  }
+                >
+                  {index < 2 ? "HIGH" : client.priority}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <Panel title="Live Gaming Telemetry" eyebrow="REAL-TIME">
+        <div className="gaming-live-chart">
+          {telemetry.map((value, index) => (
+            <span
+              key={`${index}-${value}`}
+              style={{
+                height: `${Math.max(8, Math.min(92, value * 5))}%`,
+              }}
+            />
+          ))}
+        </div>
+
+        <div className="telemetry-labels">
+          <span>LATENCY</span>
+          <span>LIVE</span>
+        </div>
+      </Panel>
+
+      <div className="gaming-schedule-bar">
+        <AdvancedToggle
+          icon={Sparkles}
+          title="Scheduled Optimization"
+          description="Run a network optimization pass automatically."
+          enabled={scheduled}
+          setEnabled={setScheduled}
+        />
+
+        <div className="schedule-select-wrap">
+          <span>RUN EVERY</span>
+
+          <select className="premium-select">
+            <option>15 minutes</option>
+            <option>30 minutes</option>
+            <option>1 hour</option>
+            <option>3 hours</option>
+            <option>6 hours</option>
+          </select>
+        </div>
+
+        <button
+          className="hero-button"
+          onClick={optimize}
+          disabled={optimizing}
+        >
+          <Zap size={16} />
+          {optimizing ? "Optimizing..." : "Optimize Gaming"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ToggleButton({
+  label,
+  enabled,
+  onClick,
+}: {
+  label: string;
+  enabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      className={enabled ? "engine-toggle active" : "engine-toggle"}
+      onClick={onClick}
+    >
+      <span />
+      {label}
+    </button>
+  );
+}
+
+function MetricTile({
+  label,
+  value,
+  unit,
+  detail,
+  good,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  detail: string;
+  good?: boolean;
+}) {
+  return (
+    <div className="gaming-metric-tile">
+      <span>{label}</span>
+
+      <strong>
+        {value}
+        {unit && <small>{unit}</small>}
+      </strong>
+
+      <em className={good ? "metric-good" : ""}>
+        {detail}
+      </em>
+    </div>
+  );
+}
+
+function AdvancedToggle({
+  icon: Icon,
+  title,
+  description,
+  enabled,
+  setEnabled,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  enabled: boolean;
+  setEnabled: (value: boolean) => void;
+}) {
+  return (
+    <div className="advanced-toggle">
+      <div className="advanced-toggle-icon">
+        <Icon size={17} />
+      </div>
+
+      <div className="advanced-toggle-copy">
+        <strong>{title}</strong>
+        <span>{description}</span>
+      </div>
+
+      <button
+        className={enabled ? "qg-switch enabled" : "qg-switch"}
+        onClick={() => setEnabled(!enabled)}
+        aria-label={`Toggle ${title}`}
+      >
+        <span />
+      </button>
+    </div>
+  );
+}
+
+function GenericModulePage({
+  title,
+  eyebrow,
+  Icon,
+}: {
+  title: string;
+  eyebrow: string;
+  Icon: React.ElementType;
+}) {
   return (
     <div className="module-page">
       <section className="module-hero">
@@ -1531,29 +2573,31 @@ function DashboardPage({
           <div className="setup-kicker">{eyebrow.toUpperCase()}</div>
           <h1>{title}</h1>
           <p>
-            QuantumGrid management module. Real device telemetry and
-            controls will connect here through the QuantumGrid API.
+            QuantumGrid management module. Real hardware telemetry and
+            controls will be connected to this service.
           </p>
         </div>
       </section>
 
       <div className="module-grid">
-        <Panel title="Live Status" eyebrow="QUANTUMGRID">
+        <Panel title="Service Status" eyebrow="QUANTUMGRID">
           <Status>MODULE ONLINE</Status>
+
           <div className="module-message">
-            This interface is ready for the corresponding QuantumGrid
-            backend service.
+            This service is ready for QuantumGrid backend integration.
           </div>
         </Panel>
 
         <Panel title="Controls" eyebrow="MANAGEMENT">
           <div className="control-grid">
-            {["Optimize", "Diagnostics", "Configure", "Inspect"].map((item) => (
-              <button key={item} className="control-tile">
-                <Sparkles size={17} />
-                {item}
-              </button>
-            ))}
+            {["Optimize", "Diagnostics", "Configure", "Inspect"].map(
+              (item) => (
+                <button key={item} className="control-tile">
+                  <Sparkles size={17} />
+                  {item}
+                </button>
+              ),
+            )}
           </div>
         </Panel>
       </div>
