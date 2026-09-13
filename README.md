@@ -98,6 +98,45 @@ Core areas include:
 - SSH and management ACLs
 - A dedicated QuantumGrid control center
 
+## QuantumGrid Control Center
+
+QuantumGrid includes a modern control center designed to make advanced networking easy to understand and manage.
+
+The interface combines real-time network telemetry, Wi-Fi configuration, gaming optimization, system controls, diagnostics and guided first-boot configuration into a single experience.
+
+### First Boot Experience
+
+![QuantumGrid First Boot Experience](ui/quantumgrid/screenshots/first-boot.png)
+
+### Administrator Setup
+
+![Set Administrator Credentials](ui/quantumgrid/screenshots/administrator-credentials.png)
+
+![Administrator Credentials Set](ui/quantumgrid/screenshots/admin-credentials-set.png)
+
+### Dashboard
+
+![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-1.png)
+
+![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-2.png)
+
+### Wi-Fi & Internet
+
+![Configure Wi-Fi](ui/quantumgrid/screenshots/configure-wifi.png)
+
+![Internet Connection Settings](ui/quantumgrid/screenshots/internet-settings.png)
+
+### Gaming
+
+![QuantumGrid Gaming](ui/quantumgrid/screenshots/gaming-page-1.png)
+
+![QuantumGrid Gaming](ui/quantumgrid/screenshots/gaming-page-2.png)
+
+### Access Control
+
+![QuantumGrid Login](ui/quantumgrid/screenshots/login-screen.png)
+
+
 ## Current Hardware Target
 
 ### Arcadyan AW1000
