@@ -114,17 +114,19 @@ The interface combines real-time network telemetry, Wi-Fi configuration, gaming 
 
 ![Administrator Credentials Set](ui/quantumgrid/screenshots/admin-credentials-set.png)
 
-### Dashboard
-
-![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-1.png)
-
-![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-2.png)
 
 ### Wi-Fi & Internet
 
 ![Configure Wi-Fi](ui/quantumgrid/screenshots/configure-wifi.png)
 
 ![Internet Connection Settings](ui/quantumgrid/screenshots/internet-settings.png)
+
+### Dashboard
+
+![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-1.png)
+
+![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-2.png)
+
 
 ### Gaming
 
