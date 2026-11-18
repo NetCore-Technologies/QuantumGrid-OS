@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://netcore-technologies.github.io/QuantumGrid-OS/sitemap.xml
