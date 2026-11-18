@@ -6,6 +6,8 @@ on:
     paths:
       - ".github/workflows/firmware-release.yml"
       - "build.sh"
+      - "scripts/build-ui.sh"
+      - "ui/quantumgrid/**"
       - "configs/**"
       - "files/**"
       - "scripts/setup-aw1000-phone-feed.sh"
@@ -60,7 +62,14 @@ jobs:
             squashfs-tools subversion swig texinfo uglifyjs unzip vim wget xmlto xxd \
             zlib1g-dev zstd
 
-      - name: Build AW1000 firmware
+      - name: Set up Node.js for the QuantumGrid control centre
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: ui/quantumgrid/package-lock.json
+
+      - name: Build AW1000 firmware and install the control centre
         shell: bash
         run: |
           set -Eeuo pipefail

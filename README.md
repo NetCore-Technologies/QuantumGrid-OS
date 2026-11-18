@@ -71,6 +71,11 @@ To use a different OpenWrt revision deliberately:
 QG_OPENWRT_REF=v25.12.6 ./build.sh
 ```
 
+The build also compiles the existing React control centre with Node.js 22/npm and copies
+its Vite output into the firmware root filesystem at `/www/quantumgrid`. After boot it is served
+at `http://<router-address>/quantumgrid/`. The UI's hardware-backed API/authentication wiring
+is tracked separately; do not treat its demo telemetry as live router measurements yet.
+
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.
 

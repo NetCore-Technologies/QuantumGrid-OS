@@ -52,13 +52,16 @@ cd "$OPENWRT_DIR"
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-printf '\n[5/9] Installing QuantumGrid first-boot files...\n'
+printf '\n[5/10] Building and installing the QuantumGrid control centre...\n'
+"$PROJECT_ROOT/scripts/build-ui.sh" "$PROJECT_ROOT" "$OPENWRT_DIR"
+
+printf '\n[6/10] Installing QuantumGrid first-boot files...\n'
 mkdir -p "$OPENWRT_DIR/files"
 if [[ -d "$PROJECT_ROOT/files" ]]; then
     cp -a "$PROJECT_ROOT/files/." "$OPENWRT_DIR/files/"
 fi
 
-printf '\n[6/9] Applying AW1000 firmware configuration...\n'
+printf '\n[7/10] Applying AW1000 firmware configuration...\n'
 CONFIG_FILE="$PROJECT_ROOT/configs/aw1000-max.config"
 if [[ -f "$PROJECT_ROOT/configs/aw1000.config" ]]; then
     CONFIG_FILE="$PROJECT_ROOT/configs/aw1000.config"
@@ -71,13 +74,13 @@ grep -qx 'CONFIG_TARGET_qualcommax=y' .config || die "qualcommax target was not 
 grep -qx 'CONFIG_TARGET_qualcommax_ipq807x=y' .config || die "ipq807x subtarget was not selected"
 grep -qx 'CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y' .config || die "Arcadyan AW1000 profile was not selected"
 
-printf '\n[7/9] Running OpenWrt prerequisites...\n'
+printf '\n[8/10] Running OpenWrt prerequisites...\n'
 make prereq
 
-printf '\n[8/9] Downloading source packages...\n'
+printf '\n[9/10] Downloading source packages...\n'
 make download -j"$BUILD_JOBS"
 
-printf '\n[9/9] Building QuantumGrid AW1000 firmware...\n'
+printf '\n[10/10] Building QuantumGrid AW1000 firmware...\n'
 make -j"$BUILD_JOBS" V=s
 
 printf '\n==============================================\n'

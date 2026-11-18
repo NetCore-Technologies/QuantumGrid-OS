@@ -13,6 +13,10 @@ for package in kmod-usb-serial-option kmod-aw1000-fxs fxsd luci-app-fxs; do
 done
 
 grep -Fq 'setup-aw1000-phone-feed.sh' "$ROOT/build.sh"
+grep -Fq 'scripts/build-ui.sh' "$ROOT/build.sh"
+grep -Fq 'npm ci --no-audit --no-fund' "$ROOT/scripts/build-ui.sh"
+grep -Fq 'files/www/quantumgrid' "$ROOT/scripts/build-ui.sh"
+grep -Fq "base: './'" "$ROOT/ui/quantumgrid/vite.config.ts"
 grep -Fq 'src-link quantumgrid_phone ' "$ROOT/scripts/setup-aw1000-phone-feed.sh"
 ! grep -Fq 'src-link quantumgrid-phone ' "$ROOT/scripts/setup-aw1000-phone-feed.sh"
 grep -Fq 'setup-aw1000-phone-feed.sh' "$ROOT/quantumgrid-configure.sh"
