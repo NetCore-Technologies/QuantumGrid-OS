@@ -89,6 +89,18 @@ The factory image is **not** a universal stock-firmware installer. Follow
 [Docs/RECOVERY.md](Docs/RECOVERY.md), back up first and verify the exact image and checksum.
 Do not flash an image whose installation route you have not confirmed.
 
+## Publish the website
+
+A repository administrator must enable GitHub Pages once:
+
+1. Open repository **Settings → Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+3. Save the setting.
+
+Until Pages is enabled, CI still validates the seven site pages, checks local references and
+JavaScript, and uploads a site artifact; deployment is skipped with a workflow notice. After
+Pages is enabled, pushes to `main` (or a manual Pages workflow run on `main`) publish the site.
+
 ## Releases
 
 Release tags use the `qg-v*` pattern, for example `qg-v0.1.0-alpha.1`. A tagged release
