@@ -1576,6 +1576,7 @@ function DashboardPage({
     devices: ["Devices", "Client Intelligence", Users],
     wifi: ["Wi-Fi", "Wireless Intelligence", Wifi],
     "5g": ["5G", "Cellular Control Center", Signal],
+    phone: ["Phone", "Analogue Voice & FXS", PhoneCall],
     network: ["Network", "Network Control", Network],
     security: ["Security", "Security Center", Shield],
     diagnostics: ["Diagnostics", "Network Diagnostics", Activity],
