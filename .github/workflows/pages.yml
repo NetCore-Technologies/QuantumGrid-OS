@@ -7,12 +7,14 @@ on:
       - "website/**"
       - "scripts/check-website.py"
       - ".github/workflows/pages.yml"
+      - "README.md"
   pull_request:
     branches: [main]
     paths:
       - "website/**"
       - "scripts/check-website.py"
       - ".github/workflows/pages.yml"
+      - "README.md"
   workflow_dispatch:
 
 permissions:
@@ -30,17 +32,31 @@ jobs:
     permissions:
       contents: read
       pages: write
+    outputs:
+      pages_enabled: ${{ steps.pages-check.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
       - name: Validate local links, metadata and sitemap
         run: python3 scripts/check-website.py
       - name: Check website JavaScript
         run: node --check website/site.js
-      - name: Enable and configure Pages
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+      - name: Detect repository Pages configuration
+        id: pages-check
+        shell: bash
+        run: |
+          set -euo pipefail
+          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")"
+          if [[ "$status" == "200" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "GitHub Pages is enabled; deployment can proceed."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::GitHub Pages is not enabled yet. The website was validated and will be uploaded as an artifact, but deployment is skipped. A repository administrator must set Settings > Pages > Build and deployment > Source to GitHub Actions."
+          fi
+      - name: Configure Pages
+        if: steps.pages-check.outputs.enabled == 'true'
         uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
@@ -48,7 +64,7 @@ jobs:
 
   deploy:
     name: Publish GitHub Pages
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.build.outputs.pages_enabled == 'true'
     needs: build
     runs-on: ubuntu-latest
     permissions:
