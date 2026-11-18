@@ -39,7 +39,7 @@ jobs:
       - name: Validate local links, metadata and sitemap
         run: python3 scripts/check-website.py
       - name: Check website JavaScript
-        run: node --check website/site.js
+        run: node --check docs/site.js
       - name: Detect repository Pages configuration
         id: pages-check
         shell: bash
