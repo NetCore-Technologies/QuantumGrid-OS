@@ -22,7 +22,7 @@ for required in "$PHONE_DIR/LICENSE" "$PHONE_DIR/openwrt/aw1000-fxs/Makefile" "$
     [[ -s "$required" ]] || die "Pinned phone source is incomplete: $required"
 done
 
-FEED_LINE="src-link quantumgrid-phone $PHONE_DIR/openwrt"
+FEED_LINE="src-link quantumgrid_phone $PHONE_DIR/openwrt"
 if [[ ! -f "$OPENWRT_DIR/feeds.conf" ]]; then
     if [[ -f "$OPENWRT_DIR/feeds.conf.default" ]]; then cp "$OPENWRT_DIR/feeds.conf.default" "$OPENWRT_DIR/feeds.conf"; else : > "$OPENWRT_DIR/feeds.conf"; fi
 fi
