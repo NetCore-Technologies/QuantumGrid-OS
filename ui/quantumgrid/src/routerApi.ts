@@ -48,6 +48,7 @@ export interface RouterOverview {
 }
 
 const API_URL = "/cgi-bin/luci/admin/services/quantumgrid/api";
+const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -71,10 +72,7 @@ async function decodeOverview(response: Response): Promise<RouterOverview> {
   return payload as RouterOverview;
 }
 
-export async function loginToRouter(
-  username: string,
-  password: string,
-): Promise<RouterOverview> {
+async function authenticate(username: string, password: string): Promise<RouterOverview> {
   const form = new URLSearchParams();
   form.set("luci_username", username);
   form.set("luci_password", password);
@@ -92,6 +90,60 @@ export async function loginToRouter(
   });
 
   return decodeOverview(response);
+}
+
+async function setInitialRootPassword(password: string): Promise<void> {
+  const form = new URLSearchParams();
+  form.set("password", password);
+
+  const response = await fetch(PASSWORD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    throw new Error("The router could not set its initial administrator password.");
+  }
+
+  const result: unknown = await response.json();
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    !("ok" in result) ||
+    result.ok !== true
+  ) {
+    throw new Error("The router rejected the initial administrator password.");
+  }
+}
+
+export async function loginToRouter(
+  username: string,
+  password: string,
+): Promise<RouterOverview> {
+  try {
+    return await authenticate(username, password);
+  } catch (originalError) {
+    // A blank password is accepted only on a router that has not been secured yet.
+    // If an existing password is wrong, the blank-password attempt also fails and
+    // the original authentication error is preserved.
+    if (!password) throw originalError;
+
+    try {
+      await authenticate(username, "");
+    } catch {
+      throw originalError;
+    }
+
+    await setInitialRootPassword(password);
+    return fetchRouterOverview();
+  }
 }
 
 export async function fetchRouterOverview(): Promise<RouterOverview> {

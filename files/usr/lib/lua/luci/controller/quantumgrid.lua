@@ -151,6 +151,40 @@ function index()
 	local page = entry({"admin", "services", "quantumgrid"}, call("action_index"), _("QuantumGrid"), 10)
 	page.dependent = false
 	entry({"admin", "services", "quantumgrid", "api"}, call("action_api")).leaf = true
+	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
+end
+
+function action_set_password()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local password = http.formvalue("password", true)
+
+	if type(password) ~= "string" or #password < 8 or #password > 128 or password:find("[%z\\r\\n]") then
+		http.status(400, "Bad Request")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "Password must be 8 to 128 characters." })
+		return
+	end
+
+	-- First-boot bootstrap only: never replace an existing root password.
+	local current_hash = sys.user.getpasswd("root")
+	if current_hash ~= nil and current_hash ~= "" then
+		http.status(409, "Conflict")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "The router already has a root password." })
+		return
+	end
+
+	local ok, status = pcall(sys.user.setpasswd, "root", password)
+	if not ok or (type(status) == "number" and status ~= 0) then
+		http.status(500, "Internal Server Error")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "OpenWrt could not set the initial root password." })
+		return
+	end
+
+	http.prepare_content("application/json; charset=UTF-8")
+	http.write_json({ ok = true })
 end
 
 function action_index()

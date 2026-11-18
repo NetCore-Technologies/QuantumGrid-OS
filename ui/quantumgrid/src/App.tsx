@@ -262,7 +262,7 @@ function AccountSetup({
           </h1>
 
           <p>
-            Use the existing OpenWrt root account. QuantumGrid does not create a separate Linux user.
+            Use the existing OpenWrt root account. On a brand-new router, QuantumGrid will set its password once.
           </p>
 
           <div className="account-form">
@@ -277,10 +277,10 @@ function AccountSetup({
             />
 
             <Field
-              label="CURRENT ROOT PASSWORD"
+              label="ROOT PASSWORD"
               icon={Lock}
               value={password}
-              placeholder="Current router password"
+              placeholder="New on first boot · current otherwise"
               onChange={setPassword}
               type="password"
               valid={validPassword}
@@ -290,7 +290,7 @@ function AccountSetup({
               label="CONFIRM ROOT PASSWORD"
               icon={Lock}
               value={confirm}
-              placeholder="Enter it again"
+              placeholder="Confirm the new or current password"
               onChange={setConfirm}
               type="password"
               valid={validMatch}
@@ -298,7 +298,7 @@ function AccountSetup({
           </div>
 
           <div className="rules">
-            <Rule text="3+ character username" valid={validUser} />
+            <Rule text="Existing OpenWrt root account" valid={validUser} />
             <Rule text="8+ character password" valid={validPassword} />
             <Rule text="Passwords match" valid={validMatch} />
           </div>
@@ -2904,6 +2904,7 @@ function App() {
     try {
       await loginToRouter(saved, loginPassword);
       setSecondsUntilRefresh(3);
+      setLoginPassword("");
       setLoggedIn(true);
       setLoginError("");
     } catch (error) {
