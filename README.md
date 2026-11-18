@@ -106,6 +106,23 @@ Until Pages is enabled, CI still validates the seven site pages, checks local re
 JavaScript, and uploads a site artifact; deployment is skipped with a workflow notice. After
 Pages is enabled, pushes to `main` (or a manual Pages workflow run on `main`) publish the site.
 
+## Router authentication and telemetry
+
+The QuantumGrid control centre authenticates with the existing LuCI/OpenWrt administrator
+session. It does not create a second Linux user or store the router password in browser storage.
+The read-only LuCI API reports system load, CPU/memory/temperature where available, WAN/LAN
+interface counters, wireless radio state, modem device presence and RJ11 service/patch state.
+WAN throughput is calculated from successive kernel byte-counter samples. A single ICMP probe is
+shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
+
+The custom API route is protected by LuCI's authenticated administrator tree and accepts no
+arbitrary shell commands, UCI writes or caller-selected ubus methods.
+
+On first boot, the wizard first attempts the supplied root password. If that authentication
+fails, it attempts an empty root password; only when that succeeds may the authenticated
+password endpoint set the new root password, and only if OpenWrt still reports no password hash.
+A wrong password on an already-secured router is never overwritten.
+
 ## Releases
 
 Release tags use the `qg-v*` pattern, for example `qg-v0.1.0-alpha.1`. A tagged release
