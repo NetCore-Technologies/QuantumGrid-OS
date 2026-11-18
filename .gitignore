@@ -35,3 +35,6 @@ venv/
 node_modules/
 dist/
 build/
+
+# Pinned external OpenWrt feed checkouts (not vendored into the repository)
+third_party/

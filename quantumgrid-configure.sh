@@ -70,6 +70,10 @@ fi
 # feeds
 # ------------------------------------------------------------
 
+log "Registering AW1000 RJ11 phone feed"
+
+"${ROOT}/scripts/setup-aw1000-phone-feed.sh" "${ROOT}" "${OPENWRT}"
+
 log "Updating OpenWrt feeds"
 
 ./scripts/feeds update -a
@@ -407,7 +411,10 @@ for p in \
     kmod-usb-net-qmi-wwan \
     kmod-usb-net-cdc-mbim \
     kmod-usb-serial-option \
-    kmod-usb-serial-wwan
+    kmod-usb-serial-wwan \
+    kmod-aw1000-fxs \
+    fxsd \
+    luci-app-fxs
 do
     enable_pkg "$p"
 done

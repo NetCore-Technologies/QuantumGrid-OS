@@ -53,13 +53,16 @@ echo "[3/8] OpenWrt version:"
 git describe --tags --always || true
 
 echo
-echo "[4/8] Updating feeds..."
+echo "[4/9] Registering AW1000 RJ11 phone feed..."
+"${PROJECT_ROOT}/scripts/setup-aw1000-phone-feed.sh" "${PROJECT_ROOT}" "${OPENWRT_DIR}"
+
+echo "[5/9] Updating feeds..."
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
 echo
-echo "[5/8] Installing QuantumGrid files..."
+echo "[6/9] Installing QuantumGrid files..."
 
 cd "${PROJECT_ROOT}"
 
@@ -70,32 +73,29 @@ if [ -d "${PROJECT_ROOT}/files" ]; then
 fi
 
 echo
-echo "[6/8] Applying QuantumGrid configuration..."
+echo "[7/9] Applying QuantumGrid configuration..."
 
 cd "${OPENWRT_DIR}"
 
+CONFIG_FILE="${PROJECT_ROOT}/configs/aw1000-max.config"
 if [ -f "${PROJECT_ROOT}/configs/aw1000.config" ]; then
-    cp "${PROJECT_ROOT}/configs/aw1000.config" .config
+    CONFIG_FILE="${PROJECT_ROOT}/configs/aw1000.config"
+fi
+if [ -f "${CONFIG_FILE}" ]; then
+    cp "${CONFIG_FILE}" .config
     make defconfig
 else
-    echo
-    echo "No AW1000 configuration exists yet."
-    echo "Run:"
-    echo
-    echo "    make menuconfig"
-    echo
-    echo "and create configs/aw1000.config"
-    echo
+    echo "ERROR: No AW1000 configuration found in ${PROJECT_ROOT}/configs."
     exit 2
 fi
 
 echo
-echo "[7/8] Running prerequisite checks..."
+echo "[8/9] Running prerequisite checks..."
 
 make prereq
 
 echo
-echo "[8/8] QuantumGrid build"
+echo "[9/9] QuantumGrid build"
 
 make download -j"$(nproc)"
 

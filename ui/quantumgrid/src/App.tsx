@@ -34,6 +34,7 @@ import {
   X,
   Zap,
   RadioTower,
+  PhoneCall,
 } from "lucide-react";
 
 type Page =
@@ -42,6 +43,7 @@ type Page =
   | "devices"
   | "wifi"
   | "5g"
+  | "phone"
   | "network"
   | "security"
   | "diagnostics"
@@ -68,6 +70,7 @@ const nav = [
   ["devices", "Devices", Users],
   ["wifi", "Wi-Fi", Wifi],
   ["5g", "5G", Signal],
+  ["phone", "Phone", PhoneCall],
   ["network", "Network", Network],
   ["security", "Security", Shield],
   ["diagnostics", "Diagnostics", Activity],
@@ -1211,7 +1214,7 @@ function Dashboard({
           </NavSection>
 
           <NavSection title="Network" collapsed={collapsed}>
-            {nav.slice(3, 8).map(([id, label, Icon]) => (
+            {nav.slice(3, 9).map(([id, label, Icon]) => (
               <NavButton
                 key={id}
                 label={label}
@@ -1227,7 +1230,7 @@ function Dashboard({
           </NavSection>
 
           <NavSection title="System" collapsed={collapsed}>
-            {nav.slice(8).map(([id, label, Icon]) => (
+            {nav.slice(9).map(([id, label, Icon]) => (
               <NavButton
                 key={id}
                 label={label}
@@ -1345,6 +1348,66 @@ function NavButton({
   );
 }
 
+
+function PhonePage() {
+  return (
+    <div className="phone-page">
+      <section className="phone-hero">
+        <div className="phone-hero-mark"><PhoneCall size={30} /></div>
+        <div className="phone-hero-copy">
+          <div className="setup-kicker">AW1000 ANALOG VOICE • FXS</div>
+          <h1>Bring your <span>RJ11 phone line</span> back to life.</h1>
+          <p>Use the AW1000's built-in analogue phone port with a VoLTE-enabled SIM. QuantumGrid integrates the hardware-matched FXS driver, voice daemon and native call-management service.</p>
+          <div className="phone-hero-actions">
+            <a className="hero-button phone-primary-action" href="/cgi-bin/luci/admin/services/fxs/status">Open Phone (RJ11) controls <ChevronRight size={17} /></a>
+            <a className="secondary-button" href="https://github.com/Perz3us/openwrt-aw1000-phone" target="_blank" rel="noreferrer">Driver & service source <Globe2 size={15} /></a>
+          </div>
+        </div>
+        <div className="phone-readiness">
+          <Status active={false}>SETUP REQUIRED</Status>
+          <strong>AW1000 FXS</strong>
+          <span>Single analogue handset port</span>
+          <small>Live line state appears in Phone (RJ11) controls after setup.</small>
+        </div>
+      </section>
+      <div className="phone-layout">
+        <Panel title="Hardware profile" eyebrow="VOICE PLATFORM">
+          <div className="phone-detail-grid">
+            <div className="phone-detail"><span>PHONE INTERFACE</span><strong>RJ11 / FXS</strong><small>One analogue handset</small></div>
+            <div className="phone-detail"><span>MODEM</span><strong>Quectel RG500Q-EA</strong><small>Cellular voice via VoLTE</small></div>
+            <div className="phone-detail"><span>SLIC</span><strong>Skyworks Si32261</strong><small>Line interface controller</small></div>
+            <div className="phone-detail"><span>PLATFORM</span><strong>Qualcomm IPQ8074</strong><small>PCM audio bridge</small></div>
+          </div>
+        </Panel>
+        <Panel title="Before enabling the line" eyebrow="SAFE FIRST BOOT">
+          <div className="phone-setup-list">
+            <div><span>01</span><div><strong>Install a matching firmware build</strong><small>The kernel module must match the exact running kernel.</small></div></div>
+            <div><span>02</span><div><strong>Provide the SLIC DSP patch</strong><small>Supply your legally obtained Skyworks patch at /etc/fxs/si3226x_patch.bin.</small></div></div>
+            <div><span>03</span><div><strong>Use a VoLTE-enabled SIM</strong><small>Confirm voice service and carrier support before placing calls.</small></div></div>
+            <div><span>04</span><div><strong>Enable the service intentionally</strong><small>The service is disabled by default to avoid an unexpected modem restart.</small></div></div>
+          </div>
+          <a className="phone-doc-link" href="https://github.com/NetCore-Technologies/QuantumGrid-OS/blob/main/Docs/PHONE-PORT.md" target="_blank" rel="noreferrer">Read the QuantumGrid setup guide <ArrowRight size={15} /></a>
+        </Panel>
+      </div>
+      <Panel title="Voice features" eyebrow="SUPPORTED BY THE AW1000 FXS STACK">
+        <div className="phone-feature-grid">
+          {[
+            ["VoLTE handset calls", "Make and receive calls through the modem SIM"],
+            ["Caller ID & call waiting", "Caller identity, hold and flash-button call waiting"],
+            ["Phonebook & speed dial", "Contacts, redial, callback and configured shortcuts"],
+            ["Call policies", "Blocked numbers, outgoing rules and do-not-disturb schedules"],
+            ["Call history & recording", "Review call history and optionally record to local or USB storage"],
+            ["SIP extensions", "Optional SIP service integration for LAN phones and apps"],
+          ].map(([title, detail]) => (
+            <div className="phone-feature" key={title}><Check size={16} /><div><strong>{title}</strong><span>{detail}</span></div></div>
+          ))}
+        </div>
+        <p className="phone-footnote">Feature availability depends on the selected modem/SIP backend, carrier, SIM plan and configuration. Emergency calling has not been validated; keep an independent, certified emergency calling option.</p>
+      </Panel>
+    </div>
+  );
+}
+
 function DashboardPage({
   stats,
   refresh,
@@ -1354,6 +1417,8 @@ function DashboardPage({
   refresh: () => void;
   page: Page;
 }) {
+  if (page === "phone") return <PhonePage />;
+
   if (page === "dashboard") {
     return (
       <div className="dashboard-page">
