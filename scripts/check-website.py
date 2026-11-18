@@ -57,8 +57,8 @@ def main() -> int:
         parser.feed(source)
         parser.close()
 
-        if parser.nav_count != 2:
-            errors.append(f"{name}: expected header and footer navigation landmarks, found {parser.nav_count}")
+        if parser.nav_count != 1:
+            errors.append(f"{name}: expected one navigation landmark, found {parser.nav_count}")
         if parser.duplicates:
             errors.append(f"{name}: duplicate IDs: {', '.join(parser.duplicates)}")
         if "<title>" not in source or 'name="description"' not in source:
