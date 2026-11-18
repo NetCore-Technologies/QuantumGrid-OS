@@ -181,3 +181,15 @@ The current QuantumGrid configuration is already locked to the AW1000 target.
                   └───────┼───────┘
                           │
                     Qualcomm IPQ807x
+
+
+## AW1000 RJ11 phone port
+
+QuantumGrid's AW1000 build can include the analogue FXS phone stack for the built-in RJ11
+socket. It uses the open-source [AW1000 FXS driver and service](https://github.com/Perz3us/openwrt-aw1000-phone)
+(kmod-aw1000-fxs, fxsd and luci-app-fxs) and the Quectel RG500Q-EA modem's VoLTE voice service.
+
+The phone service is disabled by default. It requires a kernel-matched module, a VoLTE-enabled
+SIM and a separately obtained Skyworks SLIC DSP patch. The proprietary patch is not included
+or redistributed by QuantumGrid. See [Docs/PHONE-PORT.md](Docs/PHONE-PORT.md) before enabling
+the analogue line, SIP services or call recording.

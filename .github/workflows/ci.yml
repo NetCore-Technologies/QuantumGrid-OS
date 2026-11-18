@@ -1,0 +1,38 @@
+name: QuantumGrid quality gates
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: quantumgrid-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  ui:
+    name: Control centre lint and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/quantumgrid
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/quantumgrid/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+  firmware-scripts:
+    name: Firmware integration checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: bash -n build.sh quantumgrid-configure.sh scripts/setup-aw1000-phone-feed.sh
+      - name: Check AW1000 profile and RJ11 package selection
+        run: bash tests/firmware-smoke.sh
