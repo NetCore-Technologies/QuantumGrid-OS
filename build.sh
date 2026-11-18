@@ -1,114 +1,90 @@
 #!/usr/bin/env bash
-
-set -euo pipefail
+set -Eeuo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENWRT_DIR="${PROJECT_ROOT}/openwrt"
-
 OPENWRT_REPO="https://github.com/openwrt/openwrt.git"
-OPENWRT_BRANCH="openwrt-25.12"
+OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"
+BUILD_JOBS="${QG_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)}"
 
-echo
-echo "=============================================="
-echo "        QUANTUMGRID OS BUILD SYSTEM"
-echo "=============================================="
-echo
-
-echo "[1/8] Checking host environment..."
-
-command -v git >/dev/null || {
-    echo "ERROR: git is not installed"
+die() {
+    printf '\nERROR: %s\n' "$*" >&2
     exit 1
 }
 
-command -v make >/dev/null || {
-    echo "ERROR: make is not installed"
-    exit 1
-}
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]*$ ]] || die "QG_BUILD_JOBS must be a positive integer"
+[[ -n "$OPENWRT_REF" ]] || die "QG_OPENWRT_REF cannot be empty"
 
-command -v python3 >/dev/null || {
-    echo "ERROR: python3 is not installed"
-    exit 1
-}
+for command in git make python3; do
+    command -v "$command" >/dev/null 2>&1 || die "$command is required"
+done
 
-echo "Host environment OK."
+printf '\n==============================================\n'
+printf '        QUANTUMGRID OS BUILD SYSTEM\n'
+printf '==============================================\n'
+printf 'OpenWrt ref: %s\n' "$OPENWRT_REF"
+printf 'Build jobs:  %s\n' "$BUILD_JOBS"
 
-echo
-echo "[2/8] Getting OpenWrt ${OPENWRT_BRANCH}..."
-
-if [ ! -d "${OPENWRT_DIR}/.git" ]; then
-    git clone \
-        --branch "${OPENWRT_BRANCH}" \
-        --single-branch \
-        "${OPENWRT_REPO}" \
-        "${OPENWRT_DIR}"
+printf '\n[1/9] Preparing OpenWrt source...\n'
+if [[ ! -d "$OPENWRT_DIR/.git" ]]; then
+    if [[ -e "$OPENWRT_DIR" ]]; then
+        die "$OPENWRT_DIR exists but is not a Git checkout; move it aside or configure the build path first"
+    fi
+    git clone --filter=blob:none --no-checkout "$OPENWRT_REPO" "$OPENWRT_DIR"
 else
-    echo "OpenWrt source already exists."
+    if [[ -n "$(git -C "$OPENWRT_DIR" status --porcelain --untracked-files=no)" ]]; then
+        die "OpenWrt checkout has modified tracked files; refusing to overwrite local source changes"
+    fi
 fi
 
-cd "${OPENWRT_DIR}"
+printf '\n[2/9] Checking out pinned OpenWrt ref %s...\n' "$OPENWRT_REF"
+git -C "$OPENWRT_DIR" remote get-url origin >/dev/null 2>&1 || die "OpenWrt checkout has no origin remote"
+git -C "$OPENWRT_DIR" fetch --depth 1 origin "$OPENWRT_REF"
+git -C "$OPENWRT_DIR" checkout --detach FETCH_HEAD
+OPENWRT_SHA="$(git -C "$OPENWRT_DIR" rev-parse HEAD)"
+printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 
-echo
-echo "[3/8] OpenWrt version:"
-git describe --tags --always || true
+printf '\n[3/9] Registering pinned AW1000 RJ11 phone feed...\n'
+"$PROJECT_ROOT/scripts/setup-aw1000-phone-feed.sh" "$PROJECT_ROOT" "$OPENWRT_DIR"
 
-echo
-echo "[4/9] Registering AW1000 RJ11 phone feed..."
-"${PROJECT_ROOT}/scripts/setup-aw1000-phone-feed.sh" "${PROJECT_ROOT}" "${OPENWRT_DIR}"
-
-echo "[5/9] Updating feeds..."
-
+printf '\n[4/9] Updating and installing OpenWrt feeds...\n'
+cd "$OPENWRT_DIR"
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-echo
-echo "[6/9] Installing QuantumGrid files..."
-
-cd "${PROJECT_ROOT}"
-
-mkdir -p "${OPENWRT_DIR}/files"
-
-if [ -d "${PROJECT_ROOT}/files" ]; then
-    cp -a "${PROJECT_ROOT}/files/." "${OPENWRT_DIR}/files/"
+printf '\n[5/9] Installing QuantumGrid first-boot files...\n'
+mkdir -p "$OPENWRT_DIR/files"
+if [[ -d "$PROJECT_ROOT/files" ]]; then
+    cp -a "$PROJECT_ROOT/files/." "$OPENWRT_DIR/files/"
 fi
 
-echo
-echo "[7/9] Applying QuantumGrid configuration..."
-
-cd "${OPENWRT_DIR}"
-
-CONFIG_FILE="${PROJECT_ROOT}/configs/aw1000-max.config"
-if [ -f "${PROJECT_ROOT}/configs/aw1000.config" ]; then
-    CONFIG_FILE="${PROJECT_ROOT}/configs/aw1000.config"
+printf '\n[6/9] Applying AW1000 firmware configuration...\n'
+CONFIG_FILE="$PROJECT_ROOT/configs/aw1000-max.config"
+if [[ -f "$PROJECT_ROOT/configs/aw1000.config" ]]; then
+    CONFIG_FILE="$PROJECT_ROOT/configs/aw1000.config"
 fi
-if [ -f "${CONFIG_FILE}" ]; then
-    cp "${CONFIG_FILE}" .config
-    make defconfig
-else
-    echo "ERROR: No AW1000 configuration found in ${PROJECT_ROOT}/configs."
-    exit 2
-fi
+[[ -s "$CONFIG_FILE" ]] || die "AW1000 configuration not found: $CONFIG_FILE"
+cp "$CONFIG_FILE" "$OPENWRT_DIR/.config"
+cd "$OPENWRT_DIR"
+make defconfig
+grep -qx 'CONFIG_TARGET_qualcommax=y' .config || die "qualcommax target was not selected"
+grep -qx 'CONFIG_TARGET_qualcommax_ipq807x=y' .config || die "ipq807x subtarget was not selected"
+grep -qx 'CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y' .config || die "Arcadyan AW1000 profile was not selected"
 
-echo
-echo "[8/9] Running prerequisite checks..."
-
+printf '\n[7/9] Running OpenWrt prerequisites...\n'
 make prereq
 
-echo
-echo "[9/9] QuantumGrid build"
+printf '\n[8/9] Downloading source packages...\n'
+make download -j"$BUILD_JOBS"
 
-make download -j"$(nproc)"
+printf '\n[9/9] Building QuantumGrid AW1000 firmware...\n'
+make -j"$BUILD_JOBS" V=s
 
-make -j"$(nproc)" V=s
-
-echo
-echo "=============================================="
-echo "       QUANTUMGRID BUILD COMPLETE"
-echo "=============================================="
-echo
-echo "Firmware:"
-echo
-find "${OPENWRT_DIR}/bin/targets" \
-    -type f \
-    \( -name "*.bin" -o -name "*.img" -o -name "*.itb" \) \
-    -print
+printf '\n==============================================\n'
+printf '       QUANTUMGRID BUILD COMPLETE\n'
+printf '==============================================\n'
+printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
+printf '\nFirmware outputs:\n'
+find "$OPENWRT_DIR/bin/targets/qualcommax/ipq807x" -maxdepth 1 -type f \
+    \( -name '*arcadyan_aw1000*.bin' -o -name '*arcadyan_aw1000*.ubi' -o -name '*arcadyan_aw1000*.itb' \) \
+    -print | sort

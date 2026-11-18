@@ -1,195 +1,136 @@
-QuantumGrid OS
-
-An intelligent, high-performance network operating system for modern routers.
-
-QuantumGrid OS is an OpenWrt-based networking platform focused on **performance, gaming, Wi-Fi intelligence, security, 5G/cellular connectivity, telemetry and hardware acceleration**.
-
-The goal is to build a complete network operating system — not simply a rebranded router interface.
-
-Vision
-
-QuantumGrid is designed to make advanced networking powerful without making it difficult to use.
-
-Core areas include:
-
-- Intelligent network optimization
-- Gaming and low-latency networking
-- Wi-Fi 6 management
-- Band steering
-- Device intelligence and prioritization
-- WAN and routing control
-- Network diagnostics
-- Security and management controls
-- 5G/cellular integration
-- Real-time hardware telemetry
-- NSS acceleration
-- EDMA/PPE integration
-- SSH and management ACLs
-- A dedicated QuantumGrid control center
-
-Current Hardware Target
-
-Arcadyan AW1000
-
-| Component | Target |
-|---|---|
-| Device | Arcadyan AW1000 |
-| Platform | Qualcomm IPQ807x |
-| OpenWrt | 25.12 |
-| Target | `qualcommax` |
-| Subtarget | `ipq807x` |
-| Profile | `arcadyan_aw1000` |
-| RAM | 1 GB |
-| Ethernet | 2.5GbE |
-| Wireless | Qualcomm Wi-Fi 6 |
-| Cellular hardware | RG500Q-EA platform |
-
-The current QuantumGrid configuration is already locked to the AW1000 target.
-
-Architecture
-
-                    QUANTUMGRID OS
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-     Control UI       Core Engine        Services
-        │                 │                 │
-     Wi-Fi           Telemetry             5G
-     Gaming          Optimization          Security
-     Devices         Policy                Updates
-     System          Diagnostics           Network
-                          │
-                    Hardware Layer
-                          │
-                  ┌───────┼───────┐
-                  │       │       │
-                 NSS     EDMA     PPE
-                  │       │       │
-                  └───────┼───────┘
-                          │
-                    Qualcomm IPQ807x
-=======
 # QuantumGrid OS
 
-**An intelligent, high-performance network operating system for modern routers.**
+**Your network. Your rules.**
 
-QuantumGrid OS is an OpenWrt-based networking platform focused on **performance, gaming, Wi-Fi intelligence, security, 5G/cellular connectivity, telemetry and hardware acceleration**.
+QuantumGrid OS is an OpenWrt-based network operating system initially built for the **Arcadyan AW1000**. It combines a hardware-specific firmware configuration, the existing QuantumGrid React control centre and AW1000 integration work.
 
-The goal is to build a complete network operating system — not simply a rebranded router interface.
+- **Target:** `qualcommax / ipq807x / arcadyan_aw1000`
+- **Firmware base:** OpenWrt `v25.12.6` (pinned for reproducible builds)
+- **Cellular modem:** Quectel RG500Q-EA
+- **Voice hardware:** RJ11 / FXS with Skyworks Si32261 SLIC
+- **Control centre:** `ui/quantumgrid`
 
-## Vision
+## Website
 
-QuantumGrid is designed to make advanced networking powerful without making it difficult to use.
+**[QuantumGrid OS](https://netcore-technologies.github.io/QuantumGrid-OS/)**
 
-Core areas include:
+Explore the [platform](https://netcore-technologies.github.io/QuantumGrid-OS/features.html), [AW1000 hardware](https://netcore-technologies.github.io/QuantumGrid-OS/hardware.html), [downloads](https://netcore-technologies.github.io/QuantumGrid-OS/downloads.html), [documentation](https://netcore-technologies.github.io/QuantumGrid-OS/docs.html), [roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html) and [community](https://netcore-technologies.github.io/QuantumGrid-OS/community.html).
 
-- Intelligent network optimization
-- Gaming and low-latency networking
-- Wi-Fi 6 management
-- Band steering
-- Device intelligence and prioritization
-- WAN and routing control
-- Network diagnostics
-- Security and management controls
-- 5G/cellular integration
-- Real-time hardware telemetry
-- NSS acceleration
-- EDMA/PPE integration
-- SSH and management ACLs
-- A dedicated QuantumGrid control center
+## Project principles
 
-## QuantumGrid Control Center
+1. Build on upstream OpenWrt rather than shipping an opaque router image.
+2. Make each control use a real service API; do not label simulated values as hardware telemetry.
+3. Keep the existing QuantumGrid control-centre design and improve it in place.
+4. Gate hardware-sensitive changes behind compatibility checks, safe defaults and recovery instructions.
+5. Publish device-specific firmware with build provenance and SHA-256 checksums.
 
-QuantumGrid includes a modern control center designed to make advanced networking easy to understand and manage.
+## Hardware target
 
-The interface combines real-time network telemetry, Wi-Fi configuration, gaming optimization, system controls, diagnostics and guided first-boot configuration into a single experience.
-
-### First Boot Experience
-
-![QuantumGrid First Boot Experience](ui/quantumgrid/screenshots/first-boot.png)
-
-### Administrator Setup
-
-![Set Administrator Credentials](ui/quantumgrid/screenshots/administrator-credentials.png)
-
-![Administrator Credentials Set](ui/quantumgrid/screenshots/admin-credentials-set.png)
-
-
-### Wi-Fi & Internet
-
-![Configure Wi-Fi](ui/quantumgrid/screenshots/configure-wifi.png)
-
-![Internet Connection Settings](ui/quantumgrid/screenshots/internet-settings.png)
-
-### Dashboard
-
-![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-1.png)
-
-![QuantumGrid Dashboard](ui/quantumgrid/screenshots/dashboard-2.png)
-
-
-### Gaming
-
-![QuantumGrid Gaming](ui/quantumgrid/screenshots/gaming-page-1.png)
-
-![QuantumGrid Gaming](ui/quantumgrid/screenshots/gaming-page-2.png)
-
-### Access Control
-
-![QuantumGrid Login](ui/quantumgrid/screenshots/login-screen.png)
-
-
-## Current Hardware Target
-
-### Arcadyan AW1000
-
-| Component | Target |
+| Component | Platform |
 |---|---|
-| Device | Arcadyan AW1000 |
-| Platform | Qualcomm IPQ807x |
-| OpenWrt | 25.12 |
-| Target | `qualcommax` |
-| Subtarget | `ipq807x` |
-| Profile | `arcadyan_aw1000` |
-| RAM | 1 GB |
-| Ethernet | 2.5GbE |
-| Wireless | Qualcomm Wi-Fi 6 |
-| Cellular hardware | RG500Q-EA platform |
+| Router | Arcadyan AW1000 |
+| SoC | Qualcomm IPQ8074 |
+| OpenWrt target | `qualcommax/ipq807x` |
+| Device profile | `arcadyan_aw1000` |
+| Cellular modem | Quectel RG500Q-EA |
+| Voice interface | RJ11 / FXS, Si32261 SLIC |
+| Wireless | Qualcomm Wi-Fi 6 platform |
 
-The current QuantumGrid configuration is already locked to the AW1000 target.
-
-## Architecture
-
-```text
-                    QUANTUMGRID OS
-                          │
-        ┌─────────────────┼─────────────────┐
-        │                 │                 │
-     Control UI       Core Engine        Services
-        │                 │                 │
-     Wi-Fi           Telemetry             5G
-     Gaming          Optimization          Security
-     Devices         Policy                Updates
-     System          Diagnostics           Network
-                          │
-                    Hardware Layer
-                          │
-                  ┌───────┼───────┐
-                  │       │       │
-                 NSS     EDMA     PPE
-                  │       │       │
-                  └───────┼───────┘
-                          │
-                    Qualcomm IPQ807x
-
+The current firmware is based on the upstream OpenWrt networking stack. **NSS acceleration is not included or claimed** until a compatible kernel/driver integration is selected and validated.
 
 ## AW1000 RJ11 phone port
 
-QuantumGrid's AW1000 build can include the analogue FXS phone stack for the built-in RJ11
-socket. It uses the open-source [AW1000 FXS driver and service](https://github.com/Perz3us/openwrt-aw1000-phone)
-(kmod-aw1000-fxs, fxsd and luci-app-fxs) and the Quectel RG500Q-EA modem's VoLTE voice service.
+The AW1000 analogue phone port is integrated from the GPL-2.0-only
+[openwrt-aw1000-phone](https://github.com/Perz3us/openwrt-aw1000-phone) project at tag `v0.9.0`.
+The build includes `kmod-aw1000-fxs`, `fxsd` and `luci-app-fxs`.
 
-The phone service is disabled by default. It requires a kernel-matched module, a VoLTE-enabled
-SIM and a separately obtained Skyworks SLIC DSP patch. The proprietary patch is not included
-or redistributed by QuantumGrid. See [Docs/PHONE-PORT.md](Docs/PHONE-PORT.md) before enabling
-the analogue line, SIP services or call recording.
+The FXS service is disabled by default. It requires a kernel-matched module, a VoLTE-enabled
+SIM and a separately obtained Skyworks SLIC DSP patch. QuantumGrid does not redistribute that
+proprietary patch. Starting the service changes modem audio configuration and can restart the
+RG500Q-EA, temporarily interrupting mobile data.
+
+Read [Docs/PHONE-PORT.md](Docs/PHONE-PORT.md) before enabling the line. Emergency calling has
+not been validated; keep an independent certified emergency calling option.
+
+## Build
+
+The normal build pins OpenWrt to `v25.12.6`:
+
+```bash
+git clone https://github.com/NetCore-Technologies/QuantumGrid-OS.git
+cd QuantumGrid-OS
+./build.sh
+```
+
+The build script fetches the pinned RJ11 source feed, updates OpenWrt feeds, applies
+`configs/aw1000-max.config`, installs QuantumGrid first-boot files and builds the AW1000 target.
+
+To use a different OpenWrt revision deliberately:
+
+```bash
+QG_OPENWRT_REF=v25.12.6 ./build.sh
+```
+
+The build host must have the OpenWrt build prerequisites installed. Firmware compilation
+requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.
+
+## Firmware images
+
+| Artifact | Intended use |
+|---|---|
+| `*-squashfs-sysupgrade.bin` | Upgrade an existing compatible OpenWrt installation |
+| `*-squashfs-factory.ubi` | Supported factory/recovery installation route |
+| `*-initramfs-uImage.itb` | Temporary RAM boot / recovery workflows |
+| `*-packages.tar.zst` | Package output from the same firmware build |
+| `SHA256SUMS` | Verify the published release assets |
+| `BUILDINFO.txt` | Source commits, configuration hash and build metadata |
+
+The factory image is **not** a universal stock-firmware installer. Follow
+[Docs/RECOVERY.md](Docs/RECOVERY.md), back up first and verify the exact image and checksum.
+Do not flash an image whose installation route you have not confirmed.
+
+## Releases
+
+Release tags use the `qg-v*` pattern, for example `qg-v0.1.0-alpha.1`. A tagged release
+builds three AW1000 image formats, packages, the pinned RJ11 feed source, recovery/phone guides,
+a build provenance file and `SHA256SUMS`.
+
+The release workflow can also be run manually to produce a downloadable CI artifact without
+publishing a GitHub Release. The public Downloads page reads the release inventory from GitHub;
+it does not fabricate assets before a build completes.
+
+QuantumGrid is router firmware, not a desktop application. We do not publish macOS DMG or
+Windows EXE/MSI installers for this project.
+
+## Quality gates
+
+CI checks the existing React control centre with ESLint, TypeScript and Vite; validates the
+static website's local links and metadata; checks the website JavaScript; and verifies the AW1000
+profile, RJ11 packages and shell script syntax. The full OpenWrt firmware build runs separately
+from a release tag or manual firmware workflow dispatch.
+
+A successful compile does not prove RF performance, voice-call compatibility, emergency calling,
+flash compatibility or NSS acceleration. Those require separate hardware tests and are reported
+as such.
+
+## Development status
+
+- **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
+  safe first-boot default for the FXS service, Pages workflow and release build workflow.
+- **Active development:** service-backed telemetry, UI-to-ubus control wiring, radio intelligence,
+  latency policy and modem observability.
+- **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
+
+See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).
+
+## Contributing and security
+
+Open issues with the exact hardware, firmware/kernel version, logs and reproducible steps.
+Focused pull requests should include tests and documentation. See
+[CONTRIBUTING.md](CONTRIBUTING.md) and [SECURITY.md](SECURITY.md).
+
+## Licensing
+
+QuantumGrid's repository files are licensed as described in [LICENSE](LICENSE). Third-party
+feeds retain their own licences and notices. The AW1000 phone feed is GPL-2.0-only; Skyworks
+SLIC patch firmware is proprietary and is not bundled by QuantumGrid.

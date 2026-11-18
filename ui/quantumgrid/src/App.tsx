@@ -1002,18 +1002,16 @@ function Login({
   setPassword,
   login,
   error,
+  clearError,
 }: {
   username: string;
   password: string;
   setPassword: (v: string) => void;
   login: () => void;
   error: string;
+  clearError: () => void;
 }) {
-  const [showError, setShowError] = useState(true);
-
-  useEffect(() => {
-    setShowError(Boolean(error));
-  }, [error]);
+  const showError = Boolean(error);
 
   return (
     <div className="login-landscape">
@@ -1093,7 +1091,7 @@ function Login({
                   placeholder="Enter your password"
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    setShowError(false);
+                    clearError();
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") login();
@@ -1115,7 +1113,7 @@ function Login({
                 <span>{error}</span>
               </div>
 
-              <button onClick={() => setShowError(false)}>
+              <button onClick={() => clearError()}>
                 <X size={15} />
               </button>
             </div>
@@ -1578,6 +1576,7 @@ function DashboardPage({
     devices: ["Devices", "Client Intelligence", Users],
     wifi: ["Wi-Fi", "Wireless Intelligence", Wifi],
     "5g": ["5G", "Cellular Control Center", Signal],
+    phone: ["Phone", "Analogue Voice & FXS", PhoneCall],
     network: ["Network", "Network Control", Network],
     security: ["Security", "Security Center", Shield],
     diagnostics: ["Diagnostics", "Network Diagnostics", Activity],
@@ -2812,8 +2811,6 @@ function App() {
   useEffect(() => {
     if (!setupComplete || !loggedIn) return;
 
-    setSecondsUntilRefresh(3);
-
     const refreshTimer = window.setInterval(() => {
       refresh();
       setSecondsUntilRefresh(3);
@@ -2857,6 +2854,7 @@ function App() {
      * Production firmware will authenticate against the router backend.
      */
     if (saved.length > 0 && loginPassword === password) {
+      setSecondsUntilRefresh(3);
       setLoggedIn(true);
       setLoginError("");
       return;
@@ -2916,6 +2914,7 @@ function App() {
         setPassword={setLoginPassword}
         login={login}
         error={loginError}
+        clearError={() => setLoginError("")}
       />
     );
   }

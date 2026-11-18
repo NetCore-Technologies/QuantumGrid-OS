@@ -1,0 +1,165 @@
+name: QuantumGrid AW1000 firmware release
+
+on:
+  push:
+    tags:
+      - "qg-v*"
+  workflow_dispatch:
+    inputs:
+      openwrt_ref:
+        description: "OpenWrt tag or commit to build"
+        required: true
+        default: "v25.12.6"
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quantumgrid-firmware-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and package AW1000 firmware
+    runs-on: ubuntu-24.04
+    env:
+      QG_OPENWRT_REF: ${{ inputs.openwrt_ref || 'v25.12.6' }}
+      QG_BUILD_JOBS: "2"
+    steps:
+      - name: Checkout QuantumGrid source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Free space for OpenWrt compilation
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/powershell
+          df -h
+
+      - name: Install OpenWrt build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ack asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex \
+            gawk gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged \
+            help2man libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev libssl-dev \
+            libtool lld llvm lrzsz mkisofs nano ninja-build p7zip-full patch pkgconf \
+            python3 python3-pip python3-ply python3-docutils qemu-utils rsync scons \
+            squashfs-tools subversion swig texinfo uglifyjs unzip vim wget xmlto xxd \
+            zlib1g-dev zstd
+
+      - name: Build AW1000 firmware
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          ./build.sh
+
+      - name: Assemble firmware assets and provenance
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          IMAGE_DIR="openwrt/bin/targets/qualcommax/ipq807x"
+          test -d "$IMAGE_DIR" || { echo "Missing AW1000 image output: $IMAGE_DIR" >&2; exit 1; }
+
+          rm -rf dist
+          mkdir -p dist
+          VERSION="${GITHUB_REF_NAME#qg-}"
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then
+            VERSION="manual-build-${GITHUB_RUN_NUMBER}"
+          fi
+
+          copy_required() {
+            local pattern="$1"
+            local output="$2"
+            local source
+            source="$(find "$IMAGE_DIR" -maxdepth 1 -type f -name "$pattern" -print -quit)"
+            if [[ -z "$source" ]]; then
+              echo "Required AW1000 image was not produced: $pattern" >&2
+              exit 1
+            fi
+            cp "$source" "dist/$output"
+            printf 'Included: %s\n' "$source"
+          }
+
+          copy_required "*arcadyan_aw1000-squashfs-sysupgrade.bin" \
+            "QuantumGrid-OS-${VERSION}-AW1000-squashfs-sysupgrade.bin"
+          copy_required "*arcadyan_aw1000-squashfs-factory.ubi" \
+            "QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi"
+          copy_required "*arcadyan_aw1000-initramfs-uImage.itb" \
+            "QuantumGrid-OS-${VERSION}-AW1000-initramfs-uImage.itb"
+
+          if [[ -d openwrt/bin/packages ]]; then
+            tar --zstd -cf "dist/QuantumGrid-OS-${VERSION}-AW1000-packages.tar.zst" \
+              -C openwrt/bin/packages .
+          fi
+
+          MANIFEST="$(find "$IMAGE_DIR" -maxdepth 1 -type f -name '*arcadyan_aw1000*.manifest' -print -quit)"
+          if [[ -n "$MANIFEST" ]]; then
+            cp "$MANIFEST" "dist/QuantumGrid-OS-${VERSION}-AW1000-PACKAGE-MANIFEST.txt"
+          fi
+
+          git -C third_party/openwrt-aw1000-phone archive --format=tar.gz \
+            --output="dist/QuantumGrid-OS-${VERSION}-AW1000-phone-source.tar.gz" HEAD
+
+          SOURCE_SHA="$(git rev-parse HEAD)"
+          OPENWRT_SHA="$(git -C openwrt rev-parse HEAD)"
+          PHONE_SHA="$(git -C third_party/openwrt-aw1000-phone rev-parse HEAD)"
+          CONFIG_SHA="$(sha256sum configs/aw1000-max.config | cut -d' ' -f1)"
+
+          {
+            echo "QuantumGrid OS — Arcadyan AW1000 firmware"
+            echo "Release: $VERSION"
+            echo "QuantumGrid source commit: $SOURCE_SHA"
+            echo "OpenWrt requested ref: $QG_OPENWRT_REF"
+            echo "OpenWrt resolved commit: $OPENWRT_SHA"
+            echo "AW1000 phone source commit: $PHONE_SHA"
+            echo "AW1000 config SHA-256: $CONFIG_SHA"
+            echo "Build runner: $RUNNER_OS / $RUNNER_ARCH"
+            echo "Build timestamp (UTC): $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "Device: Arcadyan AW1000"
+            echo "Target: qualcommax/ipq807x"
+            echo "Profile: arcadyan_aw1000"
+            echo "Phone service: installed, disabled by default"
+            echo "Voice prerequisites: matching kernel, VoLTE SIM and user-supplied Skyworks SLIC patch"
+            echo "NSS acceleration: not included or claimed by this upstream OpenWrt build"
+            echo
+            echo "OpenWrt source: https://github.com/openwrt/openwrt"
+            echo "Phone source: https://github.com/Perz3us/openwrt-aw1000-phone"
+          } > dist/BUILDINFO.txt
+
+          cp Docs/PHONE-PORT.md dist/PHONE-PORT.md
+          cp Docs/RECOVERY.md dist/RECOVERY.md
+          cp configs/aw1000-max.config dist/aw1000-max.config
+
+          (
+            cd dist
+            sha256sum -- * > SHA256SUMS
+          )
+
+          echo "Final release inventory:"
+          ls -lh dist
+          echo
+          echo "SHA-256 manifest:"
+          cat dist/SHA256SUMS
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: quantumgrid-aw1000-firmware
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/qg-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: QuantumGrid OS ${{ github.ref_name }}
+          generate_release_notes: true
+          files: dist/*
+          fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
