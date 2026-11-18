@@ -1002,16 +1002,18 @@ function Login({
   setPassword,
   login,
   error,
-  clearError,
 }: {
   username: string;
   password: string;
   setPassword: (v: string) => void;
   login: () => void;
   error: string;
-  clearError: () => void;
 }) {
-  const showError = Boolean(error);
+  const [showError, setShowError] = useState(true);
+
+  useEffect(() => {
+    setShowError(Boolean(error));
+  }, [error]);
 
   return (
     <div className="login-landscape">
@@ -1091,7 +1093,7 @@ function Login({
                   placeholder="Enter your password"
                   onChange={(e) => {
                     setPassword(e.target.value);
-                    clearError();
+                    setShowError(false);
                   }}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") login();
@@ -2810,6 +2812,8 @@ function App() {
   useEffect(() => {
     if (!setupComplete || !loggedIn) return;
 
+    setSecondsUntilRefresh(3);
+
     const refreshTimer = window.setInterval(() => {
       refresh();
       setSecondsUntilRefresh(3);
@@ -2853,7 +2857,6 @@ function App() {
      * Production firmware will authenticate against the router backend.
      */
     if (saved.length > 0 && loginPassword === password) {
-      setSecondsUntilRefresh(3);
       setLoggedIn(true);
       setLoginError("");
       return;
@@ -2913,7 +2916,6 @@ function App() {
         setPassword={setLoginPassword}
         login={login}
         error={loginError}
-        clearError={() => setLoginError("")}
       />
     );
   }
