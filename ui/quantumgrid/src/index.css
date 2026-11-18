@@ -6726,3 +6726,39 @@ input::placeholder {
     width: 100%;
   }
 }
+
+
+/* ---------- AW1000 RJ11 / FXS PHONE ---------- */
+.phone-page { display:grid; gap:22px; }
+.phone-hero { position:relative; display:grid; grid-template-columns:auto minmax(0,1fr) minmax(190px,230px); align-items:center; gap:26px; padding:30px; overflow:hidden; border:1px solid rgba(219,40,95,.2); border-radius:18px; background:radial-gradient(circle at 0% 0%,rgba(219,40,95,.16),transparent 38%),radial-gradient(circle at 100% 100%,rgba(71,121,255,.12),transparent 38%),var(--panel); }
+.phone-hero-mark { width:68px; height:68px; display:grid; place-items:center; border:1px solid rgba(219,40,95,.28); border-radius:18px; color:#ff6288; background:rgba(219,40,95,.1); box-shadow:0 12px 42px rgba(219,40,95,.12); }
+.phone-hero-copy { min-width:0; }
+.phone-hero-copy h1 { margin:8px 0 10px; font-size:clamp(25px,3vw,36px); line-height:1.12; letter-spacing:-.045em; }
+.phone-hero-copy h1 span { color:#ff6389; }
+.phone-hero-copy p { max-width:710px; margin:0; color:var(--muted); font-size:14px; line-height:1.75; }
+.phone-hero-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:20px; }
+.phone-primary-action,.phone-hero-actions .secondary-button { display:inline-flex; align-items:center; justify-content:center; gap:10px; min-height:42px; text-decoration:none; }
+.phone-readiness { min-height:150px; display:flex; flex-direction:column; align-items:flex-start; justify-content:center; gap:9px; padding:18px; border:1px solid var(--line); border-radius:14px; background:rgba(4,5,10,.38); }
+.phone-readiness>strong { font-size:19px; letter-spacing:-.02em; }
+.phone-readiness>span:not(.status) { color:var(--muted); font-size:12px; }
+.phone-readiness>small { color:var(--muted2); font-size:11px; line-height:1.55; }
+.phone-layout { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px; }
+.phone-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+.phone-detail { min-width:0; display:flex; flex-direction:column; gap:7px; padding:14px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.018); }
+.phone-detail>span { color:var(--muted2); font-size:9px; font-weight:750; letter-spacing:.12em; }
+.phone-detail>strong { overflow-wrap:anywhere; font-size:14px; }
+.phone-detail>small { color:var(--muted); font-size:11px; }
+.phone-setup-list { display:grid; gap:15px; }
+.phone-setup-list>div { display:grid; grid-template-columns:30px minmax(0,1fr); gap:11px; align-items:start; }
+.phone-setup-list>div>span { width:28px; height:28px; display:grid; place-items:center; border:1px solid rgba(71,121,255,.25); border-radius:8px; color:#8ba8ff; background:rgba(71,121,255,.08); font-size:10px; font-weight:800; }
+.phone-setup-list strong,.phone-feature strong { display:block; font-size:12px; }
+.phone-setup-list small,.phone-feature span { display:block; margin-top:4px; color:var(--muted); font-size:11px; line-height:1.55; }
+.phone-doc-link { display:inline-flex; align-items:center; gap:8px; margin-top:20px; color:#ff7898; font-size:12px; font-weight:700; text-decoration:none; }
+.phone-doc-link:hover { color:#ff9bb2; }
+.phone-feature-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:13px; }
+.phone-feature { display:grid; grid-template-columns:18px minmax(0,1fr); gap:10px; padding:14px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.018); }
+.phone-feature>svg { margin-top:1px; color:var(--green); }
+.phone-footnote { margin:16px 0 0; color:var(--muted2); font-size:11px; line-height:1.65; }
+@media(max-width:1050px) { .phone-hero { grid-template-columns:auto minmax(0,1fr); } .phone-readiness { grid-column:1/-1; min-height:auto; } .phone-feature-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:760px) { .phone-layout { grid-template-columns:1fr; } .phone-hero { grid-template-columns:1fr; padding:22px; } .phone-hero-actions { align-items:stretch; flex-direction:column; } .phone-hero-actions>a { width:100%; } .phone-feature-grid { grid-template-columns:1fr; } }
+@media(max-width:480px) { .phone-detail-grid { grid-template-columns:1fr; } }

@@ -1,0 +1,10 @@
+#!/bin/sh
+# Keep the analogue line off until the administrator supplies the Skyworks SLIC patch
+# and explicitly enables the RJ11 service. The first fxsd start changes modem PCM
+# settings and can restart the RG500Q-EA, briefly interrupting mobile data.
+[ -x /etc/init.d/fxsd ] || exit 0
+uci -q set fxs.main.enabled='0'
+uci -q commit fxs
+/etc/init.d/fxsd disable >/dev/null 2>&1 || true
+logger -t quantumgrid "AW1000 RJ11 service installed but disabled; follow the QuantumGrid phone-port guide."
+exit 0
