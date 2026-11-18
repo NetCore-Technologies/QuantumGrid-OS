@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, type RouterOverview } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -55,14 +55,15 @@ type Page =
 type SetupStep = "welcome" | "account" | "wifi" | "wan";
 
 type Stats = {
-  latency: number;
-  jitter: number;
+  latency: number | null;
+  probeDelta: number | null;
   download: number;
   upload: number;
-  loss: number;
-  cpu: number;
-  ram: number;
-  temp: number;
+  wanAvailable: boolean;
+  reachable: boolean;
+  cpu: number | null;
+  ram: number | null;
+  temp: number | null;
 };
 
 const nav = [
@@ -1157,6 +1158,8 @@ function Dashboard({
   setPage,
   logout,
   telemetryError,
+  routerOverview,
+  trafficHistory,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -1167,6 +1170,8 @@ function Dashboard({
   setPage: (v: Page) => void;
   logout: () => void;
   telemetryError: string;
+  routerOverview: RouterOverview | null;
+  trafficHistory: number[];
 }) {
   const [mobile, setMobile] = useState(false);
 
@@ -1276,7 +1281,9 @@ function Dashboard({
           </div>
 
           <div className="header-right">
-            <Status active={!telemetryError}>{telemetryError ? "ROUTER API OFFLINE" : "LIVE ROUTER DATA"}</Status>
+            <Status active={Boolean(routerOverview) && !telemetryError}>
+              {telemetryError ? "ROUTER API OFFLINE" : routerOverview ? "LIVE ROUTER DATA" : "CONNECTING TO ROUTER"}
+            </Status>
 
             <div className="refresh-countdown">
               NEXT REFRESH
@@ -1304,7 +1311,14 @@ function Dashboard({
         </header>
 
         <section className="dashboard-content">
-          <DashboardPage stats={stats} refresh={refresh} page={page} />
+          <DashboardPage
+            stats={stats}
+            refresh={refresh}
+            page={page}
+            telemetryError={telemetryError}
+            routerOverview={routerOverview}
+            trafficHistory={trafficHistory}
+          />
         </section>
       </main>
     </div>
@@ -1354,7 +1368,18 @@ function NavButton({
 }
 
 
-function PhonePage() {
+function PhonePage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+  const phone = routerOverview?.phone ?? null;
+  const phoneStatus = !phone
+    ? "WAITING FOR ROUTER"
+    : !phone.service_installed
+      ? "FXS SERVICE NOT INSTALLED"
+      : !phone.patch_installed
+        ? "SLIC PATCH REQUIRED"
+        : phone.enabled
+          ? "PHONE SERVICE ENABLED"
+          : "DISABLED BY SAFE DEFAULT";
+
   return (
     <div className="phone-page">
       <section className="phone-hero">
@@ -1369,19 +1394,19 @@ function PhonePage() {
           </div>
         </div>
         <div className="phone-readiness">
-          <Status active={false}>SETUP REQUIRED</Status>
+          <Status active={Boolean(phone?.service_installed && phone.patch_installed && phone.enabled)}>{phoneStatus}</Status>
           <strong>AW1000 FXS</strong>
           <span>Single analogue handset port</span>
-          <small>Live line state appears in Phone (RJ11) controls after setup.</small>
+          <small>{phone ? "Status read from the router's FXS configuration." : "Connect to the router to read FXS status."}</small>
         </div>
       </section>
       <div className="phone-layout">
         <Panel title="Hardware profile" eyebrow="VOICE PLATFORM">
           <div className="phone-detail-grid">
             <div className="phone-detail"><span>PHONE INTERFACE</span><strong>RJ11 / FXS</strong><small>One analogue handset</small></div>
-            <div className="phone-detail"><span>MODEM</span><strong>Quectel RG500Q-EA</strong><small>Cellular voice via VoLTE</small></div>
-            <div className="phone-detail"><span>SLIC</span><strong>Skyworks Si32261</strong><small>Line interface controller</small></div>
-            <div className="phone-detail"><span>PLATFORM</span><strong>Qualcomm IPQ8074</strong><small>PCM audio bridge</small></div>
+            <div className="phone-detail"><span>FXS SERVICE</span><strong>{phone?.service_installed ? "Installed" : phone ? "Not installed" : "Unknown"}</strong><small>Native fxsd service files</small></div>
+            <div className="phone-detail"><span>SLIC PATCH</span><strong>{phone?.patch_installed ? "Present" : phone ? "Required" : "Unknown"}</strong><small>Proprietary patch is not bundled</small></div>
+            <div className="phone-detail"><span>LINE SERVICE</span><strong>{phone ? (phone.enabled ? "Enabled" : "Disabled") : "Unknown"}</strong><small>Safe by default</small></div>
           </div>
         </Panel>
         <Panel title="Before enabling the line" eyebrow="SAFE FIRST BOOT">
@@ -1413,16 +1438,35 @@ function PhonePage() {
   );
 }
 
+function formatUptime(seconds: number | undefined): string {
+  if (seconds === undefined || !Number.isFinite(seconds) || seconds < 0) return "N/A";
+  const whole = Math.floor(seconds);
+  const days = Math.floor(whole / 86400);
+  const hours = Math.floor((whole % 86400) / 3600);
+  const minutes = Math.floor((whole % 3600) / 60);
+  return days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
 function DashboardPage({
   stats,
   refresh,
   page,
+  telemetryError,
+  routerOverview,
+  trafficHistory,
 }: {
   stats: Stats;
   refresh: () => void;
   page: Page;
+  telemetryError: string;
+  routerOverview: RouterOverview | null;
+  trafficHistory: number[];
 }) {
-  if (page === "phone") return <PhonePage />;
+  const wanOnline = routerOverview?.interfaces.some((item) => item.is_wan && item.up) ?? false;
+  const wifiOnline = routerOverview?.wireless.some((radio) => radio.up) ?? false;
+  const modemDetected = routerOverview?.cellular.modem_present ?? false;
+
+  if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
 
   if (page === "dashboard") {
     return (
@@ -1448,38 +1492,34 @@ function DashboardPage({
           </div>
 
           <div className="health-card">
-            <Status>SYSTEM OPTIMAL</Status>
+            <Status active={Boolean(routerOverview) && !telemetryError}>
+              {telemetryError ? "TELEMETRY UNAVAILABLE" : routerOverview ? "ROUTER CONNECTED" : "CONNECTING"}
+            </Status>
 
-            <strong>98</strong>
-            <span>QuantumGrid Health Score</span>
+            <strong>{stats.cpu === null ? "N/A" : `${fmt(stats.cpu, 1)}%`}</strong>
+            <span>CPU utilisation</span>
 
             <div className="health-mini">
-              <div><span>CLIENTS</span><b>18</b></div>
-              <div><span>WAN</span><b>2.5GbE</b></div>
-              <div><span>UPTIME</span><b>12d</b></div>
+              <div><span>CLIENTS</span><b>N/A</b></div>
+              <div><span>WAN</span><b>{routerOverview ? (wanOnline ? "ONLINE" : "OFFLINE") : "—"}</b></div>
+              <div><span>UPTIME</span><b>{formatUptime(routerOverview?.system.uptime_seconds)}</b></div>
             </div>
           </div>
         </section>
 
         <div className="metrics">
-          <Metric title="Latency" value={fmt(stats.latency)} unit="ms" detail={`${fmt(stats.jitter, 1)} ms probe delta`} icon={Activity} />
-          <Metric title="Download" value={fmt(stats.download)} unit="Mbps" detail="Current WAN throughput" icon={Download} />
-          <Metric title="Upload" value={fmt(stats.upload)} unit="Mbps" detail="Current WAN throughput" icon={Upload} />
-          <Metric title="Packet Loss" value={fmt(stats.loss, 1)} unit="%" detail="Connection quality" icon={Signal} />
+          <Metric title="Latency" value={stats.latency === null ? "N/A" : fmt(stats.latency)} unit={stats.latency === null ? "" : "ms"} detail={stats.probeDelta === null ? "Awaiting second sample" : `${fmt(stats.probeDelta, 1)} ms change between probes`} icon={Activity} />
+          <Metric title="Download" value={stats.wanAvailable ? fmt(stats.download, 2) : "N/A"} unit={stats.wanAvailable ? "Mbps" : ""} detail="WAN byte-counter rate" icon={Download} />
+          <Metric title="Upload" value={stats.wanAvailable ? fmt(stats.upload, 2) : "N/A"} unit={stats.wanAvailable ? "Mbps" : ""} detail="WAN byte-counter rate" icon={Upload} />
+          <Metric title="Internet Probe" value={routerOverview ? (stats.reachable ? "ONLINE" : "NO REPLY") : "N/A"} unit="" detail="Single ICMP probe · 1.1.1.1" icon={Signal} />
         </div>
 
         <div className="dashboard-grid">
-          <Panel title="Live Network Traffic" eyebrow="THROUGHPUT" action={<Status>LIVE</Status>}>
+          <Panel title="WAN Traffic Samples" eyebrow="MEASURED THROUGHPUT" action={<Status active={Boolean(routerOverview) && !telemetryError}>{routerOverview && !telemetryError ? "LIVE" : "WAITING"}</Status>}>
             <div className="traffic-demo">
-              {Array.from({ length: 30 }, (_, i) => {
-                const height = clamp(
-                  25 +
-                    Math.sin(i / 2.3) * 18 +
-                    Math.sin(i / 4.5) * 22 +
-                    (i % 5) * 4,
-                  8,
-                  90,
-                );
+              {trafficHistory.map((value, i) => {
+                const maximum = Math.max(1, ...trafficHistory);
+                const height = value > 0 ? Math.max(3, (value / maximum) * 90) : 3;
 
                 return (
                   <div key={i} className="traffic-column">
@@ -1490,31 +1530,29 @@ function DashboardPage({
             </div>
 
             <div className="traffic-labels">
-              <span>60s ago</span>
-              <span>30s</span>
+              <span>90s ago</span>
+              <span>45s</span>
               <span>NOW</span>
             </div>
           </Panel>
 
-          <Panel title="Gaming Engine" eyebrow="LOW LATENCY" action={<Status>ACTIVE</Status>}>
+          <Panel title="Gaming Engine" eyebrow="LATENCY OBSERVABILITY" action={<Status active={false}>POLICY NOT CONFIGURED</Status>}>
             <div className="gaming-score">
               <div className="gaming-ring">
-                <strong>98</strong>
-                <span>/100</span>
+                <strong>N/A</strong>
+                <span>NO SCORE</span>
               </div>
 
               <div className="gaming-stats">
-                <div><span>LATENCY</span><b>{fmt(stats.latency)} ms</b></div>
-                <div><span>JITTER</span><b>{fmt(stats.jitter, 1)} ms</b></div>
-                <div><span>LOSS</span><b>{fmt(stats.loss, 1)}%</b></div>
+                <div><span>LATENCY</span><b>{stats.latency === null ? "N/A" : `${fmt(stats.latency)} ms`}</b></div>
+                <div><span>PROBE DELTA</span><b>{stats.probeDelta === null ? "N/A" : `${fmt(stats.probeDelta, 1)} ms`}</b></div>
+                <div><span>INTERNET PROBE</span><b>{routerOverview ? (stats.reachable ? "ONLINE" : "NO REPLY") : "N/A"}</b></div>
                 <div><span>BUFFERBLOAT</span><b>N/A</b></div>
               </div>
             </div>
 
             <div className="mode-row">
-              <span className="selected">GAMING</span>
-              <span>BALANCED</span>
-              <span>TURBO</span>
+              <span className="selected">POLICY PRESETS NOT APPLIED</span>
             </div>
           </Panel>
         </div>
@@ -1523,19 +1561,19 @@ function DashboardPage({
           <Panel title="Acceleration" eyebrow="DATA PLANE">
             <InfoRows
               rows={[
-                ["NSS", "READY"],
-                ["EDMA", "READY"],
-                ["PPE", "READY"],
-                ["2.5GbE", "READY"],
+                ["NSS", "NOT INCLUDED"],
+                ["EDMA", "UNVERIFIED"],
+                ["PPE", "UNVERIFIED"],
+                ["2.5GbE", "LINK SPEED UNKNOWN"],
               ]}
             />
           </Panel>
 
           <Panel title="System Health" eyebrow="LIVE HARDWARE">
             <div className="health-grid">
-              <Health icon={Cpu} label="CPU" value={`${fmt(stats.cpu, 1)}%`} />
-              <Health icon={Thermometer} label="TEMP" value={stats.temp > 0 ? `${fmt(stats.temp, 1)}°C` : "N/A"} />
-              <Health icon={Database} label="RAM" value={`${fmt(stats.ram, 1)}%`} />
+              <Health icon={Cpu} label="CPU" value={stats.cpu === null ? "N/A" : `${fmt(stats.cpu, 1)}%`} />
+              <Health icon={Thermometer} label="TEMP" value={stats.temp === null ? "N/A" : `${fmt(stats.temp, 1)}°C`} />
+              <Health icon={Database} label="RAM" value={stats.ram === null ? "N/A" : `${fmt(stats.ram, 1)}%`} />
               <Health icon={HardDrive} label="STORAGE" value="N/A" />
             </div>
           </Panel>
@@ -1543,9 +1581,9 @@ function DashboardPage({
           <Panel title="Network Status" eyebrow="CONNECTIVITY">
             <InfoRows
               rows={[
-                ["WAN", "ONLINE"],
-                ["WI-FI", "ONLINE"],
-                ["5G", "STANDBY"],
+                ["WAN", routerOverview ? (wanOnline ? "ONLINE" : "OFFLINE") : "UNKNOWN"],
+                ["WI-FI", routerOverview ? (wifiOnline ? "ONLINE" : "OFFLINE") : "UNKNOWN"],
+                ["5G MODEM", routerOverview ? (modemDetected ? "DETECTED" : "NOT DETECTED") : "UNKNOWN"],
               ]}
             />
           </Panel>
@@ -2789,16 +2827,19 @@ function App() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(3);
 
   const [stats, setStats] = useState<Stats>({
-    latency: 0,
-    jitter: 0,
+    latency: null,
+    probeDelta: null,
     download: 0,
     upload: 0,
-    loss: 100,
-    cpu: 0,
-    ram: 0,
-    temp: 0,
+    wanAvailable: false,
+    reachable: false,
+    cpu: null,
+    ram: null,
+    temp: null,
   });
   const [telemetryError, setTelemetryError] = useState("");
+  const [routerOverview, setRouterOverview] = useState<RouterOverview | null>(null);
+  const [trafficHistory, setTrafficHistory] = useState<number[]>(() => Array(30).fill(0));
   const previousNetworkSample = useRef<{
     device: string;
     rx: number;
@@ -2818,37 +2859,40 @@ function App() {
       const previous = previousNetworkSample.current;
       let download = 0;
       let upload = 0;
-      let jitter = 0;
+      let probeDelta: number | null = null;
 
       if (wan && previous && previous.device === wan.device) {
         const elapsedSeconds = Math.max(0.001, (now - previous.sampledAt) / 1000);
         download = Math.max(0, ((wan.rx_bytes - previous.rx) * 8) / elapsedSeconds / 1_000_000);
         upload = Math.max(0, ((wan.tx_bytes - previous.tx) * 8) / elapsedSeconds / 1_000_000);
         if (previous.latency !== null && overview.system.ping_ms !== null) {
-          jitter = Math.abs(overview.system.ping_ms - previous.latency);
+          probeDelta = Math.abs(overview.system.ping_ms - previous.latency);
         }
       }
 
-      if (wan) {
-        previousNetworkSample.current = {
-          device: wan.device,
-          rx: wan.rx_bytes,
-          tx: wan.tx_bytes,
-          sampledAt: now,
-          latency: overview.system.ping_ms,
-        };
-      }
+      previousNetworkSample.current = wan
+        ? {
+            device: wan.device,
+            rx: wan.rx_bytes,
+            tx: wan.tx_bytes,
+            sampledAt: now,
+            latency: overview.system.ping_ms,
+          }
+        : null;
 
       setStats({
-        latency: overview.system.ping_ms ?? 0,
-        jitter,
+        latency: overview.system.ping_ms,
+        probeDelta,
         download,
         upload,
-        loss: overview.system.ping_ok ? 0 : 100,
-        cpu: overview.system.cpu_percent ?? 0,
-        ram: overview.system.memory.used_percent ?? 0,
-        temp: overview.system.temperature_c ?? 0,
+        wanAvailable: Boolean(wan),
+        reachable: overview.system.ping_ok,
+        cpu: overview.system.cpu_percent,
+        ram: overview.system.memory.used_percent,
+        temp: overview.system.temperature_c,
       });
+      setRouterOverview(overview);
+      setTrafficHistory((history) => [...history.slice(1), wan ? download + upload : 0]);
       setTelemetryError("");
     } catch (error) {
       setTelemetryError(error instanceof Error ? error.message : "Router telemetry is unavailable.");
@@ -2979,6 +3023,8 @@ function App() {
       setPage={setPage}
       logout={logout}
       telemetryError={telemetryError}
+      routerOverview={routerOverview}
+      trafficHistory={trafficHistory}
     />
   );
 }

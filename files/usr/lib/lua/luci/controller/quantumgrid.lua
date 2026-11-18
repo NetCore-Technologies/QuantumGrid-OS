@@ -158,8 +158,26 @@ function action_set_password()
 	local http = require "luci.http"
 	local sys = require "luci.sys"
 	local password = http.formvalue("password", true)
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
 
-	if type(password) ~= "string" or #password < 8 or #password > 128 or password:find("[%z\\r\\n]") then
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		http.status(405, "Method Not Allowed")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "POST is required." })
+		return
+	end
+
+	if not host or origin ~= scheme .. "://" .. host then
+		http.status(403, "Forbidden")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "A same-origin request is required." })
+		return
+	end
+
+	if type(password) ~= "string" or #password < 8 or #password > 128
+		or password:find("%z") or password:find("\\r") or password:find("\\n") then
 		http.status(400, "Bad Request")
 		http.prepare_content("application/json; charset=UTF-8")
 		http.write_json({ ok = false, error = "Password must be 8 to 128 characters." })
