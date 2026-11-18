@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  pages: write
 
 concurrency:
   group: quantumgrid-pages
@@ -26,14 +27,20 @@ jobs:
   build:
     name: Validate and package website
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
     steps:
       - uses: actions/checkout@v4
       - name: Validate local links, metadata and sitemap
         run: python3 scripts/check-website.py
       - name: Check website JavaScript
         run: node --check website/site.js
-      - name: Configure Pages
+      - name: Enable and configure Pages
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
@@ -41,7 +48,7 @@ jobs:
 
   deploy:
     name: Publish GitHub Pages
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     permissions:
