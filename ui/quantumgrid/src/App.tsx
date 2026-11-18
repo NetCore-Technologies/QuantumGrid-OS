@@ -88,10 +88,6 @@ const devices = [
   ["Living Room TV", "Smart TV", "192.168.1.140", "Wi-Fi 6", 12],
 ];
 
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
-
 function fmt(value: number, digits = 0) {
   return value.toLocaleString("en-US", {
     minimumFractionDigits: digits,

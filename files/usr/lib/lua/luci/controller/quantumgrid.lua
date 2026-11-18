@@ -177,7 +177,7 @@ function action_set_password()
 	end
 
 	if type(password) ~= "string" or #password < 8 or #password > 128
-		or password:find("%z") or password:find("\\r") or password:find("\\n") then
+		or password:find("%z") or password:find("\r") or password:find("\n") then
 		http.status(400, "Bad Request")
 		http.prepare_content("application/json; charset=UTF-8")
 		http.write_json({ ok = false, error = "Password must be 8 to 128 characters." })
