@@ -2,6 +2,15 @@ name: QuantumGrid AW1000 firmware release
 
 on:
   push:
+    branches: [main]
+    paths:
+      - ".github/workflows/firmware-release.yml"
+      - "build.sh"
+      - "configs/**"
+      - "files/**"
+      - "scripts/setup-aw1000-phone-feed.sh"
+      - "Docs/PHONE-PORT.md"
+      - "Docs/RECOVERY.md"
     tags:
       - "qg-v*"
   workflow_dispatch:
