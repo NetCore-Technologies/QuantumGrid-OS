@@ -26,6 +26,11 @@ grep -Fq 'squashfs-sysupgrade.bin' "$ROOT/.github/workflows/firmware-release.yml
 grep -Fq 'squashfs-factory.ubi' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'initramfs-uImage.itb' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'function PhonePage()' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'admin/services/quantumgrid/api' "$ROOT/ui/quantumgrid/src/routerApi.ts"
+grep -Fq 'loginToRouter' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'network.interface' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'network.wireless' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'http.write_json' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq '/cgi-bin/luci/admin/services/fxs/status' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq "uci -q set fxs.main.enabled='0'" "$ROOT/files/etc/uci-defaults/90-quantumgrid-fxs-safe"
 

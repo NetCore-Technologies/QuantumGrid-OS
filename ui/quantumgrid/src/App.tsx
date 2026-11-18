@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchRouterOverview, loginToRouter } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -225,13 +226,13 @@ function AccountSetup({
 }) {
   const [error, setError] = useState("");
 
-  const validUser = username.trim().length >= 3;
+  const validUser = username.trim() === "root";
   const validPassword = password.length >= 8;
   const validMatch = password.length > 0 && password === confirm;
 
   function submit() {
     if (!validUser) {
-      setError("Your username must contain at least 3 characters.");
+      setError("Use the existing OpenWrt root administrator account.");
       return;
     }
 
@@ -256,39 +257,40 @@ function AccountSetup({
           <div className="setup-kicker">STEP 1 OF 3 • ADMINISTRATOR</div>
 
           <h1>
-            Create your
-            <span> administrator account.</span>
+            Connect your
+            <span> router administrator.</span>
           </h1>
 
           <p>
-            This account protects access to your QuantumGrid control center.
+            Use the existing OpenWrt root account. QuantumGrid does not create a separate Linux user.
           </p>
 
           <div className="account-form">
             <Field
-              label="USERNAME"
+              label="ROUTER ADMINISTRATOR"
               icon={User}
               value={username}
-              placeholder="Choose a username"
+              placeholder="root"
               onChange={setUsername}
               valid={validUser}
+              readOnly
             />
 
             <Field
-              label="PASSWORD"
+              label="CURRENT ROOT PASSWORD"
               icon={Lock}
               value={password}
-              placeholder="Create a secure password"
+              placeholder="Current router password"
               onChange={setPassword}
               type="password"
               valid={validPassword}
             />
 
             <Field
-              label="CONFIRM PASSWORD"
+              label="CONFIRM ROOT PASSWORD"
               icon={Lock}
               value={confirm}
-              placeholder="Enter the password again"
+              placeholder="Enter it again"
               onChange={setConfirm}
               type="password"
               valid={validMatch}
@@ -368,6 +370,7 @@ function Field({
   onChange,
   valid,
   type = "text",
+  readOnly = false,
 }: {
   label: string;
   icon: React.ElementType;
@@ -376,6 +379,7 @@ function Field({
   onChange: (v: string) => void;
   valid: boolean;
   type?: string;
+  readOnly?: boolean;
 }) {
   return (
     <label className="setup-field">
@@ -391,6 +395,7 @@ function Field({
           value={value}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
+          readOnly={readOnly}
         />
 
         {valid && <Check size={17} className="input-success" />}
@@ -1151,6 +1156,7 @@ function Dashboard({
   page,
   setPage,
   logout,
+  telemetryError,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -1160,6 +1166,7 @@ function Dashboard({
   page: Page;
   setPage: (v: Page) => void;
   logout: () => void;
+  telemetryError: string;
 }) {
   const [mobile, setMobile] = useState(false);
 
@@ -1269,7 +1276,7 @@ function Dashboard({
           </div>
 
           <div className="header-right">
-            <Status>SYSTEM OPTIMAL</Status>
+            <Status active={!telemetryError}>{telemetryError ? "ROUTER API OFFLINE" : "LIVE ROUTER DATA"}</Status>
 
             <div className="refresh-countdown">
               NEXT REFRESH
@@ -1455,7 +1462,7 @@ function DashboardPage({
         </section>
 
         <div className="metrics">
-          <Metric title="Latency" value={fmt(stats.latency)} unit="ms" detail={`${fmt(stats.jitter, 1)} ms jitter`} icon={Activity} />
+          <Metric title="Latency" value={fmt(stats.latency)} unit="ms" detail={`${fmt(stats.jitter, 1)} ms probe delta`} icon={Activity} />
           <Metric title="Download" value={fmt(stats.download)} unit="Mbps" detail="Current WAN throughput" icon={Download} />
           <Metric title="Upload" value={fmt(stats.upload)} unit="Mbps" detail="Current WAN throughput" icon={Upload} />
           <Metric title="Packet Loss" value={fmt(stats.loss, 1)} unit="%" detail="Connection quality" icon={Signal} />
@@ -1500,7 +1507,7 @@ function DashboardPage({
                 <div><span>LATENCY</span><b>{fmt(stats.latency)} ms</b></div>
                 <div><span>JITTER</span><b>{fmt(stats.jitter, 1)} ms</b></div>
                 <div><span>LOSS</span><b>{fmt(stats.loss, 1)}%</b></div>
-                <div><span>BUFFERBLOAT</span><b>A</b></div>
+                <div><span>BUFFERBLOAT</span><b>N/A</b></div>
               </div>
             </div>
 
@@ -1527,9 +1534,9 @@ function DashboardPage({
           <Panel title="System Health" eyebrow="LIVE HARDWARE">
             <div className="health-grid">
               <Health icon={Cpu} label="CPU" value={`${fmt(stats.cpu, 1)}%`} />
-              <Health icon={Thermometer} label="TEMP" value={`${fmt(stats.temp, 1)}°C`} />
+              <Health icon={Thermometer} label="TEMP" value={stats.temp > 0 ? `${fmt(stats.temp, 1)}°C` : "N/A"} />
               <Health icon={Database} label="RAM" value={`${fmt(stats.ram, 1)}%`} />
-              <Health icon={HardDrive} label="STORAGE" value="28%" />
+              <Health icon={HardDrive} label="STORAGE" value="N/A" />
             </div>
           </Panel>
 
@@ -2764,9 +2771,8 @@ function App() {
 
   const [setupStep, setSetupStep] = useState<SetupStep>("welcome");
 
-  // Setup username must always start blank.
-  // The saved username is loaded separately for the login screen.
-  const [username, setUsername] = useState("");
+  // OpenWrt's built-in administrator account is root; the password is never stored locally.
+  const [username, setUsername] = useState("root");
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -2783,50 +2789,91 @@ function App() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(3);
 
   const [stats, setStats] = useState<Stats>({
-    latency: 8,
-    jitter: 1.1,
-    download: 942,
-    upload: 41,
-    loss: 0,
-    cpu: 21,
-    ram: 34,
-    temp: 51,
+    latency: 0,
+    jitter: 0,
+    download: 0,
+    upload: 0,
+    loss: 100,
+    cpu: 0,
+    ram: 0,
+    temp: 0,
   });
+  const [telemetryError, setTelemetryError] = useState("");
+  const previousNetworkSample = useRef<{
+    device: string;
+    rx: number;
+    tx: number;
+    sampledAt: number;
+    latency: number | null;
+  } | null>(null);
 
-  function refresh() {
-    setSecondsUntilRefresh(3);
+  const refresh = useCallback(async () => {
+    try {
+      const overview = await fetchRouterOverview();
+      const wan =
+        overview.interfaces.find((item) => item.name === "wan" && item.up) ??
+        overview.interfaces.find((item) => item.is_wan && item.up) ??
+        overview.interfaces.find((item) => item.up);
+      const now = Date.now();
+      const previous = previousNetworkSample.current;
+      let download = 0;
+      let upload = 0;
+      let jitter = 0;
 
-    setStats((s) => ({
-      latency: clamp(s.latency + (Math.random() - 0.5) * 4, 5, 18),
-      jitter: clamp(s.jitter + (Math.random() - 0.5) * 0.5, 0.3, 4),
-      download: clamp(s.download + (Math.random() - 0.5) * 80, 700, 1120),
-      upload: clamp(s.upload + (Math.random() - 0.5) * 12, 25, 80),
-      loss: clamp(s.loss + (Math.random() - 0.5) * 0.1, 0, 0.8),
-      cpu: clamp(s.cpu + (Math.random() - 0.5) * 8, 7, 58),
-      ram: clamp(s.ram + (Math.random() - 0.5) * 4, 22, 60),
-      temp: clamp(s.temp + (Math.random() - 0.5) * 1.5, 43, 68),
-    }));
-  }
+      if (wan && previous && previous.device === wan.device) {
+        const elapsedSeconds = Math.max(0.001, (now - previous.sampledAt) / 1000);
+        download = Math.max(0, ((wan.rx_bytes - previous.rx) * 8) / elapsedSeconds / 1_000_000);
+        upload = Math.max(0, ((wan.tx_bytes - previous.tx) * 8) / elapsedSeconds / 1_000_000);
+        if (previous.latency !== null && overview.system.ping_ms !== null) {
+          jitter = Math.abs(overview.system.ping_ms - previous.latency);
+        }
+      }
+
+      if (wan) {
+        previousNetworkSample.current = {
+          device: wan.device,
+          rx: wan.rx_bytes,
+          tx: wan.tx_bytes,
+          sampledAt: now,
+          latency: overview.system.ping_ms,
+        };
+      }
+
+      setStats({
+        latency: overview.system.ping_ms ?? 0,
+        jitter,
+        download,
+        upload,
+        loss: overview.system.ping_ok ? 0 : 100,
+        cpu: overview.system.cpu_percent ?? 0,
+        ram: overview.system.memory.used_percent ?? 0,
+        temp: overview.system.temperature_c ?? 0,
+      });
+      setTelemetryError("");
+    } catch (error) {
+      setTelemetryError(error instanceof Error ? error.message : "Router telemetry is unavailable.");
+    } finally {
+      setSecondsUntilRefresh(3);
+    }
+  }, []);
 
   useEffect(() => {
     if (!setupComplete || !loggedIn) return;
 
+    void refresh();
     const refreshTimer = window.setInterval(() => {
-      refresh();
-      setSecondsUntilRefresh(3);
+      void refresh();
     }, 3000);
 
     const countdownTimer = window.setInterval(() => {
-      setSecondsUntilRefresh((value) =>
-        value <= 1 ? 3 : value - 1,
-      );
+      setSecondsUntilRefresh((value) => (value <= 1 ? 3 : value - 1));
     }, 1000);
 
     return () => {
       window.clearInterval(refreshTimer);
       window.clearInterval(countdownTimer);
     };
-  }, [setupComplete, loggedIn]);
+  }, [setupComplete, loggedIn, refresh]);
 
   function finishSetup() {
     localStorage.setItem("quantumgrid-setup-complete", "1");
@@ -2834,33 +2881,34 @@ function App() {
     localStorage.setItem("quantumgrid-wifi-ssid", ssid);
     localStorage.setItem("quantumgrid-wan-type", wanType);
 
+    setLoginPassword(password);
     setSetupComplete(true);
     setSetupStep("welcome");
   }
 
   function logout() {
-    setLoggedIn(false);
-    setLoginPassword("");
-    setLoginError("");
-    setPage("dashboard");
-    setCollapsed(false);
+    void fetch("/cgi-bin/luci/admin/logout", {
+      credentials: "same-origin",
+      cache: "no-store",
+    }).finally(() => {
+      setLoggedIn(false);
+      setLoginPassword("");
+      setLoginError("");
+      setPage("dashboard");
+      setCollapsed(false);
+    });
   }
 
-  function login() {
-    const saved = localStorage.getItem("quantumgrid-username") || "";
-
-    /*
-     * Development-only credential handling.
-     * Production firmware will authenticate against the router backend.
-     */
-    if (saved.length > 0 && loginPassword === password) {
+  async function login() {
+    const saved = localStorage.getItem("quantumgrid-username") || "root";
+    try {
+      await loginToRouter(saved, loginPassword);
       setSecondsUntilRefresh(3);
       setLoggedIn(true);
       setLoginError("");
-      return;
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : "Router sign-in failed.");
     }
-
-    setLoginError("Incorrect username or password.");
   }
 
   if (!setupComplete) {
@@ -2909,7 +2957,7 @@ function App() {
   if (!loggedIn) {
     return (
       <Login
-        username={localStorage.getItem("quantumgrid-username") || ""}
+        username={localStorage.getItem("quantumgrid-username") || "root"}
         password={loginPassword}
         setPassword={setLoginPassword}
         login={login}
@@ -2929,6 +2977,7 @@ function App() {
       page={page}
       setPage={setPage}
       logout={logout}
+      telemetryError={telemetryError}
     />
   );
 }
