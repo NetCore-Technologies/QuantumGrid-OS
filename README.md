@@ -73,10 +73,11 @@ QG_OPENWRT_REF=v25.12.6 ./build.sh
 
 The build also compiles the existing React control centre with Node.js 22/npm and copies
 its Vite output into the firmware root filesystem at `/www/quantumgrid`. After boot it is served
-at `http://<router-address>/quantumgrid/`. The dashboard and Devices inventory use live
-router API data for system metrics, WAN counters, wireless state and DHCPv4 leases. Wi-Fi radio
-status is read-only. Gaming policy and several advanced controls remain incomplete previews
-and do not change router configuration.
+at `http://<router-address>/quantumgrid/`. The dashboard, Network, Diagnostics, System and Analytics views use live router API data for
+system metrics, WAN counters, wireless state and a short rolling throughput window. The Devices
+and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. The 5G page reports
+modem device detection only; cellular registration and RF metrics are not yet exposed. Gaming,
+Security and Advanced policy controls remain unconnected and do not change router configuration.
 
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.

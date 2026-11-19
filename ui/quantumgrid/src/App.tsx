@@ -1546,6 +1546,278 @@ function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview
   );
 }
 
+function formatTrafficBytes(bytes: number | undefined): string {
+  if (bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return "N/A";
+  if (bytes < 1024) return `${fmt(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${fmt(value, 1)} ${units[unit]}`;
+}
+
+function NetworkControlPage({
+  routerOverview,
+  stats,
+}: {
+  routerOverview: RouterOverview | null;
+  stats: Stats;
+}) {
+  const interfaces = routerOverview?.interfaces ?? [];
+  const radios = routerOverview?.wireless ?? [];
+  const wirelessClients = routerOverview?.wireless_clients ?? [];
+  const wanCount = interfaces.filter((item) => item.is_wan).length;
+  const activeInterfaces = interfaces.filter((item) => item.up).length;
+  const activeRadios = radios.filter((radio) => radio.up).length;
+  const knownClientCount = Array.isArray(routerOverview?.clients)
+    ? fmt(routerOverview.clients.length)
+    : "N/A";
+
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Network size={25} /></div>
+        <div>
+          <div className="setup-kicker">LIVE ROUTER INTERFACES</div>
+          <h1>Network</h1>
+          <p>Current WAN/LAN interface state, kernel byte counters, IPv4 addresses and wireless radio status from the authenticated router API.</p>
+        </div>
+      </section>
+
+      <div className="metrics">
+        <Metric title="Active Interfaces" value={routerOverview ? `${activeInterfaces}/${interfaces.length}` : "N/A"} unit="" detail="Kernel interface state" icon={Network} />
+        <Metric title="WAN Interfaces" value={routerOverview ? fmt(wanCount) : "N/A"} unit="" detail="Configured WAN links" icon={Globe2} />
+        <Metric title="Active Radios" value={routerOverview ? `${activeRadios}/${radios.length}` : "N/A"} unit="" detail="Wireless radio state" icon={Wifi} />
+        <Metric title="Known DHCP Clients" value={knownClientCount} unit="" detail="Unexpired IPv4 leases" icon={Users} />
+      </div>
+
+      <Panel title="Network interfaces" eyebrow="KERNEL COUNTERS" action={<Status active={Boolean(routerOverview)}>{routerOverview ? "LIVE" : "WAITING"}</Status>}>
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : interfaces.length === 0 ? (
+          <div className="module-message">The router did not report any network interfaces.</div>
+        ) : (
+          <div className="device-list">
+            {interfaces.map((item) => (
+              <div className="device-row" key={item.name}>
+                <div className="device-title">
+                  <div className="device-icon"><Network size={17} /></div>
+                  <div><strong>{item.name}</strong><span>{item.device}{item.is_wan ? " · WAN" : " · LAN / other"}</span></div>
+                </div>
+                <div><small>STATE</small><b>{item.up ? "UP" : "DOWN"}</b></div>
+                <div><small>IPV4</small><b>{item.ipv4.length > 0 ? item.ipv4.join(", ") : "—"}</b></div>
+                <div><small>RX TOTAL</small><b>{formatTrafficBytes(item.rx_bytes)}</b></div>
+                <div><small>TX TOTAL</small><b>{formatTrafficBytes(item.tx_bytes)}</b></div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">RX/TX values are cumulative kernel byte counters since the interface counters were reset; they are not instantaneous link speeds.</div>
+      </Panel>
+
+      <div className="module-grid">
+        <Panel title="Wireless radios" eyebrow="NETWORK.WIRELESS">
+          {!routerOverview ? (
+            <div className="module-message">Wireless status is waiting for router data.</div>
+          ) : radios.length === 0 ? (
+            <div className="module-message">No radios were reported.</div>
+          ) : (
+            <InfoRows rows={radios.map((radio) => [
+              radio.name,
+              `${radio.up ? "UP" : "DOWN"} · ${radio.interfaces.length} interface(s)`,
+            ])} />
+          )}
+        </Panel>
+        <Panel title="Live WAN throughput" eyebrow="SUCCESSIVE COUNTER SAMPLES">
+          <div className="health-grid">
+            <Health icon={Download} label="DOWNLOAD" value={stats.wanAvailable ? `${fmt(stats.download, 2)} Mbps` : "N/A"} />
+            <Health icon={Upload} label="UPLOAD" value={stats.wanAvailable ? `${fmt(stats.upload, 2)} Mbps` : "N/A"} />
+          </div>
+          <div className="module-message">Throughput is calculated between successive WAN counter samples and requires two valid samples.</div>
+        </Panel>
+      </div>
+
+      <Panel title="Associated Wi-Fi stations" eyebrow="IWINFO ASSOCIATION DATA">
+        <WirelessClientList
+          clients={wirelessClients}
+          available={Array.isArray(routerOverview?.wireless_clients)}
+          leases={routerOverview?.clients ?? []}
+        />
+      </Panel>
+    </div>
+  );
+}
+
+function DiagnosticsControlPage({
+  stats,
+  telemetryError,
+  routerOverview,
+  refresh,
+}: {
+  stats: Stats;
+  telemetryError: string;
+  routerOverview: RouterOverview | null;
+  refresh: () => void;
+}) {
+  const wanInterfaces = routerOverview?.interfaces.filter((item) => item.is_wan) ?? [];
+  const lastSample = routerOverview
+    ? new Date(routerOverview.timestamp * 1000).toLocaleString()
+    : "N/A";
+
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Activity size={25} /></div>
+        <div>
+          <div className="setup-kicker">READ-ONLY CONNECTIVITY CHECKS</div>
+          <h1>Diagnostics</h1>
+          <p>Inspect the authenticated router API, WAN interface state and the current single-target Internet reachability probe.</p>
+          <button className="hero-button" onClick={refresh}><RefreshCw size={16} /> Refresh diagnostics</button>
+        </div>
+      </section>
+
+      <div className="metrics">
+        <Metric title="Internet Probe" value={routerOverview ? (stats.reachable ? "ONLINE" : "NO REPLY") : "N/A"} unit="" detail="Single ICMP target · 1.1.1.1" icon={Signal} />
+        <Metric title="Latency" value={stats.latency === null ? "N/A" : fmt(stats.latency, 1)} unit={stats.latency === null ? "" : "ms"} detail="Latest successful probe" icon={Activity} />
+        <Metric title="Probe Change" value={stats.probeDelta === null ? "N/A" : fmt(stats.probeDelta, 1)} unit={stats.probeDelta === null ? "" : "ms"} detail="Absolute change between samples" icon={CircleGauge} />
+        <Metric title="WAN Links Up" value={routerOverview ? fmt(wanInterfaces.filter((item) => item.up).length) : "N/A"} unit={routerOverview ? `/${wanInterfaces.length}` : ""} detail="Reported WAN interfaces" icon={Globe2} />
+      </div>
+
+      <div className="module-grid">
+        <Panel title="Probe details" eyebrow="CONNECTIVITY">
+          <InfoRows rows={[
+            ["ROUTER API", telemetryError ? "ERROR" : routerOverview ? "AUTHENTICATED" : "WAITING"],
+            ["TARGET", "1.1.1.1 · ICMP"],
+            ["RESULT", routerOverview ? (stats.reachable ? "REPLY RECEIVED" : "NO REPLY") : "NOT SAMPLED"],
+            ["LAST SAMPLE", lastSample],
+          ]} />
+          {telemetryError && <div className="module-message">{telemetryError}</div>}
+        </Panel>
+        <Panel title="WAN interface checks" eyebrow="ROUTER REPORTED STATE">
+          {wanInterfaces.length === 0 ? (
+            <div className="module-message">{routerOverview ? "No WAN interface was identified by the router API." : "Waiting for router interface telemetry."}</div>
+          ) : (
+            <InfoRows rows={wanInterfaces.map((item) => [
+              item.name,
+              item.up ? "LINK UP" : "LINK DOWN",
+            ])} />
+          )}
+        </Panel>
+      </div>
+
+      <Panel title="Measurement boundaries" eyebrow="WHAT THIS PAGE DOES NOT CLAIM">
+        <div className="module-message">The current API provides a single ICMP reachability/latency sample. It does not yet run continuous ping, traceroute, DNS resolution tests, packet-loss windows or bufferbloat tests. No packet-loss percentage is inferred from a missing reply.</div>
+      </Panel>
+    </div>
+  );
+}
+
+function SystemControlPage({ routerOverview, stats }: { routerOverview: RouterOverview | null; stats: Stats }) {
+  const memory = routerOverview?.system.memory;
+  const load = routerOverview?.system.load_avg ?? [];
+
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Cpu size={25} /></div>
+        <div>
+          <div className="setup-kicker">LIVE HARDWARE TELEMETRY</div>
+          <h1>System</h1>
+          <p>CPU, memory, temperature, uptime and load averages reported by the AW1000 router.</p>
+        </div>
+      </section>
+      <div className="metrics">
+        <Metric title="CPU Utilisation" value={stats.cpu === null ? "N/A" : fmt(stats.cpu, 1)} unit={stats.cpu === null ? "" : "%"} detail="Kernel-derived sample" icon={Cpu} />
+        <Metric title="Memory Used" value={stats.ram === null ? "N/A" : fmt(stats.ram, 1)} unit={stats.ram === null ? "" : "%"} detail={memory ? `${fmt(memory.available_kib / 1024, 0)} MiB available` : "Unavailable"} icon={Database} />
+        <Metric title="Temperature" value={stats.temp === null ? "N/A" : fmt(stats.temp, 1)} unit={stats.temp === null ? "" : "°C"} detail="First available thermal zone" icon={Thermometer} />
+        <Metric title="Uptime" value={formatUptime(routerOverview?.system.uptime_seconds)} unit="" detail="Since the last boot" icon={HardDrive} />
+      </div>
+      <div className="module-grid">
+        <Panel title="System load" eyebrow="1 / 5 / 15 MINUTES">
+          <InfoRows rows={[
+            ["1 MIN", load[0] === undefined ? "N/A" : fmt(load[0], 2)],
+            ["5 MIN", load[1] === undefined ? "N/A" : fmt(load[1], 2)],
+            ["15 MIN", load[2] === undefined ? "N/A" : fmt(load[2], 2)],
+          ]} />
+        </Panel>
+        <Panel title="Memory inventory" eyebrow="PROC / MEMINFO">
+          <InfoRows rows={[
+            ["TOTAL", memory ? `${fmt(memory.total_kib / 1024, 0)} MiB` : "N/A"],
+            ["AVAILABLE", memory ? `${fmt(memory.available_kib / 1024, 0)} MiB` : "N/A"],
+            ["USED", stats.ram === null ? "N/A" : `${fmt(stats.ram, 1)}%`],
+          ]} />
+        </Panel>
+      </div>
+      <div className="module-message">Values are reported by the router API; some hardware/firmware builds may not expose CPU, memory or thermal data for every sample.</div>
+    </div>
+  );
+}
+
+function AnalyticsControlPage({ stats, trafficHistory }: { stats: Stats; trafficHistory: number[] }) {
+  const peak = trafficHistory.length > 0 ? Math.max(...trafficHistory) : 0;
+  const average = trafficHistory.length > 0
+    ? trafficHistory.reduce((sum, value) => sum + value, 0) / trafficHistory.length
+    : 0;
+  const maximum = Math.max(1, peak);
+  const current = stats.wanAvailable ? stats.download + stats.upload : 0;
+
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Database size={25} /></div>
+        <div>
+          <div className="setup-kicker">MEASURED WAN COUNTERS</div>
+          <h1>Analytics</h1>
+          <p>Short-window WAN throughput history derived from successive kernel byte-counter samples.</p>
+        </div>
+      </section>
+      <div className="metrics">
+        <Metric title="Current Combined" value={stats.wanAvailable ? fmt(current, 2) : "N/A"} unit={stats.wanAvailable ? "Mbps" : ""} detail="Download + upload" icon={Activity} />
+        <Metric title="Window Peak" value={stats.wanAvailable ? fmt(peak, 2) : "N/A"} unit={stats.wanAvailable ? "Mbps" : ""} detail="Highest 30-sample total" icon={Signal} />
+        <Metric title="Window Average" value={stats.wanAvailable ? fmt(average, 2) : "N/A"} unit={stats.wanAvailable ? "Mbps" : ""} detail="Average sample total" icon={CircleGauge} />
+        <Metric title="Sample Count" value={stats.wanAvailable ? fmt(trafficHistory.length) : "N/A"} unit="" detail="Approximately 90 seconds" icon={Database} />
+      </div>
+      <Panel title="WAN throughput history" eyebrow="30 SAMPLES · 3 SECOND REFRESH" action={<Status active={stats.wanAvailable}>{stats.wanAvailable ? "LIVE" : "WAITING"}</Status>}>
+        <div className="traffic-demo">
+          {trafficHistory.map((value, index) => {
+            const height = value > 0 ? Math.max(3, (value / maximum) * 90) : 3;
+            return <div className="traffic-column" key={index}><span style={{ height: `${height}%` }} /></div>;
+          })}
+        </div>
+        <div className="traffic-labels"><span>OLDEST</span><span>~45s</span><span>NOW</span></div>
+        <div className="module-message">This is an in-memory rolling window. It resets when the QuantumGrid page reloads and is not a historical usage/accounting database.</div>
+      </Panel>
+    </div>
+  );
+}
+
+function CellularControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+  const detected = routerOverview?.cellular.modem_present ?? false;
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Signal size={25} /></div>
+        <div>
+          <div className="setup-kicker">AW1000 CELLULAR HARDWARE</div>
+          <h1>5G Modem</h1>
+          <p>Read-only modem device-node detection for the AW1000's cellular subsystem.</p>
+        </div>
+      </section>
+      <div className="module-grid">
+        <Panel title="Modem presence" eyebrow="DEVICE NODE CHECK" action={<Status active={detected}>{detected ? "DETECTED" : routerOverview ? "NOT DETECTED" : "WAITING"}</Status>}>
+          <div className="module-message">{detected ? "At least one supported modem control device node was found by the router API." : routerOverview ? "The router API did not find the expected modem control device nodes." : "Waiting for authenticated router telemetry."}</div>
+        </Panel>
+        <Panel title="Cellular telemetry" eyebrow="NOT YET EXPOSED">
+          <div className="module-message">SIM state, registration, operator, radio technology, signal quality, band, cell ID and data-session counters are not yet available from this API. They are deliberately shown as unavailable instead of estimated.</div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage({
   stats,
   refresh,
@@ -1568,6 +1840,11 @@ function DashboardPage({
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
 
   if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
+  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} />;
+  if (page === "diagnostics") return <DiagnosticsControlPage stats={stats} telemetryError={telemetryError} routerOverview={routerOverview} refresh={refresh} />;
+  if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} />;
+  if (page === "analytics") return <AnalyticsControlPage stats={stats} trafficHistory={trafficHistory} />;
+  if (page === "5g") return <CellularControlPage routerOverview={routerOverview} />;
 
   if (page === "dashboard") {
     return (
@@ -1588,7 +1865,7 @@ function DashboardPage({
 
             <button className="hero-button" onClick={refresh}>
               <Sparkles size={17} />
-              Optimize Network
+              Refresh Telemetry
             </button>
           </div>
 
@@ -2382,42 +2659,17 @@ function GenericModulePage({
   return (
     <div className="module-page">
       <section className="module-hero">
-        <div className="module-icon">
-          <Icon size={25} />
-        </div>
-
+        <div className="module-icon"><Icon size={25} /></div>
         <div>
           <div className="setup-kicker">{eyebrow.toUpperCase()}</div>
           <h1>{title}</h1>
-          <p>
-            QuantumGrid management module. Real hardware telemetry and
-            controls will be connected to this service.
-          </p>
+          <p>This module is not connected to an authenticated router service yet. QuantumGrid will not display simulated readings or apply local-only settings here.</p>
         </div>
       </section>
-
-      <div className="module-grid">
-        <Panel title="Service Status" eyebrow="QUANTUMGRID">
-          <Status>MODULE ONLINE</Status>
-
-          <div className="module-message">
-            This service is ready for QuantumGrid backend integration.
-          </div>
-        </Panel>
-
-        <Panel title="Controls" eyebrow="MANAGEMENT">
-          <div className="control-grid">
-            {["Optimize", "Diagnostics", "Configure", "Inspect"].map(
-              (item) => (
-                <button key={item} className="control-tile">
-                  <Sparkles size={17} />
-                  {item}
-                </button>
-              ),
-            )}
-          </div>
-        </Panel>
-      </div>
+      <Panel title="Service integration" eyebrow="NOT YET CONNECTED">
+        <Status active={false}>INTEGRATION PENDING</Status>
+        <div className="module-message">Controls remain unavailable until the router-side API, capability checks, validation and recovery behaviour are implemented and tested.</div>
+      </Panel>
     </div>
   );
 }
