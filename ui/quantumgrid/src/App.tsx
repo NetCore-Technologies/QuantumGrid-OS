@@ -2349,6 +2349,24 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scan, setScan] = useState<RouterWifiScan | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [scanFilter, setScanFilter] = useState("");
+  const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
+  const visibleScanResults = scan
+    ? scan.results
+      .filter((network) => {
+        const query = scanFilter.trim().toLocaleLowerCase();
+        return !query || [network.ssid, network.bssid, network.radio, network.ifname, network.band]
+          .some((value) => value.toLocaleLowerCase().includes(query));
+      })
+      .sort((left, right) => {
+        if (scanSort === "ssid") return (left.ssid || "").localeCompare(right.ssid || "");
+        if (scanSort === "channel") {
+          if (left.band !== right.band) return left.band.localeCompare(right.band);
+          return (left.channel ?? Number.MAX_SAFE_INTEGER) - (right.channel ?? Number.MAX_SAFE_INTEGER);
+        }
+        return (right.signal_dbm ?? -Infinity) - (left.signal_dbm ?? -Infinity);
+      })
+    : [];
   const channelGroups = scan ? summarizeWifiChannels(scan.results) : [];
   const strongestNetwork = scan?.results
     .filter((network) => typeof network.signal_dbm === "number" && Number.isFinite(network.signal_dbm))
@@ -2439,8 +2457,21 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
             {scan.results.length === 0 ? (
               <div className="module-message">No nearby access points were returned by iwinfo. The radio may not support scanning in its current mode.</div>
             ) : (
+              <>
+                <div className="wifi-scan-tools">
+                  <input className="wifi-scan-filter" type="search" aria-label="Filter nearby access points" placeholder="Filter SSID, BSSID or radio" value={scanFilter} onChange={(event) => setScanFilter(event.target.value)} />
+                  <select className="wifi-scan-sort" aria-label="Sort nearby access points" value={scanSort} onChange={(event) => setScanSort(event.target.value as "signal" | "channel" | "ssid")}>
+                    <option value="signal">Strongest signal first</option>
+                    <option value="channel">Band and channel</option>
+                    <option value="ssid">SSID A–Z</option>
+                  </select>
+                  <span>{visibleScanResults.length} of {scan.results.length} access points</span>
+                </div>
+                {visibleScanResults.length === 0 ? (
+                  <div className="module-message">No access points match this filter.</div>
+                ) : (
               <div className="device-list">
-                {scan.results.map((network) => (
+                {visibleScanResults.map((network) => (
                   <div className="device-row wifi-scan-row" key={network.ifname + "-" + network.bssid}>
                     <div className="device-title">
                       <div className="device-icon"><Wifi size={17} /></div>
@@ -2454,6 +2485,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
                   </div>
                 ))}
               </div>
+                )}
+              </>
             )}
           </>
         )}

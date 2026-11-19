@@ -1783,6 +1783,27 @@ button:disabled {
 .wifi-scan-row {
   grid-template-columns: minmax(190px, 1.7fr) repeat(5, minmax(100px, 1fr));
 }
+.wifi-scan-tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(170px, .7fr) auto;
+  align-items: center;
+  gap: 9px;
+  margin: 10px 0 14px;
+}
+.wifi-scan-filter,
+.wifi-scan-sort {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font: inherit;
+  font-size: 9px;
+}
+.wifi-scan-tools span { color: var(--muted2); font-size: 8px; white-space: nowrap; }
 .wifi-scan-actions {
   display: flex;
   align-items: center;
@@ -2074,6 +2095,8 @@ button:disabled {
   }
   .wifi-scan-row,
   .wifi-channel-row { grid-template-columns: 1fr 1fr; }
+  .wifi-scan-tools { grid-template-columns: 1fr; }
+  .wifi-scan-tools span { white-space: normal; }
 }
 
 /* ============================================================
