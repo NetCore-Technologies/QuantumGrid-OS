@@ -81,7 +81,8 @@ read-only iwinfo survey counters where the driver supports them; unsupported rad
 The Wi-Fi page also provides an authenticated, manual iwinfo scan of nearby access points,
 including SSID/BSSID, band, channel, frequency and driver-reported signal/quality. Scans are
 rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic while
-scanning. The
+scanning. The same page groups observed BSSIDs by reported band/channel and shows strongest
+reported signal; these counts are scan visibility only, not airtime or interference measurements. The
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming
 reports SQM queue configuration and read-only kernel qdisc
 counters; it does not yet write queue policy or measure jitter, packet loss or bufferbloat.

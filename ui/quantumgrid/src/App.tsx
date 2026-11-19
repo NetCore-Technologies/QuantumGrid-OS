@@ -2291,6 +2291,47 @@ function WirelessRadioInventory({
   );
 }
 
+
+type WifiChannelGroup = {
+  band: string;
+  channel: number | null;
+  networks: RouterWifiScan["results"];
+  strongestSignal: number | null;
+  strongestSsid: string;
+};
+
+function summarizeWifiChannels(results: RouterWifiScan["results"]): WifiChannelGroup[] {
+  const groups = new Map<string, WifiChannelGroup>();
+  for (const network of results) {
+    const channel = typeof network.channel === "number" && Number.isFinite(network.channel)
+      ? network.channel
+      : null;
+    const band = network.band || "Unknown";
+    const key = \`\${band}:\${channel === null ? "unknown" : channel}\`;
+    let group = groups.get(key);
+    if (!group) {
+      group = { band, channel, networks: [], strongestSignal: null, strongestSsid: "" };
+      groups.set(key, group);
+    }
+    group.networks.push(network);
+    if (
+      typeof network.signal_dbm === "number" &&
+      Number.isFinite(network.signal_dbm) &&
+      (group.strongestSignal === null || network.signal_dbm > group.strongestSignal)
+    ) {
+      group.strongestSignal = network.signal_dbm;
+      group.strongestSsid = network.ssid || "Hidden network";
+    }
+  }
+  return [...groups.values()].sort((left, right) => {
+    if (right.networks.length !== left.networks.length) {
+      return right.networks.length - left.networks.length;
+    }
+    if (left.band !== right.band) return left.band.localeCompare(right.band);
+    return (left.channel ?? Number.MAX_SAFE_INTEGER) - (right.channel ?? Number.MAX_SAFE_INTEGER);
+  });
+}
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
@@ -2300,6 +2341,16 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scan, setScan] = useState<RouterWifiScan | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
+  const channelGroups = scan ? summarizeWifiChannels(scan.results) : [];
+  const strongestNetwork = scan?.results
+    .filter((network) => typeof network.signal_dbm === "number" && Number.isFinite(network.signal_dbm))
+    .reduce<RouterWifiScan["results"][number] | null>(
+      (strongest, network) => !strongest || (network.signal_dbm ?? -Infinity) > (strongest.signal_dbm ?? -Infinity)
+        ? network
+        : strongest,
+      null,
+    ) ?? null;
+  const bandsObserved = scan ? new Set(scan.results.map((network) => network.band)).size : 0;
   const runWirelessScan = async () => {
     setScanLoading(true);
     setScanError("");
@@ -2368,6 +2419,35 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           </>
         )}
         <div className="module-message">Scans use the router’s native iwinfo API and do not change Wi-Fi configuration. Depending on the radio driver, a scan may briefly interrupt or slow wireless traffic. Results are cached for 30 seconds to prevent repeated scans.</div>
+      </Panel>
+      <Panel title="Channel visibility" eyebrow="SCAN INVENTORY · NOT AIRTIME">
+        {!scan ? (
+          <div className="module-message">Scan nearby networks to build a channel inventory.</div>
+        ) : scan.results.length === 0 ? (
+          <div className="module-message">There are no access-point observations to group into channels.</div>
+        ) : (
+          <>
+            <div className="metrics">
+              <Metric title="Detected access points" value={fmt(scan.results.length)} unit="" detail="Unique BSSIDs reported in this scan" icon={Wifi} />
+              <Metric title="Bands observed" value={fmt(bandsObserved)} unit="" detail={[...new Set(scan.results.map((network) => network.band))].join(" · ") || "N/A"} icon={RadioTower} />
+              <Metric title="Strongest neighbour" value={strongestNetwork?.signal_dbm === undefined ? "N/A" : `${fmt(strongestNetwork.signal_dbm)} dBm`} unit="" detail={strongestNetwork?.ssid || "Signal not reported"} icon={Signal} />
+            </div>
+            <div className="device-list">
+              {channelGroups.map((group) => (
+                <div className="device-row wifi-channel-row" key={group.band + "-" + (group.channel ?? "unknown")}>
+                  <div className="device-title">
+                    <div className="device-icon"><RadioTower size={17} /></div>
+                    <div><strong>{group.band} · {group.channel === null ? "Channel N/A" : `Channel ${group.channel}`}</strong><span>{group.strongestSsid ? `Strongest: ${group.strongestSsid}` : "No signal readings reported"}</span></div>
+                  </div>
+                  <div><small>OBSERVED APS</small><b>{fmt(group.networks.length)}</b></div>
+                  <div><small>STRONGEST SIGNAL</small><b>{group.strongestSignal === null ? "N/A" : `${fmt(group.strongestSignal)} dBm`}</b></div>
+                  <div><small>VISIBLE NETWORKS</small><b>{group.networks.map((network) => network.ssid || "Hidden").slice(0, 3).join(", ")}{group.networks.length > 3 ? ` +${group.networks.length - 3}` : ""}</b></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Take repeat scans from the router’s actual installation location before comparing environments.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />

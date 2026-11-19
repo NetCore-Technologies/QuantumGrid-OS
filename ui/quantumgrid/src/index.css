@@ -1784,6 +1784,9 @@ button:disabled {
   grid-template-columns: minmax(190px, 1.7fr) repeat(4, minmax(100px, 1fr));
 }
 .wifi-scan-button:disabled { cursor: not-allowed; opacity: .48; }
+.wifi-channel-row {
+  grid-template-columns: minmax(190px, 1.7fr) repeat(3, minmax(105px, 1fr));
+}
 
 .device-title {
   display: flex;
@@ -2061,7 +2064,8 @@ button:disabled {
   .device-title {
     grid-column: 1 / -1;
   }
-  .wifi-scan-row { grid-template-columns: 1fr 1fr; }
+  .wifi-scan-row,
+  .wifi-channel-row { grid-template-columns: 1fr 1fr; }
 }
 
 /* ============================================================
