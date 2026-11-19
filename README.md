@@ -98,25 +98,29 @@ Do not flash an image whose installation route you have not confirmed.
 
 ## Publish the website
 
-A repository administrator must enable GitHub Pages once:
+The website is available with either supported Pages source:
 
-1. Open repository **Settings → Pages**.
-2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
-3. Save the setting.
+- **GitHub Actions (recommended):** open repository **Settings → Pages**, set **Source** to
+  **GitHub Actions**, and save. The QuantumGrid Pages workflow validates and deploys the
+  lowercase `docs/` source.
+- **Deploy from a branch:** select `main` and the `/docs` folder. GitHub's built-in Pages
+  workflow builds and publishes that same source.
 
-Until Pages is enabled, CI still validates the seven site pages, checks local references and
-JavaScript, and uploads a site artifact; deployment is skipped with a workflow notice. After
-Pages is enabled, pushes to `main` (or a manual Pages workflow run on `main`) publish the site.
+The legacy `Docs/` path remains as a compatibility mirror for existing documentation links and
+firmware packaging. CI checks that both website trees stay byte-for-byte identical.
 
 ## Router authentication and telemetry
 
 The QuantumGrid control centre authenticates with the existing LuCI/OpenWrt administrator
 session. It does not create a second Linux user or store the router password in browser storage.
 The read-only LuCI API reports system load, CPU/memory/temperature where available, WAN/LAN
-interface counters, unexpired DHCPv4 leases, wireless radio state, modem device presence and
-RJ11 service/patch state. DHCP leases show address allocation, not current reachability or
-wireless association.
-WAN throughput is calculated from successive kernel byte-counter samples. A single ICMP probe is
+interface counters, unexpired DHCPv4 leases, wireless radio state, live hostapd-associated
+Wi-Fi stations, modem device presence and RJ11 service/patch state. Signal strength and RX/TX
+rates are included only when the wireless driver reports them. DHCP leases show address
+allocation, not current reachability or wireless association.
+WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi association
+data is read from OpenWrt's hostapd ubus API; missing RF fields remain unavailable rather than
+being inferred. A single ICMP probe is
 shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
 
 The custom API route is protected by LuCI's authenticated administrator tree and accepts no

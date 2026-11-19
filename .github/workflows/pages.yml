@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "Docs/**",
+      - "Docs/**"
       - "docs/**"
       - "scripts/check-website.py"
       - ".github/workflows/pages.yml"
@@ -13,6 +13,7 @@ on:
     branches: [main]
     paths:
       - "Docs/**"
+      - "docs/**"
       - "scripts/check-website.py"
       - ".github/workflows/pages.yml"
       - "README.md"
@@ -37,23 +38,33 @@ jobs:
       pages_enabled: ${{ steps.pages-check.outputs.enabled }}
     steps:
       - uses: actions/checkout@v4
-      - name: Validate local links, metadata and sitemap
+      - name: Validate local links, metadata and mirrored site
         run: python3 scripts/check-website.py
       - name: Check website JavaScript
         run: node --check docs/site.js
-      - name: Detect repository Pages configuration
+      - name: Detect GitHub Pages deployment source
         id: pages-check
         shell: bash
         run: |
           set -euo pipefail
           status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")"
+          build_type="disabled"
           if [[ "$status" == "200" ]]; then
+            pages_json="$(curl --silent --show-error "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")"
+            build_type="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build_type", "legacy"))' <<<"$pages_json")"
+          fi
+
+          if [[ "$build_type" == "workflow" ]]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "GitHub Pages is enabled; deployment can proceed."
+            echo "GitHub Pages is configured for GitHub Actions."
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::GitHub Pages is not enabled yet. The website was validated and will be uploaded as an artifact, but deployment is skipped. A repository administrator must set Settings > Pages > Build and deployment > Source to GitHub Actions."
+            if [[ "$build_type" == "disabled" ]]; then
+              echo "::notice::GitHub Pages is not enabled. The website was validated and packaged, but deployment is skipped."
+            else
+              echo "::notice::GitHub Pages is configured for branch deployment. GitHub's built-in Pages workflow publishes /docs; this workflow skips deployment to avoid competing publishers. Set Settings > Pages > Source to GitHub Actions to use this workflow instead."
+            fi
           fi
       - name: Configure Pages
         if: steps.pages-check.outputs.enabled == 'true'
