@@ -13,6 +13,14 @@ export interface RouterWirelessInterface {
   ssid: string;
   mode: string;
   up: boolean;
+  channel?: number;
+  frequency_mhz?: number;
+  txpower_dbm?: number;
+  signal_dbm?: number;
+  noise_dbm?: number;
+  bitrate_kbps?: number;
+  quality?: number;
+  quality_max?: number;
 }
 
 export interface RouterWirelessRadio {

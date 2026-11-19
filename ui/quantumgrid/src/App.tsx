@@ -1619,17 +1619,8 @@ function NetworkControlPage({
       </Panel>
 
       <div className="module-grid">
-        <Panel title="Wireless radios" eyebrow="NETWORK.WIRELESS">
-          {!routerOverview ? (
-            <div className="module-message">Wireless status is waiting for router data.</div>
-          ) : radios.length === 0 ? (
-            <div className="module-message">No radios were reported.</div>
-          ) : (
-            <InfoRows rows={radios.map((radio) => [
-              radio.name,
-              `${radio.up ? "UP" : "DOWN"} · ${radio.interfaces.length} interface(s)`,
-            ])} />
-          )}
+        <Panel title="Wireless radio measurements" eyebrow="IWINFO · LIVE">
+          <WirelessRadioInventory radios={radios} available={Boolean(routerOverview)} />
         </Panel>
         <Panel title="Live WAN throughput" eyebrow="SUCCESSIVE COUNTER SAMPLES">
           <div className="health-grid">
@@ -2176,6 +2167,41 @@ function DashboardPage({
 }
 
 
+function WirelessRadioInventory({
+  radios,
+  available,
+}: {
+  radios: RouterOverview["wireless"];
+  available: boolean;
+}) {
+  if (!available) {
+    return <div className="module-message">Waiting for authenticated wireless telemetry.</div>;
+  }
+  if (radios.length === 0 || radios.every((radio) => radio.interfaces.length === 0)) {
+    return <div className="module-message">No wireless interfaces were reported by the router.</div>;
+  }
+
+  return (
+    <div className="device-list">
+      {radios.map((radio) => radio.interfaces.map((iface) => (
+        <div className="device-row" key={`${radio.name}-${iface.ifname}`}>
+          <div className="device-title">
+            <div className="device-icon"><Wifi size={17} /></div>
+            <div>
+              <strong>{iface.ssid || iface.ifname || radio.name}</strong>
+              <span>{radio.name} · {iface.ifname || "No interface"} · {iface.mode || "mode N/A"} · {iface.up ? "UP" : "DOWN"}</span>
+            </div>
+          </div>
+          <div><small>CHANNEL / FREQ</small><b>{iface.channel === undefined ? "N/A" : fmt(iface.channel)}{iface.frequency_mhz === undefined ? "" : ` · ${fmt(iface.frequency_mhz)} MHz`}</b></div>
+          <div><small>AP SIGNAL / NOISE</small><b>{iface.signal_dbm === undefined ? "N/A" : `${fmt(iface.signal_dbm)} dBm`}{iface.noise_dbm === undefined ? "" : ` / ${fmt(iface.noise_dbm)} dBm`}</b></div>
+          <div><small>BITRATE</small><b>{formatKbps(iface.bitrate_kbps)}</b></div>
+          <div><small>QUALITY / TX POWER</small><b>{iface.quality === undefined ? "N/A" : `${fmt(iface.quality)}/${fmt(iface.quality_max ?? 0)`}{iface.txpower_dbm === undefined ? "" : ` · ${fmt(iface.txpower_dbm)} dBm`}</b></div>
+        </div>
+      )))}
+    </div>
+  );
+}
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
@@ -2195,35 +2221,16 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       </section>
       <div className="module-grid">
         <Panel title="Wireless radios" eyebrow="NETWORK.WIRELESS STATUS" action={<Status active={Boolean(routerOverview)}>{routerOverview ? "LIVE" : "WAITING"}</Status>}>
-          {!routerOverview ? (
-            <div className="module-message">Waiting for authenticated router telemetry.</div>
-          ) : radios.length === 0 ? (
-            <div className="module-message">No wireless radios were reported by the router.</div>
-          ) : (
-            <div className="info-rows">
-              {radios.map((radio) => (
-                <div key={radio.name}>
-                  <div>
-                    <span>{radio.name}</span>
-                    <small>{radio.interfaces.length > 0 ? radio.interfaces.map((iface) => {
-                      const name = iface.ssid || iface.ifname || "Unnamed interface";
-                      return `${name} · ${iface.mode || "mode unavailable"} · ${iface.up ? "up" : "down"}`;
-                    }).join(" / ") : "No wireless interfaces reported"}</small>
-                  </div>
-                  <Status active={radio.up}>{radio.up ? "RADIO UP" : "RADIO DOWN"}</Status>
-                </div>
-              ))}
-            </div>
-          )}
+          <WirelessRadioInventory radios={radios} available={Boolean(routerOverview)} />
         </Panel>
         <Panel title="Configuration controls" eyebrow="SAFE READ-ONLY MODE">
           <Status active={false}>NOT CONNECTED</Status>
-          <div className="module-message">Band steering, channel selection, channel width, transmit power, roaming and radio enable/disable are not applied by this interface. They will be enabled only when backed by authenticated services, capability checks and a recovery path.</div>
+          <div className="module-message">Channel, power, width, band steering, roaming and radio enable/disable are not writable here. Driver-reported channel/frequency/signal/bitrate/quality are live measurements; configuration remains read-only until safe service handlers and rollback checks exist.</div>
         </Panel>
       </div>
       <Panel title="Associated Wi-Fi clients" eyebrow="IWINFO ASSOCIATION DATA">
         <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
-        <div className="module-message">Signal, noise, rates, counters, connected time and retries come from iwinfo association data. A driver may omit individual fields. This is current AP association data, not a DHCP lease or an ICMP reachability test.</div>
+        <div className="module-message">AP signal/noise and link bitrate are radio-interface measurements. Per-station signal, noise, rates, counters, connected time and retries are shown separately from iwinfo association data; drivers may omit fields.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />

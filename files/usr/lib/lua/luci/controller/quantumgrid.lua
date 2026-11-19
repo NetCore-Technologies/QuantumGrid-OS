@@ -128,11 +128,22 @@ local function wireless_status()
 			local item = { name = name, up = radio.up == true, interfaces = {} }
 			for _, iface in ipairs(radio.interfaces or {}) do
 				local config = type(iface.config) == "table" and iface.config or {}
+				local ifname = iface.ifname
+				local valid_ifname = type(ifname) == "string" and ifname:match("^[%w_.%-]+$") ~= nil
+				local info = valid_ifname and (ubus_call("iwinfo", "info", { device = ifname }) or {}) or {}
 				table.insert(item.interfaces, {
-					ifname = iface.ifname or "",
-					ssid = config.ssid or "",
-					mode = config.mode or "",
-					up = iface.ifname ~= nil and iface.config ~= nil
+					ifname = ifname or "",
+					ssid = config.ssid or info.ssid or "",
+					mode = config.mode or info.mode or "",
+					up = valid_ifname and iface.config ~= nil and radio.up == true,
+					channel = tonumber(info.channel),
+					frequency_mhz = tonumber(info.frequency),
+					txpower_dbm = tonumber(info.txpower),
+					signal_dbm = tonumber(info.signal),
+					noise_dbm = tonumber(info.noise),
+					bitrate_kbps = tonumber(info.bitrate),
+					quality = tonumber(info.quality),
+					quality_max = tonumber(info.quality_max)
 				})
 			end
 			table.insert(result, item)
