@@ -73,8 +73,10 @@ QG_OPENWRT_REF=v25.12.6 ./build.sh
 
 The build also compiles the existing React control centre with Node.js 22/npm and copies
 its Vite output into the firmware root filesystem at `/www/quantumgrid`. After boot it is served
-at `http://<router-address>/quantumgrid/`. The UI's hardware-backed API/authentication wiring
-is tracked separately; do not treat its demo telemetry as live router measurements yet.
+at `http://<router-address>/quantumgrid/`. The dashboard and Devices inventory use live
+router API data for system metrics, WAN counters, wireless state and DHCPv4 leases. Wi-Fi radio
+status is read-only. Gaming policy and several advanced controls remain incomplete previews
+and do not change router configuration.
 
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.
@@ -111,7 +113,9 @@ Pages is enabled, pushes to `main` (or a manual Pages workflow run on `main`) pu
 The QuantumGrid control centre authenticates with the existing LuCI/OpenWrt administrator
 session. It does not create a second Linux user or store the router password in browser storage.
 The read-only LuCI API reports system load, CPU/memory/temperature where available, WAN/LAN
-interface counters, wireless radio state, modem device presence and RJ11 service/patch state.
+interface counters, unexpired DHCPv4 leases, wireless radio state, modem device presence and
+RJ11 service/patch state. DHCP leases show address allocation, not current reachability or
+wireless association.
 WAN throughput is calculated from successive kernel byte-counter samples. A single ICMP probe is
 shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
 
