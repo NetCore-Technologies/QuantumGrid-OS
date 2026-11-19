@@ -68,7 +68,7 @@ grep -Fq '/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-serving-system' "$ROOT/fi
 grep -Fq '/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq '/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'export interface RouterCellularStatus' "$ROOT/ui/quantumgrid/src/routerApi.ts"
-grep -Fq 'function CellularControlPage({ routerOverview }' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'function CellularControlPage({ routerOverview, cellularHistory }' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'CONFIG_PACKAGE_uqmi=y' "$CONFIG"
 ! grep -Fq 'get-imei' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 ! grep -Fq 'get-imsi' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
