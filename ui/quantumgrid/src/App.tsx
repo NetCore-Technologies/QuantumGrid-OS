@@ -2340,6 +2340,12 @@ function csvCell(value: string | number | null | undefined): string {
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
+type WifiScanHistorySample = {
+  scannedAt: number;
+  accessPoints: number;
+  bandCounts: Record<string, number>;
+};
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
@@ -2349,6 +2355,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scan, setScan] = useState<RouterWifiScan | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
+  const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
   const [scanFilter, setScanFilter] = useState("");
   const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
   const visibleScanResults = scan
@@ -2405,7 +2412,25 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const runWirelessScan = async () => {
     setScanLoading(true);
     setScanError("");
-    try { setScan(await scanRouterWifi()); }
+    try {
+      const result = await scanRouterWifi();
+      setScan(result);
+      if (!result.cached) {
+        const bandCounts = result.results.reduce<Record<string, number>>((counts, network) => {
+          const band = network.band || "Unknown";
+          counts[band] = (counts[band] ?? 0) + 1;
+          return counts;
+        }, {});
+        setScanHistory((history) => {
+          if (history[history.length - 1]?.scannedAt === result.scanned_at) return history;
+          return [...history.slice(-9), {
+            scannedAt: result.scanned_at,
+            accessPoints: result.results.length,
+            bandCounts,
+          }];
+        });
+      }
+    }
     catch (error) { setScanError(error instanceof Error ? error.message : "Wireless scan failed."); }
     finally { setScanLoading(false); }
   };
@@ -2522,6 +2547,30 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           </>
         )}
         <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Security labels come from iwinfo encryption metadata; missing metadata is marked Unknown rather than treated as an open network. Take repeat scans from the router’s actual installation location before comparing environments.</div>
+      </Panel>
+      <Panel title="Manual scan history" eyebrow="LAST 10 DISTINCT SCANS · THIS UI SESSION">
+        {scanHistory.length === 0 ? (
+          <div className="module-message">Completed manual scans will appear here. Cached repeat requests are not added as new samples.</div>
+        ) : (
+          <div className="device-list">
+            {scanHistory.map((sample, index) => {
+              const previous = index > 0 ? scanHistory[index - 1] : null;
+              const change = previous ? sample.accessPoints - previous.accessPoints : null;
+              return (
+                <div className="device-row wifi-history-row" key={sample.scannedAt}>
+                  <div className="device-title">
+                    <div className="device-icon"><Activity size={17} /></div>
+                    <div><strong>Scan {index + 1}</strong><span>{new Date(sample.scannedAt * 1000).toLocaleString()}</span></div>
+                  </div>
+                  <div><small>ACCESS POINTS</small><b>{fmt(sample.accessPoints)}</b></div>
+                  <div><small>CHANGE VS PRIOR</small><b>{change === null ? "BASELINE" : `${change > 0 ? "+" : ""}${fmt(change)}`}</b></div>
+                  <div><small>BANDS</small><b>{Object.entries(sample.bandCounts).map(([band, count]) => `${band}: ${count}`).join(" · ") || "None"}</b></div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="module-message">Only distinct, completed manual scans are recorded. The last ten summaries are kept in page memory and cleared when the page is reloaded; no BSSIDs or SSIDs from earlier scans are retained in this history.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />

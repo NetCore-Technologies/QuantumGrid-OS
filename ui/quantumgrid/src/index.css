@@ -1816,6 +1816,9 @@ button:disabled {
 .wifi-channel-row {
   grid-template-columns: minmax(190px, 1.7fr) repeat(3, minmax(105px, 1fr));
 }
+.wifi-history-row {
+  grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(110px, 1fr));
+}
 
 .device-title {
   display: flex;
@@ -2094,7 +2097,8 @@ button:disabled {
     grid-column: 1 / -1;
   }
   .wifi-scan-row,
-  .wifi-channel-row { grid-template-columns: 1fr 1fr; }
+  .wifi-channel-row,
+  .wifi-history-row { grid-template-columns: 1fr 1fr; }
   .wifi-scan-tools { grid-template-columns: 1fr; }
   .wifi-scan-tools span { white-space: normal; }
 }
