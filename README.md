@@ -78,7 +78,10 @@ system metrics, WAN counters and a short rolling throughput window. Wi-Fi and Ne
 iwinfo radio channel/frequency, AP signal/noise, bitrate, quality and transmit power where the
 wireless driver reports them. Current-channel busy airtime is calculated from successive
 read-only iwinfo survey counters where the driver supports them; unsupported radios remain N/A.
-This is a short-window current-channel estimate, not a neighbouring-access-point scan. The
+The Wi-Fi page also provides an authenticated, manual iwinfo scan of nearby access points,
+including SSID/BSSID, band, channel, frequency and driver-reported signal/quality. Scans are
+rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic while
+scanning. The
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming
 reports SQM queue configuration and read-only kernel qdisc
 counters; it does not yet write queue policy or measure jitter, packet loss or bufferbloat.

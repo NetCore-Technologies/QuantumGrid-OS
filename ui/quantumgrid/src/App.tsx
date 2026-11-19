@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, type RouterClient, type RouterOverview, type RouterWirelessClient } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, scanRouterWifi, type RouterClient, type RouterOverview, type RouterWifiScan, type RouterWirelessClient } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -2297,6 +2297,16 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
   const wirelessClients = routerOverview?.wireless_clients ?? [];
   const wirelessInventoryAvailable = Array.isArray(routerOverview?.wireless_clients);
+  const [scan, setScan] = useState<RouterWifiScan | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const runWirelessScan = async () => {
+    setScanLoading(true);
+    setScanError("");
+    try { setScan(await scanRouterWifi()); }
+    catch (error) { setScanError(error instanceof Error ? error.message : "Wireless scan failed."); }
+    finally { setScanLoading(false); }
+  };
 
   return (
     <div className="module-page">
@@ -2320,6 +2330,44 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       <Panel title="Associated Wi-Fi clients" eyebrow="IWINFO ASSOCIATION DATA">
         <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
         <div className="module-message">AP signal/noise and link bitrate are radio-interface measurements. Per-station signal, noise, rates, counters, connected time and retries are shown separately from iwinfo association data; drivers may omit fields.</div>
+      </Panel>
+      <Panel
+        title="Nearby access points"
+        eyebrow="MANUAL IWINFO SCAN"
+        action={<button className="hero-button wifi-scan-button" onClick={() => void runWirelessScan()} disabled={!routerOverview || scanLoading}>{scanLoading ? "Scanning…" : scan ? "Scan again" : "Scan nearby networks"}</button>}
+      >
+        {scanError ? <div className="module-message" role="alert">{scanError}</div> : null}
+        {!scan ? (
+          <div className="module-message">Run a manual scan to list nearby access points reported by the wireless driver. Scanning is not part of the automatic telemetry refresh.</div>
+        ) : (
+          <>
+            <div className="module-message">
+              {new Date(scan.scanned_at * 1000).toLocaleString()} · {scan.interfaces_scanned} interface(s) scanned
+              {scan.interfaces_failed > 0 ? ` · ${scan.interfaces_failed} interface(s) unavailable` : ""}
+              {scan.cached ? " · cached result (30-second scan limit)" : " · fresh result"}
+              {scan.truncated ? " · result list limited to 128 access points" : ""}
+            </div>
+            {scan.results.length === 0 ? (
+              <div className="module-message">No nearby access points were returned by iwinfo. The radio may not support scanning in its current mode.</div>
+            ) : (
+              <div className="device-list">
+                {scan.results.map((network) => (
+                  <div className="device-row wifi-scan-row" key={network.ifname + "-" + network.bssid}>
+                    <div className="device-title">
+                      <div className="device-icon"><Wifi size={17} /></div>
+                      <div><strong>{network.ssid || "Hidden network"}</strong><span>{network.radio} · {network.ifname} · {network.bssid}</span></div>
+                    </div>
+                    <div><small>BAND / MODE</small><b>{network.band} · {network.mode || "N/A"}</b></div>
+                    <div><small>CHANNEL / FREQ</small><b>{network.channel === undefined ? "N/A" : fmt(network.channel)}{network.frequency_mhz === undefined ? "" : " · " + fmt(network.frequency_mhz) + " MHz"}</b></div>
+                    <div><small>SIGNAL</small><b>{network.signal_dbm === undefined ? "N/A" : fmt(network.signal_dbm) + " dBm"}</b></div>
+                    <div><small>QUALITY</small><b>{network.quality === undefined ? "N/A" : fmt(network.quality) + "/" + fmt(network.quality_max ?? 0)}</b></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        <div className="module-message">Scans use the router’s native iwinfo API and do not change Wi-Fi configuration. Depending on the radio driver, a scan may briefly interrupt or slow wireless traffic. Results are cached for 30 seconds to prevent repeated scans.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />

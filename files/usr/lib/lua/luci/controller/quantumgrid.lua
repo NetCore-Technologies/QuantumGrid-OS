@@ -6,6 +6,8 @@ module("luci.controller.quantumgrid", package.seeall)
 
 local previous_cpu = nil
 local previous_survey = {}
+local wifi_scan_cache = nil
+local wifi_scan_cache_at = 0
 local cellular_cache = nil
 local cellular_cache_at = 0
 
@@ -307,10 +309,119 @@ local function ping_probe()
 	return { ok = latency ~= nil, latency_ms = latency and tonumber(latency) or nil }
 end
 
+
+local function build_wifi_scan()
+	local radios = wireless_status()
+	local results = {}
+	local seen_interfaces = {}
+	local seen_bssids = {}
+	local scanned = 0
+	local failed = 0
+	local truncated = false
+
+	for _, radio in ipairs(radios) do
+		for _, iface in ipairs(radio.interfaces or {}) do
+			local ifname = iface.ifname
+			local valid_ifname = type(ifname) == "string"
+				and ifname:match("^[%w_.%-]+$") ~= nil
+			if iface.up == true and valid_ifname and not seen_interfaces[ifname] then
+				seen_interfaces[ifname] = true
+				local response = ubus_call("iwinfo", "scan", { device = ifname })
+				if type(response) == "table" and type(response.results) == "table" then
+					scanned = scanned + 1
+					for _, network in ipairs(response.results) do
+						if #results >= 128 then truncated = true break end
+						if type(network) == "table" then
+							local bssid = type(network.bssid) == "string" and network.bssid or ""
+							local valid_bssid = bssid:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
+							local unique_key = ifname .. ":" .. bssid:lower()
+							if valid_bssid and not seen_bssids[unique_key] then
+								seen_bssids[unique_key] = true
+								local frequency = tonumber(network.mhz)
+								local signal = tonumber(network.signal)
+								-- rpcd encodes signed RSSI in a u32 blob attribute.
+								if signal and signal > 2147483647 then signal = signal - 4294967296 end
+								local band = "Unknown"
+								if frequency then
+									if frequency >= 5925 then band = "6 GHz"
+									elseif frequency >= 5000 then band = "5 GHz"
+									elseif frequency >= 2400 then band = "2.4 GHz" end
+								end
+								local ssid = type(network.ssid) == "string" and network.ssid or ""
+								if #ssid > 128 then ssid = ssid:sub(1, 128) end
+								table.insert(results, {
+									radio = tostring(radio.name or ""), ifname = ifname,
+									ssid = ssid, bssid = bssid:lower(),
+									mode = type(network.mode) == "string" and network.mode or "",
+									channel = tonumber(network.channel), frequency_mhz = frequency,
+									band = band, signal_dbm = signal,
+									quality = tonumber(network.quality), quality_max = tonumber(network.quality_max)
+								})
+							end
+						end
+					end
+				else
+					failed = failed + 1
+				end
+			end
+			if truncated then break end
+		end
+		if truncated then break end
+	end
+
+	table.sort(results, function(left, right)
+		local lc, rc = left.channel or 999, right.channel or 999
+		if lc == rc then return (left.signal_dbm or -200) > (right.signal_dbm or -200) end
+		return lc < rc
+	end)
+	return {
+		ok = true, scanned_at = os.time(), cached = false,
+		interfaces_scanned = scanned, interfaces_failed = failed,
+		truncated = truncated, results = results
+	}
+end
+
+function action_wifi_scan()
+	local http = require "luci.http"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		http.status(405, "Method Not Allowed")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		http.status(403, "Forbidden")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "A same-origin request is required." })
+		return
+	end
+
+	local now = os.time()
+	local payload = wifi_scan_cache
+	if not payload or now - wifi_scan_cache_at >= 30 then
+		payload = build_wifi_scan()
+		wifi_scan_cache = payload
+		wifi_scan_cache_at = now
+	else
+		payload = {
+			ok = payload.ok, scanned_at = payload.scanned_at, cached = true,
+			interfaces_scanned = payload.interfaces_scanned,
+			interfaces_failed = payload.interfaces_failed, truncated = payload.truncated,
+			results = payload.results
+		}
+	end
+	http.prepare_content("application/json; charset=UTF-8")
+	http.write_json(payload)
+end
+
 function index()
 	local page = entry({"admin", "services", "quantumgrid"}, call("action_index"), _("QuantumGrid"), 10)
 	page.dependent = false
 	entry({"admin", "services", "quantumgrid", "api"}, call("action_api")).leaf = true
+	entry({"admin", "services", "quantumgrid", "wifi-scan"}, call("action_wifi_scan")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 end
 

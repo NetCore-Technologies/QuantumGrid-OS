@@ -134,6 +134,17 @@ export interface RouterSecurityStatus {
   };
 }
 
+export interface RouterWifiScanResult {
+  radio: string; ifname: string; ssid: string; bssid: string; mode: string;
+  channel?: number; frequency_mhz?: number; band: string;
+  signal_dbm?: number; quality?: number; quality_max?: number;
+}
+export interface RouterWifiScan {
+  ok: true; scanned_at: number; cached: boolean;
+  interfaces_scanned: number; interfaces_failed: number; truncated: boolean;
+  results: RouterWifiScanResult[];
+}
+
 export interface RouterCellularStatus {
   modem_present: boolean;
   qmi_available: boolean;
@@ -186,6 +197,7 @@ export interface RouterOverview {
 
 const API_URL = "/cgi-bin/luci/admin/services/quantumgrid/api";
 const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
+const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -292,4 +304,27 @@ export async function fetchRouterOverview(): Promise<RouterOverview> {
   });
 
   return decodeOverview(response);
+}
+
+
+export async function scanRouterWifi(): Promise<RouterWifiScan> {
+  const response = await fetch(WIFI_SCAN_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    if (response.status === 403) {
+      throw new Error("Wi-Fi scanning requires an active router administrator session.");
+    }
+    throw new Error("The router could not complete the wireless scan.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null || !("ok" in payload) ||
+      payload.ok !== true || !("results" in payload) || !Array.isArray(payload.results)) {
+    throw new Error("The router returned an invalid Wi-Fi scan response.");
+  }
+  return payload as RouterWifiScan;
 }
