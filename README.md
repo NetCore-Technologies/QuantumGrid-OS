@@ -78,9 +78,11 @@ system metrics, WAN counters, wireless state and a short rolling throughput wind
 and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming reports
 SQM queue configuration and read-only kernel qdisc counters; it does not yet write queue policy
 or measure jitter, packet loss or bufferbloat. The 5G page reports modem device detection only;
-cellular registration and RF metrics are not yet exposed. Security reports firewall zone
-policies, nftables table presence, Adblock Fast configuration and WireGuard/OpenVPN service
-state without exposing VPN secrets or changing router configuration. Advanced policy controls
+The 5G page reads QMI registration, radio type, data-session state and RF measurements where
+the modem reports them; values are cached briefly and no SIM identifiers or credentials are
+requested. Security reports firewall zone policies, nftables table presence, Adblock Fast
+configuration and WireGuard/OpenVPN service state without exposing VPN secrets or changing
+router configuration. Advanced policy controls
 remain unconnected and read-only.
 
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation

@@ -1794,28 +1794,75 @@ function AnalyticsControlPage({ stats, trafficHistory }: { stats: Stats; traffic
 }
 
 function CellularControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
-  const detected = routerOverview?.cellular.modem_present ?? false;
+  const cellular = routerOverview?.cellular;
+  const detected = cellular?.modem_present ?? false;
+  const registered = cellular?.registered === true;
+  const signalValue = (value: number | undefined, suffix: string) =>
+    value === undefined ? "N/A" : `${fmt(value, 1)} ${suffix}`;
+  const radio = cellular?.radio_interfaces?.length
+    ? cellular.radio_interfaces.join(", ").toUpperCase()
+    : cellular?.signal_type?.toUpperCase() || "N/A";
+  const plmn = cellular?.mcc && cellular?.mnc
+    ? `${cellular.mcc}-${cellular.mnc}`
+    : "N/A";
+
   return (
     <div className="module-page">
       <section className="module-hero">
         <div className="module-icon"><Signal size={25} /></div>
         <div>
-          <div className="setup-kicker">AW1000 CELLULAR HARDWARE</div>
+          <div className="setup-kicker">AW1000 CELLULAR HARDWARE · QMI</div>
           <h1>5G Modem</h1>
-          <p>Read-only modem device-node detection for the AW1000's cellular subsystem.</p>
+          <p>Read-only Quectel modem registration, serving-network, data-session and RF measurements from uqmi where the modem exposes them.</p>
         </div>
       </section>
+
+      <div className="metrics">
+        <Metric title="Modem" value={cellular ? (detected ? "DETECTED" : "NOT FOUND") : "N/A"} unit="" detail="AW1000 modem device presence" icon={Signal} />
+        <Metric title="Network Registration" value={!cellular?.qmi_available ? "N/A" : registered ? "REGISTERED" : (cellular.registration || "UNKNOWN").toUpperCase()} unit="" detail="QMI serving-system status" icon={Globe2} />
+        <Metric title="Radio Technology" value={radio} unit="" detail="Serving radio interface" icon={RadioTower} />
+        <Metric title="Data Session" value={cellular?.data_status ? cellular.data_status.toUpperCase() : "N/A"} unit="" detail="QMI packet-data status" icon={Activity} />
+      </div>
+
       <div className="module-grid">
-        <Panel title="Modem presence" eyebrow="DEVICE NODE CHECK" action={<Status active={detected}>{detected ? "DETECTED" : routerOverview ? "NOT DETECTED" : "WAITING"}</Status>}>
-          <div className="module-message">{detected ? "At least one supported modem control device node was found by the router API." : routerOverview ? "The router API did not find the expected modem control device nodes." : "Waiting for authenticated router telemetry."}</div>
+        <Panel title="RF signal measurements" eyebrow="QMI NAS · READ ONLY" action={<Status active={Boolean(cellular?.qmi_available)}>{cellular?.qmi_available ? "QMI AVAILABLE" : detected ? "QMI NOT AVAILABLE" : "WAITING"}</Status>}>
+          {cellular?.qmi_available ? (
+            <div className="metrics">
+              <Metric title="RSSI" value={signalValue(cellular.rssi_dbm, "dBm")} unit="" detail="Received signal strength" icon={Signal} />
+              <Metric title="RSRP" value={signalValue(cellular.rsrp_dbm, "dBm")} unit="" detail="Reference signal power" icon={Activity} />
+              <Metric title="RSRQ" value={signalValue(cellular.rsrq_db, "dB")} unit="" detail="Reference signal quality" icon={CircleGauge} />
+              <Metric title="SNR" value={signalValue(cellular.snr_db, "dB")} unit="" detail="Signal-to-noise ratio" icon={RadioTower} />
+            </div>
+          ) : (
+            <div className="module-message">{detected ? "A modem device node exists, but /dev/cdc-wdm0 or uqmi is unavailable for QMI measurements." : "Waiting for an accessible QMI modem control device."}</div>
+          )}
         </Panel>
-        <Panel title="Cellular telemetry" eyebrow="NOT YET EXPOSED">
-          <div className="module-message">SIM state, registration, operator, radio technology, signal quality, band, cell ID and data-session counters are not yet available from this API. They are deliberately shown as unavailable instead of estimated.</div>
+
+        <Panel title="Serving network" eyebrow="REGISTRATION / OPERATOR">
+          <InfoRows rows={[
+            ["REGISTRATION", cellular?.registration ? cellular.registration.toUpperCase() : "N/A"],
+            ["OPERATOR", cellular?.operator || "N/A"],
+            ["MCC / MNC", plmn],
+            ["ROAMING", cellular?.roaming === undefined ? "N/A" : cellular.roaming ? "YES" : "NO"],
+            ["RADIO", radio],
+          ]} />
+          <div className="module-message">Operator and radio fields appear only when returned by the modem. No band or cell identity is inferred from signal values.</div>
         </Panel>
       </div>
+
+      <Panel title="Modem telemetry freshness" eyebrow="QMI SAMPLE CACHE">
+        <InfoRows rows={[
+          ["CONTROL DEVICE", cellular?.device || "N/A"],
+          ["QMI CLIENT", cellular?.qmi_available ? "AVAILABLE" : "UNAVAILABLE"],
+          ["LAST SAMPLE", cellular?.sampled_at ? new Date(cellular.sampled_at * 1000).toLocaleTimeString() : "N/A"],
+          ["DATA SESSION", cellular?.data_status ? cellular.data_status.toUpperCase() : "N/A"],
+        ]} />
+        <div className="module-message">Read-only queries are cached for eight seconds. The page does not change network mode, APN, roaming, registration, SIM PIN or data-session state. IMEI, IMSI and SIM credentials are never requested.</div>
+      </Panel>
     </div>
   );
 }
+
 
 function SecurityControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const security = routerOverview?.security;

@@ -123,6 +123,26 @@ export interface RouterSecurityStatus {
   };
 }
 
+export interface RouterCellularStatus {
+  modem_present: boolean;
+  qmi_available: boolean;
+  device: string;
+  sampled_at: number;
+  registration?: string;
+  registered?: boolean;
+  operator?: string;
+  mcc?: number;
+  mnc?: number;
+  roaming?: boolean;
+  radio_interfaces?: string[];
+  signal_type?: string;
+  rssi_dbm?: number;
+  rsrp_dbm?: number;
+  rsrq_db?: number;
+  snr_db?: number;
+  data_status?: string;
+}
+
 export interface RouterOverview {
   ok: true;
   timestamp: number;
@@ -145,7 +165,7 @@ export interface RouterOverview {
   wireless_clients?: RouterWirelessClient[];
   sqm?: RouterSqmStatus;
   security?: RouterSecurityStatus;
-  cellular: { modem_present: boolean };
+  cellular: RouterCellularStatus;
   phone: {
     service_installed: boolean;
     enabled: boolean;

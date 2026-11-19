@@ -5,6 +5,8 @@
 module("luci.controller.quantumgrid", package.seeall)
 
 local previous_cpu = nil
+local cellular_cache = nil
+local cellular_cache_at = 0
 
 local function read_file(path)
 	local file = io.open(path, "r")
@@ -466,6 +468,70 @@ local function sqm_status(uci, fs)
 	return result
 end
 
+local function cellular_status(fs)
+	local now = os.time()
+	if cellular_cache and now - cellular_cache_at < 8 then
+		return cellular_cache
+	end
+
+	local modem_present = fs.access("/dev/cdc-wdm0") == true
+		or fs.access("/dev/ttyUSB2") == true
+		or fs.access("/dev/ttyUSB3") == true
+	local qmi_available = fs.access("/dev/cdc-wdm0") == true
+		and fs.access("/sbin/uqmi") == true
+	local result = {
+		modem_present = modem_present,
+		qmi_available = qmi_available,
+		device = qmi_available and "/dev/cdc-wdm0" or "",
+		sampled_at = now
+	}
+
+	if qmi_available then
+		local util = require "luci.util"
+		local jsonc = require "luci.jsonc"
+		local serving_ok, serving_output = pcall(util.exec, "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-serving-system")
+		if serving_ok and type(serving_output) == "string" then
+			local parse_ok, serving = pcall(jsonc.parse, serving_output)
+			if parse_ok and type(serving) == "table" then
+				result.registration = tostring(serving.registration or "")
+				result.registered = serving.registration == "registered"
+				result.operator = tostring(serving.plmn_description or "")
+				result.mcc = tonumber(serving.plmn_mcc)
+				result.mnc = tonumber(serving.plmn_mnc)
+				result.roaming = serving.roaming == true
+				result.radio_interfaces = {}
+				for _, radio in ipairs(serving.radio_interface or {}) do
+					if type(radio) == "string" then table.insert(result.radio_interfaces, radio) end
+				end
+			end
+		end
+
+		local signal_ok, signal_output = pcall(util.exec, "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info")
+		if signal_ok and type(signal_output) == "string" then
+			local parse_ok, signal = pcall(jsonc.parse, signal_output)
+			if parse_ok and type(signal) == "table" then
+				result.signal_type = tostring(signal.type or "")
+				result.rssi_dbm = tonumber(signal.rssi)
+				result.rsrp_dbm = tonumber(signal.rsrp)
+				result.rsrq_db = tonumber(signal.rsrq)
+				result.snr_db = tonumber(signal.snr)
+			end
+		end
+
+		local data_ok, data_output = pcall(util.exec, "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status")
+		if data_ok and type(data_output) == "string" then
+			local parse_ok, data_status = pcall(jsonc.parse, data_output)
+			if parse_ok and type(data_status) == "string" then
+				result.data_status = data_status
+			end
+		end
+	end
+
+	cellular_cache = result
+	cellular_cache_at = now
+	return result
+end
+
 function action_api()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
@@ -478,9 +544,7 @@ function action_api()
 	local phone_enabled = uci:get("fxs", "main", "enabled") == "1"
 	local phone_patch = fs.access("/etc/fxs/si3226x_patch.bin") == true
 	local phone_service = fs.access("/etc/init.d/fxsd") == true
-	local modem_present = fs.access("/dev/cdc-wdm0") == true
-		or fs.access("/dev/ttyUSB2") == true
-		or fs.access("/dev/ttyUSB3") == true
+	local cellular = cellular_status(fs)
 	local wireless = wireless_status()
 	local sqm = sqm_status(uci, fs)
 	local security = security_status(uci, fs)
@@ -504,7 +568,7 @@ function action_api()
 		wireless_clients = wireless_clients(wireless),
 		sqm = sqm,
 		security = security,
-		cellular = { modem_present = modem_present },
+		cellular = cellular,
 		phone = {
 			service_installed = phone_service,
 			enabled = phone_enabled,
