@@ -138,6 +138,7 @@ export interface RouterWifiScanResult {
   radio: string; ifname: string; ssid: string; bssid: string; mode: string;
   channel?: number; frequency_mhz?: number; band: string;
   signal_dbm?: number; quality?: number; quality_max?: number;
+  security: string; authentication?: string[];
 }
 export interface RouterWifiScan {
   ok: true; scanned_at: number; cached: boolean;

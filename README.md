@@ -79,9 +79,10 @@ iwinfo radio channel/frequency, AP signal/noise, bitrate, quality and transmit p
 wireless driver reports them. Current-channel busy airtime is calculated from successive
 read-only iwinfo survey counters where the driver supports them; unsupported radios remain N/A.
 The Wi-Fi page also provides an authenticated, manual iwinfo scan of nearby access points,
-including SSID/BSSID, band, channel, frequency and driver-reported signal/quality. Scans are
-rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic while
-scanning. The same page groups observed BSSIDs by reported band/channel and shows strongest
+including SSID/BSSID, band, channel, frequency, signal/quality and encryption metadata (WPA
+versions and authentication where exposed). Unknown security metadata is not classified as open.
+Scans are rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic
+while scanning. The same page groups observed BSSIDs by reported band/channel and shows strongest
 reported signal; these counts are scan visibility only, not airtime or interference measurements. The
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming
 reports SQM queue configuration and read-only kernel qdisc

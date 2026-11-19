@@ -1781,7 +1781,7 @@ button:disabled {
   grid-template-columns: minmax(180px, 1.7fr) repeat(5, minmax(88px, 1fr));
 }
 .wifi-scan-row {
-  grid-template-columns: minmax(190px, 1.7fr) repeat(4, minmax(100px, 1fr));
+  grid-template-columns: minmax(190px, 1.7fr) repeat(5, minmax(100px, 1fr));
 }
 .wifi-scan-button:disabled { cursor: not-allowed; opacity: .48; }
 .wifi-channel-row {

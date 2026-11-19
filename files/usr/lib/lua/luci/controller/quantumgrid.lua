@@ -349,12 +349,41 @@ local function build_wifi_scan()
 								end
 								local ssid = type(network.ssid) == "string" and network.ssid or ""
 								if #ssid > 128 then ssid = ssid:sub(1, 128) end
+								local encryption = type(network.encryption) == "table" and network.encryption or {}
+								local security = "Unknown"
+								local authentication = {}
+								if encryption.enabled == false or encryption.enabled == 0 then
+									security = "Open"
+								elseif encryption.enabled == true or encryption.enabled == 1 then
+									if type(encryption.wpa) == "table" and #encryption.wpa > 0 then
+										local versions = {}
+										for _, version in ipairs(encryption.wpa) do
+											local number = tonumber(version)
+											if number == 1 or number == 2 or number == 3 then
+												table.insert(versions, "WPA" .. tostring(number))
+											end
+										end
+										security = #versions > 0 and table.concat(versions, "/") or "WPA"
+										if type(encryption.authentication) == "table" then
+											for _, method in ipairs(encryption.authentication) do
+												if type(method) == "string" and #authentication < 8 then
+													table.insert(authentication, method)
+												end
+											end
+										end
+									elseif type(encryption.wep) == "table" and #encryption.wep > 0 then
+										security = "WEP"
+									else
+										security = "Encrypted"
+									end
+								end
 								table.insert(results, {
 									radio = tostring(radio.name or ""), ifname = ifname,
 									ssid = ssid, bssid = bssid:lower(),
 									mode = type(network.mode) == "string" and network.mode or "",
 									channel = tonumber(network.channel), frequency_mhz = frequency,
 									band = band, signal_dbm = signal,
+									security = security, authentication = authentication,
 									quality = tonumber(network.quality), quality_max = tonumber(network.quality_max)
 								})
 							end

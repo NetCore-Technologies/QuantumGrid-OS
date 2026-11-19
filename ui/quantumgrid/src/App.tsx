@@ -2351,6 +2351,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       null,
     ) ?? null;
   const bandsObserved = scan ? new Set(scan.results.map((network) => network.band)).size : 0;
+  const openNetworkCount = scan ? scan.results.filter((network) => network.security === "Open").length : 0;
+  const unknownSecurityCount = scan ? scan.results.filter((network) => network.security === "Unknown").length : 0;
   const runWirelessScan = async () => {
     setScanLoading(true);
     setScanError("");
@@ -2412,6 +2414,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
                     <div><small>CHANNEL / FREQ</small><b>{network.channel === undefined ? "N/A" : fmt(network.channel)}{network.frequency_mhz === undefined ? "" : " · " + fmt(network.frequency_mhz) + " MHz"}</b></div>
                     <div><small>SIGNAL</small><b>{network.signal_dbm === undefined ? "N/A" : fmt(network.signal_dbm) + " dBm"}</b></div>
                     <div><small>QUALITY</small><b>{network.quality === undefined ? "N/A" : fmt(network.quality) + "/" + fmt(network.quality_max ?? 0)}</b></div>
+                    <div><small>SECURITY</small><b>{network.security}{network.authentication?.length ? ` · ${network.authentication.join("/")}` : ""}</b></div>
                   </div>
                 ))}
               </div>
@@ -2431,6 +2434,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
               <Metric title="Detected access points" value={fmt(scan.results.length)} unit="" detail="Unique BSSIDs reported in this scan" icon={Wifi} />
               <Metric title="Bands observed" value={fmt(bandsObserved)} unit="" detail={[...new Set(scan.results.map((network) => network.band))].join(" · ") || "N/A"} icon={RadioTower} />
               <Metric title="Strongest neighbour" value={strongestNetwork?.signal_dbm === undefined ? "N/A" : `${fmt(strongestNetwork.signal_dbm)} dBm`} unit="" detail={strongestNetwork?.ssid || "Signal not reported"} icon={Signal} />
+              <Metric title="Open networks" value={fmt(openNetworkCount)} unit="" detail="No encryption reported by iwinfo" icon={Lock} />
+              <Metric title="Unknown security" value={fmt(unknownSecurityCount)} unit="" detail="Driver did not return encryption state" icon={Shield} />
             </div>
             <div className="device-list">
               {channelGroups.map((group) => (
@@ -2447,7 +2452,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
             </div>
           </>
         )}
-        <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Take repeat scans from the router’s actual installation location before comparing environments.</div>
+        <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Security labels come from iwinfo encryption metadata; missing metadata is marked Unknown rather than treated as an open network. Take repeat scans from the router’s actual installation location before comparing environments.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />
