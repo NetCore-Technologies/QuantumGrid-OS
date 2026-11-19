@@ -2275,7 +2275,7 @@ function WirelessRadioInventory({
             <div className="device-icon"><Wifi size={17} /></div>
             <div>
               <strong>{iface.ssid || iface.ifname || radio.name}</strong>
-              <span>{radio.name} · {iface.ifname || "No interface"} · {iface.mode || "mode N/A"} · {iface.up ? "UP" : "DOWN"}</span>
+              <span>{radio.name} · {iface.ifname || "No interface"} · {iface.mode || "mode N/A"} · {iface.up ? "UP" : "DOWN"} · {iface.country || "Region N/A"} · {iface.htmode || "Width N/A"}</span>
             </div>
           </div>
           <div><small>CHANNEL / FREQ</small><b>{iface.channel === undefined ? "N/A" : fmt(iface.channel)}{iface.frequency_mhz === undefined ? "" : ` · ${fmt(iface.frequency_mhz)} MHz`}</b></div>

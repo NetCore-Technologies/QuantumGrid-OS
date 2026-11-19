@@ -15,6 +15,11 @@ export interface RouterWirelessInterface {
   up: boolean;
   channel?: number;
   frequency_mhz?: number;
+  country?: string;
+  hwmode?: string;
+  htmode?: string;
+  center_channel_1?: number;
+  center_channel_2?: number;
   txpower_dbm?: number;
   signal_dbm?: number;
   noise_dbm?: number;
