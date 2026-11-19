@@ -79,8 +79,9 @@ iwinfo radio channel/frequency, driver-reported regulatory country and channel m
 AP signal/noise, bitrate, quality and transmit power where the wireless driver reports them. Current-channel busy airtime is calculated from successive
 read-only iwinfo survey counters where the driver supports them; unsupported radios remain N/A.
 The Wi-Fi page also provides an authenticated, manual iwinfo scan of nearby access points,
-including SSID/BSSID, band, channel, frequency, signal/quality and encryption metadata (WPA
-versions and authentication where exposed). Unknown security metadata is not classified as open.
+including SSID/BSSID, band, channel, frequency, signal/quality, encryption metadata (WPA
+versions and authentication where exposed) and HT/VHT/HE/EHT operation width information when
+returned by the driver. Unknown security metadata is not classified as open.
 Scans are rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic
 while scanning. The same page groups observed BSSIDs by reported band/channel and shows strongest
 reported signal; these counts are scan visibility only, not airtime or interference measurements.

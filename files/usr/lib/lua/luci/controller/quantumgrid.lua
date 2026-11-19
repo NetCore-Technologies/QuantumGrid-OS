@@ -409,6 +409,10 @@ local function build_wifi_scan()
 								local ssid = type(network.ssid) == "string" and network.ssid or ""
 								if #ssid > 128 then ssid = ssid:sub(1, 128) end
 								local encryption = type(network.encryption) == "table" and network.encryption or {}
+								local ht_operation = type(network.ht_operation) == "table" and network.ht_operation or nil
+								local vht_operation = type(network.vht_operation) == "table" and network.vht_operation or nil
+								local he_operation = type(network.he_operation) == "table" and network.he_operation or nil
+								local eht_operation = type(network.eht_operation) == "table" and network.eht_operation or nil
 								local security = "Unknown"
 								local authentication = {}
 								if encryption.enabled == false or encryption.enabled == 0 then
@@ -443,6 +447,27 @@ local function build_wifi_scan()
 									channel = tonumber(network.channel), frequency_mhz = frequency,
 									band = band, signal_dbm = signal,
 									security = security, authentication = authentication,
+									ht_operation = ht_operation and {
+										primary_channel = tonumber(ht_operation.primary_channel),
+										secondary_channel_offset = type(ht_operation.secondary_channel_offset) == "string"
+											and ht_operation.secondary_channel_offset or nil,
+										channel_width = tonumber(ht_operation.channel_width)
+									} or nil,
+									vht_operation = vht_operation and {
+										channel_width = tonumber(vht_operation.channel_width),
+										center_freq_1 = tonumber(vht_operation.center_freq_1),
+										center_freq_2 = tonumber(vht_operation.center_freq_2)
+									} or nil,
+									he_operation = he_operation and {
+										channel_width = tonumber(he_operation.channel_width),
+										center_freq_1 = tonumber(he_operation.center_freq_1),
+										center_freq_2 = tonumber(he_operation.center_freq_2)
+									} or nil,
+									eht_operation = eht_operation and {
+										channel_width = tonumber(eht_operation.channel_width),
+										center_freq_1 = tonumber(eht_operation.center_freq_1),
+										center_freq_2 = tonumber(eht_operation.center_freq_2)
+									} or nil,
 									quality = tonumber(network.quality), quality_max = tonumber(network.quality_max)
 								})
 							end

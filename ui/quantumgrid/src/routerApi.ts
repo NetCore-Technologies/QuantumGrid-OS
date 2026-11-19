@@ -156,11 +156,23 @@ export interface RouterSecurityStatus {
   };
 }
 
+export interface RouterWifiOperation {
+  channel_width?: number;
+  primary_channel?: number;
+  secondary_channel_offset?: string;
+  center_freq_1?: number;
+  center_freq_2?: number;
+}
+
 export interface RouterWifiScanResult {
   radio: string; ifname: string; ssid: string; bssid: string; mode: string;
   channel?: number; frequency_mhz?: number; band: string;
   signal_dbm?: number; quality?: number; quality_max?: number;
   security: string; authentication?: string[];
+  ht_operation?: RouterWifiOperation;
+  vht_operation?: RouterWifiOperation;
+  he_operation?: RouterWifiOperation;
+  eht_operation?: RouterWifiOperation;
 }
 export interface RouterWifiScan {
   ok: true; scanned_at: number; cached: boolean;

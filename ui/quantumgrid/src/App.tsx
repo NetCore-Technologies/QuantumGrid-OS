@@ -2395,6 +2395,42 @@ type WifiScanHistorySample = {
   bandCounts: Record<string, number>;
 };
 
+function describeScanOperation(network: RouterWifiScan["results"][number]): string {
+  const describeWidth = (kind: "HT" | "VHT" | "HE" | "EHT", width: number | undefined) => {
+    if (width === undefined) return "width unknown";
+    if (kind === "HT") {
+      if (width === 20) return "20 MHz";
+      if (width === 2040) return "40 MHz or higher";
+    } else if (kind === "VHT") {
+      const widths: Record<number, string> = {
+        40: "20 or 40 MHz", 80: "80 MHz", 8080: "80+80 MHz", 160: "160 MHz",
+      };
+      return widths[width] ?? "width unknown";
+    } else {
+      const widths: Record<number, string> = {
+        20: "20 MHz", 40: "40 MHz", 80: "80 MHz", 160: "160 MHz", 320: "320 MHz",
+      };
+      return widths[width] ?? "width unknown";
+    }
+    return "width unknown";
+  };
+
+  const operations = [
+    { name: "EHT", value: network.eht_operation },
+    { name: "HE", value: network.he_operation },
+    { name: "VHT", value: network.vht_operation },
+    { name: "HT", value: network.ht_operation },
+  ] as const;
+  const selected = operations.find((operation) => operation.value !== undefined);
+  if (!selected) return "N/A";
+  const details = [selected.name, describeWidth(selected.name, selected.value?.channel_width)];
+  if (selected.name === "HT" && selected.value?.primary_channel !== undefined) {
+    details.push(\`primary CH \${selected.value.primary_channel}\`);
+    if (selected.value.secondary_channel_offset) details.push(selected.value.secondary_channel_offset);
+  }
+  return details.join(" · ");
+}
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
@@ -2439,12 +2475,12 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     if (!scan || scan.results.length === 0) return;
     const scannedAt = new Date(scan.scanned_at * 1000).toISOString();
     const rows: Array<Array<string | number | null | undefined>> = [
-      ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Mode"],
+      ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Mode", "PHY operation"],
       ...scan.results.map((network) => [
         scannedAt, network.radio, network.ifname, network.ssid, network.bssid,
         network.band, network.channel, network.frequency_mhz, network.signal_dbm,
         network.quality, network.quality_max, network.security,
-        network.authentication?.join("/"), network.mode,
+        network.authentication?.join("/"), network.mode, describeScanOperation(network),
       ]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
@@ -2555,6 +2591,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
                     <div><small>CHANNEL / FREQ</small><b>{network.channel === undefined ? "N/A" : fmt(network.channel)}{network.frequency_mhz === undefined ? "" : " · " + fmt(network.frequency_mhz) + " MHz"}</b></div>
                     <div><small>SIGNAL</small><b>{network.signal_dbm === undefined ? "N/A" : fmt(network.signal_dbm) + " dBm"}</b></div>
                     <div><small>QUALITY</small><b>{network.quality === undefined ? "N/A" : fmt(network.quality) + "/" + fmt(network.quality_max ?? 0)}</b></div>
+                    <div><small>PHY / WIDTH</small><b>{describeScanOperation(network)}</b></div>
                     <div><small>SECURITY</small><b>{network.security}{network.authentication?.length ? ` · ${network.authentication.join("/")}` : ""}</b></div>
                   </div>
                 ))}
