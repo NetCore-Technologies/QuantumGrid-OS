@@ -313,6 +313,91 @@ function action_index()
 	require("luci.http").redirect("/quantumgrid/")
 end
 
+local function security_status(uci, fs)
+	local result = {
+		firewall_installed = fs.access("/etc/init.d/firewall") == true,
+		firewall_config_available = fs.access("/etc/config/firewall") == true,
+		firewall_config_readable = false,
+		zones = {},
+		rules_count = 0,
+		redirects_count = 0,
+		nft_available = false,
+		nft_tables = {},
+		adblock_fast = {
+			installed = fs.access("/etc/init.d/adblock-fast") == true,
+			config_available = fs.access("/etc/config/adblock-fast") == true,
+			configured_enabled = false
+		},
+		vpn = {
+			wireguard_tool_installed = fs.access("/usr/bin/wg") == true,
+			openvpn_service_installed = fs.access("/etc/init.d/openvpn") == true,
+			wireguard_interfaces = {},
+			openvpn_enabled_instances = 0
+		}
+	}
+	local config_ok = pcall(function()
+		uci:foreach("firewall", "zone", function(section)
+			if #result.zones < 32 then
+				local networks = {}
+				if type(section.network) == "table" then
+					for _, network in ipairs(section.network) do table.insert(networks, tostring(network)) end
+				elseif type(section.network) == "string" and section.network ~= "" then
+					table.insert(networks, section.network)
+				end
+				table.insert(result.zones, {
+					name = tostring(section.name or section[".name"] or ""),
+					networks = networks,
+					input = tostring(section.input or ""),
+					output = tostring(section.output or ""),
+					forward = tostring(section.forward or ""),
+					masquerade = section.masq == "1"
+				})
+			end
+		end)
+		uci:foreach("firewall", "rule", function() result.rules_count = result.rules_count + 1 end)
+		uci:foreach("firewall", "redirect", function() result.redirects_count = result.redirects_count + 1 end)
+	end)
+	result.firewall_config_readable = config_ok
+
+	local adblock_ok, adblock_enabled = pcall(uci.get, uci, "adblock-fast", "config", "enabled")
+	if adblock_ok then result.adblock_fast.configured_enabled = adblock_enabled == "1" end
+
+	pcall(function()
+		uci:foreach("network", "interface", function(section)
+			if section.proto == "wireguard" and #result.vpn.wireguard_interfaces < 16 then
+				local name = tostring(section[".name"] or "")
+				if name:match("^[%w_.%-]+$") then
+					local status = ubus_call("network.interface." .. name, "status", {}) or {}
+					table.insert(result.vpn.wireguard_interfaces, {
+						name = name,
+						up = status.up == true,
+						device = tostring(status.device or status.l3_device or "")
+					})
+				end
+			end
+		end)
+		uci:foreach("openvpn", "openvpn", function(section)
+			if section.enabled == "1" then
+				result.vpn.openvpn_enabled_instances = result.vpn.openvpn_enabled_instances + 1
+			end
+		end)
+	end)
+
+	-- Enumerate nftables tables only. This fixed command never accepts user input.
+	local util = require "luci.util"
+	local exec_ok, output = pcall(util.exec, "nft list tables")
+	if exec_ok and type(output) == "string" then
+		result.nft_available = true
+		for line in output:gmatch("[^\r\n]+") do
+			local family, name = line:match("^table%s+(%S+)%s+(%S+)")
+			if family and name and #result.nft_tables < 32 then
+				table.insert(result.nft_tables, family .. "/" .. name)
+			end
+		end
+	end
+	return result
+end
+
 local function sqm_status(uci, fs)
 	local result = {
 		installed = fs.access("/etc/init.d/sqm") == true,
@@ -398,6 +483,7 @@ function action_api()
 		or fs.access("/dev/ttyUSB3") == true
 	local wireless = wireless_status()
 	local sqm = sqm_status(uci, fs)
+	local security = security_status(uci, fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -417,6 +503,7 @@ function action_api()
 		wireless = wireless,
 		wireless_clients = wireless_clients(wireless),
 		sqm = sqm,
+		security = security,
 		cellular = { modem_present = modem_present },
 		phone = {
 			service_installed = phone_service,

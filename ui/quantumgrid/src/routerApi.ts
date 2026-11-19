@@ -86,6 +86,43 @@ export interface RouterSqmStatus {
   qdiscs: RouterQdiscState[];
 }
 
+export interface RouterFirewallZone {
+  name: string;
+  networks: string[];
+  input: string;
+  output: string;
+  forward: string;
+  masquerade: boolean;
+}
+
+export interface RouterVpnInterface {
+  name: string;
+  up: boolean;
+  device: string;
+}
+
+export interface RouterSecurityStatus {
+  firewall_installed: boolean;
+  firewall_config_available: boolean;
+  firewall_config_readable: boolean;
+  zones: RouterFirewallZone[];
+  rules_count: number;
+  redirects_count: number;
+  nft_available: boolean;
+  nft_tables: string[];
+  adblock_fast: {
+    installed: boolean;
+    config_available: boolean;
+    configured_enabled: boolean;
+  };
+  vpn: {
+    wireguard_tool_installed: boolean;
+    openvpn_service_installed: boolean;
+    wireguard_interfaces: RouterVpnInterface[];
+    openvpn_enabled_instances: number;
+  };
+}
+
 export interface RouterOverview {
   ok: true;
   timestamp: number;
@@ -107,6 +144,7 @@ export interface RouterOverview {
   wireless: RouterWirelessRadio[];
   wireless_clients?: RouterWirelessClient[];
   sqm?: RouterSqmStatus;
+  security?: RouterSecurityStatus;
   cellular: { modem_present: boolean };
   phone: {
     service_installed: boolean;

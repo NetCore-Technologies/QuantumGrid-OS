@@ -1817,6 +1817,118 @@ function CellularControlPage({ routerOverview }: { routerOverview: RouterOvervie
   );
 }
 
+function SecurityControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+  const security = routerOverview?.security;
+  const zones = security?.zones ?? [];
+  const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
+  const activeWireGuard = security?.vpn.wireguard_interfaces.filter((item) => item.up) ?? [];
+
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Shield size={25} /></div>
+        <div>
+          <div className="setup-kicker">FIREWALL · DNS FILTERING · VPN</div>
+          <h1>Security Center</h1>
+          <p>Read-only firewall zone policy, nftables table presence, Adblock Fast configuration and VPN interface status from the authenticated router API.</p>
+        </div>
+      </section>
+
+      <div className="metrics">
+        <Metric title="Firewall Service" value={security ? (security.firewall_installed ? "INSTALLED" : "MISSING") : "N/A"} unit="" detail="firewall4 init service" icon={Shield} />
+        <Metric title="fw4 nftables Table" value={security ? (fw4Present ? "PRESENT" : "NOT FOUND") : "N/A"} unit="" detail="inet/fw4 runtime table" icon={Network} />
+        <Metric title="Firewall Zones" value={security?.firewall_config_readable ? fmt(zones.length) : "N/A"} unit="" detail="UCI zone sections" icon={Settings} />
+        <Metric title="Rules / Redirects" value={security?.firewall_config_readable ? `${fmt(security.rules_count)} / ${fmt(security.redirects_count)}` : "N/A"} unit="" detail="Configured firewall entries" icon={Activity} />
+      </div>
+
+      <Panel title="Firewall zones" eyebrow="UCI · /ETC/CONFIG/FIREWALL" action={<Status active={Boolean(security?.firewall_config_readable)}>{security?.firewall_config_readable ? "CONFIG READ" : "WAITING"}</Status>}>
+        {!security ? (
+          <div className="module-message">Waiting for authenticated router security telemetry.</div>
+        ) : !security.firewall_installed ? (
+          <div className="module-message">The router does not report the firewall init service as installed.</div>
+        ) : !security.firewall_config_readable ? (
+          <div className="module-message">Firewall configuration could not be read.</div>
+        ) : zones.length === 0 ? (
+          <div className="module-message">No firewall zones were reported.</div>
+        ) : (
+          <div className="device-list">
+            {zones.map((zone) => (
+              <div className="device-row" key={zone.name}>
+                <div className="device-title">
+                  <div className="device-icon"><Shield size={17} /></div>
+                  <div><strong>{zone.name || "Unnamed zone"}</strong><span>{zone.networks.length > 0 ? zone.networks.join(", ") : "No networks assigned"}</span></div>
+                </div>
+                <div><small>INPUT</small><b>{zone.input || "N/A"}</b></div>
+                <div><small>OUTPUT</small><b>{zone.output || "N/A"}</b></div>
+                <div><small>FORWARD</small><b>{zone.forward || "N/A"}</b></div>
+                <div><small>MASQUERADE</small><b>{zone.masquerade ? "ON" : "OFF"}</b></div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Panel>
+
+      <div className="module-grid">
+        <Panel title="Adblock Fast" eyebrow="DNS FILTER CONFIGURATION">
+          {!security ? (
+            <div className="module-message">Waiting for router telemetry.</div>
+          ) : (
+            <InfoRows rows={[
+              ["SERVICE", security.adblock_fast.installed ? "INSTALLED" : "NOT INSTALLED"],
+              ["CONFIG FILE", security.adblock_fast.config_available ? "PRESENT" : "MISSING"],
+              ["CONFIGURED ENABLED", security.adblock_fast.configured_enabled ? "YES" : "NO"],
+            ]} />
+          )}
+          <div className="module-message">The enabled flag is configuration state only. This API does not claim that a filtering run completed or that DNS requests are currently being blocked.</div>
+        </Panel>
+
+        <Panel title="VPN services" eyebrow="WIREGUARD / OPENVPN">
+          {!security ? (
+            <div className="module-message">Waiting for router telemetry.</div>
+          ) : (
+            <>
+              <InfoRows rows={[
+                ["WIREGUARD TOOL", security.vpn.wireguard_tool_installed ? "INSTALLED" : "NOT INSTALLED"],
+                ["OPENVPN SERVICE", security.vpn.openvpn_service_installed ? "INSTALLED" : "NOT INSTALLED"],
+                ["OPENVPN ENABLED INSTANCES", fmt(security.vpn.openvpn_enabled_instances)],
+                ["WIREGUARD LINKS UP", `${fmt(activeWireGuard.length)} / ${fmt(security.vpn.wireguard_interfaces.length)}`],
+              ]} />
+              {security.vpn.wireguard_interfaces.length > 0 && (
+                <div className="info-rows">
+                  {security.vpn.wireguard_interfaces.map((iface) => (
+                    <div key={iface.name}>
+                      <span>{iface.name}{iface.device ? ` · ${iface.device}` : ""}</span>
+                      <Status active={iface.up}>{iface.up ? "UP" : "DOWN"}</Status>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+          <div className="module-message">Private keys, preshared keys and peer credentials are never returned by this telemetry endpoint.</div>
+        </Panel>
+      </div>
+
+      <Panel title="nftables tables" eyebrow="KERNEL RUNTIME INVENTORY">
+        {!security ? (
+          <div className="module-message">Waiting for nftables telemetry.</div>
+        ) : !security.nft_available ? (
+          <div className="module-message">The router could not return an nftables table inventory.</div>
+        ) : security.nft_tables.length === 0 ? (
+          <div className="module-message">No nftables tables were reported.</div>
+        ) : (
+          <div className="info-rows">
+            {security.nft_tables.map((table) => (
+              <div key={table}><span>{table}</span><Status active={table === "inet/fw4"}>{table === "inet/fw4" ? "FIREWALL4 TABLE" : "TABLE PRESENT"}</Status></div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">This is a table inventory, not a full rule evaluation or security audit. Zone policies and service configuration are shown separately.</div>
+      </Panel>
+    </div>
+  );
+}
+
 function DashboardPage({
   stats,
   refresh,
@@ -1989,6 +2101,10 @@ function DashboardPage({
 
   if (page === "gaming") {
     return <GamingControlPage routerOverview={routerOverview} />;
+  }
+
+  if (page === "security") {
+    return <SecurityControlPage routerOverview={routerOverview} />;
   }
 
   if (page === "wifi") {
