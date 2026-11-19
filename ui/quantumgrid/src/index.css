@@ -1791,6 +1791,7 @@ button:disabled {
 .wireless-channel-chip span { color: var(--muted); font-size: 8px; }
 .wireless-channel-chip small { color: #e8ad6b; font-size: 6px; letter-spacing: .04em; }
 .wireless-channel-chip.restricted { border-color: rgba(232,173,107,.42); }
+.wireless-channel-chip.active { border-color: rgba(81,190,151,.48); background: rgba(81,190,151,.08); }
 .wifi-scan-row {
   grid-template-columns: minmax(190px, 1.7fr) repeat(5, minmax(100px, 1fr));
 }

@@ -2312,6 +2312,29 @@ function WirelessRadioInventory({
       ))}
     </div>
     <div className="module-message">The inventory comes from iwinfo.freqlist. Restricted flags and driver capabilities are shown as reported; they are not a substitute for the router's complete regulatory database or a guarantee that a channel is usable in every operating mode.</div>
+    <div className="wireless-channel-inventory">
+      {radios.map((radio) => (
+        <section className="wireless-channel-section" key={radio.name + "-txpower"}>
+          <div className="wireless-channel-heading">
+            <strong>{radio.name} · Driver-supported transmit power</strong>
+            <span>{radio.txpower_levels?.length ? `${radio.txpower_levels.length} levels` : "Not reported"}</span>
+          </div>
+          {radio.txpower_levels?.length ? (
+            <div className="wireless-channel-chips">
+              {radio.txpower_levels.map((level) => (
+                <div className={`wireless-channel-chip${level.active ? " active" : ""}`} key={level.dbm + "-" + level.mw}>
+                  <strong>{fmt(level.dbm)} dBm{level.active ? " · CURRENT" : ""}</strong>
+                  <span>{fmt(level.mw)} mW</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="module-message">The radio driver did not return a supported transmit-power list.</div>
+          )}
+        </section>
+      ))}
+    </div>
+    <div className="module-message">The transmit-power levels are the driver's iwinfo.txpowerlist response, not regulatory permission to use every listed level. Current power is only marked when the driver identifies an active entry. QuantumGrid does not change transmit power here.</div>
     <div className="module-message">Channel busy is calculated from changes in the current channel's iwinfo busy-time and active-time counters between samples. It is a short-window airtime estimate, not a neighbouring-access-point scan; drivers without survey counters show N/A.</div>
     </>
   );

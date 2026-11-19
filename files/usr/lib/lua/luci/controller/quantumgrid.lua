@@ -174,7 +174,21 @@ local function wireless_status()
 				end
 			end
 			local channels = {}
+			local txpower_levels = {}
 			if channel_device then
+				local power_list = ubus_call("iwinfo", "txpowerlist", { device = channel_device }) or {}
+				for _, entry in ipairs(power_list.results or {}) do
+					if #txpower_levels < 64 then
+						local dbm = tonumber(entry.dbm)
+						local mw = tonumber(entry.mw)
+						if dbm and dbm >= 0 and dbm <= 100 and mw and mw >= 0 and mw <= 100000 then
+							table.insert(txpower_levels, {
+								dbm = dbm, mw = mw,
+								active = entry.active == true or entry.active == 1
+							})
+						end
+					end
+				end
 				local frequency_list = ubus_call("iwinfo", "freqlist", { device = channel_device }) or {}
 				for _, entry in ipairs(frequency_list.results or {}) do
 					if #channels < 128 then
@@ -202,7 +216,10 @@ local function wireless_status()
 					end
 				end
 			end
-			local item = { name = name, up = radio.up == true, interfaces = {}, channels = channels }
+			local item = {
+				name = name, up = radio.up == true, interfaces = {},
+				channels = channels, txpower_levels = txpower_levels
+			}
 			for _, iface in ipairs(radio.interfaces or {}) do
 				local config = type(iface.config) == "table" and iface.config or {}
 				local ifname = iface.ifname

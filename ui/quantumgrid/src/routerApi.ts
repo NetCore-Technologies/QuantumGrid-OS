@@ -40,11 +40,18 @@ export interface RouterWirelessChannel {
   flags: string[];
 }
 
+export interface RouterWirelessTxPower {
+  dbm: number;
+  mw: number;
+  active: boolean;
+}
+
 export interface RouterWirelessRadio {
   name: string;
   up: boolean;
   interfaces: RouterWirelessInterface[];
   channels?: RouterWirelessChannel[];
+  txpower_levels?: RouterWirelessTxPower[];
 }
 
 export interface RouterClient {
