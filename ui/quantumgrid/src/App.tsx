@@ -11,7 +11,6 @@ import {
   Database,
   Download,
   Gamepad2,
-  GripVertical,
   Globe2,
   HardDrive,
   KeyRound,
@@ -1989,7 +1988,7 @@ function DashboardPage({
   };
 
   if (page === "gaming") {
-    return <GamingControlPage />;
+    return <GamingControlPage routerOverview={routerOverview} />;
   }
 
   if (page === "wifi") {
@@ -2069,547 +2068,106 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   );
 }
 
-function GamingControlPage() {
-  const [engine, setEngine] = useState(true);
-  const [smartQueue, setSmartQueue] = useState(true);
-  const [gamingPriority, setGamingPriority] = useState(true);
-  const [autoOptimize, setAutoOptimize] = useState(true);
-  const [scheduled, setScheduled] = useState(false);
-  const [optimizing, setOptimizing] = useState(false);
+function formatKbps(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return "N/A";
+  return value >= 1000 ? `${fmt(value / 1000, 2)} Mbps` : `${fmt(value)} Kbps`;
+}
 
-  const [mode, setMode] = useState<
-    "latency" | "balanced" | "throughput"
-  >("latency");
-
-  const [downloadLimit, setDownloadLimit] = useState("950");
-  const [uploadLimit, setUploadLimit] = useState("45");
-
-  const [latency, setLatency] = useState(8);
-  const [jitter, setJitter] = useState(1.1);
-  const [packetLoss, setPacketLoss] = useState(0);
-  const [score, setScore] = useState(98);
-
-  const [clients, setClients] = useState([
-    {
-      name: "QuantumGrid PC",
-      ip: "192.168.1.100",
-      link: "2.5GbE",
-      latency: 8,
-      priority: "HIGH",
-    },
-    {
-      name: "PlayStation 5",
-      ip: "192.168.1.112",
-      link: "Wi-Fi 6",
-      latency: 11,
-      priority: "HIGH",
-    },
-    {
-      name: "Xbox",
-      ip: "192.168.1.118",
-      link: "Wi-Fi 6",
-      latency: 14,
-      priority: "NORMAL",
-    },
-    {
-      name: "Gaming Laptop",
-      ip: "192.168.1.119",
-      link: "Wi-Fi 6",
-      latency: 17,
-      priority: "NORMAL",
-    },
-  ]);
-
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-
-  const [telemetry, setTelemetry] = useState<number[]>(
-    Array.from({ length: 42 }, (_, i) =>
-      9 +
-      Math.sin(i / 2.8) * 3 +
-      Math.sin(i / 5.4) * 2,
-    ),
-  );
-
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      setLatency((value) =>
-        Math.max(
-          5,
-          Math.min(
-            18,
-            value + (Math.random() - 0.5) * (autoOptimize ? 1.5 : 3),
-          ),
-        ),
-      );
-
-      setJitter((value) =>
-        Math.max(
-          0.3,
-          Math.min(
-            3.8,
-            value + (Math.random() - 0.5) * (autoOptimize ? 0.2 : 0.45),
-          ),
-        ),
-      );
-
-      setPacketLoss((value) =>
-        Math.max(
-          0,
-          Math.min(0.8, value + (Math.random() - 0.5) * 0.08),
-        ),
-      );
-
-      setScore((value) =>
-        Math.max(
-          91,
-          Math.min(
-            100,
-            value + (Math.random() - 0.5) * (autoOptimize ? 1.1 : 2),
-          ),
-        ),
-      );
-
-      setTelemetry((values) => [
-        ...values.slice(1),
-        8 +
-          Math.random() * 4 +
-          Math.sin(Date.now() / 1100) * 2,
-      ]);
-    }, 1800);
-
-    return () => window.clearInterval(timer);
-  }, [autoOptimize]);
-
-  function optimize() {
-    if (optimizing) return;
-
-    setOptimizing(true);
-
-    setEngine(true);
-    setSmartQueue(true);
-    setGamingPriority(true);
-    setAutoOptimize(true);
-
-    setMode("latency");
-    setDownloadLimit("950");
-    setUploadLimit("45");
-
-    setLatency(7);
-    setJitter(0.9);
-    setPacketLoss(0);
-    setScore(99);
-
-    window.setTimeout(() => {
-      setOptimizing(false);
-    }, 2200);
-  }
-
-  function moveClient(from: number, to: number) {
-    if (
-      from === to ||
-      from < 0 ||
-      to < 0 ||
-      from >= clients.length ||
-      to >= clients.length
-    ) {
-      return;
-    }
-
-    setClients((current) => {
-      const next = [...current];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
-  }
+function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+  const sqm = routerOverview?.sqm;
+  const queues = sqm?.queues ?? [];
+  const enabledQueues = queues.filter((queue) => queue.enabled);
+  const qdiscs = sqm?.qdiscs ?? [];
+  const cakeCount = qdiscs.filter((qdisc) => qdisc.kind.toLowerCase() === "cake").length;
+  const queueConfigAvailable = sqm?.config_available === true && sqm.config_readable;
+  const runtimeAvailable = sqm?.runtime_available === true;
 
   return (
-    <div className="gaming-page">
-      {optimizing && (
-        <div className="optimization-overlay">
-          <div className="optimization-orbit">
-            <Zap size={27} />
-          </div>
-
-          <strong>Optimizing QuantumGrid</strong>
-
-          <span>
-            Rebalancing latency, queues and client priorities...
-          </span>
-
-          <div className="optimization-progress">
-            <span />
-          </div>
-        </div>
-      )}
-
-      <section className="gaming-hero premium-hero">
-        <div className="gaming-hero-copy">
-          <div className="setup-kicker">GAMING ENGINE • LIVE</div>
-
-          <h1>
-            Maximum
-            <span> gaming performance.</span>
-          </h1>
-
-          <p>
-            QuantumGrid continuously monitors latency, jitter, packet loss,
-            bufferbloat and client traffic to keep gaming traffic responsive.
-          </p>
-
-          <div className="gaming-engine-controls">
-            <ToggleButton
-              label="Gaming Engine"
-              enabled={engine}
-              onClick={() => setEngine(!engine)}
-            />
-
-            <ToggleButton
-              label="Auto Optimize"
-              enabled={autoOptimize}
-              onClick={() => setAutoOptimize(!autoOptimize)}
-            />
-
-            <Status>
-              {engine ? "LATENCY OPTIMIZED" : "STANDARD ROUTING"}
-            </Status>
-          </div>
-        </div>
-
-        <div className="gaming-score-card premium-score">
-          <div className="gaming-score-ring large">
-            <strong>{Math.round(score)}</strong>
-            <span>/100</span>
-          </div>
-
-          <div className="gaming-score-label">GAMING SCORE</div>
-
-          <p>
-            {optimizing
-              ? "Optimization in progress"
-              : "Excellent connection quality"}
-          </p>
+    <div className="module-page gaming-page">
+      <section className="module-hero">
+        <div className="module-icon"><Gamepad2 size={25} /></div>
+        <div>
+          <div className="setup-kicker">SMART QUEUE MANAGEMENT · LIVE INSPECTION</div>
+          <h1>Gaming & Latency</h1>
+          <p>Inspect configured SQM queues and kernel queue disciplines. This page is read-only: it does not change bandwidth limits, priorities or traffic-shaping policy.</p>
         </div>
       </section>
 
-      <div className="gaming-metrics premium-metrics">
-        <MetricTile
-          label="LATENCY"
-          value={latency.toFixed(0)}
-          unit="ms"
-          detail="Excellent"
-          good
-        />
-        <MetricTile
-          label="JITTER"
-          value={jitter.toFixed(1)}
-          unit="ms"
-          detail="Stable"
-          good
-        />
-        <MetricTile
-          label="PACKET LOSS"
-          value={packetLoss.toFixed(1)}
-          unit="%"
-          detail="Perfect"
-          good
-        />
-        <MetricTile
-          label="BUFFERBLOAT"
-          value="A"
-          detail="Excellent"
-          good
-        />
+      <div className="metrics">
+        <Metric title="SQM Package" value={sqm ? (sqm.installed ? "INSTALLED" : "MISSING") : "N/A"} unit="" detail="sqm init service detection" icon={Settings} />
+        <Metric title="Enabled Queue Configs" value={queueConfigAvailable ? fmt(enabledQueues.length) : "N/A"} unit="" detail={queueConfigAvailable ? `${queues.length} queue section(s) found` : "SQM config unavailable"} icon={CircleGauge} />
+        <Metric title="CAKE qdiscs" value={runtimeAvailable ? fmt(cakeCount) : "N/A"} unit="" detail="Observed in kernel qdisc inventory" icon={Activity} />
+        <Metric title="Runtime qdiscs" value={runtimeAvailable ? fmt(qdiscs.length) : "N/A"} unit="" detail="All interfaces · tc statistics" icon={Network} />
       </div>
 
-      <div className="gaming-main-grid">
-        <Panel title="Gaming Mode" eyebrow="TRAFFIC POLICY">
-          <div className="gaming-mode-grid">
-            {[
-              [
-                "latency",
-                "Latency First",
-                "Minimum delay",
-                "Best for competitive gaming",
-              ],
-              [
-                "balanced",
-                "Balanced",
-                "Latency + throughput",
-                "General gaming",
-              ],
-              [
-                "throughput",
-                "Throughput",
-                "Maximum bandwidth",
-                "Large downloads",
-              ],
-            ].map(([id, title, description, detail]) => (
-              <button
-                key={id}
-                className={
-                  mode === id ? "gaming-mode selected" : "gaming-mode"
-                }
-                onClick={() =>
-                  setMode(
-                    id as "latency" | "balanced" | "throughput",
-                  )
-                }
-              >
-                <div className="gaming-mode-icon">
-                  <Zap size={18} />
+      <Panel title="Configured SQM queues" eyebrow="UCI · /ETC/CONFIG/SQM" action={<Status active={Boolean(queueConfigAvailable)}>{queueConfigAvailable ? "CONFIG READ" : "WAITING"}</Status>}>
+        {!sqm ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !sqm.installed ? (
+          <div className="module-message">The router does not report the SQM init service as installed.</div>
+        ) : !queueConfigAvailable ? (
+          <div className="module-message">SQM is installed, but its configuration file or queue data could not be read.</div>
+        ) : queues.length === 0 ? (
+          <div className="module-message">No SQM queue sections are configured.</div>
+        ) : (
+          <div className="device-list">
+            {queues.map((queue) => (
+              <div className="device-row" key={queue.name}>
+                <div className="device-title">
+                  <div className="device-icon"><Gamepad2 size={17} /></div>
+                  <div><strong>{queue.name || "Unnamed queue"}</strong><span>{queue.interface || "Interface not set"}</span></div>
                 </div>
-
-                <strong>{title}</strong>
-                <span>{description}</span>
-                <small>{detail}</small>
-
-                {mode === id && (
-                  <div className="gaming-mode-check">
-                    <Check size={14} />
-                  </div>
-                )}
-              </button>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel title="Smart Queue Control" eyebrow="BUFFERBLOAT">
-          <div className="advanced-toggle-stack">
-            <AdvancedToggle
-              icon={Gamepad2}
-              title="Smart Queue Management"
-              description="Shape WAN traffic dynamically to reduce latency under load."
-              enabled={smartQueue}
-              setEnabled={setSmartQueue}
-            />
-
-            <AdvancedToggle
-              icon={Gamepad2}
-              title="Gaming Priority"
-              description="Prioritize gaming traffic above normal network traffic."
-              enabled={gamingPriority}
-              setEnabled={setGamingPriority}
-            />
-
-            <AdvancedToggle
-              icon={Sparkles}
-              title="Auto Optimization"
-              description="Continuously adjust queue behaviour using live network conditions."
-              enabled={autoOptimize}
-              setEnabled={setAutoOptimize}
-            />
-          </div>
-        </Panel>
-      </div>
-
-      <div className="gaming-policy-grid">
-        <Panel title="Bandwidth Policy" eyebrow="WAN CONTROL">
-          <div className="bandwidth-policy premium-bandwidth">
-            <label>
-              <span>DOWNLOAD LIMIT</span>
-
-              <div>
-                <input
-                  type="number"
-                  value={downloadLimit}
-                  onChange={(e) => setDownloadLimit(e.target.value)}
-                />
-                <b>Mbps</b>
-              </div>
-            </label>
-
-            <label>
-              <span>UPLOAD LIMIT</span>
-
-              <div>
-                <input
-                  type="number"
-                  value={uploadLimit}
-                  onChange={(e) => setUploadLimit(e.target.value)}
-                />
-                <b>Mbps</b>
-              </div>
-            </label>
-          </div>
-
-          <div className="policy-summary">
-            <div>
-              <span>MODE</span>
-              <strong>
-                {mode === "latency" ? "LATENCY FIRST" : mode.toUpperCase()}
-              </strong>
-            </div>
-
-            <div>
-              <span>AUTO ADJUST</span>
-              <strong>{autoOptimize ? "ENABLED" : "DISABLED"}</strong>
-            </div>
-          </div>
-        </Panel>
-
-        <Panel title="Gaming Client Priority" eyebrow="DRAG TO REORDER">
-          <div className="priority-help">
-            <GripVertical size={14} />
-            Drag clients to change their priority order.
-          </div>
-
-          <div className="gaming-priority-list">
-            {clients.map((client, index) => (
-              <div
-                key={client.name}
-                className={
-                  dragIndex === index
-                    ? "gaming-priority-row dragging"
-                    : "gaming-priority-row"
-                }
-                draggable
-                onDragStart={() => setDragIndex(index)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => {
-                  if (dragIndex !== null) {
-                    moveClient(dragIndex, index);
-                  }
-                  setDragIndex(null);
-                }}
-                onDragEnd={() => setDragIndex(null)}
-              >
-                <div className="drag-handle">
-                  <GripVertical size={17} />
-                </div>
-
-                <div className="priority-number">{index + 1}</div>
-
-                <div className="priority-device">
-                  <div className="device-icon">
-                    <Gamepad2 size={16} />
-                  </div>
-
-                  <div>
-                    <strong>{client.name}</strong>
-                    <span>
-                      {client.ip} • {client.link}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="priority-latency">
-                  <span>LATENCY</span>
-                  <strong>{client.latency} ms</strong>
-                </div>
-
-                <span
-                  className={
-                    index < 2
-                      ? "priority-pill high"
-                      : "priority-pill normal"
-                  }
-                >
-                  {index < 2 ? "HIGH" : client.priority}
-                </span>
+                <div><small>CONFIGURATION</small><b>{queue.enabled ? "ENABLED" : "DISABLED"}</b></div>
+                <div><small>QDISC / SCRIPT</small><b>{queue.qdisc || "N/A"} · {queue.script || "N/A"}</b></div>
+                <div><small>DOWNLOAD</small><b>{formatKbps(queue.download_kbps)}</b></div>
+                <div><small>UPLOAD</small><b>{formatKbps(queue.upload_kbps)}</b></div>
               </div>
             ))}
           </div>
-        </Panel>
-      </div>
-
-      <Panel title="Live Gaming Telemetry" eyebrow="REAL-TIME">
-        <div className="gaming-live-chart">
-          {telemetry.map((value, index) => (
-            <span
-              key={`${index}-${value}`}
-              style={{
-                height: `${Math.max(8, Math.min(92, value * 5))}%`,
-              }}
-            />
-          ))}
-        </div>
-
-        <div className="telemetry-labels">
-          <span>LATENCY</span>
-          <span>LIVE</span>
-        </div>
+        )}
+        <div className="module-message">Queue rates are configured SQM values in kbit/s. An enabled UCI section alone does not prove that its shaper is attached to the live WAN path.</div>
       </Panel>
 
-      <div className="gaming-schedule-bar">
-        <AdvancedToggle
-          icon={Sparkles}
-          title="Scheduled Optimization"
-          description="Run a network optimization pass automatically."
-          enabled={scheduled}
-          setEnabled={setScheduled}
-        />
+      <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={<Status active={runtimeAvailable}>{runtimeAvailable ? "RUNTIME READ" : "NOT AVAILABLE"}</Status>}>
+        {!sqm ? (
+          <div className="module-message">Waiting for router qdisc telemetry.</div>
+        ) : !runtimeAvailable ? (
+          <div className="module-message">The router could not return kernel qdisc statistics.</div>
+        ) : qdiscs.length === 0 ? (
+          <div className="module-message">No qdisc entries were returned by the kernel.</div>
+        ) : (
+          <div className="device-list">
+            {qdiscs.map((qdisc, index) => (
+              <div className="device-row" key={`${qdisc.device ?? "unknown"}-${qdisc.handle}-${index}`}>
+                <div className="device-title">
+                  <div className="device-icon"><Activity size={17} /></div>
+                  <div><strong>{qdisc.kind}</strong><span>{qdisc.handle} · {qdisc.root ? "root" : qdisc.parent || "child"}</span></div>
+                </div>
+                <div><small>DEVICE</small><b>{qdisc.device || "N/A"}</b></div>
+                <div><small>TRAFFIC SENT</small><b>{qdisc.bytes === undefined ? "N/A" : formatTrafficBytes(qdisc.bytes)}</b></div>
+                <div><small>DROPPED / OVERLIMITS</small><b>{qdisc.dropped === undefined ? "N/A" : `${fmt(qdisc.dropped)} / ${fmt(qdisc.overlimits ?? 0)}`}</b></div>
+                <div><small>BACKLOG</small><b>{qdisc.backlog_bytes === undefined ? "N/A" : `${formatTrafficBytes(qdisc.backlog_bytes)} · ${fmt(qdisc.backlog_packets ?? 0)} pkt`}</b></div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">This inventory covers kernel qdiscs across interfaces; entries are not automatically attributed to a particular SQM queue. Compare the configured interface and runtime device before concluding that SQM is shaping the WAN.</div>
+      </Panel>
 
-        <div className="schedule-select-wrap">
-          <span>RUN EVERY</span>
-
-          <select className="premium-select">
-            <option>15 minutes</option>
-            <option>30 minutes</option>
-            <option>1 hour</option>
-            <option>3 hours</option>
-            <option>6 hours</option>
-          </select>
-        </div>
-
-        <button
-          className="hero-button"
-          onClick={optimize}
-          disabled={optimizing}
-        >
-          <Zap size={16} />
-          {optimizing ? "Optimizing..." : "Optimize Gaming"}
-        </button>
+      <div className="module-grid">
+        <Panel title="Gaming measurement status" eyebrow="NO SYNTHETIC SCORES">
+          <InfoRows rows={[
+            ["LATENCY / JITTER", "NOT MEASURED"],
+            ["PACKET LOSS", "NOT MEASURED"],
+            ["BUFFERBLOAT GRADE", "NOT MEASURED"],
+            ["PER-CLIENT PRIORITY", "NOT CONFIGURED"],
+          ]} />
+        </Panel>
+        <Panel title="Policy controls" eyebrow="READ-ONLY SAFETY">
+          <Status active={false}>CONFIGURATION LOCKED</Status>
+          <div className="module-message">Gaming profiles, CAKE options, bandwidth changes, traffic classes and per-client priority are not writable through this API. No changes are made to the router from this page.</div>
+        </Panel>
       </div>
-    </div>
-  );
-}
-
-function ToggleButton({
-  label,
-  enabled,
-  onClick,
-}: {
-  label: string;
-  enabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      className={enabled ? "engine-toggle active" : "engine-toggle"}
-      onClick={onClick}
-    >
-      <span />
-      {label}
-    </button>
-  );
-}
-
-function MetricTile({
-  label,
-  value,
-  unit,
-  detail,
-  good,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  detail: string;
-  good?: boolean;
-}) {
-  return (
-    <div className="gaming-metric-tile">
-      <span>{label}</span>
-
-      <strong>
-        {value}
-        {unit && <small>{unit}</small>}
-      </strong>
-
-      <em className={good ? "metric-good" : ""}>
-        {detail}
-      </em>
     </div>
   );
 }

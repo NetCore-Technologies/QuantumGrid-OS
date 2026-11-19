@@ -313,6 +313,74 @@ function action_index()
 	require("luci.http").redirect("/quantumgrid/")
 end
 
+local function sqm_status(uci, fs)
+	local result = {
+		installed = fs.access("/etc/init.d/sqm") == true,
+		config_available = fs.access("/etc/config/sqm") == true,
+		queues = {},
+		runtime_available = false,
+		qdiscs = {}
+	}
+	local ok = pcall(function()
+		uci:foreach("sqm", "queue", function(section)
+			if #result.queues < 16 then
+				table.insert(result.queues, {
+					name = tostring(section[".name"] or ""),
+					enabled = section.enabled == "1",
+					interface = tostring(section.interface or ""),
+					download_kbps = tonumber(section.download),
+					upload_kbps = tonumber(section.upload),
+					qdisc = tostring(section.qdisc or ""),
+					script = tostring(section.script or ""),
+					linklayer = tostring(section.linklayer or "")
+				})
+			end
+		end)
+	end)
+	result.config_readable = ok
+
+	-- Fixed read-only command; no request or UCI value is passed to a shell.
+	local util = require "luci.util"
+	local exec_ok, output = pcall(util.exec, "tc -s qdisc show")
+	if exec_ok and type(output) == "string" then
+		result.runtime_available = true
+		local current = nil
+		for line in output:gmatch("[^\r\n]+") do
+			local kind, handle, details = line:match("^qdisc%s+(%S+)%s+(%S+)%s*(.*)$")
+			if kind then
+				current = {
+					kind = kind,
+					handle = handle,
+					device = details:match("dev%s+(%S+)"),
+					parent = details:match("parent%s+(%S+)"),
+					root = details:match("%f[%a]root%f[%A]") ~= nil
+				}
+				if #result.qdiscs < 64 then
+					table.insert(result.qdiscs, current)
+				else
+					current = nil
+				end
+			elseif current then
+				local bytes, packets, dropped, overlimits, requeues =
+					line:match("Sent%s+(%d+)%s+bytes%s+(%d+)%s+pkt%s+%(%s*dropped%s+(%d+),%s*overlimits%s+(%d+)%s+requeues%s+(%d+)%)")
+				if bytes then
+					current.bytes = tonumber(bytes)
+					current.packets = tonumber(packets)
+					current.dropped = tonumber(dropped)
+					current.overlimits = tonumber(overlimits)
+					current.requeues = tonumber(requeues)
+				end
+				local backlog_bytes, backlog_packets = line:match("backlog%s+(%d+)b%s+(%d+)p")
+				if backlog_bytes then
+					current.backlog_bytes = tonumber(backlog_bytes)
+					current.backlog_packets = tonumber(backlog_packets)
+				end
+			end
+		end
+	end
+	return result
+end
+
 function action_api()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
@@ -329,6 +397,7 @@ function action_api()
 		or fs.access("/dev/ttyUSB2") == true
 		or fs.access("/dev/ttyUSB3") == true
 	local wireless = wireless_status()
+	local sqm = sqm_status(uci, fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -347,6 +416,7 @@ function action_api()
 		clients = dhcp_clients(),
 		wireless = wireless,
 		wireless_clients = wireless_clients(wireless),
+		sqm = sqm,
 		cellular = { modem_present = modem_present },
 		phone = {
 			service_installed = phone_service,

@@ -51,6 +51,41 @@ export interface RouterWirelessClient {
   tx_failed?: number;
 }
 
+export interface RouterSqmQueue {
+  name: string;
+  enabled: boolean;
+  interface: string;
+  download_kbps?: number;
+  upload_kbps?: number;
+  qdisc: string;
+  script: string;
+  linklayer: string;
+}
+
+export interface RouterQdiscState {
+  kind: string;
+  handle: string;
+  device?: string;
+  parent?: string;
+  root: boolean;
+  bytes?: number;
+  packets?: number;
+  dropped?: number;
+  overlimits?: number;
+  requeues?: number;
+  backlog_bytes?: number;
+  backlog_packets?: number;
+}
+
+export interface RouterSqmStatus {
+  installed: boolean;
+  config_available: boolean;
+  config_readable: boolean;
+  queues: RouterSqmQueue[];
+  runtime_available: boolean;
+  qdiscs: RouterQdiscState[];
+}
+
 export interface RouterOverview {
   ok: true;
   timestamp: number;
@@ -71,6 +106,7 @@ export interface RouterOverview {
   clients?: RouterClient[];
   wireless: RouterWirelessRadio[];
   wireless_clients?: RouterWirelessClient[];
+  sqm?: RouterSqmStatus;
   cellular: { modem_present: boolean };
   phone: {
     service_installed: boolean;
