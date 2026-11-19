@@ -1540,7 +1540,7 @@ function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview
         </Panel>
       </div>
       <Panel title="Data provenance" eyebrow="HOW TO READ THIS LIST">
-        <div className="module-message">DHCP leases show address allocation. Wi-Fi entries come from hostapd association state. Signal and rates are shown only when the router driver reports them; neither source implies every LAN device is wireless or reachable through ICMP.</div>
+        <div className="module-message">DHCP leases show address allocation. Wi-Fi entries come from iwinfo association data. Signal and rates are shown only when the router driver reports them; neither source implies every LAN device is wireless or reachable through ICMP.</div>
       </Panel>
     </div>
   );
@@ -1781,7 +1781,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           <div className="module-message">Band steering, channel selection, channel width, transmit power, roaming and radio enable/disable are not applied by this interface. They will be enabled only when backed by authenticated services, capability checks and a recovery path.</div>
         </Panel>
       </div>
-      <Panel title="Associated Wi-Fi clients" eyebrow="HOSTAPD ASSOCIATION STATE">
+      <Panel title="Associated Wi-Fi clients" eyebrow="IWINFO ASSOCIATION DATA">
         <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
         <div className="module-message">Signal, noise, rates, counters, connected time and retries come from iwinfo association data. A driver may omit individual fields. This is current AP association data, not a DHCP lease or an ICMP reachability test.</div>
       </Panel>
