@@ -20,6 +20,7 @@ import {
   Network,
   RefreshCw,
   Router,
+  RadioTower,
   Settings,
   Shield,
   SlidersHorizontal,
