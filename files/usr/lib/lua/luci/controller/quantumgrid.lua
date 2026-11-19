@@ -180,6 +180,57 @@ local function dhcp_clients()
 	return result
 end
 
+-- Read associated Wi-Fi stations from hostapd's read-only ubus API.
+-- RSSI and rates are optional because some drivers do not expose every field.
+local function wireless_clients(radios)
+	local result = {}
+	for _, radio in ipairs(radios or {}) do
+		for _, iface in ipairs(radio.interfaces or {}) do
+			local ifname = iface.ifname
+			local valid_ifname = type(ifname) == "string" and ifname:match("^[%w_.%-]+$") ~= nil
+			if valid_ifname then
+				local status = ubus_call("hostapd." .. ifname, "get_clients", {})
+				if status and type(status.clients) == "table" then
+					local frequency = tonumber(status.freq)
+					local band = "Unknown"
+					if frequency then
+						if frequency >= 5925 then band = "6 GHz"
+						elseif frequency >= 5000 then band = "5 GHz"
+						elseif frequency >= 2400 then band = "2.4 GHz" end
+					end
+					for mac, station in pairs(status.clients) do
+						local valid_mac = type(mac) == "string"
+							and mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
+						if valid_mac and type(station) == "table" and station.assoc == true then
+							local rates = type(station.rate) == "table" and station.rate or {}
+							local rx_kbps = tonumber(rates.rx)
+							local tx_kbps = tonumber(rates.tx)
+							table.insert(result, {
+								ifname = ifname,
+								radio = tostring(radio.name or ""),
+								ssid = tostring(iface.ssid or ""),
+								mac = mac:lower(),
+								associated = true,
+								authorized = station.authorized == true,
+								signal_dbm = tonumber(station.signal),
+								rx_rate_mbps = rx_kbps and rx_kbps / 1000 or nil,
+								tx_rate_mbps = tx_kbps and tx_kbps / 1000 or nil,
+								frequency_mhz = frequency,
+								band = band
+							})
+						end
+					end
+				end
+			end
+		end
+	end
+	table.sort(result, function(left, right)
+		if left.ifname == right.ifname then return left.mac < right.mac end
+		return left.ifname < right.ifname
+	end)
+	return result
+end
+
 local function ping_probe()
 	local util = require "luci.util"
 	-- Fixed diagnostic destination; no client-supplied shell arguments.
@@ -265,6 +316,7 @@ function action_api()
 	local modem_present = fs.access("/dev/cdc-wdm0") == true
 		or fs.access("/dev/ttyUSB2") == true
 		or fs.access("/dev/ttyUSB3") == true
+	local wireless = wireless_status()
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -281,7 +333,8 @@ function action_api()
 		},
 		interfaces = network_interfaces(),
 		clients = dhcp_clients(),
-		wireless = wireless_status(),
+		wireless = wireless,
+		wireless_clients = wireless_clients(wireless),
 		cellular = { modem_present = modem_present },
 		phone = {
 			service_installed = phone_service,

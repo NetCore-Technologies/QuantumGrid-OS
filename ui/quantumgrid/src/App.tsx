@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, type RouterClient, type RouterOverview } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, type RouterClient, type RouterOverview, type RouterWirelessClient } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -1468,9 +1468,55 @@ function ClientLeaseList({ clients, available, maxRows }: { clients: RouterClien
   );
 }
 
+function WirelessClientList({
+  clients,
+  available,
+  leases,
+}: {
+  clients: RouterWirelessClient[];
+  available: boolean;
+  leases: RouterClient[];
+}) {
+  if (!available) return <div className="module-message">Wireless association telemetry is not available from this router API.</div>;
+  if (clients.length === 0) return <div className="module-message">No associated Wi-Fi stations were reported by hostapd.</div>;
+  const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
+  return (
+    <div className="wifi-client-table">
+      <div className="wifi-client-table-head">
+        <span>DEVICE / MAC</span>
+        <span>RADIO</span>
+        <span>SIGNAL</span>
+        <span>RX / TX RATE</span>
+        <span>STATE</span>
+      </div>
+      {clients.map((client) => (
+        <div className="wifi-client-table-row" key={`${client.ifname}-${client.mac}`}>
+          <div className="wifi-client-name">
+            <div className="device-icon"><Wifi size={15} /></div>
+            <div>
+              <strong>{hostnames.get(client.mac.toLowerCase()) || client.mac.toUpperCase()}</strong>
+              <span>{client.ssid || client.ifname} · {client.mac.toUpperCase()}</span>
+            </div>
+          </div>
+          <b>{client.band}</b>
+          <b>{client.signal_dbm === undefined ? "N/A" : `${fmt(client.signal_dbm)} dBm`}</b>
+          <b>{client.rx_rate_mbps === undefined || client.tx_rate_mbps === undefined
+            ? "N/A"
+            : `${fmt(client.rx_rate_mbps, 1)} / ${fmt(client.tx_rate_mbps, 1)} Mbps`}</b>
+          <span className={client.authorized ? "priority-pill high" : "priority-pill normal"}>
+            {client.authorized ? "AUTHORIZED" : "ASSOCIATED"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const clients = routerOverview?.clients ?? [];
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
+  const wirelessClients = routerOverview?.wireless_clients ?? [];
+  const wirelessInventoryAvailable = Array.isArray(routerOverview?.wireless_clients);
   return (
     <div className="module-page">
       <section className="module-hero">
@@ -1485,10 +1531,13 @@ function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview
         <Panel title="DHCPv4 client inventory" eyebrow="ROUTER LEASE TABLE" action={<Status active={inventoryAvailable}>{inventoryAvailable ? "LIVE" : "WAITING"}</Status>}>
           <ClientLeaseList clients={clients} available={inventoryAvailable} />
         </Panel>
-        <Panel title="Data provenance" eyebrow="HOW TO READ THIS LIST">
-          <div className="module-message">An unexpired DHCP lease means the router allocated an address; it does not prove that a device is reachable now or connected over Wi-Fi. Static-IP devices and clients using another DHCP server may not appear in this list.</div>
+        <Panel title="Associated Wi-Fi clients" eyebrow="LIVE HOSTAPD ASSOCIATIONS" action={<Status active={wirelessInventoryAvailable}>{wirelessInventoryAvailable ? "LIVE" : "WAITING"}</Status>}>
+          <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
         </Panel>
       </div>
+      <Panel title="Data provenance" eyebrow="HOW TO READ THIS LIST">
+        <div className="module-message">DHCP leases show address allocation. Wi-Fi entries come from hostapd association state. Signal and rates are shown only when the router driver reports them; neither source implies every LAN device is wireless or reachable through ICMP.</div>
+      </Panel>
     </div>
   );
 }
@@ -1687,6 +1736,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
+  const wirelessClients = routerOverview?.wireless_clients ?? [];
+  const wirelessInventoryAvailable = Array.isArray(routerOverview?.wireless_clients);
 
   return (
     <div className="module-page">
@@ -1726,9 +1777,12 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           <div className="module-message">Band steering, channel selection, channel width, transmit power, roaming and radio enable/disable are not applied by this interface. They will be enabled only when backed by authenticated services, capability checks and a recovery path.</div>
         </Panel>
       </div>
+      <Panel title="Associated Wi-Fi clients" eyebrow="HOSTAPD ASSOCIATION STATE">
+        <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
+        <div className="module-message">Signal and transmit/receive rates are displayed only when the wireless driver exposes them through hostapd. This is current AP association data, not a DHCP lease or an ICMP reachability test.</div>
+      </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />
-        <div className="module-message">DHCP leases record address allocations; they do not confirm current reachability or Wi-Fi association and do not include RSSI or link rate.</div>
       </Panel>
     </div>
   );

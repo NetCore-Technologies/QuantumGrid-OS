@@ -28,6 +28,20 @@ export interface RouterClient {
   lease_remaining_seconds: number | null;
 }
 
+export interface RouterWirelessClient {
+  ifname: string;
+  radio: string;
+  ssid: string;
+  mac: string;
+  associated: boolean;
+  authorized: boolean;
+  signal_dbm?: number;
+  rx_rate_mbps?: number;
+  tx_rate_mbps?: number;
+  frequency_mhz?: number;
+  band: string;
+}
+
 export interface RouterOverview {
   ok: true;
   timestamp: number;
@@ -47,6 +61,7 @@ export interface RouterOverview {
   interfaces: RouterInterface[];
   clients?: RouterClient[];
   wireless: RouterWirelessRadio[];
+  wireless_clients?: RouterWirelessClient[];
   cellular: { modem_present: boolean };
   phone: {
     service_installed: boolean;
