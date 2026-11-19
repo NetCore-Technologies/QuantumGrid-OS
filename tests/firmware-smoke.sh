@@ -41,7 +41,7 @@ grep -Fq 'wireless_clients = wireless_clients(wireless)' "$ROOT/files/usr/lib/lu
 grep -Fq 'signal_dbm' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'rx_rate_mbps' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function WirelessClientList' "$ROOT/ui/quantumgrid/src/App.tsx"
-grep -Fq 'associated Wi-Fi clients' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'Associated Wi-Fi clients' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'function DevicesControlPage' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'function ClientLeaseList' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'docs/site.js' "$ROOT/.github/workflows/ci.yml"
