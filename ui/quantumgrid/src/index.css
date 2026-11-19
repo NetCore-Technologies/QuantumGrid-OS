@@ -1783,7 +1783,15 @@ button:disabled {
 .wifi-scan-row {
   grid-template-columns: minmax(190px, 1.7fr) repeat(5, minmax(100px, 1fr));
 }
-.wifi-scan-button:disabled { cursor: not-allowed; opacity: .48; }
+.wifi-scan-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.wifi-scan-button:disabled,
+.wifi-export-button:disabled { cursor: not-allowed; opacity: .48; }
 .wifi-channel-row {
   grid-template-columns: minmax(190px, 1.7fr) repeat(3, minmax(105px, 1fr));
 }

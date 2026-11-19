@@ -83,7 +83,9 @@ including SSID/BSSID, band, channel, frequency, signal/quality and encryption me
 versions and authentication where exposed). Unknown security metadata is not classified as open.
 Scans are rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic
 while scanning. The same page groups observed BSSIDs by reported band/channel and shows strongest
-reported signal; these counts are scan visibility only, not airtime or interference measurements. The
+reported signal; these counts are scan visibility only, not airtime or interference measurements.
+Scan inventories can be exported as CSV; network-controlled text is quoted and spreadsheet
+formula prefixes are neutralised in the export. The
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming
 reports SQM queue configuration and read-only kernel qdisc
 counters; it does not yet write queue policy or measure jitter, packet loss or bufferbloat.

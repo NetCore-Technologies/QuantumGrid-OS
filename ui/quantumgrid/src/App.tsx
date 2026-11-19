@@ -2332,6 +2332,14 @@ function summarizeWifiChannels(results: RouterWifiScan["results"]): WifiChannelG
   });
 }
 
+
+function csvCell(value: string | number | null | undefined): string {
+  let text = value === null || value === undefined ? "" : String(value);
+  // Treat network-controlled SSIDs and other fields as text in spreadsheet applications.
+  if (/^[\t\r\n ]*[=+\-@]/.test(text)) text = "'" + text;
+  return '"' + text.replace(/"/g, '""') + '"';
+}
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
@@ -2353,6 +2361,29 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const bandsObserved = scan ? new Set(scan.results.map((network) => network.band)).size : 0;
   const openNetworkCount = scan ? scan.results.filter((network) => network.security === "Open").length : 0;
   const unknownSecurityCount = scan ? scan.results.filter((network) => network.security === "Unknown").length : 0;
+  const exportWifiScan = () => {
+    if (!scan || scan.results.length === 0) return;
+    const scannedAt = new Date(scan.scanned_at * 1000).toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Mode"],
+      ...scan.results.map((network) => [
+        scannedAt, network.radio, network.ifname, network.ssid, network.bssid,
+        network.band, network.channel, network.frequency_mhz, network.signal_dbm,
+        network.quality, network.quality_max, network.security,
+        network.authentication?.join("/"), network.mode,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `quantumgrid-wifi-scan-${scannedAt.replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
   const runWirelessScan = async () => {
     setScanLoading(true);
     setScanError("");
@@ -2387,7 +2418,12 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       <Panel
         title="Nearby access points"
         eyebrow="MANUAL IWINFO SCAN"
-        action={<button className="hero-button wifi-scan-button" onClick={() => void runWirelessScan()} disabled={!routerOverview || scanLoading}>{scanLoading ? "Scanning…" : scan ? "Scan again" : "Scan nearby networks"}</button>}
+        action={
+          <div className="wifi-scan-actions">
+            <button className="hero-button wifi-scan-button" onClick={() => void runWirelessScan()} disabled={!routerOverview || scanLoading}>{scanLoading ? "Scanning…" : scan ? "Scan again" : "Scan nearby networks"}</button>
+            <button className="hero-button wifi-export-button" onClick={exportWifiScan} disabled={!scan || scan.results.length === 0}>Export CSV</button>
+          </div>
+        }
       >
         {scanError ? <div className="module-message" role="alert">{scanError}</div> : null}
         {!scan ? (
@@ -2421,7 +2457,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
             )}
           </>
         )}
-        <div className="module-message">Scans use the router’s native iwinfo API and do not change Wi-Fi configuration. Depending on the radio driver, a scan may briefly interrupt or slow wireless traffic. Results are cached for 30 seconds to prevent repeated scans.</div>
+        <div className="module-message">Scans use the router’s native iwinfo API and do not change Wi-Fi configuration. Depending on the radio driver, a scan may briefly interrupt or slow wireless traffic. Results are cached for 30 seconds to prevent repeated scans. CSV export quotes fields and neutralises spreadsheet formula prefixes in network-controlled text.</div>
       </Panel>
       <Panel title="Channel visibility" eyebrow="SCAN INVENTORY · NOT AIRTIME">
         {!scan ? (
