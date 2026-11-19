@@ -115,4 +115,11 @@ grep -Fq 'authenticate(username, "")' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq '/cgi-bin/luci/admin/services/fxs/status' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq "uci -q set fxs.main.enabled='0'" "$ROOT/files/etc/uci-defaults/90-quantumgrid-fxs-safe"
 
-echo "QuantumGrid AW1000 target, pinned firmware source, RJ11 and release asset checks passed."
+grep -Fq 'type CellularHistorySample' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'function CellularSignalHistory' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq '5G RF signal history' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'sampledAt >= sample.sampledAt' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'Bar heights compare readings within this session only' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq '.rf-history-track' "$ROOT/ui/quantumgrid/src/index.css"
+
+echo "QuantumGrid AW1000 target, pinned firmware source, RJ11, QMI history and release asset checks passed."

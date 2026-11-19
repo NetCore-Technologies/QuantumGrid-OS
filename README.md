@@ -76,13 +76,13 @@ its Vite output into the firmware root filesystem at `/www/quantumgrid`. After b
 at `http://<router-address>/quantumgrid/`. The dashboard, Network, Diagnostics, System and Analytics views use live router API data for
 system metrics, WAN counters and a short rolling throughput window. Wi-Fi and Network show
 iwinfo radio channel/frequency, AP signal/noise, bitrate, quality and transmit power where the
-wireless driver reports them. The Devices
-and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming reports
-SQM queue configuration and read-only kernel qdisc counters; it does not yet write queue policy
-or measure jitter, packet loss or bufferbloat. The 5G page reports modem device detection only;
-The 5G page reads QMI registration, radio type, data-session state and RF measurements where
-the modem reports them; values are cached briefly and no SIM identifiers or credentials are
-requested. Security reports firewall zone policies, nftables table presence, Adblock Fast
+wireless driver reports them. The Devices and Wi-Fi views include unexpired DHCP leases and
+iwinfo station associations. Gaming reports SQM queue configuration and read-only kernel qdisc
+counters; it does not yet write queue policy or measure jitter, packet loss or bufferbloat.
+The 5G page reads QMI registration, serving radio interface, roaming state, data-session status
+and RF measurements where the modem reports them. It retains up to 30 distinct modem RF samples
+in the current UI session, without assigning a synthetic signal score. QMI values are cached
+briefly and no SIM identifiers or credentials are requested. Security reports firewall zone policies, nftables table presence, Adblock Fast
 configuration and WireGuard/OpenVPN service state without exposing VPN secrets or changing
 router configuration. Advanced policy controls
 remain unconnected and read-only.
@@ -124,8 +124,9 @@ The QuantumGrid control centre authenticates with the existing LuCI/OpenWrt admi
 session. It does not create a second Linux user or store the router password in browser storage.
 The read-only LuCI API reports system load, CPU/memory/temperature where available, WAN/LAN
 interface counters, unexpired DHCPv4 leases, wireless radio state, live iwinfo-associated
-Wi-Fi stations, modem device presence and RJ11 service/patch state. Signal strength and RX/TX
-rates are included only when the wireless driver reports them. DHCP leases show address
+Wi-Fi stations, modem device presence, QMI registration/data-session status and cellular RF
+measurements where returned, plus RJ11 service/patch state. Signal strength and RX/TX rates
+are included only when the relevant wireless or modem interface reports them. DHCP leases show address
 allocation, not current reachability or wireless association.
 WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi association
 data is read from OpenWrt's iwinfo ubus API; missing RF fields remain unavailable rather than

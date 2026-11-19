@@ -64,6 +64,14 @@ type Stats = {
   temp: number | null;
 };
 
+type CellularHistorySample = {
+  sampledAt: number;
+  rssi_dbm: number | null;
+  rsrp_dbm: number | null;
+  rsrq_db: number | null;
+  snr_db: number | null;
+};
+
 const nav = [
   ["dashboard", "Dashboard", CircleGauge],
   ["gaming", "Gaming", Gamepad2],
@@ -1147,6 +1155,7 @@ function Dashboard({
   telemetryError,
   routerOverview,
   trafficHistory,
+  cellularHistory,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -1159,6 +1168,7 @@ function Dashboard({
   telemetryError: string;
   routerOverview: RouterOverview | null;
   trafficHistory: number[];
+  cellularHistory: CellularHistorySample[];
 }) {
   const [mobile, setMobile] = useState(false);
 
@@ -1785,7 +1795,77 @@ function AnalyticsControlPage({ stats, trafficHistory }: { stats: Stats; traffic
   );
 }
 
-function CellularControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+const cellularSignalSeries = [
+  { key: "rssi_dbm", label: "RSSI", unit: "dBm" },
+  { key: "rsrp_dbm", label: "RSRP", unit: "dBm" },
+  { key: "rsrq_db", label: "RSRQ", unit: "dB" },
+  { key: "snr_db", label: "SNR", unit: "dB" },
+] as const;
+
+function CellularSignalHistory({ history }: { history: CellularHistorySample[] }) {
+  const latest = history[history.length - 1];
+
+  return (
+    <Panel
+      title="5G RF signal history"
+      eyebrow="UP TO 30 DISTINCT QMI READINGS"
+      action={<Status active={history.length > 0}>{history.length > 0 ? `${history.length} SAMPLES` : "WAITING"}</Status>}
+    >
+      {history.length === 0 ? (
+        <div className="module-message">Waiting for the modem to return numeric RF measurements. No sample is generated when the modem does not report a value.</div>
+      ) : (
+        <div className="rf-history">
+          {cellularSignalSeries.map((metric) => {
+            const readings = history.map((sample) => sample[metric.key]);
+            const values = readings.filter((value): value is number => value !== null && Number.isFinite(value));
+            const minimum = values.length > 0 ? Math.min(...values) : 0;
+            const maximum = values.length > 0 ? Math.max(...values) : 0;
+            const current = values[values.length - 1];
+
+            return (
+              <div className="rf-history-row" key={metric.key}>
+                <div className="rf-history-heading">
+                  <strong>{metric.label}</strong>
+                  <span>{current === undefined ? "NOT REPORTED" : `${fmt(current, 1)} ${metric.unit}`}</span>
+                </div>
+                <div className="rf-history-track" role="img" aria-label={`${metric.label} history across ${history.length} distinct modem samples`}>
+                  {readings.map((value, index) => {
+                    const height = value === null
+                      ? 4
+                      : maximum === minimum
+                        ? 52
+                        : 10 + ((value - minimum) / (maximum - minimum)) * 90;
+                    const title = value === null
+                      ? `${metric.label}: not reported`
+                      : `${metric.label}: ${fmt(value, 1)} ${metric.unit}`;
+
+                    return (
+                      <div className="rf-history-column" key={history[index].sampledAt}>
+                        <span
+                          className={value === null ? "rf-history-gap" : ""}
+                          style={{ height: `${height}%` }}
+                          title={title}
+                          aria-hidden="true"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {latest && (
+        <div className="module-message">
+          {history.length} unique modem samples · Last sample {new Date(latest.sampledAt * 1000).toLocaleTimeString()}. Bar heights compare readings within this session only; they are not a coverage or signal-quality grade.
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function CellularControlPage({ routerOverview, cellularHistory }: { routerOverview: RouterOverview | null; cellularHistory: CellularHistorySample[] }) {
   const cellular = routerOverview?.cellular;
   const detected = cellular?.modem_present ?? false;
   const registered = cellular?.registered === true;
@@ -1851,6 +1931,8 @@ function CellularControlPage({ routerOverview }: { routerOverview: RouterOvervie
         ]} />
         <div className="module-message">Read-only queries are cached for eight seconds. The page does not change network mode, APN, roaming, registration, SIM PIN or data-session state. IMEI, IMSI and SIM credentials are never requested.</div>
       </Panel>
+
+      <CellularSignalHistory history={cellularHistory} />
     </div>
   );
 }
@@ -1994,7 +2076,7 @@ function DashboardPage({
   if (page === "diagnostics") return <DiagnosticsControlPage stats={stats} telemetryError={telemetryError} routerOverview={routerOverview} refresh={refresh} />;
   if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} />;
   if (page === "analytics") return <AnalyticsControlPage stats={stats} trafficHistory={trafficHistory} />;
-  if (page === "5g") return <CellularControlPage routerOverview={routerOverview} />;
+  if (page === "5g") return <CellularControlPage routerOverview={routerOverview} cellularHistory={cellularHistory} />;
 
   if (page === "dashboard") {
     return (
@@ -2496,6 +2578,7 @@ function App() {
   const [telemetryError, setTelemetryError] = useState("");
   const [routerOverview, setRouterOverview] = useState<RouterOverview | null>(null);
   const [trafficHistory, setTrafficHistory] = useState<number[]>(() => Array(30).fill(0));
+  const [cellularHistory, setCellularHistory] = useState<CellularHistorySample[]>([]);
   const previousNetworkSample = useRef<{
     device: string;
     rx: number;
@@ -2549,6 +2632,26 @@ function App() {
       });
       setRouterOverview(overview);
       setTrafficHistory((history) => [...history.slice(1), wan ? download + upload : 0]);
+
+      const cellular = overview.cellular;
+      if (!cellular.qmi_available) {
+        setCellularHistory([]);
+      } else if (Number.isFinite(cellular.sampled_at)) {
+        const sample: CellularHistorySample = {
+          sampledAt: cellular.sampled_at,
+          rssi_dbm: typeof cellular.rssi_dbm === "number" && Number.isFinite(cellular.rssi_dbm) ? cellular.rssi_dbm : null,
+          rsrp_dbm: typeof cellular.rsrp_dbm === "number" && Number.isFinite(cellular.rsrp_dbm) ? cellular.rsrp_dbm : null,
+          rsrq_db: typeof cellular.rsrq_db === "number" && Number.isFinite(cellular.rsrq_db) ? cellular.rsrq_db : null,
+          snr_db: typeof cellular.snr_db === "number" && Number.isFinite(cellular.snr_db) ? cellular.snr_db : null,
+        };
+        if ([sample.rssi_dbm, sample.rsrp_dbm, sample.rsrq_db, sample.snr_db].some((value) => value !== null)) {
+          setCellularHistory((history) => {
+            const latest = history[history.length - 1];
+            if (latest && latest.sampledAt >= sample.sampledAt) return history;
+            return [...history.slice(-29), sample];
+          });
+        }
+      }
       setTelemetryError("");
     } catch (error) {
       setTelemetryError(error instanceof Error ? error.message : "Router telemetry is unavailable.");
@@ -2592,6 +2695,7 @@ function App() {
       cache: "no-store",
     }).finally(() => {
       setLoggedIn(false);
+      setCellularHistory([]);
       setLoginPassword("");
       setLoginError("");
       setPage("dashboard");
@@ -2681,6 +2785,7 @@ function App() {
       telemetryError={telemetryError}
       routerOverview={routerOverview}
       trafficHistory={trafficHistory}
+      cellularHistory={cellularHistory}
     />
   );
 }
