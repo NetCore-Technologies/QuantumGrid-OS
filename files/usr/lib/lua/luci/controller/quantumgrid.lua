@@ -165,7 +165,44 @@ local function wireless_status()
 
 	for name, radio in pairs(status) do
 		if type(radio) == "table" then
-			local item = { name = name, up = radio.up == true, interfaces = {} }
+			local channel_device = nil
+			for _, candidate in ipairs(radio.interfaces or {}) do
+				local candidate_name = candidate.ifname
+				if type(candidate_name) == "string" and candidate_name:match("^[%w_.%-]+$") then
+					channel_device = candidate_name
+					break
+				end
+			end
+			local channels = {}
+			if channel_device then
+				local frequency_list = ubus_call("iwinfo", "freqlist", { device = channel_device }) or {}
+				for _, entry in ipairs(frequency_list.results or {}) do
+					if #channels < 128 then
+						local channel = tonumber(entry.channel)
+						local frequency = tonumber(entry.mhz)
+						if channel and channel > 0 and frequency and frequency > 0 then
+							local band = "Unknown"
+							if frequency >= 5925 then band = "6 GHz"
+							elseif frequency >= 5000 then band = "5 GHz"
+							elseif frequency >= 2400 then band = "2.4 GHz" end
+							local flags = {}
+							if type(entry.flags) == "table" then
+								for _, flag in ipairs(entry.flags) do
+									if type(flag) == "string" and #flags < 8 then table.insert(flags, flag) end
+								end
+							end
+							local active = nil
+							if entry.active ~= nil then active = entry.active == true or entry.active == 1 end
+							table.insert(channels, {
+								channel = channel, frequency_mhz = frequency, band = band,
+								restricted = entry.restricted == true or entry.restricted == 1,
+								active = active, flags = flags
+							})
+						end
+					end
+				end
+			end
+			local item = { name = name, up = radio.up == true, interfaces = {}, channels = channels }
 			for _, iface in ipairs(radio.interfaces or {}) do
 				local config = type(iface.config) == "table" and iface.config or {}
 				local ifname = iface.ifname

@@ -2286,6 +2286,32 @@ function WirelessRadioInventory({
         </div>
       )))}
     </div>
+    <div className="wireless-channel-inventory">
+      {radios.map((radio) => (
+        <section className="wireless-channel-section" key={radio.name}>
+          <div className="wireless-channel-heading">
+            <strong>{radio.name} · Driver frequency list</strong>
+            <span>{radio.channels?.length ? `${radio.channels.length} channel entries` : "Not reported"}</span>
+          </div>
+          {radio.channels?.length ? (
+            <div className="wireless-channel-chips">
+              {radio.channels.map((channel) => (
+                <div className={`wireless-channel-chip${channel.restricted ? " restricted" : ""}`} key={channel.band + "-" + channel.channel + "-" + channel.frequency_mhz}>
+                  <strong>{channel.band} · CH {channel.channel}</strong>
+                  <span>{fmt(channel.frequency_mhz)} MHz{channel.active ? " · CURRENT" : ""}</span>
+                  {channel.restricted || channel.flags.length > 0 ? (
+                    <small>{[channel.restricted ? "RESTRICTED" : "", ...channel.flags].filter(Boolean).join(" · ")}</small>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="module-message">The radio driver did not return a frequency/channel list.</div>
+          )}
+        </section>
+      ))}
+    </div>
+    <div className="module-message">The inventory comes from iwinfo.freqlist. Restricted flags and driver capabilities are shown as reported; they are not a substitute for the router's complete regulatory database or a guarantee that a channel is usable in every operating mode.</div>
     <div className="module-message">Channel busy is calculated from changes in the current channel's iwinfo busy-time and active-time counters between samples. It is a short-window airtime estimate, not a neighbouring-access-point scan; drivers without survey counters show N/A.</div>
     </>
   );

@@ -1780,6 +1780,17 @@ button:disabled {
 .wireless-radio-row {
   grid-template-columns: minmax(180px, 1.7fr) repeat(5, minmax(88px, 1fr));
 }
+.wireless-channel-inventory { display: grid; gap: 12px; margin-top: 14px; }
+.wireless-channel-section { min-width: 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.wireless-channel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
+.wireless-channel-heading strong { font-size: 9px; }
+.wireless-channel-heading span { color: var(--muted2); font-size: 8px; }
+.wireless-channel-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.wireless-channel-chip { display: grid; gap: 3px; min-width: 104px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.025); }
+.wireless-channel-chip strong { font-size: 8px; }
+.wireless-channel-chip span { color: var(--muted); font-size: 8px; }
+.wireless-channel-chip small { color: #e8ad6b; font-size: 6px; letter-spacing: .04em; }
+.wireless-channel-chip.restricted { border-color: rgba(232,173,107,.42); }
 .wifi-scan-row {
   grid-template-columns: minmax(190px, 1.7fr) repeat(5, minmax(100px, 1fr));
 }

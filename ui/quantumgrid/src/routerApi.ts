@@ -31,10 +31,20 @@ export interface RouterWirelessInterface {
   survey_interval_seconds?: number;
 }
 
+export interface RouterWirelessChannel {
+  channel: number;
+  frequency_mhz: number;
+  band: string;
+  restricted: boolean;
+  active?: boolean;
+  flags: string[];
+}
+
 export interface RouterWirelessRadio {
   name: string;
   up: boolean;
   interfaces: RouterWirelessInterface[];
+  channels?: RouterWirelessChannel[];
 }
 
 export interface RouterClient {
