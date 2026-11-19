@@ -2172,39 +2172,6 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
   );
 }
 
-function AdvancedToggle({
-  icon: Icon,
-  title,
-  description,
-  enabled,
-  setEnabled,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  enabled: boolean;
-  setEnabled: (value: boolean) => void;
-}) {
-  return (
-    <div className="advanced-toggle">
-      <div className="advanced-toggle-icon">
-        <Icon size={17} />
-      </div>
-      <div className="advanced-toggle-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-      <button
-        className={enabled ? "qg-switch enabled" : "qg-switch"}
-        onClick={() => setEnabled(!enabled)}
-        aria-label={`Toggle ${title}`}
-      >
-        <span />
-      </button>
-    </div>
-  );
-}
-
 function GenericModulePage({
   title,
   eyebrow,
