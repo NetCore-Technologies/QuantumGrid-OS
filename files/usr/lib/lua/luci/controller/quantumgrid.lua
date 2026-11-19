@@ -189,36 +189,48 @@ local function wireless_clients(radios)
 			local ifname = iface.ifname
 			local valid_ifname = type(ifname) == "string" and ifname:match("^[%w_.%-]+$") ~= nil
 			if valid_ifname then
-				local status = ubus_call("hostapd." .. ifname, "get_clients", {})
-				if status and type(status.clients) == "table" then
-					local frequency = tonumber(status.freq)
-					local band = "Unknown"
-					if frequency then
-						if frequency >= 5925 then band = "6 GHz"
-						elseif frequency >= 5000 then band = "5 GHz"
-						elseif frequency >= 2400 then band = "2.4 GHz" end
-					end
-					for mac, station in pairs(status.clients) do
-						local valid_mac = type(mac) == "string"
-							and mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
-						if valid_mac and type(station) == "table" and station.assoc == true then
-							local rates = type(station.rate) == "table" and station.rate or {}
-							local rx_kbps = tonumber(rates.rx)
-							local tx_kbps = tonumber(rates.tx)
-							table.insert(result, {
-								ifname = ifname,
-								radio = tostring(radio.name or ""),
-								ssid = tostring(iface.ssid or ""),
-								mac = mac:lower(),
-								associated = true,
-								authorized = station.authorized == true,
-								signal_dbm = tonumber(station.signal),
-								rx_rate_mbps = rx_kbps and rx_kbps / 1000 or nil,
-								tx_rate_mbps = tx_kbps and tx_kbps / 1000 or nil,
-								frequency_mhz = frequency,
-								band = band
-							})
-						end
+				-- rpcd-mod-iwinfo is included in the AW1000 image and exposes
+				-- station signal, bitrate, counters, connection and auth state.
+				local info = ubus_call("iwinfo", "info", { device = ifname }) or {}
+				local associations = ubus_call("iwinfo", "assoclist", { device = ifname }) or {}
+				local frequency = tonumber(info.frequency)
+				local band = "Unknown"
+				if frequency then
+					if frequency >= 5925 then band = "6 GHz"
+					elseif frequency >= 5000 then band = "5 GHz"
+					elseif frequency >= 2400 then band = "2.4 GHz" end
+				end
+				for _, station in ipairs(associations.results or {}) do
+					local mac = type(station) == "table" and station.mac or nil
+					local valid_mac = type(mac) == "string"
+						and mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
+					if valid_mac then
+						local rx = type(station.rx) == "table" and station.rx or {}
+						local tx = type(station.tx) == "table" and station.tx or {}
+						local rx_rate = tonumber(rx.rate)
+						local tx_rate = tonumber(tx.rate)
+						table.insert(result, {
+							ifname = ifname,
+							radio = tostring(radio.name or ""),
+							ssid = tostring(iface.ssid or info.ssid or ""),
+							mac = mac:lower(),
+							associated = true,
+							authorized = station.authorized == true,
+							signal_dbm = tonumber(station.signal_avg) or tonumber(station.signal),
+							noise_dbm = tonumber(station.noise),
+							rx_rate_mbps = rx_rate and rx_rate > 0 and rx_rate / 1000 or nil,
+							tx_rate_mbps = tx_rate and tx_rate > 0 and tx_rate / 1000 or nil,
+							frequency_mhz = frequency,
+							band = band,
+							connected_seconds = tonumber(station.connected_time),
+							inactive_ms = tonumber(station.inactive),
+							rx_bytes = tonumber(rx.bytes),
+							tx_bytes = tonumber(tx.bytes),
+							rx_packets = tonumber(rx.packets),
+							tx_packets = tonumber(tx.packets),
+							tx_retries = tonumber(tx.retries),
+							tx_failed = tonumber(tx.failed)
+						})
 					end
 				end
 			end

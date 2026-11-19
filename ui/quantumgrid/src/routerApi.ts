@@ -40,6 +40,15 @@ export interface RouterWirelessClient {
   tx_rate_mbps?: number;
   frequency_mhz?: number;
   band: string;
+  noise_dbm?: number;
+  connected_seconds?: number;
+  inactive_ms?: number;
+  rx_bytes?: number;
+  tx_bytes?: number;
+  rx_packets?: number;
+  tx_packets?: number;
+  tx_retries?: number;
+  tx_failed?: number;
 }
 
 export interface RouterOverview {

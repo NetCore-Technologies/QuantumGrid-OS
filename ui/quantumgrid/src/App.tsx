@@ -1478,7 +1478,7 @@ function WirelessClientList({
   leases: RouterClient[];
 }) {
   if (!available) return <div className="module-message">Wireless association telemetry is not available from this router API.</div>;
-  if (clients.length === 0) return <div className="module-message">No associated Wi-Fi stations were reported by hostapd.</div>;
+  if (clients.length === 0) return <div className="module-message">No associated Wi-Fi stations were reported by iwinfo.</div>;
   const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
   return (
     <div className="wifi-client-table">
@@ -1495,7 +1495,11 @@ function WirelessClientList({
             <div className="device-icon"><Wifi size={15} /></div>
             <div>
               <strong>{hostnames.get(client.mac.toLowerCase()) || client.mac.toUpperCase()}</strong>
-              <span>{client.ssid || client.ifname} · {client.mac.toUpperCase()}</span>
+              <span>
+                {client.ssid || client.ifname} · {client.mac.toUpperCase()}
+                {client.connected_seconds === undefined ? "" : ` · connected ${formatUptime(client.connected_seconds)}`}
+                {client.tx_retries === undefined ? "" : ` · TX retries ${fmt(client.tx_retries)}`}
+              </span>
             </div>
           </div>
           <b>{client.band}</b>
@@ -1779,7 +1783,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       </div>
       <Panel title="Associated Wi-Fi clients" eyebrow="HOSTAPD ASSOCIATION STATE">
         <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
-        <div className="module-message">Signal and transmit/receive rates are displayed only when the wireless driver exposes them through hostapd. This is current AP association data, not a DHCP lease or an ICMP reachability test.</div>
+        <div className="module-message">Signal, noise, rates, counters, connected time and retries come from iwinfo association data. A driver may omit individual fields. This is current AP association data, not a DHCP lease or an ICMP reachability test.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />
