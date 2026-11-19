@@ -76,8 +76,11 @@ its Vite output into the firmware root filesystem at `/www/quantumgrid`. After b
 at `http://<router-address>/quantumgrid/`. The dashboard, Network, Diagnostics, System and Analytics views use live router API data for
 system metrics, WAN counters and a short rolling throughput window. Wi-Fi and Network show
 iwinfo radio channel/frequency, AP signal/noise, bitrate, quality and transmit power where the
-wireless driver reports them. The Devices and Wi-Fi views include unexpired DHCP leases and
-iwinfo station associations. Gaming reports SQM queue configuration and read-only kernel qdisc
+wireless driver reports them. Current-channel busy airtime is calculated from successive
+read-only iwinfo survey counters where the driver supports them; unsupported radios remain N/A.
+This is a short-window current-channel estimate, not a neighbouring-access-point scan. The
+Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming
+reports SQM queue configuration and read-only kernel qdisc
 counters; it does not yet write queue policy or measure jitter, packet loss or bufferbloat.
 The 5G page reads QMI registration, serving radio interface, roaming state, data-session status
 and RF measurements where the modem reports them. It retains up to 30 distinct modem RF samples

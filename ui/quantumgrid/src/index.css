@@ -1777,6 +1777,10 @@ button:disabled {
   border-bottom: 0;
 }
 
+.wireless-radio-row {
+  grid-template-columns: minmax(180px, 1.7fr) repeat(5, minmax(88px, 1fr));
+}
+
 .device-title {
   display: flex;
   align-items: center;

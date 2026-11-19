@@ -21,6 +21,9 @@ export interface RouterWirelessInterface {
   bitrate_kbps?: number;
   quality?: number;
   quality_max?: number;
+  survey_supported?: boolean;
+  channel_busy_percent?: number;
+  survey_interval_seconds?: number;
 }
 
 export interface RouterWirelessRadio {

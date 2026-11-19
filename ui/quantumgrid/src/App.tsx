@@ -2267,9 +2267,10 @@ function WirelessRadioInventory({
   }
 
   return (
+    <>
     <div className="device-list">
       {radios.map((radio) => radio.interfaces.map((iface) => (
-        <div className="device-row" key={`${radio.name}-${iface.ifname}`}>
+        <div className="device-row wireless-radio-row" key={`${radio.name}-${iface.ifname}`}>
           <div className="device-title">
             <div className="device-icon"><Wifi size={17} /></div>
             <div>
@@ -2281,9 +2282,12 @@ function WirelessRadioInventory({
           <div><small>AP SIGNAL / NOISE</small><b>{iface.signal_dbm === undefined ? "N/A" : `${fmt(iface.signal_dbm)} dBm`}{iface.noise_dbm === undefined ? "" : ` / ${fmt(iface.noise_dbm)} dBm`}</b></div>
           <div><small>BITRATE</small><b>{formatKbps(iface.bitrate_kbps)}</b></div>
           <div><small>QUALITY / TX POWER</small><b>{iface.quality === undefined ? "N/A" : `${fmt(iface.quality)}/${fmt(iface.quality_max ?? 0)}`}{iface.txpower_dbm === undefined ? "" : ` · ${fmt(iface.txpower_dbm)} dBm`}</b></div>
+          <div><small>CHANNEL BUSY</small><b>{iface.channel_busy_percent === undefined ? (iface.survey_supported ? "COLLECTING" : "N/A") : `${fmt(iface.channel_busy_percent, 1)}% · ${fmt(iface.survey_interval_seconds ?? 0)}s`}</b></div>
         </div>
       )))}
     </div>
+    <div className="module-message">Channel busy is calculated from changes in the current channel's iwinfo busy-time and active-time counters between samples. It is a short-window airtime estimate, not a neighbouring-access-point scan; drivers without survey counters show N/A.</div>
+    </>
   );
 }
 

@@ -5,6 +5,7 @@
 module("luci.controller.quantumgrid", package.seeall)
 
 local previous_cpu = nil
+local previous_survey = {}
 local cellular_cache = nil
 local cellular_cache_at = 0
 
@@ -119,6 +120,43 @@ local function network_interfaces()
 	return result
 end
 
+local function wireless_survey(ifname, frequency)
+	local response = ubus_call("iwinfo", "survey", { device = ifname }) or {}
+	local entries = type(response.results) == "table" and response.results or {}
+	local sampled_at = os.time()
+
+	for _, entry in ipairs(entries) do
+		local mhz = tonumber(entry.mhz)
+		local active_time = tonumber(entry.active_time)
+		local busy_time = tonumber(entry.busy_time)
+		if frequency and mhz == frequency and active_time and busy_time
+			and active_time > 0 and busy_time >= 0 and busy_time <= active_time then
+			local result = { supported = true }
+			local previous = previous_survey[ifname]
+			if previous and previous.mhz == mhz then
+				local interval = sampled_at - previous.sampled_at
+				local active_delta = active_time - previous.active_time
+				local busy_delta = busy_time - previous.busy_time
+				if interval > 0 and interval <= 20 and active_delta > 0
+					and busy_delta >= 0 and busy_delta <= active_delta then
+					result.busy_percent = busy_delta / active_delta * 100
+					result.interval_seconds = interval
+				end
+			end
+			previous_survey[ifname] = {
+				mhz = mhz,
+				active_time = active_time,
+				busy_time = busy_time,
+				sampled_at = sampled_at
+			}
+			return result
+		end
+	end
+
+	previous_survey[ifname] = nil
+	return { supported = false }
+end
+
 local function wireless_status()
 	local status = ubus_call("network.wireless", "status", {}) or {}
 	local result = {}
@@ -131,11 +169,16 @@ local function wireless_status()
 				local ifname = iface.ifname
 				local valid_ifname = type(ifname) == "string" and ifname:match("^[%w_.%-]+$") ~= nil
 				local info = valid_ifname and (ubus_call("iwinfo", "info", { device = ifname }) or {}) or {}
+				local interface_up = valid_ifname and iface.config ~= nil and radio.up == true
+				local survey = interface_up and wireless_survey(ifname, tonumber(info.frequency)) or { supported = false }
 				table.insert(item.interfaces, {
 					ifname = ifname or "",
 					ssid = config.ssid or info.ssid or "",
 					mode = config.mode or info.mode or "",
-					up = valid_ifname and iface.config ~= nil and radio.up == true,
+					up = interface_up,
+					survey_supported = survey.supported == true,
+					channel_busy_percent = survey.busy_percent,
+					survey_interval_seconds = survey.interval_seconds,
 					channel = tonumber(info.channel),
 					frequency_mhz = tonumber(info.frequency),
 					txpower_dbm = tonumber(info.txpower),
