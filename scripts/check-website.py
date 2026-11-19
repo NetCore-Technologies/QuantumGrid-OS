@@ -9,7 +9,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-SITE = ROOT / "Docs"
+SITE = ROOT / "docs"
+LEGACY_SITE = ROOT / "Docs"
 PAGES = (
     "index.html",
     "features.html",
@@ -82,6 +83,24 @@ def main() -> int:
     for name in ("styles.css", "site.js", "assets/quantumgrid.svg", "robots.txt", "sitemap.xml"):
         if not (SITE / name).is_file():
             errors.append(f"missing site asset: {name}")
+
+    # Keep the lowercase GitHub Pages source in sync with the legacy Docs path.
+    # Firmware packaging and historical GitHub links still read from Docs/.
+    for source in sorted(SITE.rglob("*")):
+        if not source.is_file():
+            continue
+        mirror = LEGACY_SITE / source.relative_to(SITE)
+        if not mirror.is_file():
+            errors.append(f"legacy Docs mirror is missing: {source.relative_to(SITE)}")
+        elif source.read_bytes() != mirror.read_bytes():
+            errors.append(f"website mirror differs from Docs/: {source.relative_to(SITE)}")
+
+    for legacy in sorted(LEGACY_SITE.rglob("*")):
+        if not legacy.is_file():
+            continue
+        mirror = SITE / legacy.relative_to(LEGACY_SITE)
+        if not mirror.is_file():
+            errors.append(f"lowercase Pages source is missing: {legacy.relative_to(LEGACY_SITE)}")
 
     sitemap = SITE / "sitemap.xml"
     if sitemap.is_file():

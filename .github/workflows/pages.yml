@@ -4,7 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "Docs/**"
+      - "Docs/**",
+      - "docs/**"
       - "scripts/check-website.py"
       - ".github/workflows/pages.yml"
       - "README.md"
@@ -39,7 +40,7 @@ jobs:
       - name: Validate local links, metadata and sitemap
         run: python3 scripts/check-website.py
       - name: Check website JavaScript
-        run: node --check Docs/site.js
+        run: node --check docs/site.js
       - name: Detect repository Pages configuration
         id: pages-check
         shell: bash
@@ -60,7 +61,7 @@ jobs:
       - name: Upload static site
         uses: actions/upload-pages-artifact@v4
         with:
-          path: Docs
+          path: docs
 
   deploy:
     name: Publish GitHub Pages

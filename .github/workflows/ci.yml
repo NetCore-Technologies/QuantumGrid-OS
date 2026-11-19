@@ -44,7 +44,7 @@ jobs:
         with:
           node-version: "22"
       - run: python3 scripts/check-website.py
-      - run: node --check Docs/site.js
+      - run: node --check docs/site.js
 
   firmware-scripts:
     name: Firmware integration checks
