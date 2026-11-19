@@ -2307,7 +2307,7 @@ function summarizeWifiChannels(results: RouterWifiScan["results"]): WifiChannelG
       ? network.channel
       : null;
     const band = network.band || "Unknown";
-    const key = \`\${band}:\${channel === null ? "unknown" : channel}\`;
+    const key = band + ":" + (channel === null ? "unknown" : String(channel));
     let group = groups.get(key);
     if (!group) {
       group = { band, channel, networks: [], strongestSignal: null, strongestSsid: "" };
