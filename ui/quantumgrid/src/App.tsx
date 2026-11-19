@@ -1315,6 +1315,7 @@ function Dashboard({
             telemetryError={telemetryError}
             routerOverview={routerOverview}
             trafficHistory={trafficHistory}
+            cellularHistory={cellularHistory}
           />
         </section>
       </main>
@@ -2057,6 +2058,7 @@ function DashboardPage({
   telemetryError,
   routerOverview,
   trafficHistory,
+  cellularHistory,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -2064,6 +2066,7 @@ function DashboardPage({
   telemetryError: string;
   routerOverview: RouterOverview | null;
   trafficHistory: number[];
+  cellularHistory: CellularHistorySample[];
 }) {
   const wanOnline = routerOverview?.interfaces.some((item) => item.is_wan && item.up) ?? false;
   const wifiOnline = routerOverview?.wireless.some((radio) => radio.up) ?? false;
