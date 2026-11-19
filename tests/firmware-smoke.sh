@@ -25,6 +25,8 @@ grep -Fq 'src-link quantumgrid_phone ' "$ROOT/scripts/setup-aw1000-phone-feed.sh
 grep -Fq 'setup-aw1000-phone-feed.sh' "$ROOT/quantumgrid-configure.sh"
 grep -Fq 'OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"' "$ROOT/build.sh"
 grep -Fq 'QG_OPENWRT_REF:' "$ROOT/.github/workflows/firmware-release.yml"
+! grep -Fq 'branches: [main]' "$ROOT/.github/workflows/firmware-release.yml"
+grep -Fq '"qg-v*"' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'squashfs-sysupgrade.bin' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'squashfs-factory.ubi' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'initramfs-uImage.itb' "$ROOT/.github/workflows/firmware-release.yml"

@@ -171,8 +171,9 @@ Windows EXE/MSI installers for this project.
 
 CI checks the existing React control centre with ESLint, TypeScript and Vite; validates the
 static website's local links and metadata; checks the website JavaScript; and verifies the AW1000
-profile, RJ11 packages and shell script syntax. The full OpenWrt firmware build runs separately
-from a release tag or manual firmware workflow dispatch.
+profile, RJ11 packages and shell script syntax. The full OpenWrt firmware build runs only for a release tag or manual firmware workflow
+dispatch. Routine commits run the faster lint, website, Lua syntax and firmware integration gates
+without launching another full OpenWrt compilation.
 
 A successful compile does not prove RF performance, voice-call compatibility, emergency calling,
 flash compatibility or NSS acceleration. Those require separate hardware tests and are reported
