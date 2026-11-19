@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, type RouterOverview } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, type RouterClient, type RouterOverview } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -11,7 +11,6 @@ import {
   Database,
   Download,
   Gamepad2,
-  Bot,
   GripVertical,
   Globe2,
   HardDrive,
@@ -34,7 +33,6 @@ import {
   Wifi,
   X,
   Zap,
-  RadioTower,
   PhoneCall,
 } from "lucide-react";
 
@@ -80,13 +78,6 @@ const nav = [
   ["system", "System", Cpu],
   ["advanced", "Advanced", Settings],
 ] as const;
-
-const devices = [
-  ["QuantumGrid PC", "Gaming workstation", "192.168.1.100", "2.5GbE", 428],
-  ["PlayStation 5", "Console", "192.168.1.112", "Wi-Fi 6", 186],
-  ["iPhone", "Mobile", "192.168.1.121", "Wi-Fi 6", 38],
-  ["Living Room TV", "Smart TV", "192.168.1.140", "Wi-Fi 6", 12],
-];
 
 function fmt(value: number, digits = 0) {
   return value.toLocaleString("en-US", {
@@ -1443,6 +1434,65 @@ function formatUptime(seconds: number | undefined): string {
   return days > 0 ? `${days}d ${hours}h` : hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
+function formatLeaseRemaining(seconds: number | null): string {
+  if (seconds === null) return "No expiry";
+  if (!Number.isFinite(seconds) || seconds < 0) return "Expired";
+  if (seconds === 0) return "Expiring";
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return `${Math.floor(seconds)}s`;
+}
+
+function ClientLeaseList({ clients, available, maxRows }: { clients: RouterClient[]; available: boolean; maxRows?: number }) {
+  if (!available) return <div className="module-message">DHCP client inventory is not available from this router API.</div>;
+  if (clients.length === 0) return <div className="module-message">No unexpired DHCPv4 leases were reported. Static-IP devices may not appear here.</div>;
+  return (
+    <div className="device-list">
+      {clients.slice(0, maxRows ?? clients.length).map((client) => (
+        <div className="device-row" key={client.mac}>
+          <div className="device-title">
+            <div className="device-icon"><Monitor size={17} /></div>
+            <div><strong>{client.hostname || "Unknown device"}</strong><span>DHCPv4 lease</span></div>
+          </div>
+          <div><small>IP ADDRESS</small><b>{client.ip}</b></div>
+          <div><small>MAC ADDRESS</small><b>{client.mac.toUpperCase()}</b></div>
+          <div><small>LEASE REMAINING</small><b>{formatLeaseRemaining(client.lease_remaining_seconds)}</b></div>
+          <div><small>SOURCE</small><b>DHCPv4</b></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+  const clients = routerOverview?.clients ?? [];
+  const inventoryAvailable = Array.isArray(routerOverview?.clients);
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Users size={25} /></div>
+        <div>
+          <div className="setup-kicker">CLIENT INTELLIGENCE · READ ONLY</div>
+          <h1>Known Network Clients</h1>
+          <p>Inventory of validated, unexpired IPv4 DHCP leases reported by dnsmasq on this router. Entries update with router telemetry.</p>
+        </div>
+      </section>
+      <div className="module-grid">
+        <Panel title="DHCPv4 client inventory" eyebrow="ROUTER LEASE TABLE" action={<Status active={inventoryAvailable}>{inventoryAvailable ? "LIVE" : "WAITING"}</Status>}>
+          <ClientLeaseList clients={clients} available={inventoryAvailable} />
+        </Panel>
+        <Panel title="Data provenance" eyebrow="HOW TO READ THIS LIST">
+          <div className="module-message">An unexpired DHCP lease means the router allocated an address; it does not prove that a device is reachable now or connected over Wi-Fi. Static-IP devices and clients using another DHCP server may not appear in this list.</div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
 function DashboardPage({
   stats,
   refresh,
@@ -1461,6 +1511,8 @@ function DashboardPage({
   const wanOnline = routerOverview?.interfaces.some((item) => item.is_wan && item.up) ?? false;
   const wifiOnline = routerOverview?.wireless.some((radio) => radio.up) ?? false;
   const modemDetected = routerOverview?.cellular.modem_present ?? false;
+  const clients = routerOverview?.clients ?? [];
+  const inventoryAvailable = Array.isArray(routerOverview?.clients);
 
   if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
 
@@ -1496,7 +1548,7 @@ function DashboardPage({
             <span>CPU utilisation</span>
 
             <div className="health-mini">
-              <div><span>CLIENTS</span><b>N/A</b></div>
+              <div><span>CLIENTS</span><b>{inventoryAvailable ? fmt(clients.length) : "N/A"}</b></div>
               <div><span>WAN</span><b>{routerOverview ? (wanOnline ? "ONLINE" : "OFFLINE") : "—"}</b></div>
               <div><span>UPTIME</span><b>{formatUptime(routerOverview?.system.uptime_seconds)}</b></div>
             </div>
@@ -1585,28 +1637,8 @@ function DashboardPage({
           </Panel>
         </div>
 
-        <Panel title="Connected Devices" eyebrow="CLIENT INTELLIGENCE">
-          <div className="device-list">
-            {devices.map(([name, type, ip, link, speed]) => (
-              <div className="device-row" key={name}>
-                <div className="device-title">
-                  <div className="device-icon">
-                    <Monitor size={17} />
-                  </div>
-
-                  <div>
-                    <strong>{name}</strong>
-                    <span>{type}</span>
-                  </div>
-                </div>
-
-                <div><small>IP</small><b>{ip}</b></div>
-                <div><small>LINK</small><b>{link}</b></div>
-                <div><small>DOWNLOAD</small><b>{fmt(Number(speed))} Mbps</b></div>
-                <div><small>PRIORITY</small><b className="priority">HIGH</b></div>
-              </div>
-            ))}
-          </div>
+        <Panel title="Known Network Clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
+          <ClientLeaseList clients={clients} available={inventoryAvailable} maxRows={6} />
         </Panel>
       </div>
     );
@@ -1631,7 +1663,11 @@ function DashboardPage({
   }
 
   if (page === "wifi") {
-    return <WifiControlPage />;
+    return <WifiControlPage routerOverview={routerOverview} />;
+  }
+
+  if (page === "devices") {
+    return <DevicesControlPage routerOverview={routerOverview} />;
   }
 
   const [title, eyebrow, Icon] =
@@ -1647,436 +1683,56 @@ function DashboardPage({
 }
 
 
-function WifiControlPage() {
-  const [bandSteering, setBandSteering] = useState(true);
-  const [autoChannel, setAutoChannel] = useState(true);
-
-  const [radio24, setRadio24] = useState(true);
-  const [radio5, setRadio5] = useState(true);
-
-  const [power24, setPower24] = useState("High");
-  const [power5, setPower5] = useState("High");
-
-  const [clients, setClients] = useState([
-    {
-      name: "QuantumGrid PC",
-      band: "5 GHz",
-      signal: "-39 dBm",
-      rate: "842 Mbps",
-      priority: "HIGH",
-    },
-    {
-      name: "PlayStation 5",
-      band: "5 GHz",
-      signal: "-46 dBm",
-      rate: "486 Mbps",
-      priority: "HIGH",
-    },
-    {
-      name: "iPhone",
-      band: "2.4 GHz",
-      signal: "-48 dBm",
-      rate: "312 Mbps",
-      priority: "NORMAL",
-    },
-    {
-      name: "Living Room TV",
-      band: "2.4 GHz",
-      signal: "-61 dBm",
-      rate: "186 Mbps",
-      priority: "LOW",
-    },
-  ]);
-
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-
-  function moveClient(from: number, to: number) {
-    if (
-      from === to ||
-      from < 0 ||
-      to < 0 ||
-      from >= clients.length ||
-      to >= clients.length
-    ) {
-      return;
-    }
-
-    setClients((current) => {
-      const next = [...current];
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
-      return next;
-    });
-  }
+function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+  const radios = routerOverview?.wireless ?? [];
+  const clients = routerOverview?.clients ?? [];
+  const inventoryAvailable = Array.isArray(routerOverview?.clients);
 
   return (
-    <div className="real-page wifi-control-page">
-      <section className="real-page-header wifi-real-header">
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Wifi size={25} /></div>
         <div>
-          <div className="setup-kicker">WIRELESS INTELLIGENCE • LIVE</div>
-
-          <h1>
-            Wi-Fi
-            <span> Control Center.</span>
-          </h1>
-
-          <p>
-            Control your radios, intelligent band steering, channels,
-            security, transmit power and connected clients.
-          </p>
-
-          <div className="wifi-header-controls">
-            <AdvancedToggle
-              icon={Sparkles}
-              title="Band Steering"
-              description="Automatic"
-              enabled={bandSteering}
-              setEnabled={setBandSteering}
-            />
-
-            <AdvancedToggle
-              icon={Bot}
-              title="Auto Channel"
-              description="Intelligent"
-              enabled={autoChannel}
-              setEnabled={setAutoChannel}
-            />
-          </div>
-        </div>
-
-        <div className="wifi-health-card">
-          <Status>WIRELESS HEALTH</Status>
-
-          <strong>98</strong>
-
-          <span>
-            Excellent wireless environment
-          </span>
-
-          <div className="wifi-health-bar">
-            <span style={{ width: "98%" }} />
-          </div>
+          <div className="setup-kicker">LIVE WIRELESS TELEMETRY</div>
+          <h1>Wi-Fi</h1>
+          <p>Radio and wireless-interface status from the authenticated OpenWrt API. Configuration changes remain disabled until safe router-side handlers and rollback checks are implemented.</p>
         </div>
       </section>
-
-      <div className="radio-overview-grid">
-        <WifiRadioPanel
-          band="2.4 GHz"
-          enabled={radio24}
-          setEnabled={setRadio24}
-          channel={autoChannel ? "AUTO" : "6"}
-          width="20 MHz"
-          clients={2}
-          power={power24}
-          setPower={setPower24}
-        />
-
-        <WifiRadioPanel
-          band="5 GHz"
-          enabled={radio5}
-          setEnabled={setRadio5}
-          channel={autoChannel ? "AUTO" : "36"}
-          width="80 MHz"
-          clients={2}
-          power={power5}
-          setPower={setPower5}
-          primary
-        />
-      </div>
-
-      <div className="wifi-feature-grid">
-        <Panel title="Band Steering" eyebrow="CLIENT INTELLIGENCE">
-          <div className="feature-big-toggle">
-            <div className="feature-icon">
-              <Sparkles size={23} />
+      <div className="module-grid">
+        <Panel title="Wireless radios" eyebrow="NETWORK.WIRELESS STATUS" action={<Status active={Boolean(routerOverview)}>{routerOverview ? "LIVE" : "WAITING"}</Status>}>
+          {!routerOverview ? (
+            <div className="module-message">Waiting for authenticated router telemetry.</div>
+          ) : radios.length === 0 ? (
+            <div className="module-message">No wireless radios were reported by the router.</div>
+          ) : (
+            <div className="info-rows">
+              {radios.map((radio) => (
+                <div key={radio.name}>
+                  <div>
+                    <span>{radio.name}</span>
+                    <small>{radio.interfaces.length > 0 ? radio.interfaces.map((iface) => {
+                      const name = iface.ssid || iface.ifname || "Unnamed interface";
+                      return `${name} · ${iface.mode || "mode unavailable"} · ${iface.up ? "up" : "down"}`;
+                    }).join(" / ") : "No wireless interfaces reported"}</small>
+                  </div>
+                  <Status active={radio.up}>{radio.up ? "RADIO UP" : "RADIO DOWN"}</Status>
+                </div>
+              ))}
             </div>
-
-            <div>
-              <strong>
-                Intelligent client steering
-              </strong>
-
-              <span>
-                QuantumGrid can move compatible clients between
-                2.4 GHz and 5 GHz based on signal, capabilities,
-                utilization and priority.
-              </span>
-            </div>
-
-            <button
-              className={
-                bandSteering
-                  ? "qg-switch enabled large"
-                  : "qg-switch large"
-              }
-              onClick={() => setBandSteering(!bandSteering)}
-            >
-              <span />
-            </button>
-          </div>
-
-          <div className="steering-rule-grid">
-            <div>
-              <span>SIGNAL</span>
-              <strong>SMART</strong>
-            </div>
-
-            <div>
-              <span>CAPABILITY</span>
-              <strong>SMART</strong>
-            </div>
-
-            <div>
-              <span>PRIORITY</span>
-              <strong>SMART</strong>
-            </div>
-
-            <div>
-              <span>LOAD</span>
-              <strong>SMART</strong>
-            </div>
-          </div>
+          )}
         </Panel>
-
-        <Panel title="Wireless Security" eyebrow="PROTECTION">
-          <div className="security-status-card">
-            <div className="security-status-icon">
-              <Shield size={21} />
-            </div>
-
-            <div>
-              <strong>WPA2 / WPA3</strong>
-              <span>
-                Protected wireless authentication
-              </span>
-            </div>
-
-            <Status>SECURE</Status>
-          </div>
-
-          <div className="security-option-row">
-            <div>
-              <span>PRIMARY SECURITY</span>
-              <strong>WPA3-SAE</strong>
-            </div>
-
-            <button className="secondary-button">
-              Configure
-              <ChevronRight size={15} />
-            </button>
-          </div>
-
-          <div className="security-option-row">
-            <div>
-              <span>COMPATIBILITY</span>
-              <strong>WPA2/WPA3</strong>
-            </div>
-
-            <button className="secondary-button">
-              Advanced
-              <ChevronRight size={15} />
-            </button>
-          </div>
+        <Panel title="Configuration controls" eyebrow="SAFE READ-ONLY MODE">
+          <Status active={false}>NOT CONNECTED</Status>
+          <div className="module-message">Band steering, channel selection, channel width, transmit power, roaming and radio enable/disable are not applied by this interface. They will be enabled only when backed by authenticated services, capability checks and a recovery path.</div>
         </Panel>
       </div>
-
-      <Panel title="Connected Clients" eyebrow="DRAG TO PRIORITIZE">
-        <div className="wifi-client-help">
-          <GripVertical size={14} />
-          Drag a device to change its network priority.
-        </div>
-
-        <div className="wifi-client-table">
-          <div className="wifi-client-table-head">
-            <span>DEVICE</span>
-            <span>BAND</span>
-            <span>SIGNAL</span>
-            <span>RATE</span>
-            <span>PRIORITY</span>
-          </div>
-
-          {clients.map((client, index) => (
-            <div
-              key={client.name}
-              className={
-                dragIndex === index
-                  ? "wifi-client-table-row dragging"
-                  : "wifi-client-table-row"
-              }
-              draggable
-              onDragStart={() => setDragIndex(index)}
-              onDragOver={(event) => event.preventDefault()}
-              onDrop={() => {
-                if (dragIndex !== null) {
-                  moveClient(dragIndex, index);
-                }
-
-                setDragIndex(null);
-              }}
-              onDragEnd={() => setDragIndex(null)}
-            >
-              <div className="wifi-client-name">
-                <div className="drag-handle">
-                  <GripVertical size={16} />
-                </div>
-
-                <div className="device-icon">
-                  <Monitor size={16} />
-                </div>
-
-                <div>
-                  <strong>{client.name}</strong>
-                  <span>Connected</span>
-                </div>
-              </div>
-
-              <b>{client.band}</b>
-              <b>{client.signal}</b>
-              <b>{client.rate}</b>
-
-              <span
-                className={
-                  client.priority === "HIGH"
-                    ? "priority-pill high"
-                    : client.priority === "LOW"
-                      ? "priority-pill low"
-                      : "priority-pill normal"
-                }
-              >
-                {client.priority}
-              </span>
-            </div>
-          ))}
-        </div>
+      <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
+        <ClientLeaseList clients={clients} available={inventoryAvailable} />
+        <div className="module-message">DHCP leases record address allocations; they do not confirm current reachability or Wi-Fi association and do not include RSSI or link rate.</div>
       </Panel>
-
-      <div className="wifi-bottom-actions premium-bottom-actions">
-        <div>
-          <div className="bottom-action-icon">
-            <RadioTower size={16} />
-          </div>
-
-          <div>
-            <strong>Wireless environment monitored</strong>
-            <span>
-              QuantumGrid is continuously evaluating radio conditions.
-            </span>
-          </div>
-        </div>
-
-        <button
-          className="hero-button"
-          onClick={() => window.location.reload()}
-        >
-          <RefreshCw size={16} />
-          Rescan Environment
-        </button>
-      </div>
     </div>
   );
 }
-
-function WifiRadioPanel({
-  band,
-  enabled,
-  setEnabled,
-  channel,
-  width,
-  clients,
-  power,
-  setPower,
-  primary = false,
-}: {
-  band: string;
-  enabled: boolean;
-  setEnabled: (value: boolean) => void;
-  channel: string;
-  width: string;
-  clients: number;
-  power: string;
-  setPower: (value: string) => void;
-  primary?: boolean;
-}) {
-  return (
-    <section className={primary ? "radio-card primary wifi-radio-real" : "radio-card wifi-radio-real"}>
-      <div className="radio-card-header">
-        <div>
-          <div className="panel-eyebrow">
-            WIRELESS RADIO
-          </div>
-
-          <h2>{band}</h2>
-        </div>
-
-        <button
-          className={
-            enabled
-              ? "radio-power active"
-              : "radio-power"
-          }
-          onClick={() => setEnabled(!enabled)}
-        >
-          <span />
-          {enabled ? "ACTIVE" : "OFF"}
-        </button>
-      </div>
-
-      <div className="radio-live-line">
-        <Status>
-          {enabled ? "RADIO ONLINE" : "RADIO DISABLED"}
-        </Status>
-
-        <span>
-          802.11AX
-        </span>
-      </div>
-
-      <div className="radio-stats">
-        <div>
-          <span>CHANNEL</span>
-          <strong>{channel}</strong>
-        </div>
-
-        <div>
-          <span>WIDTH</span>
-          <strong>{width}</strong>
-        </div>
-
-        <div>
-          <span>CLIENTS</span>
-          <strong>{clients}</strong>
-        </div>
-
-        <div>
-          <span>POWER</span>
-          <strong>{power}</strong>
-        </div>
-      </div>
-
-      <div className="radio-controls">
-        <label>
-          <span>TRANSMIT POWER</span>
-
-          <select
-            value={power}
-            onChange={(e) => setPower(e.target.value)}
-          >
-            <option>Low</option>
-            <option>Medium</option>
-            <option>High</option>
-          </select>
-        </label>
-
-        <button className="secondary-button">
-          <SlidersHorizontal size={14} />
-          Configure Radio
-        </button>
-      </div>
-    </section>
-  );
-}
-
-
 
 function GamingControlPage() {
   const [engine, setEngine] = useState(true);
@@ -2619,41 +2275,6 @@ function MetricTile({
       <em className={good ? "metric-good" : ""}>
         {detail}
       </em>
-    </div>
-  );
-}
-
-function AdvancedToggle({
-  icon: Icon,
-  title,
-  description,
-  enabled,
-  setEnabled,
-}: {
-  icon: React.ElementType;
-  title: string;
-  description: string;
-  enabled: boolean;
-  setEnabled: (value: boolean) => void;
-}) {
-  return (
-    <div className="advanced-toggle">
-      <div className="advanced-toggle-icon">
-        <Icon size={17} />
-      </div>
-
-      <div className="advanced-toggle-copy">
-        <strong>{title}</strong>
-        <span>{description}</span>
-      </div>
-
-      <button
-        className={enabled ? "qg-switch enabled" : "qg-switch"}
-        onClick={() => setEnabled(!enabled)}
-        aria-label={`Toggle ${title}`}
-      >
-        <span />
-      </button>
     </div>
   );
 }

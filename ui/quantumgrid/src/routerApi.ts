@@ -21,6 +21,13 @@ export interface RouterWirelessRadio {
   interfaces: RouterWirelessInterface[];
 }
 
+export interface RouterClient {
+  hostname: string;
+  ip: string;
+  mac: string;
+  lease_remaining_seconds: number | null;
+}
+
 export interface RouterOverview {
   ok: true;
   timestamp: number;
@@ -38,6 +45,7 @@ export interface RouterOverview {
     ping_ms: number | null;
   };
   interfaces: RouterInterface[];
+  clients?: RouterClient[];
   wireless: RouterWirelessRadio[];
   cellular: { modem_present: boolean };
   phone: {

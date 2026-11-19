@@ -139,6 +139,47 @@ local function wireless_status()
 	return result
 end
 
+local function valid_ipv4(address)
+	if type(address) ~= "string" then return false end
+	local a, b, c, d = address:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then return false end
+	for _, part in ipairs({ a, b, c, d }) do
+		local octet = tonumber(part)
+		if not octet or octet < 0 or octet > 255 then return false end
+	end
+	return true
+end
+
+-- Unexpired dnsmasq leases are address allocations, not proof of reachability.
+local function dhcp_clients()
+	local contents = read_file("/tmp/dhcp.leases") or ""
+	local now = os.time()
+	local result = {}
+
+	for line in contents:gmatch("[^\r\n]+") do
+		local expires, mac, ip, hostname = line:match("^(%d+)%s+(%S+)%s+(%S+)%s+(%S+)")
+		local expiry = tonumber(expires)
+		local valid_mac = mac and mac:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
+		if expiry and valid_mac and valid_ipv4(ip) and (expiry == 0 or expiry > now) then
+			local remaining = nil
+			if expiry > 0 then remaining = math.max(0, expiry - now) end
+			table.insert(result, {
+				hostname = hostname ~= "*" and hostname or "",
+				ip = ip,
+				mac = mac:lower(),
+				lease_remaining_seconds = remaining and math.floor(remaining) or nil
+			})
+		end
+	end
+
+	table.sort(result, function(left, right)
+		local left_name = left.hostname ~= "" and left.hostname:lower() or left.ip
+		local right_name = right.hostname ~= "" and right.hostname:lower() or right.ip
+		return left_name < right_name
+	end)
+	return result
+end
+
 local function ping_probe()
 	local util = require "luci.util"
 	-- Fixed diagnostic destination; no client-supplied shell arguments.
@@ -239,6 +280,7 @@ function action_api()
 			ping_ms = ping.latency_ms
 		},
 		interfaces = network_interfaces(),
+		clients = dhcp_clients(),
 		wireless = wireless_status(),
 		cellular = { modem_present = modem_present },
 		phone = {
