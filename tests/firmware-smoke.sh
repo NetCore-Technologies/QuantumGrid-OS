@@ -384,7 +384,7 @@ grep -Fq 'policies_available' "$ROOT/files/usr/lib/lua/luci/controller/quantumgr
 grep -Fq 'connected_ipv4 = inventory.connected_ipv4' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'mwan3.policies.map' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'Connected WAN networks' "$ROOT/ui/quantumgrid/src/App.tsx"
-grep -Fq 'Active Multi-WAN policies' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'Active load-balancing policies' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'mwan3-interface-row' "$ROOT/ui/quantumgrid/src/index.css"
 test -f "$ROOT/files/usr/lib/lua/luci/quantumgrid/mwan3.lua"
 test -f "$ROOT/tests/mwan3-status.lua"
