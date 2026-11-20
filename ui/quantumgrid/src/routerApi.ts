@@ -463,9 +463,61 @@ export interface RouterPackageInventory {
   sampled_at: number;
 }
 
+export interface RouterGpioLine {
+  number: number;
+  label: string;
+  consumer: string;
+  direction: string;
+  state: string;
+  value?: number;
+  is_button: boolean;
+}
+
+export interface RouterGpioChip {
+  name: string;
+  first_gpio?: number;
+  last_gpio?: number;
+}
+
+export interface RouterGpioInventory {
+  available: boolean;
+  chips: RouterGpioChip[];
+  chip_count: number;
+  lines: RouterGpioLine[];
+  line_count: number;
+  truncated: boolean;
+}
+
+export interface RouterLedDevice {
+  name: string;
+  brightness?: number;
+  max_brightness?: number;
+  trigger?: string;
+  trigger_available: boolean;
+  controllable: boolean;
+}
+
+export interface RouterHardwareIoStatus {
+  available: boolean;
+  gpio: RouterGpioInventory;
+  leds_available: boolean;
+  leds: RouterLedDevice[];
+  sampled_at: number;
+}
+
+export interface RouterLedUpdateResult {
+  ok: true;
+  name: string;
+  brightness: number;
+  max_brightness: number;
+  applied: true;
+  persistent: false;
+}
+
 export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
+  hardware_io?: RouterHardwareIoStatus;
   conntrack?: RouterConntrackStatus;
   timestamp: number;
   routes_available?: boolean;
@@ -510,6 +562,7 @@ const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test"
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
+const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -857,4 +910,57 @@ export async function updateRouterSqmQueue(
     throw new Error("The router did not confirm the SQM queue update and service restart.");
   }
   return payload as RouterSqmQueueUpdateResult;
+}
+
+
+export async function updateRouterLedBrightness(
+  name: string,
+  brightness: number,
+): Promise<RouterLedUpdateResult> {
+  if (!/^[A-Za-z0-9_.:-]{1,64}$/.test(name) || name === "." || name === "..") {
+    throw new Error("Invalid LED class device name.");
+  }
+  if (!Number.isSafeInteger(brightness) || brightness < 0 || brightness > 65535) {
+    throw new Error("LED brightness must be a whole number from 0 to 65,535.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("name", name);
+  form.set("brightness", String(brightness));
+  const response = await fetch(LED_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "LED controls require an active router administrator session."
+      : "The router returned an invalid LED control response.");
+  }
+
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid LED control response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("name" in payload) || payload.name !== name ||
+    !("brightness" in payload) || payload.brightness !== brightness ||
+    !("max_brightness" in payload) || typeof payload.max_brightness !== "number" ||
+    brightness > payload.max_brightness ||
+    !("applied" in payload) || payload.applied !== true ||
+    !("persistent" in payload) || payload.persistent !== false
+  ) {
+    throw new Error("The router did not confirm the requested LED brightness.");
+  }
+  return payload as RouterLedUpdateResult;
 }
