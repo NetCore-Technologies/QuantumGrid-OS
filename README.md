@@ -315,6 +315,10 @@ enabled DHCP scopes on static IPv4 LAN interfaces. Creation validates the hostna
 canonical IPv4 address, subnet membership, existing reservations and current DHCP leases. Removal
 targets a validated UCI host-section ID and snapshots the original section before changing it. Both
 operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
+Existing DHCP scope edits are limited to start offset, pool size and lease duration. The server
+checks address boundaries and collisions against other calculable active pools, snapshots the three
+changed UCI options, restarts dnsmasq and attempts rollback on failure. It does not create new scopes
+or change DNS, DHCPv6, RA or network interface settings.
 The selected LAN is used for subnet validation only: a standard dnsmasq host section is global to
 that dnsmasq instance, not a per-VLAN reservation binding. An existing enabled DHCP scope can also
 be edited in the UI, but only for its start offset, pool size and lease duration. The server recalculates
@@ -347,9 +351,9 @@ compatible device/firmware and the documented recovery process. Validation rules
 ## Administrative audit history
 
 The Office **Admin Audit** page exposes an authenticated read-only history for supported actions:
-first-boot root-password setup, Wi-Fi configuration changes, SQM queue changes, APK/OPKG
-install/remove/feed-update operations, static DHCP reservation creation, manual LED brightness changes and configuration backup
-downloads. Each event records only a timestamp, the current administrator label, remote source IP,
+first-boot root-password setup, Wi-Fi configuration changes, SQM queue changes, DHCP scope
+updates, static DHCP reservation add/remove, APK/OPKG install/remove/feed-update operations,
+manual LED brightness changes and configuration backup downloads. Each event records only a timestamp, the current administrator label, remote source IP,
 allowlisted action, target label and success/failure outcome. Submitted passwords, SSIDs, keys,
 VPN private keys, package command output and arbitrary configuration values are not part of the
 event schema.
