@@ -25,6 +25,7 @@ Every completed build must include:
 - The exact AW1000 build configuration
 - `BUILDINFO.txt` and `SHA256SUMS`
 - `verify-aw1000-release-manifest.sh` for on-router checksum enforcement
+- `inspect-aw1000-install-target.sh` for read-only board, mount, MTD and tool inspection
 
 The factory `.ubi` is the only persistent AW1000 firmware image published by QuantumGrid.
 The bundled installer verifies its exact filename and SHA-256 digest against `SHA256SUMS`
