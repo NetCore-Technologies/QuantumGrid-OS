@@ -306,6 +306,22 @@ export interface RouterWireGuardPeer {
   allowed_ips: string[];
 }
 
+export interface RouterFirewallRedirect {
+  name: string;
+  source_zone: string;
+  destination_zone: string;
+  protocol: string;
+  target: string;
+  family: string;
+  external_port: string;
+  internal_port: string;
+  enabled: boolean;
+  source_ip_match: boolean;
+  source_mac_match: boolean;
+  destination_ip_match: boolean;
+  source_destination_ip_match: boolean;
+}
+
 export interface RouterSecurityStatus {
   firewall_installed: boolean;
   firewall_config_available: boolean;
@@ -313,7 +329,9 @@ export interface RouterSecurityStatus {
   zones: RouterFirewallZone[];
   rules: RouterFirewallRule[];
   rules_count: number;
+  redirects: RouterFirewallRedirect[];
   redirects_count: number;
+  redirects_truncated: boolean;
   nft_available: boolean;
   nft_tables: string[];
   adblock_fast: {
