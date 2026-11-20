@@ -3668,8 +3668,8 @@ local function restore_office_segment(uci, sys, network_section, dhcp_section,
 		local commit_ok, committed = pcall(uci.commit, uci, config)
 		if not commit_ok or committed ~= true then writes_ok = false end
 	end
-	if not writes_ok then return false end
-	return office_segment_reload(sys)
+	local services_ok = office_segment_reload(sys)
+	return writes_ok and services_ok
 end
 
 function action_office_segment_add()
@@ -3831,7 +3831,10 @@ function action_office_segment_add()
 		interface = update.name,
 		start = update.dhcp_start,
 		limit = update.dhcp_limit,
-		leasetime = update.lease_time
+		leasetime = update.lease_time,
+		dhcpv6 = "disabled",
+		ra = "disabled",
+		ndp = "disabled"
 	})
 	if not dhcp_ok or dhcp_created ~= dhcp_section then
 		pcall(uci.revert, uci, "network")
