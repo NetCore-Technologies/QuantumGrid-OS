@@ -1851,6 +1851,15 @@ button:disabled {
 .wifi-history-row {
   grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(110px, 1fr));
 }
+.wifi-client-history-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 7px; }
+.wifi-client-history-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 8px; white-space: nowrap; }
+.wifi-client-history-toggle input { width: 14px; height: 14px; accent-color: var(--cyan); }
+.wifi-client-history-retention { min-width: 94px; height: 30px; padding: 0 7px; border: 1px solid var(--line); border-radius: 7px; color: var(--text); background: rgba(255,255,255,.035); font: inherit; font-size: 8px; }
+.wifi-client-history-summary { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; margin-bottom: 12px; }
+.wifi-client-history-summary > div { display: grid; gap: 5px; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.02); }
+.wifi-client-history-summary small { color: var(--muted2); font-size: 7px; }
+.wifi-client-history-summary strong { font-size: 10px; }
+.wifi-client-history-row { grid-template-columns: minmax(160px, 1.4fr) repeat(4, minmax(105px, 1fr)); }
 .wifi-scan-comparison-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2208,7 +2217,10 @@ button:disabled {
   .wifi-scan-row,
   .wifi-channel-row,
   .wifi-history-row,
-  .wifi-channel-plan-row { grid-template-columns: 1fr 1fr; }
+  .wifi-channel-plan-row,
+  .wifi-client-history-row { grid-template-columns: 1fr 1fr; }
+  .wifi-client-history-summary { grid-template-columns: 1fr 1fr; }
+  .wifi-client-history-actions { justify-content: flex-start; }
   .wifi-channel-plan-heading { align-items: flex-start; flex-direction: column; }
   .wifi-station-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wifi-station-tools { grid-template-columns: 1fr 1fr; }
