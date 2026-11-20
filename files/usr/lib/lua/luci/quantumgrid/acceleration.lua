@@ -11,7 +11,8 @@ local REQUIRED_COMPONENTS = {
 	"NSS Enhanced Connection Manager",
 	"NSS firmware core 0",
 	"NSS firmware core 1",
-	"Wi-Fi driver"
+	"Wi-Fi driver",
+	"ath11k NSS offload parameter"
 }
 
 local REQUIRED_SET = {}
