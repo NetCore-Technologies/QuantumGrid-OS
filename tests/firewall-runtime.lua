@@ -63,5 +63,7 @@ assert(#capped.chains == 64 and capped.truncated)
 
 local unavailable = runtime.unavailable(1700000001, true)
 assert(not unavailable.available and unavailable.truncated and unavailable.sampled_at == 1700000001)
+local unreadable_fw4 = runtime.unavailable(1700000002, false, true)
+assert(not unreadable_fw4.available and unreadable_fw4.table_present, "fw4 presence must remain distinct from JSON snapshot availability")
 
 print("firewall-runtime: bounded fw4 chain parsing, isolation and redaction tests passed")
