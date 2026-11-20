@@ -46,9 +46,12 @@ mtd_entry() {
   awk -F '[:, ]+' -v wanted="$wanted" '
     $4 == "\"" wanted "\"" {
       count++
-      print $1, $2, $3
+      entry = $1 " " $2 " " $3
     }
-    END { if (count != 1) exit 1 }
+    END {
+      if (count != 1) exit 1
+      print entry
+    }
   ' "$MTD_FILE"
 }
 
