@@ -319,8 +319,10 @@ operations restart dnsmasq and attempt to restore the previous UCI/service state
 Existing DHCP scope edits are limited to start offset, pool size and lease duration. The server
 checks address boundaries and collisions against other enabled scopes, and fails closed if a sibling
 scope on the same interface has an uncalculable range. It snapshots the three changed UCI options,
-restarts dnsmasq and attempts rollback on failure. It does not create new scopes or change DNS,
-DHCPv6, RA or network interface settings.
+restarts dnsmasq and attempts rollback on failure. Existing scopes can also be explicitly enabled or
+disabled. Enabling validates the stored pool against the network subnet and active sibling pools;
+both directions restart dnsmasq and restore the previous `ignore` setting if the restart fails.
+These controls do not create new scopes or change DNS, DHCPv6, RA or network interface settings.
 
 The selected LAN is used for reservation subnet validation only: a standard dnsmasq host section is
 global to that dnsmasq instance, not a per-VLAN reservation binding. Creating or removing DHCP server
@@ -391,7 +393,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/edit/remove, and existing DHCP pool editors, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/edit/remove, and existing DHCP pool edit/enable/disable controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
