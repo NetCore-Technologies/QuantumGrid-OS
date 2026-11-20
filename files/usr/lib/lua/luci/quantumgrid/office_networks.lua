@@ -393,6 +393,58 @@ local function is_external_zone(zone)
 	return false
 end
 
+local ALLOWED_ZONE_POLICIES = {
+	ACCEPT = true,
+	REJECT = true,
+	DROP = true,
+}
+
+function validate_office_zone_policy(section, output, forward, masquerade, zones)
+	if type(section) ~= "string" or #section < 1 or #section > 64
+		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
+		return nil, "The firewall zone section identifier is invalid."
+	end
+	if type(output) ~= "string" or not ALLOWED_ZONE_POLICIES[output] then
+		return nil, "Zone output policy must be ACCEPT, REJECT or DROP."
+	end
+	if type(forward) ~= "string" or not ALLOWED_ZONE_POLICIES[forward] then
+		return nil, "Zone forward policy must be ACCEPT, REJECT or DROP."
+	end
+	if masquerade ~= "0" and masquerade ~= "1" then
+		return nil, "Masquerading must be explicitly enabled or disabled."
+	end
+	local found = false
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" and zone.section == section then found = true break end
+	end
+	if not found then
+		return nil, "The selected firewall zone no longer exists in the current inventory."
+	end
+	return {
+		section = section,
+		output = output,
+		forward = forward,
+		masquerade = masquerade == "1",
+		masq_value = masquerade
+	}
+end
+
+function snapshot_firewall_zone_policy_options(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "zone"
+		or type(snapshot[".name"]) ~= "string" or snapshot[".name"] == "" then
+		return nil, "A named firewall zone section is required."
+	end
+	local result = {}
+	for _, option in ipairs({ "output", "forward", "masq" }) do
+		local value = snapshot[option]
+		result[option] = {
+			present = value ~= nil,
+			value = value
+		}
+	end
+	return { section = snapshot[".name"], options = result }
+end
+
 function validate_office_forwarding(source, destination, zones, existing)
 	if type(source) ~= "string" or not source:match("^[%w_.%-]+$") or #source > 64 then
 		return nil, "Select an existing source firewall zone."
@@ -559,7 +611,9 @@ function build_inventory(source)
 			local name = token(item.name, 64)
 			if name then
 				local networks = values(item.networks, 16)
+				local section = token(item.section, 64) or name
 				local zone = {
+					section = section,
 					name = name,
 					networks = networks,
 					input = clean(item.input, 24),
