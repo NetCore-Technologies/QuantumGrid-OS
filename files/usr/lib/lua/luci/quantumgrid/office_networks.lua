@@ -130,8 +130,8 @@ function validate_reservation(name, mac, ipv4)
 		return nil, "A valid dotted-decimal IPv4 address is required."
 	end
 	local first_octet_ip = math.floor(ip_number / 16777216)
-	if ip_number == 0 or ip_number == 4294967295 or first_octet_ip == 127
-		or first_octet_ip >= 224 then
+	if first_octet_ip == 0 or first_octet_ip == 127 or first_octet_ip == 169 and math.floor(ip_number / 65536) % 256 == 254
+		or first_octet_ip == 255 or first_octet_ip >= 224 then
 		return nil, "The IPv4 address must be a usable unicast host address."
 	end
 	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
