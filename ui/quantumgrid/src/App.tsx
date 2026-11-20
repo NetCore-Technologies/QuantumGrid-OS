@@ -3159,6 +3159,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
                     <div className="firewall-redirect-heading">
                       <strong>{redirect.name}</strong>
                       <span>{redirect.enabled ? "Enabled" : "Disabled"} · {redirect.family || "Any IP family"} · {redirect.target || "Target unspecified"}</span>
+                      <small>UCI section {redirect.section || "identifier unavailable"}</small>
                     </div>
                     <div>
                       <small>SOURCE → DESTINATION ZONE</small>
