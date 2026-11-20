@@ -1156,6 +1156,7 @@ function Dashboard({
   routerOverview,
   trafficHistory,
   cellularHistory,
+  interfaceCounterDeltas,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -1169,6 +1170,7 @@ function Dashboard({
   routerOverview: RouterOverview | null;
   trafficHistory: number[];
   cellularHistory: CellularHistorySample[];
+  interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
 }) {
   const [mobile, setMobile] = useState(false);
 
@@ -1316,6 +1318,7 @@ function Dashboard({
             routerOverview={routerOverview}
             trafficHistory={trafficHistory}
             cellularHistory={cellularHistory}
+            interfaceCounterDeltas={interfaceCounterDeltas}
           />
         </section>
       </main>
@@ -1781,49 +1784,13 @@ function formatTrafficBytes(bytes: number | undefined): string {
 function NetworkControlPage({
   routerOverview,
   stats,
+  interfaceCounterDeltas,
 }: {
   routerOverview: RouterOverview | null;
   stats: Stats;
+  interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
-  const previousInterfaceCounters = useRef(new Map<string, {
-    rx_errors?: number; tx_errors?: number; rx_dropped?: number; tx_dropped?: number;
-  }>());
-  const [interfaceCounterDeltas, setInterfaceCounterDeltas] = useState(new Map<string, {
-    rxErrors: number | null; txErrors: number | null; rxDropped: number | null; txDropped: number | null;
-  }>());
-  useEffect(() => {
-    if (!routerOverview) {
-      previousInterfaceCounters.current.clear();
-      setInterfaceCounterDeltas(new Map());
-      return;
-    }
-    const nextCounters = new Map<string, {
-      rx_errors?: number; tx_errors?: number; rx_dropped?: number; tx_dropped?: number;
-    }>();
-    const deltas = new Map<string, {
-      rxErrors: number | null; txErrors: number | null; rxDropped: number | null; txDropped: number | null;
-    }>();
-    const delta = (current: number | undefined, previous: number | undefined) =>
-      current === undefined || previous === undefined || current < previous ? null : current - previous;
-    for (const item of routerOverview.interfaces) {
-      const previous = previousInterfaceCounters.current.get(item.name);
-      if (previous) {
-        deltas.set(item.name, {
-          rxErrors: delta(item.rx_errors, previous.rx_errors),
-          txErrors: delta(item.tx_errors, previous.tx_errors),
-          rxDropped: delta(item.rx_dropped, previous.rx_dropped),
-          txDropped: delta(item.tx_dropped, previous.tx_dropped),
-        });
-      }
-      nextCounters.set(item.name, {
-        rx_errors: item.rx_errors, tx_errors: item.tx_errors,
-        rx_dropped: item.rx_dropped, tx_dropped: item.tx_dropped,
-      });
-    }
-    previousInterfaceCounters.current = nextCounters;
-    setInterfaceCounterDeltas(deltas);
-  }, [routerOverview]);
   const [interfaceScope, setInterfaceScope] = useState<"all" | "wan" | "lan">("all");
   const [interfaceSort, setInterfaceSort] = useState<"name" | "rx" | "tx" | "errors">("name");
   const visibleInterfaces = interfaces.filter((item) =>
@@ -2441,6 +2408,7 @@ function DashboardPage({
   routerOverview,
   trafficHistory,
   cellularHistory,
+  interfaceCounterDeltas,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -2449,6 +2417,7 @@ function DashboardPage({
   routerOverview: RouterOverview | null;
   trafficHistory: number[];
   cellularHistory: CellularHistorySample[];
+  interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
 }) {
   const wanOnline = routerOverview?.interfaces.some((item) => item.is_wan && item.up) ?? false;
   const wifiOnline = routerOverview?.wireless.some((radio) => radio.up) ?? false;
@@ -2457,7 +2426,7 @@ function DashboardPage({
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
 
   if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
-  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} />;
+  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} interfaceCounterDeltas={interfaceCounterDeltas} />;
   if (page === "diagnostics") return <DiagnosticsControlPage stats={stats} telemetryError={telemetryError} routerOverview={routerOverview} refresh={refresh} />;
   if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} />;
   if (page === "analytics") return <AnalyticsControlPage stats={stats} trafficHistory={trafficHistory} />;
@@ -2826,6 +2795,20 @@ function describeScanOperation(network: RouterWifiScan["results"][number]): stri
 type WirelessTrafficSample = {
   rx_mbps: number;
   tx_mbps: number;
+};
+
+type InterfaceCounterSnapshot = {
+  rx_errors?: number;
+  tx_errors?: number;
+  rx_dropped?: number;
+  tx_dropped?: number;
+};
+
+type InterfaceCounterDelta = {
+  rxErrors: number | null;
+  txErrors: number | null;
+  rxDropped: number | null;
+  txDropped: number | null;
 };
 
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
@@ -3608,6 +3591,8 @@ function App() {
   });
   const [telemetryError, setTelemetryError] = useState("");
   const [routerOverview, setRouterOverview] = useState<RouterOverview | null>(null);
+  const previousInterfaceCounters = useRef(new Map<string, InterfaceCounterSnapshot>());
+  const [interfaceCounterDeltas, setInterfaceCounterDeltas] = useState<Map<string, InterfaceCounterDelta>>(new Map());
   const previousWirelessCounters = useRef(new Map<string, { rx: number; tx: number; sampledAt: number }>());
   const [trafficHistory, setTrafficHistory] = useState<number[]>(() => Array(30).fill(0));
   const [cellularHistory, setCellularHistory] = useState<CellularHistorySample[]>([]);
@@ -3622,6 +3607,27 @@ function App() {
   const refresh = useCallback(async () => {
     try {
       const overview = await fetchRouterOverview();
+      const nextInterfaceCounters = new Map<string, InterfaceCounterSnapshot>();
+      const nextInterfaceDeltas = new Map<string, InterfaceCounterDelta>();
+      const counterDelta = (current: number | undefined, previous: number | undefined) =>
+        current === undefined || previous === undefined || current < previous ? null : current - previous;
+      for (const item of overview.interfaces) {
+        const previousCounters = previousInterfaceCounters.current.get(item.name);
+        if (previousCounters) {
+          nextInterfaceDeltas.set(item.name, {
+            rxErrors: counterDelta(item.rx_errors, previousCounters.rx_errors),
+            txErrors: counterDelta(item.tx_errors, previousCounters.tx_errors),
+            rxDropped: counterDelta(item.rx_dropped, previousCounters.rx_dropped),
+            txDropped: counterDelta(item.tx_dropped, previousCounters.tx_dropped),
+          });
+        }
+        nextInterfaceCounters.set(item.name, {
+          rx_errors: item.rx_errors, tx_errors: item.tx_errors,
+          rx_dropped: item.rx_dropped, tx_dropped: item.tx_dropped,
+        });
+      }
+      previousInterfaceCounters.current = nextInterfaceCounters;
+      setInterfaceCounterDeltas(nextInterfaceDeltas);
       const wan =
         overview.interfaces.find((item) => item.name === "wan" && item.up) ??
         overview.interfaces.find((item) => item.is_wan && item.up) ??
@@ -3759,6 +3765,8 @@ function App() {
     }).finally(() => {
       setLoggedIn(false);
       setCellularHistory([]);
+      previousInterfaceCounters.current.clear();
+      setInterfaceCounterDeltas(new Map());
       previousWirelessCounters.current.clear();
       setLoginPassword("");
       setLoginError("");
@@ -3850,6 +3858,7 @@ function App() {
       routerOverview={routerOverview}
       trafficHistory={trafficHistory}
       cellularHistory={cellularHistory}
+      interfaceCounterDeltas={interfaceCounterDeltas}
     />
   );
 }
