@@ -2577,7 +2577,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
   const [scanFilter, setScanFilter] = useState("");
   const [scanSecurityFilter, setScanSecurityFilter] = useState<"all" | "open" | "encrypted" | "unknown">("all");
+  const [scanBandFilter, setScanBandFilter] = useState("all");
   const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
+  const availableScanBands = scan
+    ? [...new Set(scan.results.map((network) => network.band || "Unknown"))].sort()
+    : [];
   const visibleScanResults = scan
     ? scan.results
       .filter((network) => {
@@ -2588,7 +2592,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           (scanSecurityFilter === "open" && network.security === "Open") ||
           (scanSecurityFilter === "unknown" && network.security === "Unknown") ||
           (scanSecurityFilter === "encrypted" && !["Open", "Unknown"].includes(network.security));
-        return matchesText && matchesSecurity;
+        const matchesBand = scanBandFilter === "all" || (network.band || "Unknown") === scanBandFilter;
+        return matchesText && matchesSecurity && matchesBand;
       })
       .sort((left, right) => {
         if (scanSort === "ssid") return (left.ssid || "").localeCompare(right.ssid || "");
@@ -2742,6 +2747,10 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
                     <option value="open">Open networks</option>
                     <option value="encrypted">Encrypted networks</option>
                     <option value="unknown">Security unknown</option>
+                  </select>
+                  <select className="wifi-scan-band" aria-label="Filter nearby access point band" value={scanBandFilter} onChange={(event) => setScanBandFilter(event.target.value)}>
+                    <option value="all">All bands</option>
+                    {availableScanBands.map((band) => <option value={band} key={band}>{band}</option>)}
                   </select>
                   <select className="wifi-scan-sort" aria-label="Sort nearby access points" value={scanSort} onChange={(event) => setScanSort(event.target.value as "signal" | "channel" | "ssid")}>
                     <option value="signal">Strongest signal first</option>

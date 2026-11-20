@@ -85,7 +85,7 @@ when returned by the driver. Unknown security metadata is not classified as open
 Scans are rate-limited and cached for 30 seconds; some radio drivers may briefly interrupt traffic
 while scanning. The same page groups observed BSSIDs by reported band/channel and shows strongest
 reported signal; these counts are scan visibility only, not airtime or interference measurements.
-Scan inventories can be filtered by SSID/BSSID/radio and security state (open, encrypted or unknown), and sorted by signal, channel or SSID.
+Scan inventories can be filtered by SSID/BSSID/radio, band and security state (open, encrypted or unknown), and sorted by signal, channel or SSID.
 They can also be exported as CSV; network-controlled text is quoted and spreadsheet formula
 prefixes are neutralised in the export. The page keeps summaries from the last ten distinct manual
 scans in memory only; it does not persist the history or retain old network identifiers. The
