@@ -332,6 +332,25 @@ not provide an automatic restore/import button. Restoring a backup must be done 
 compatible device/firmware and the documented recovery process. Validation rules are covered by
 `tests/config-backup.lua` and the normal firmware CI gate.
 
+## Administrative audit history
+
+The Office **Admin Audit** page exposes an authenticated read-only history for supported actions:
+first-boot root-password setup, Wi-Fi configuration changes, SQM queue changes, APK/OPKG
+install/remove/feed-update operations, manual LED brightness changes and configuration backup
+downloads. Each event records only a timestamp, the current administrator label, remote source IP,
+allowlisted action, target label and success/failure outcome. Submitted passwords, SSIDs, keys,
+VPN private keys, package command output and arbitrary configuration values are not part of the
+event schema.
+
+The log is stored under `/etc/quantumgrid` with restrictive directory/file permissions. It rotates
+one previous file when the active log exceeds 512 KiB; the API returns at most the newest 200 valid
+events. CSV export follows the visible search/filter results. It is a local operational aid, not a
+tamper-proof accounting system or a compliance certification: root access can change it, some
+rejected/pre-validation requests are not recorded, and it is not a remote immutable log collector.
+For production deployments, forward system logs to a separately managed, access-controlled log
+server and define an independent retention policy. Parser and redaction rules are tested by
+`tests/audit-log.lua` in CI.
+
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
@@ -339,7 +358,8 @@ compatible device/firmware and the documented recovery process. Validation rules
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
   and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory
-  with CSV export, and authenticated explicit-confirmation configuration backup downloads.
+  with CSV export, authenticated explicit-confirmation configuration backup downloads, and a
+  redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
   observability.
