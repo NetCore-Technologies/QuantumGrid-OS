@@ -2243,6 +2243,7 @@ local function office_network_status(uci, fs)
 		uci:foreach("dhcp", "host", function(section)
 			if #source.static_leases >= 256 then source.truncated = true return end
 			table.insert(source.static_leases, {
+				section = section[".name"],
 				name = section.name or section[".name"],
 				mac = section.mac,
 				ipv4 = section.ip
