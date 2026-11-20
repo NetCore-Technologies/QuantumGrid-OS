@@ -319,6 +319,40 @@ local function wireless_survey(ifname, frequency)
 	return { supported = false }
 end
 
+local function wireless_config_inventory(uci)
+	local result = {}
+	local ok = pcall(function()
+		uci:foreach("wireless", "wifi-iface", function(section)
+			if #result >= 32 then return end
+			local mode = tostring(section.mode or "")
+			local radio = tostring(section.device or "")
+			local name = tostring(section[".name"] or "")
+			if mode == "ap" and name:match("^[%w_%-]+$") and radio:match("^[%w_%-]+$") then
+				local radio_type = uci:get("wireless", radio, ".type")
+				if radio_type == "wifi-device" then
+					local channel = uci:get("wireless", radio, "channel")
+					table.insert(result, {
+						section = name,
+						radio = radio,
+						mode = mode,
+						ssid = tostring(section.ssid or ""),
+						encryption = tostring(section.encryption or "none"),
+						hidden = section.hidden == "1",
+						key_set = type(section.key) == "string" and section.key ~= "",
+						interface_disabled = section.disabled == "1",
+					radio_disabled = uci:get("wireless", radio, "disabled") == "1",
+					channel = type(channel) == "string" and channel ~= "" and channel or "auto",
+					htmode = tostring(uci:get("wireless", radio, "htmode") or ""),
+					txpower = tonumber(uci:get("wireless", radio, "txpower"))
+				})
+				end
+			end
+		end)
+	end)
+	return { available = ok, sections = result }
+end
+
+
 local function wireless_status()
 	local status = ubus_call("network.wireless", "status", {}) or {}
 	local result = {}
@@ -855,6 +889,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "latency-test"}, call("action_latency_test")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 end
 
 local function sqm_restart(sys)
@@ -886,6 +921,219 @@ local function restore_sqm_queue(uci, section, snapshot)
 	end
 	return true
 end
+
+local function restore_wireless_option(uci, section, option, previous)
+	if previous == false then
+		local ok, result = pcall(uci.delete, uci, "wireless", section, option)
+		return ok and result == true
+	end
+	local ok, result = pcall(uci.set, uci, "wireless", section, option, previous)
+	return ok and result == true
+end
+
+local function restore_wireless_snapshot(uci, radio, interface, snapshot)
+	for option, value in pairs(snapshot.radio) do
+		if not restore_wireless_option(uci, radio, option, value) then
+			pcall(uci.revert, uci, "wireless")
+			return false
+		end
+	end
+	for option, value in pairs(snapshot.interface) do
+		if not restore_wireless_option(uci, interface, option, value) then
+			pcall(uci.revert, uci, "wireless")
+			return false
+		end
+	end
+	local ok, result = pcall(uci.commit, uci, "wireless")
+	return ok and result == true
+end
+
+local function wireless_channel_allowed(radio_name, channel)
+	if channel == "auto" then return true end
+	local status = ubus_call("network.wireless", "status", {}) or {}
+	local radio = status[radio_name]
+	if type(radio) ~= "table" then return false end
+
+	for _, iface in ipairs(radio.interfaces or {}) do
+		local ifname = iface.ifname
+		if type(ifname) == "string" and ifname:match("^[%w_.%-]+$") then
+			local response = ubus_call("iwinfo", "freqlist", { device = ifname }) or {}
+			for _, entry in ipairs(response.results or {}) do
+				if tonumber(entry.channel) == tonumber(channel) then
+					return not (entry.restricted == true or entry.restricted == 1)
+				end
+			end
+		end
+	end
+	return false
+end
+
+function action_wireless_update()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then http.status(status, status == 400 and "Bad Request" or
+			status == 403 and "Forbidden" or status == 404 and "Not Found" or
+			status == 405 and "Method Not Allowed" or status == 503 and "Service Unavailable" or
+			status == 502 and "Bad Gateway" or "Internal Server Error") end
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/sbin/wifi") ~= true or fs.access("/etc/config/wireless") ~= true then
+		respond(503, { ok = false, error = "Wireless configuration or the Wi-Fi reload utility is unavailable." })
+		return
+	end
+
+	local validator = require "luci.quantumgrid.wireless"
+	local update, validation_error = validator.validate_update(
+		http.formvalue("radio", true),
+		http.formvalue("section", true),
+		http.formvalue("ssid", true),
+		http.formvalue("encryption", true),
+		http.formvalue("key", true) or "",
+		http.formvalue("hidden", true),
+		http.formvalue("channel", true),
+		http.formvalue("allow_open", true),
+		http.formvalue("confirmed", true)
+	)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local radio_type_ok, radio_type = pcall(uci.get, uci, "wireless", update.radio, ".type")
+	local interface_type_ok, interface_type = pcall(uci.get, uci, "wireless", update.section, ".type")
+	if not radio_type_ok or not interface_type_ok then
+		respond(500, { ok = false, error = "Could not inspect the selected wireless configuration." })
+		return
+	end
+	if radio_type ~= "wifi-device" or interface_type ~= "wifi-iface" then
+		respond(404, { ok = false, error = "Only an existing Wi-Fi radio and AP interface can be edited." })
+		return
+	end
+	if uci:get("wireless", update.section, "device") ~= update.radio
+		or uci:get("wireless", update.section, "mode") ~= "ap" then
+		respond(400, { ok = false, error = "The selected interface is not an AP on the selected radio." })
+		return
+	end
+
+	if not wireless_channel_allowed(update.radio, update.channel) then
+		respond(400, { ok = false, error = "That channel is not reported as available and unrestricted by the radio driver." })
+		return
+	end
+
+	local current_encryption = uci:get("wireless", update.section, "encryption") or "none"
+	local current_key = uci:get("wireless", update.section, "key")
+	if update.encryption ~= "none" and not update.key_supplied
+		and (current_encryption ~= update.encryption or type(current_key) ~= "string" or current_key == "") then
+		respond(400, { ok = false, error = "Enter a new passphrase when enabling or changing wireless security." })
+		return
+	end
+
+	local snapshot = { radio = {}, interface = {} }
+	for _, option in ipairs({ "channel" }) do
+		local ok, value = pcall(uci.get, uci, "wireless", update.radio, option)
+		if not ok then
+			respond(500, { ok = false, error = "Could not snapshot the selected radio settings." })
+			return
+		end
+		snapshot.radio[option] = value or false
+	end
+	for _, option in ipairs({ "ssid", "encryption", "key", "hidden" }) do
+		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
+		if not ok then
+			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
+			return
+		end
+		snapshot.interface[option] = value or false
+	end
+
+	local radio_updates = { channel = update.channel }
+	local interface_updates = {
+		ssid = update.ssid,
+		encryption = update.encryption,
+		hidden = update.hidden
+	}
+	if update.encryption == "none" then
+		interface_updates.key = false
+	elseif update.key_supplied then
+		interface_updates.key = update.key
+	end
+
+	local function set_options(section, options)
+		for option, value in pairs(options) do
+			local ok, result
+			if value == false then
+				ok, result = pcall(uci.delete, uci, "wireless", section, option)
+			else
+				ok, result = pcall(uci.set, uci, "wireless", section, option, value)
+			end
+			if not ok or result ~= true then return false end
+		end
+		return true
+	end
+
+	if not set_options(update.radio, radio_updates)
+		or not set_options(update.section, interface_updates) then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "Wireless settings could not be staged; no reload was attempted." })
+		return
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "wireless")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "Wireless settings could not be committed; no reload was attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local rollback_saved = restore_wireless_snapshot(uci, update.radio, update.section, snapshot)
+		local rollback_ok, rollback_status = false, -1
+		if rollback_saved then
+			rollback_ok, rollback_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+		end
+		local rolled_back = rollback_saved and rollback_ok and rollback_status == 0
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "Wi-Fi reload failed. The previous radio and AP settings were restored."
+				or "Wi-Fi reload failed and rollback could not be confirmed. Inspect wireless configuration locally before applying more changes.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	respond(nil, {
+		ok = true,
+		radio = update.radio,
+		section = update.section,
+		ssid = update.ssid,
+		encryption = update.encryption,
+		hidden = update.hidden == "1",
+		channel = update.channel,
+		key_set = update.encryption ~= "none",
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
 
 function action_sqm_update()
 	local http = require "luci.http"
@@ -1520,6 +1768,7 @@ function action_api()
 		policy_rules = rule_inventory.rules,
 		clients = dhcp_clients(),
 		wireless = wireless,
+		wireless_configs = wireless_config_inventory(uci),
 		wireless_clients = wireless_clients(wireless),
 		sqm = sqm,
 		mwan3 = mwan3,
