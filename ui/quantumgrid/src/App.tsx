@@ -4915,6 +4915,23 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
         )}
       </Panel>
 
+      <Panel title="Native button event hooks" eyebrow="PROCD · EXISTING SYSTEM HANDLERS">
+        <div className="hardware-button-status">
+          <div><span>gpio-button-hotplug driver</span><Status active={hardware?.button_driver_loaded === true}>{hardware?.button_driver_loaded ? "DETECTED" : "NOT DETECTED"}</Status></div>
+          <div><span>/etc/rc.button directory</span><Status active={hardware?.button_hooks_available === true}>{hardware?.button_hooks_available ? "AVAILABLE" : "UNAVAILABLE"}</Status></div>
+        </div>
+        {!hardware?.button_hooks_available ? (
+          <div className="module-message">Native button handler inventory is unavailable on this firmware.</div>
+        ) : (hardware.button_handlers ?? []).length === 0 ? (
+          <div className="module-message">The native handler directory exists, but it contains no named button handlers.</div>
+        ) : (
+          <div className="hardware-button-handlers">
+            {(hardware.button_handlers ?? []).map((name) => <span key={name}>{name}</span>)}
+          </div>
+        )}
+        <div className="module-message">OpenWrt procd dispatches Linux button events to the matching /etc/rc.button handler. QuantumGrid inventories these existing names but does not replace, wrap or intercept reset/WPS actions, and does not yet display a live press/release event stream.</div>
+      </Panel>
+
       <Panel title="LED class devices" eyebrow="KERNEL LED CLASS · BOUNDED RUNTIME CONTROL">
         {!hardware?.leds_available ? (
           <div className="module-message">The kernel LED class directory is unavailable. No LED controls are exposed.</div>
