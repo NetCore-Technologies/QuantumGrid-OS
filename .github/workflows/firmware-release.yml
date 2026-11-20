@@ -100,6 +100,7 @@ jobs:
             "QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi"
           bash scripts/verify-aw1000-ubi.sh \
             "dist/QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi"
+          cp scripts/install-aw1000-ubi.sh dist/install-aw1000-ubi.sh
           copy_required "*arcadyan_aw1000-initramfs-uImage.itb" \
             "QuantumGrid-OS-${VERSION}-AW1000-initramfs-uImage.itb"
 
