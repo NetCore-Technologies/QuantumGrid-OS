@@ -150,8 +150,10 @@ measurements where returned, plus RJ11 service/patch state. Signal strength and 
 are included only when the relevant wireless or modem interface reports them. DHCP leases show address
 allocation, not current reachability or wireless association.
 WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi association
-data is read from OpenWrt's iwinfo ubus API; missing RF fields remain unavailable rather than
-being inferred. A single ICMP probe is
+data is read from OpenWrt's iwinfo ubus API; the client inventory can filter and sort stations by
+reported TX retries and failed packets, and exports the active diagnostic filters with each row.
+Missing driver counters remain unavailable rather than being inferred; retry/failure counts are
+cumulative station counters, not a measured packet-loss percentage. A single ICMP probe is
 shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
 
 The custom API route is protected by LuCI's authenticated administrator tree and accepts no
