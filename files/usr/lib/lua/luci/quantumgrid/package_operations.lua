@@ -32,7 +32,11 @@ local PROTECTED_PACKAGES = {
 	["rpcd-mod-ucode"] = true,
 	["rpcd-mod-iwinfo"] = true,
 	["kmod-aw1000-fxs"] = true,
-	["luci-app-fxs"] = true
+	["luci-app-fxs"] = true,
+	["libubus-lua"] = true,
+	["libjson-c"] = true,
+	["libblobmsg-json"] = true,
+	["luci-mod-admin-full"] = true
 }
 
 local PROTECTED_PREFIXES = {
@@ -40,6 +44,8 @@ local PROTECTED_PREFIXES = {
 	"wpad",
 	"qca%-nss",
 	"ath11k",
+	"kernel%-",
+	"dnsmasq",
 	"luci%-mod%-"
 }
 
