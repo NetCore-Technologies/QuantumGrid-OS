@@ -370,6 +370,7 @@ local function wireless_config_inventory(uci, radios)
 						mode = mode,
 						ssid = tostring(section.ssid or ""),
 						encryption = tostring(section.encryption or "none"),
+						ieee80211w = tostring(section.ieee80211w or ""),
 						hidden = section.hidden == "1",
 						key_set = type(section.key) == "string" and section.key ~= "",
 						radius_auth_server = tostring(section.auth_server or ""),
