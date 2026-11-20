@@ -20,6 +20,7 @@ local redirect = firewall.summarize_redirect({
 }, 1)
 
 assert(redirect.name == "Office HTTPS")
+assert(redirect.section == "cfg0031", "stable UCI section IDs should be preserved")
 assert(redirect.source_zone == "wan wan6")
 assert(redirect.destination_zone == "lan")
 assert(redirect.protocol == "tcp udp")
