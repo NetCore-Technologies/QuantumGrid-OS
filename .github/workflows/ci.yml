@@ -37,6 +37,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/wifi-client-history.test.mjs
       - name: Test firewall posture review
         run: node --experimental-strip-types --test ../../tests/firewall-posture.test.mjs
+      - name: Test IPv4 and IPv6 policy rule parser
+        run: lua5.1 tests/policy-routing.lua
       - name: Audit npm dependency advisories
         shell: bash
         run: |
@@ -95,5 +97,6 @@ jobs:
         run: |
           bash -n build.sh quantumgrid-configure.sh scripts/setup-aw1000-phone-feed.sh scripts/verify-aw1000-ubi.sh tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
         run: bash tests/firmware-smoke.sh
