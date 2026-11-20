@@ -2377,7 +2377,16 @@ local function office_network_status(uci, fs)
 					ignore = section.ignore == "1",
 					dhcpv6 = section.dhcpv6,
 					ra = section.ra,
-					ndp = section.ndp
+					ndp = section.ndp,
+					ra_flags = section.ra_flags,
+					ra_slaac = section.ra_slaac ~= "0",
+					ra_dns = section.ra_dns ~= "0",
+					ra_preference = section.ra_preference or "medium",
+					ra_lifetime = tonumber(section.ra_lifetime) or 2700,
+					dhcpv6_na = section.dhcpv6_na ~= "0",
+					dhcpv6_pd = section.dhcpv6_pd ~= "0",
+					dhcpv6_assignall = section.dhcpv6_assignall ~= "0",
+					dhcpv6_pd_min_len = tonumber(section.dhcpv6_pd_min_len) or 62
 				})
 			end
 		end)
