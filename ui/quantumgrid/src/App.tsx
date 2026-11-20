@@ -1804,6 +1804,9 @@ function NetworkControlPage({
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
   const routes = routerOverview?.routes ?? [];
+  const policyRules = routerOverview?.policy_rules ?? [];
+  const [ruleFamily, setRuleFamily] = useState<"all" | "IPv4" | "IPv6">("all");
+  const [ruleSearch, setRuleSearch] = useState("");
   const [routeFamily, setRouteFamily] = useState<"all" | "IPv4" | "IPv6">("all");
   const [interfaceScope, setInterfaceScope] = useState<"all" | "wan" | "lan">("all");
   const [interfaceSort, setInterfaceSort] = useState<"name" | "rx" | "tx" | "errors">("name");
@@ -1830,6 +1833,17 @@ function NetworkControlPage({
       left.table.localeCompare(right.table) ||
       (left.metric ?? Number.MAX_SAFE_INTEGER) - (right.metric ?? Number.MAX_SAFE_INTEGER));
 
+  const ruleQuery = ruleSearch.trim().toLocaleLowerCase();
+  const visiblePolicyRules = policyRules
+    .filter((rule) => (ruleFamily === "all" || rule.family === ruleFamily) && [
+      rule.family, String(rule.priority), rule.source, rule.destination, rule.fwmark,
+      rule.input_interface, rule.output_interface, rule.protocol, rule.uid_range,
+      rule.table, rule.action, rule.selectors,
+    ].join(" ").toLocaleLowerCase().includes(ruleQuery))
+    .slice()
+    .sort((left, right) => left.family.localeCompare(right.family) ||
+      left.priority - right.priority || left.selectors.localeCompare(right.selectors));
+
   const exportRoutes = () => {
     if (!routerOverview?.routes_available || visibleRoutes.length === 0) return;
     const exportedAt = new Date().toISOString();
@@ -1845,6 +1859,28 @@ function NetworkControlPage({
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-default-routes-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
+  const exportPolicyRules = () => {
+    if (!routerOverview?.policy_rules_available || visiblePolicyRules.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Exported at (UTC)", "Family filter", "Search filter", "Family", "Priority", "Source", "Destination", "Firewall mark", "Input interface", "Output interface", "Protocol", "UID range", "Action", "Lookup table", "Selectors"],
+      ...visiblePolicyRules.map((rule) => [
+        exportedAt, ruleFamily, ruleSearch, rule.family, rule.priority, rule.source, rule.destination,
+        rule.fwmark, rule.input_interface, rule.output_interface, rule.protocol, rule.uid_range,
+        rule.action, rule.table, rule.selectors,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-policy-routing-rules-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -1998,7 +2034,51 @@ function NetworkControlPage({
             </div>
           </>
         )}
-        <div className="module-message">This is a snapshot of default routes across kernel tables, not an evaluation of ip rule priorities, mwan3 tracking health, connection marks or the route selected for a particular packet. A lower metric only compares routes within the same routing table. Route presence does not by itself prove upstream reachability.</div>
+        <div className="module-message">This is a read-only snapshot of kernel policy rules. Rules are evaluated by ascending priority; lookup rules direct matching packets to a routing table. QuantumGrid does not change rule order, marks, routes or Multi-WAN policy.</div>
+      </Panel>
+
+      <Panel
+        title="Policy routing rules"
+        eyebrow="IP RULES · READ-ONLY"
+        action={
+          <div className="network-interface-tools">
+            <select aria-label="Filter policy rule family" value={ruleFamily} onChange={(event) => setRuleFamily(event.target.value as "all" | "IPv4" | "IPv6")}>
+              <option value="all">IPv4 + IPv6</option>
+              <option value="IPv4">IPv4 only</option>
+              <option value="IPv6">IPv6 only</option>
+            </select>
+            <input type="search" aria-label="Search policy routing rules" placeholder="Search mark, source, interface or table" value={ruleSearch} onChange={(event) => setRuleSearch(event.target.value)} />
+            <span>{visiblePolicyRules.length} of {routerOverview?.policy_rules_count ?? policyRules.length} rules</span>
+            <button className="hero-button wifi-export-button" onClick={exportPolicyRules} disabled={!routerOverview?.policy_rules_available || visiblePolicyRules.length === 0}>Export policy rules CSV</button>
+          </div>
+        }
+      >
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !routerOverview.policy_rules_available ? (
+          <div className="module-message">The router could not read IPv4/IPv6 policy rules. Check that the ip utility is installed.</div>
+        ) : visiblePolicyRules.length === 0 ? (
+          <div className="module-message">{policyRules.length === 0 ? "No policy rules were returned by the router." : "No policy rules match the selected family and search filter."}</div>
+        ) : (
+          <>
+            <div className="module-message">{visiblePolicyRules.length} matching rules shown. {routerOverview.policy_rules_truncated ? "The router inventory is capped at 64 rules; the export contains the visible subset only." : "The complete reported inventory is available."}</div>
+            <div className="device-list">
+              {visiblePolicyRules.map((rule) => (
+                <div className="device-row policy-rule-row" key={rule.family + "-" + rule.priority + "-" + rule.selectors}>
+                  <div className="device-title">
+                    <div className="device-icon"><Globe2 size={17} /></div>
+                    <div><strong>{rule.family} · Priority {fmt(rule.priority)}</strong><span>{rule.action === "lookup" ? "Lookup rule" : rule.action}</span></div>
+                  </div>
+                  <div><small>LOOKUP TARGET</small><b>{rule.table || "N/A"}</b></div>
+                  <div><small>SOURCE / DESTINATION</small><b>From {rule.source} · To {rule.destination}</b></div>
+                  <div><small>MARK / INTERFACES</small><b>{rule.fwmark || "No mark"}</b><small>{[rule.input_interface ? "iif " + rule.input_interface : "", rule.output_interface ? "oif " + rule.output_interface : "", rule.protocol ? rule.protocol : "", rule.uid_range ? "uid " + rule.uid_range : ""].filter(Boolean).join(" · ") || "No additional selectors"}</small></div>
+                  <div><small>ALL SELECTORS</small><b>{rule.selectors || "—"}</b></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="module-message">Priority order is reported by the kernel, but a rule listing is not a packet-by-packet route simulation. This view does not verify connection tracking marks, mwan3 health checks, reachability or which interface a live flow ultimately uses.</div>
       </Panel>
 
       <div className="module-grid">
