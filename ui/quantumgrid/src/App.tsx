@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6852,6 +6852,15 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         forwardings={inventory?.forwardings ?? []}
         refresh={refresh}
       />
+      <OfficeWifiNetworkManager
+        available={Boolean(inventory?.available)}
+        truncated={Boolean(inventory?.truncated)}
+        aps={inventory?.wifi_aps ?? []}
+        interfaces={interfaces}
+        zones={zones}
+        refresh={refresh}
+      />
+
 
       <Panel title="Office deployment readiness" eyebrow="CONFIGURATION INVENTORY · NOT A COMPLIANCE RESULT">
         <div className="office-readiness-list">
@@ -6866,6 +6875,142 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   );
 }
 
+
+function OfficeWifiNetworkManager({
+  available,
+  truncated,
+  aps,
+  interfaces,
+  zones,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  aps: Array<{ section: string; ssid: string; device: string; networks: string[]; disabled: boolean }>;
+  interfaces: RouterOfficeInterface[];
+  zones: RouterOfficeFirewallZone[];
+  refresh: () => void;
+}) {
+  const externalNetworks = new Set(
+    zones.filter((zone) =>
+      ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
+      zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase())),
+    ).flatMap((zone) => zone.networks),
+  );
+  const eligibleNetworks = interfaces.filter((iface) =>
+    /^[A-Za-z0-9_.-]{1,64}$/.test(iface.name) &&
+    !["wan", "wan6", "wwan", "cellular"].includes(iface.name.toLowerCase()) &&
+    !externalNetworks.has(iface.name),
+  );
+  const [selected, setSelected] = useState<Record<string, string>>({});
+  const [confirmed, setConfirmed] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState("");
+  const [notices, setNotices] = useState<Record<string, { success: boolean; message: string }>>({});
+  const bind = async (ap: { section: string; ssid: string; networks: string[] }) => {
+    const target = selected[ap.section] ?? (ap.networks.length === 1 ? ap.networks[0] : "");
+    if (!target || saving || !confirmed[ap.section]) return;
+    setSaving(ap.section);
+    setNotices((current) => ({ ...current, [ap.section]: undefined as never }));
+    try {
+      const result = await updateRouterOfficeWifiNetwork({ section: ap.section, network: target });
+      setConfirmed((current) => ({ ...current, [ap.section]: false }));
+      setNotices((current) => ({
+        ...current,
+        [ap.section]: {
+          success: true,
+          message: result.reloaded
+            ? "SSID network binding saved to " + result.network + "; Wi-Fi reload completed."
+            : "SSID is already assigned to " + result.network + ". No reload was needed.",
+        },
+      }));
+      refresh();
+    } catch (cause) {
+      setNotices((current) => ({
+        ...current,
+        [ap.section]: {
+          success: false,
+          message: cause instanceof Error ? cause.message : "The SSID network binding could not be updated.",
+        },
+      }));
+    } finally {
+      setSaving("");
+    }
+  };
+  return (
+    <Panel title="SSID-to-network binding" eyebrow="WIRELESS AP → OFFICE LAN / VLAN">
+      {!available ? (
+        <div className="module-message">Office network inventory is unavailable. SSID binding changes are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The office network inventory is truncated. Resolve it before changing SSID bindings.</div>
+      ) : eligibleNetworks.length === 0 ? (
+        <div className="module-message">No eligible non-WAN office network interfaces were found. Create and validate a LAN/VLAN interface in native LuCI first.</div>
+      ) : aps.length === 0 ? (
+        <div className="module-message">No wireless AP sections were found in UCI.</div>
+      ) : (
+        <div className="office-wifi-binding-list">
+          {aps.map((ap) => {
+            const currentBinding = ap.networks.length === 1 ? ap.networks[0] : "";
+            const target = selected[ap.section] ?? currentBinding;
+            const changed = ap.networks.length !== 1 || target !== currentBinding;
+            const validTarget = eligibleNetworks.some((iface) => iface.name === target);
+            const ready = available && !truncated && !ap.disabled && validTarget &&
+              changed && Boolean(confirmed[ap.section]) && saving !== ap.section && !saving;
+            return (
+              <div className="office-wifi-binding-row" key={ap.section}>
+                <div className="office-wifi-binding-identity">
+                  <strong>{ap.ssid || "Hidden / unnamed SSID"}</strong>
+                  <span>{ap.section} · {ap.device} · {ap.disabled ? "DISABLED" : "AP MODE"}</span>
+                  <small>Currently bound to: {ap.networks.join(", ") || "No network / unknown"}</small>
+                </div>
+                <label>
+                  <span>ASSIGN TO EXISTING LAN / VLAN INTERFACE</span>
+                  <select
+                    value={target}
+                    onChange={(event) => {
+                      setSelected((current) => ({ ...current, [ap.section]: event.target.value }));
+                      setConfirmed((current) => ({ ...current, [ap.section]: false }));
+                    }}
+                    disabled={!available || truncated || ap.disabled || Boolean(saving) || eligibleNetworks.length === 0}
+                  >
+                    <option value="">Choose an interface…</option>
+                    {eligibleNetworks.map((iface) => (
+                      <option value={iface.name} key={iface.name}>
+                        {iface.name} · {iface.protocol} · {iface.ipv4[0] || iface.device || "No IPv4 address"}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="office-reservation-confirm">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(confirmed[ap.section])}
+                    onChange={(event) => setConfirmed((current) => ({ ...current, [ap.section]: event.target.checked }))}
+                    disabled={!changed || !validTarget || ap.disabled || Boolean(saving)}
+                  />
+                  <span>Replace this SSID’s network binding with {target || "the selected network"} and reload Wi-Fi. Connected clients may disconnect.</span>
+                </label>
+                <div className="office-wifi-binding-actions">
+                  <button className="hero-button" type="button" onClick={() => void bind(ap)} disabled={!ready}>
+                    {saving === ap.section ? "Applying…" : "Save SSID binding"}
+                  </button>
+                  <Status active={validTarget && ap.networks.length === 1}>
+                    {ap.networks.length === 1 && validTarget ? "BOUND" : "REVIEW"}
+                  </Status>
+                </div>
+                {notices[ap.section] ? (
+                  <div className={notices[ap.section].success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notices[ap.section].success ? "status" : "alert"}>
+                    {notices[ap.section].message}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="module-message">This binds an existing AP to exactly one existing non-WAN network interface. It does not create an interface, VLAN, IP address, DHCP scope or firewall zone. The active administrator management network is protected by the backend; use a separate AP or out-of-band access to move a management SSID. Verify switch tagging, firewall isolation, DHCP and IPv6 on the destination network before using it for corporate or guest clients.</div>
+    </Panel>
+  );
+}
 
 function OfficeFirewallZoneManager({
   available,
