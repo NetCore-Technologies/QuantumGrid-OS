@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5304,6 +5304,138 @@ function AuditLogPage() {
 }
 
 
+function DhcpScopeCreateForm({ networks, refresh }: {
+  networks: RouterOfficeInterface[];
+  refresh: () => void;
+}) {
+  const [network, setNetwork] = useState(networks[0]?.name ?? "");
+  const [start, setStart] = useState("");
+  const [limit, setLimit] = useState("");
+  const [leaseTime, setLeaseTime] = useState("12h");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!networks.some((item) => item.name === network)) {
+      setNetwork(networks[0]?.name ?? "");
+    }
+  }, [networks, network]);
+
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || busy || !network) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await createRouterDhcpScope({
+        network,
+        start: start.trim(),
+        limit: limit.trim(),
+        lease_time: leaseTime.trim(),
+      });
+      setNotice({
+        success: true,
+        message: "New DHCP scope created: " + result.pool_start_ip + " – " + result.pool_end_ip + ". dnsmasq restarted.",
+      });
+      setStart("");
+      setLimit("");
+      setLeaseTime("12h");
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The DHCP scope could not be created.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (networks.length === 0) {
+    return (
+      <div className="office-dhcp-create-form">
+        <div className="module-message">Every eligible static LAN already has a DHCP scope, or no unused static IPv4 LAN is available. Enable or edit an existing scope above; create new network interfaces and VLANs through the separately managed network workflow.</div>
+      </div>
+    );
+  }
+
+  return (
+    <form className="office-dhcp-create-form" onSubmit={create}>
+      <div className="office-reservation-grid">
+        <label>
+          <span>Existing static LAN</span>
+          <select value={network} onChange={(event) => setNetwork(event.target.value)} required>
+            {networks.map((item) => (
+              <option key={item.name} value={item.name}>{item.name} · {item.ipv4[0]} / {item.netmask}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Lease duration</span>
+          <input
+            type="text"
+            value={leaseTime}
+            onChange={(event) => setLeaseTime(event.target.value)}
+            placeholder="12h"
+            maxLength={16}
+            pattern="[1-9][0-9]{0,8}[smhdw]?"
+            required
+          />
+        </label>
+        <label>
+          <span>Start offset</span>
+          <input
+            type="number"
+            min={1}
+            max={4294967294}
+            step={1}
+            value={start}
+            onChange={(event) => setStart(event.target.value)}
+            placeholder="100"
+            required
+          />
+        </label>
+        <label>
+          <span>Pool size (addresses)</span>
+          <input
+            type="number"
+            min={1}
+            max={4294967294}
+            step={1}
+            value={limit}
+            onChange={(event) => setLimit(event.target.value)}
+            placeholder="120"
+            required
+          />
+        </label>
+      </div>
+      <label className="office-reservation-confirm">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          disabled={busy}
+          onChange={(event) => setConfirmed(event.target.checked)}
+        />
+        <span>I confirm this LAN should start issuing DHCP leases from the calculated address pool, and authorize QuantumGrid to create the scope and restart dnsmasq.</span>
+      </label>
+      <div className="office-reservation-edit-actions">
+        <button className="hero-button" type="submit" disabled={!confirmed || busy || !network || !start || !limit}>
+          <Check size={14} /> {busy ? "Creating DHCP scope…" : "Create DHCP scope"}
+        </button>
+        <span>Only an existing static IPv4 interface is used. The router validates pool boundaries and overlap. This does not create VLANs, firewall zones, Wi-Fi SSIDs or network interfaces.</span>
+      </div>
+      {notice && (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      )}
+    </form>
+  );
+}
+
+
 function DhcpScopeToggle({ scope, refresh }: {
   scope: RouterOfficeDhcpScope;
   refresh: () => void;
@@ -5607,6 +5739,11 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   const [pendingReservationEdit, setPendingReservationEdit] = useState("");
   const [reservationRemoveBusy, setReservationRemoveBusy] = useState(false);
   const [reservationNotice, setReservationNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const existingDhcpNetworks = new Set((inventory?.dhcp_scopes ?? []).map((scope) => scope.interface));
+  const dhcpCreationNetworks = (inventory?.interfaces ?? []).filter((item) =>
+    item.protocol === "static" && item.ipv4.length > 0 && Boolean(item.netmask) &&
+    !existingDhcpNetworks.has(item.name)
+  );
   const enabledDhcpScopes = inventory?.dhcp_scopes.filter((scope) => !scope.ignore) ?? [];
   const reservationNetworks = (inventory?.interfaces ?? []).filter((item) =>
     item.protocol === "static" && item.ipv4.length > 0 && Boolean(item.netmask) &&
@@ -5957,6 +6094,10 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
             )}
           </form>
         )}
+      </Panel>
+
+      <Panel title="Create a DHCP scope" eyebrow="EXISTING STATIC LAN · NEW DHCP POOL">
+        <DhcpScopeCreateForm networks={dhcpCreationNetworks} refresh={refresh} />
       </Panel>
 
       <Panel title="Bridge VLAN membership" eyebrow="TAGGED / UNTAGGED SWITCH PORT INVENTORY">
