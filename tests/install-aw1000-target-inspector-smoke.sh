@@ -51,6 +51,16 @@ contains "$OUTPUT" "Temporary initramfs boot checks: MATCH" "RAM initramfs"
 contains "$OUTPUT" "RESULT: TARGET CHECKS MATCH" "RAM initramfs"
 contains "$OUTPUT" "This inspection is not an installer" "RAM initramfs"
 
+# Missing installer tools must remain an inspection-only result.
+rm -f "$TEST_ROOT/sbin/ubiformat" "$TEST_ROOT/sbin/sha256sum" "$TEST_ROOT/sbin/od"
+OUTPUT="$(QG_INSPECT_ROOT="$TEST_ROOT" sh "$INSPECTOR")"
+contains "$OUTPUT" "Required tool ubiformat MISSING" "missing tool"
+contains "$OUTPUT" "RESULT: INSPECTION ONLY — required installer tools are missing." "missing tool"
+for tool in ubiformat sha256sum od; do
+  printf '#!/bin/sh\\nexit 99\\n' > "$TEST_ROOT/sbin/$tool"
+  chmod 755 "$TEST_ROOT/sbin/$tool"
+done
+
 # An unexpected partition index must never be described as a supported layout.
 sed 's/mtd18: 06400000 00040000 "rootfs"/mtd22: 06400000 00040000 "rootfs"/' \
   "$TEST_ROOT/proc/mtd" > "$TEST_ROOT/proc/mtd.changed"
@@ -58,6 +68,15 @@ cp "$TEST_ROOT/proc/mtd.changed" "$TEST_ROOT/proc/mtd"
 OUTPUT="$(QG_INSPECT_ROOT="$TEST_ROOT" sh "$INSPECTOR")"
 contains "$OUTPUT" "Standard AW1000 MTD geometry: NO MATCH / UNKNOWN" "expanded layout"
 contains "$OUTPUT" "RESULT: STOP — partition geometry" "expanded layout"
+
+# Duplicate partition labels must be treated as ambiguous, never a layout match.
+cp "$TEST_ROOT/proc/mtd" "$TEST_ROOT/proc/mtd.duplicate"
+printf 'mtd22: 06400000 00040000 "rootfs"\\n' >> "$TEST_ROOT/proc/mtd.duplicate"
+cp "$TEST_ROOT/proc/mtd.duplicate" "$TEST_ROOT/proc/mtd"
+OUTPUT="$(QG_INSPECT_ROOT="$TEST_ROOT" sh "$INSPECTOR")"
+contains "$OUTPUT" "rootfs: missing or ambiguous" "duplicate rootfs"
+contains "$OUTPUT" "Standard AW1000 MTD geometry: NO MATCH / UNKNOWN" "duplicate rootfs"
+contains "$OUTPUT" "RESULT: STOP — partition geometry" "duplicate rootfs"
 
 # Incorrect board identity is always a hard stop.
 printf 'other_device\n' > "$TEST_ROOT/tmp/sysinfo/board_name"
