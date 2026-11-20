@@ -1069,6 +1069,10 @@ local function security_status(uci, fs)
 			wireguard_tool_installed = fs.access("/usr/bin/wg") == true,
 			openvpn_service_installed = fs.access("/etc/init.d/openvpn") == true,
 			wireguard_interfaces = {},
+			wireguard_peers_available = false,
+			wireguard_peer_count = 0,
+			wireguard_peers_truncated = false,
+			wireguard_peers = {},
 			openvpn_enabled_instances = 0
 		}
 	}
@@ -1160,6 +1164,19 @@ local function security_status(uci, fs)
 
 	-- Enumerate nftables tables only. This fixed command never accepts user input.
 	local util = require "luci.util"
+	-- wg dump is fixed and read-only. The parser discards keys and endpoint fields.
+	if result.vpn.wireguard_tool_installed then
+		local peer_ok, peer_output = pcall(util.exec, "wg show all dump")
+		if peer_ok and type(peer_output) == "string" then
+			local parser = require "luci.quantumgrid.wireguard"
+			local peers = parser.parse_dump(peer_output, os.time())
+			result.vpn.wireguard_peers_available = peers.available
+			result.vpn.wireguard_peer_count = peers.count
+			result.vpn.wireguard_peers_truncated = peers.truncated
+			result.vpn.wireguard_peers = peers.peers
+		end
+	end
+
 	local exec_ok, output = pcall(util.exec, "nft list tables")
 	if exec_ok and type(output) == "string" then
 		result.nft_available = true
