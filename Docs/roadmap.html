@@ -9,7 +9,7 @@ Only the minimal network identifiers and signal fields needed for comparison are
 memory, with no browser-storage persistence. The comparison exports spreadsheet-safe CSV and the
 scan history has a clear-history action. Associated-
 client inventory also filters and
-sorts by driver-reported TX retries/failures; these are cumulative counters, not packet-loss scores. The Network page also inventories IPv4/IPv6 default routes and policy-routing rules, including lookup tables, priorities, firewall marks and interface selectors. A coverage view cross-references lookup tables with default routes, while keeping missing defaults distinct from invalid or unused policy. These are read-only kernel snapshots, not packet-path simulation or Multi-WAN health verification. The Advanced page also reports
+sorts by driver-reported TX retries/failures; these are cumulative counters, not packet-loss scores. The Network page also inventories IPv4/IPv6 default routes and policy-routing rules, including lookup tables, priorities, firewall marks and interface selectors. A coverage view cross-references lookup tables with default routes, while keeping missing defaults distinct from invalid or unused policy. It also exposes the mwan3 daemon's interface and per-target health state, separate from netifd link state, with filtered CSV export. These are read-only snapshots; they do not change failover policy or simulate packet paths. The Advanced page also reports
 firmware/board identity, loaded kernel modules, service-script and diagnostic-tool presence,
 MTD partitions, block devices and important system mounts, including filesystem capacity/available
 space when statvfs is supported, through read-only checks. The Advanced page also surfaces
