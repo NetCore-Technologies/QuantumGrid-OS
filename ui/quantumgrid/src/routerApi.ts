@@ -657,6 +657,16 @@ export interface RouterOfficeNetworks {
   sampled_at: number;
 }
 
+export interface RouterDhcpReservationResult {
+  ok: true;
+  section: string;
+  name: string;
+  mac: string;
+  ipv4: string;
+  network: string;
+  restarted: true;
+  rolled_back: false;
+}
 export interface RouterAuditEvent {
   timestamp: number;
   actor: string;
@@ -728,6 +738,7 @@ const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-u
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backup";
 const AUDIT_URL = "/cgi-bin/luci/admin/services/quantumgrid/audit";
+const DHCP_RESERVATION_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -1267,4 +1278,51 @@ export async function fetchRouterAuditLog(): Promise<RouterAuditLog> {
     throw new Error("The router returned an invalid audit-log response.");
   }
   return payload as RouterAuditLog;
+}
+export async function createRouterDhcpReservation(input: {
+  name: string;
+  mac: string;
+  ipv4: string;
+  network: string;
+}): Promise<RouterDhcpReservationResult> {
+  const form = new URLSearchParams();
+  form.set("name", input.name);
+  form.set("mac", input.mac);
+  form.set("ipv4", input.ipv4);
+  form.set("network", input.network);
+  const response = await fetch(DHCP_RESERVATION_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Static DHCP reservations require an active router administrator session."
+      : "The router returned an invalid DHCP reservation response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid DHCP reservation response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("name" in payload) || payload.name !== input.name ||
+    !("mac" in payload) || payload.mac !== input.mac.toLowerCase() ||
+    !("ipv4" in payload) || payload.ipv4 !== input.ipv4 ||
+    !("network" in payload) || payload.network !== input.network ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the DHCP reservation and dnsmasq restart.");
+  }
+  return payload as RouterDhcpReservationResult;
 }
