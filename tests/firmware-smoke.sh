@@ -353,6 +353,10 @@ grep -Fq "uci -q set fxs.main.enabled='0'" "$ROOT/files/etc/uci-defaults/90-quan
 
 grep -Fq 'type CellularHistorySample' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'function CellularSignalHistory' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'Export RF history CSV' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'quantumgrid-cellular-rf-history-' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'sample.rssi_dbm, sample.rsrp_dbm, sample.rsrq_db, sample.snr_db' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'rf-history-actions' "$ROOT/ui/quantumgrid/src/index.css"
 grep -Fq '5G RF signal history' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'sampledAt >= sample.sampledAt' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'Bar heights compare readings within this session only' "$ROOT/ui/quantumgrid/src/App.tsx"
