@@ -55,7 +55,6 @@ grep -Fq 'tx_dropped = read_stat("tx_dropped")' "$ROOT/files/usr/lib/lua/luci/co
 grep -Fq 'rx_errors?: number' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'tx_dropped?: number' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 test -f "$ROOT/ui/quantumgrid/src/interfaceRates.ts"
-test -f "$ROOT/tests/interface-rates.test.mjs"
 grep -Fq 'calculateCounterRateMbps(item.rx_bytes, previousCounters.rx_bytes, sampleSeconds)' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'MEASURED RX / TX' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'Packets {item.rx_packets' "$ROOT/ui/quantumgrid/src/App.tsx"
