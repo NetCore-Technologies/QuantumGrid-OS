@@ -591,6 +591,8 @@ export interface RouterOfficeInterface {
   device: string;
   up: boolean;
   ipv4: string[];
+  netmask: string;
+  ip6assign: string;
   ipv6: string[];
   vlan_ids: number[];
   firewall_zones: string[];
