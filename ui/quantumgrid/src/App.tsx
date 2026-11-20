@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5443,8 +5443,34 @@ function DhcpScopeToggle({ scope, refresh }: {
 }) {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [deletePending, setDeletePending] = useState(false);
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
   const enable = scope.ignore;
+
+  const removeScope = async () => {
+    if (!deleteConfirmed || deleteBusy) return;
+    setDeleteBusy(true);
+    setNotice(null);
+    try {
+      await removeRouterDhcpScope(scope.section);
+      setNotice({
+        success: true,
+        message: "The DHCP scope was removed and dnsmasq restarted. Existing clients may retain leases until expiry.",
+      });
+      setDeletePending(false);
+      setDeleteConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The DHCP scope could not be removed.",
+      });
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   const apply = async () => {
     if (!confirmed || busy) return;
@@ -5488,6 +5514,41 @@ function DhcpScopeToggle({ scope, refresh }: {
         <button className="hero-button" type="button" onClick={() => { void apply(); }} disabled={!confirmed || busy}>
           <Check size={14} /> {busy ? "Applying…" : enable ? "Enable DHCP scope" : "Disable DHCP scope"}
         </button>
+      </div>
+      <div className="office-dhcp-remove">
+        {!deletePending ? (
+          <button
+            className="office-remove-start"
+            type="button"
+            onClick={() => {
+              setDeletePending(true);
+              setDeleteConfirmed(false);
+              setConfirmed(false);
+            }}
+            disabled={busy || deleteBusy}
+          >Delete DHCP scope</button>
+        ) : (
+          <>
+            <div className="module-message office-dhcp-remove-warning">
+              Deleting this scope stops this dnsmasq instance from assigning new addresses on {scope.interface}. Existing clients may keep their current leases until expiry. Static host reservations are separate and will not be deleted.
+            </div>
+            <label className="office-reservation-confirm">
+              <input
+                type="checkbox"
+                checked={deleteConfirmed}
+                disabled={deleteBusy}
+                onChange={(event) => setDeleteConfirmed(event.target.checked)}
+              />
+              <span>I understand this DHCP scope will be permanently removed from UCI.</span>
+            </label>
+            <div className="office-dhcp-editor-actions">
+              <button className="office-remove-confirm" type="button" onClick={() => { void removeScope(); }} disabled={!deleteConfirmed || deleteBusy}>
+                {deleteBusy ? "Deleting…" : "Confirm delete scope"}
+              </button>
+              <button className="office-remove-cancel" type="button" onClick={() => { setDeletePending(false); setDeleteConfirmed(false); }} disabled={deleteBusy}>Cancel</button>
+            </div>
+          </>
+        )}
       </div>
       {notice && (
         <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
