@@ -10,6 +10,7 @@ local ALLOWED_ACTIONS = {
 	["admin.password.setup"] = true,
 	["wireless.update"] = true,
 	["sqm.update"] = true,
+	["dhcp.reservation.add"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
 	["package.feed.update"] = true,
