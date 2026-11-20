@@ -113,6 +113,13 @@ local function ipv4_prefix(netmask)
 	return prefix
 end
 
+function validate_reservation_confirmation(value)
+	if value ~= "1" then
+		return nil, "Explicit confirmation is required before creating a static DHCP reservation."
+	end
+	return true
+end
+
 function validate_reservation(name, mac, ipv4)
 	if type(name) ~= "string" or #name < 1 or #name > 63
 		or not name:match("^[A-Za-z0-9][A-Za-z0-9%-]*$") then
