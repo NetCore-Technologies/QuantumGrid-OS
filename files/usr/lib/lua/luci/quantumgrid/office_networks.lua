@@ -206,7 +206,7 @@ function snapshot_dhcp_host_options(snapshot)
 	return result
 end
 
-function validate_dhcp_scope_update(start_value, limit_value, lease_time, interface_address, netmask, other_ranges)
+function validate_dhcp_pool_range(start_value, limit_value, interface_address, netmask, other_ranges)
 	if type(start_value) ~= "string" or #start_value > 10
 		or not start_value:match("^[1-9]%d*$") then
 		return nil, "DHCP start must be a positive whole-number offset."
@@ -219,19 +219,6 @@ function validate_dhcp_scope_update(start_value, limit_value, lease_time, interf
 	local limit = tonumber(limit_value)
 	if not start or not limit or start > 4294967294 or limit > 4294967294 then
 		return nil, "DHCP offset or pool size exceeds the supported IPv4 range."
-	end
-	if type(lease_time) ~= "string" or #lease_time > 16 then
-		return nil, "DHCP lease time must be between 60 seconds and 365 days."
-	end
-	local amount, unit = lease_time:match("^([1-9]%d*)([smhdw]?)$")
-	amount = tonumber(amount)
-	local multiplier = ({ [""] = 1, s = 1, m = 60, h = 3600, d = 86400, w = 604800 })[unit or ""]
-	if not amount or not multiplier then
-		return nil, "Lease time must use seconds, minutes, hours, days or weeks (for example 12h)."
-	end
-	local seconds = amount * multiplier
-	if seconds < 60 or seconds > 31536000 then
-		return nil, "DHCP lease time must be between 60 seconds and 365 days."
 	end
 
 	local router = ipv4_number(interface_address)
@@ -266,13 +253,34 @@ function validate_dhcp_scope_update(start_value, limit_value, lease_time, interf
 	return {
 		start = tostring(start),
 		limit = tostring(limit),
-		lease_time = lease_time,
 		pool_start_ip = ipv4_text(first),
 		pool_end_ip = ipv4_text(last),
 		first = first,
-		last = last,
-		lease_seconds = seconds
+		last = last
 	}
+end
+
+function validate_dhcp_scope_update(start_value, limit_value, lease_time, interface_address, netmask, other_ranges)
+	if type(lease_time) ~= "string" or #lease_time > 16 then
+		return nil, "DHCP lease time must be between 60 seconds and 365 days."
+	end
+	local amount, unit = lease_time:match("^([1-9]%d*)([smhdw]?)$")
+	amount = tonumber(amount)
+	local multiplier = ({ [""] = 1, s = 1, m = 60, h = 3600, d = 86400, w = 604800 })[unit or ""]
+	if not amount or not multiplier then
+		return nil, "Lease time must use seconds, minutes, hours, days or weeks (for example 12h)."
+	end
+	local seconds = amount * multiplier
+	if seconds < 60 or seconds > 31536000 then
+		return nil, "DHCP lease time must be between 60 seconds and 365 days."
+	end
+
+	local pool, pool_error = validate_dhcp_pool_range(
+		start_value, limit_value, interface_address, netmask, other_ranges)
+	if not pool then return nil, pool_error end
+	pool.lease_time = lease_time
+	pool.lease_seconds = seconds
+	return pool
 end
 
 function live_lease_conflict(contents, address, mac)
