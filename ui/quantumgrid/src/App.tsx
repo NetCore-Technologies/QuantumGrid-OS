@@ -4825,6 +4825,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   const modules = platform?.modules ?? [];
   const tools = platform?.tools ?? [];
   const services = platform?.services ?? [];
+  const acceleration = platform?.acceleration;
   const storage = platform?.storage ?? [];
   const [conntrackHistory, setConntrackHistory] = useState<ConntrackHistorySample[]>([]);
   useEffect(() => {
@@ -4886,6 +4887,8 @@ function AdvancedControlPage({ routerOverview, refresh }: {
       ...runtimeRows,
       [generatedAt, platform.hostname, "Kernel networking", "Connection tracking", conntrack?.available ? (conntrack.status?.toUpperCase() ?? "UNKNOWN") : "UNAVAILABLE", "Read-only nf_conntrack_count / nf_conntrack_max; warning at 75%, critical at 90%", "", "", conntrack?.used_percent ?? "", conntrack?.available ? `${conntrack.count?.toLocaleString() ?? "N/A"} / ${conntrack.maximum?.toLocaleString() ?? "N/A"} entries; ${conntrack.free?.toLocaleString() ?? "N/A"} free` : ""],
       ...modules.map((item) => [generatedAt, platform.hostname, "Kernel module", item.name, item.loaded ? "LOADED" : "NOT LOADED", "", "", "", "", ""]),
+      ...(acceleration?.components ?? []).map((item) => [generatedAt, platform.hostname, "Acceleration component", item.name, item.present ? "PRESENT" : "MISSING", item.kind + " · " + item.detail, "", "", "", ""]),
+      ...(acceleration ? [[generatedAt, platform.hostname, "Acceleration summary", "NSS / EDMA / PPE", acceleration.status.toUpperCase(), acceleration.note, "", "", "", acceleration.offload_verified ? "VERIFIED" : "UNVERIFIED"]] : []),
       ...tools.map((item) => [generatedAt, platform.hostname, "Diagnostic tool", item.name, item.available ? "AVAILABLE" : "MISSING", "", "", "", "", ""]),
       ...services.map((item) => [generatedAt, platform.hostname, "Init script", item.name, item.installed ? "PRESENT" : "MISSING", "Presence is not runtime health", "", "", "", ""]),
       ...storage.map((item) => [generatedAt, platform.hostname, "MTD partition", item.device, item.name, "erase block " + item.erase_size_bytes + " bytes", item.size_bytes, "", "", ""]),
@@ -4946,6 +4949,40 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               <div className="platform-detail-wide"><small>LOAD AVERAGE · 1 / 5 / 15 MIN</small><strong>{load.length === 0 ? "N/A" : load.slice(0, 3).map((value) => fmt(value, 2)).join(" / ")}</strong></div>
             </div>
             <div className="module-message">Values come from the authenticated router telemetry sample. Unavailable CPU or thermal readings stay marked N/A; this panel does not estimate missing values.</div>
+          </Panel>
+          <Panel title="NSS / EDMA / PPE readiness" eyebrow="DEVICE TREE · KERNEL MODULES · FIRMWARE">
+            {acceleration ? (
+              <>
+                <div className="acceleration-summary">
+                  <div>
+                    <small>NSS COMPONENT STATUS</small>
+                    <strong>{acceleration.status === "components-present-unverified" ? "COMPONENTS PRESENT" : acceleration.status === "partial" ? "PARTIAL" : "NOT DETECTED"}</strong>
+                  </div>
+                  <div>
+                    <small>REPORTED COMPONENTS</small>
+                    <strong>{fmt(acceleration.present_components)} / {fmt(acceleration.required_components)}</strong>
+                  </div>
+                  <div>
+                    <small>END-TO-END OFFLOAD</small>
+                    <strong>NOT VERIFIED</strong>
+                  </div>
+                </div>
+                <div className="platform-check-list acceleration-components">
+                  {acceleration.components.map((component) => (
+                    <div className="platform-check-row" key={component.name}>
+                      <div className="acceleration-component-copy">
+                        <span>{component.name}</span>
+                        <small>{component.kind.toUpperCase()} · {component.detail}</small>
+                      </div>
+                      <Status active={component.present}>{component.present ? "PRESENT" : "MISSING"}</Status>
+                    </div>
+                  ))}
+                </div>
+                <div className="module-message">{acceleration.note}</div>
+              </>
+            ) : (
+              <div className="module-message">Waiting for read-only NSS, EDMA and PPE component inventory.</div>
+            )}
           </Panel>
           <Panel title="Connection tracking capacity" eyebrow="READ-ONLY · NETFILTER KERNEL COUNTERS">
             {conntrack?.available ? (
