@@ -5951,11 +5951,16 @@ function DhcpScopeEditor({ scope, refresh }: {
   const [start, setStart] = useState(scope.start);
   const [limit, setLimit] = useState(String(scope.limit ?? ""));
   const [leaseTime, setLeaseTime] = useState(scope.lease_time || "12h");
+  const [dhcpv6, setDhcpv6] = useState<"UNCHANGED" | "disabled" | "server">("UNCHANGED");
+  const [ra, setRa] = useState<"UNCHANGED" | "disabled" | "server">("UNCHANGED");
+  const [ndp, setNdp] = useState<"UNCHANGED" | "disabled">("UNCHANGED");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
-  const changed = start !== scope.start || limit !== String(scope.limit ?? "") || leaseTime !== (scope.lease_time || "12h");
+  const changed = start !== scope.start || limit !== String(scope.limit ?? "") ||
+    leaseTime !== (scope.lease_time || "12h") || dhcpv6 !== "UNCHANGED" ||
+    ra !== "UNCHANGED" || ndp !== "UNCHANGED";
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!confirmed || !changed || busy || scope.ignore) return;
@@ -5967,12 +5972,20 @@ function DhcpScopeEditor({ scope, refresh }: {
         start: start.trim(),
         limit: limit.trim(),
         lease_time: leaseTime.trim(),
+        dhcpv6,
+        ra,
+        ndp,
       });
       setNotice({
         success: true,
-        message: "DHCP pool updated: " + result.pool_start_ip + " – " + result.pool_end_ip + ". dnsmasq restarted.",
+        message: "DHCP pool updated: " + result.pool_start_ip + " – " + result.pool_end_ip +
+          ". dnsmasq restarted" + (result.odhcpd_restarted ? " and odhcpd restarted." : "."),
+
       });
       setConfirmed(false);
+      setDhcpv6("UNCHANGED");
+      setRa("UNCHANGED");
+      setNdp("UNCHANGED");
       refresh();
     } catch (cause) {
       setNotice({
@@ -6011,7 +6024,31 @@ function DhcpScopeEditor({ scope, refresh }: {
                 required
               />
             </label>
+            <label>
+              <span>DHCPv6 SERVER</span>
+              <select value={dhcpv6} onChange={(event) => { setDhcpv6(event.target.value as "UNCHANGED" | "disabled" | "server"); setConfirmed(false); }} disabled={busy}>
+                <option value="UNCHANGED">Keep current ({scope.dhcpv6 || "default"})</option>
+                <option value="disabled">Disabled</option>
+                <option value="server">Server</option>
+              </select>
+            </label>
+            <label>
+              <span>ROUTER ADVERTISEMENTS (RA)</span>
+              <select value={ra} onChange={(event) => { setRa(event.target.value as "UNCHANGED" | "disabled" | "server"); setConfirmed(false); }} disabled={busy}>
+                <option value="UNCHANGED">Keep current ({scope.ra || "default"})</option>
+                <option value="disabled">Disabled</option>
+                <option value="server">Server</option>
+              </select>
+            </label>
+            <label>
+              <span>NEIGHBOUR DISCOVERY PROXY (NDP)</span>
+              <select value={ndp} onChange={(event) => { setNdp(event.target.value as "UNCHANGED" | "disabled"); setConfirmed(false); }} disabled={busy}>
+                <option value="UNCHANGED">Keep current ({scope.ndp || "default"})</option>
+                <option value="disabled">Disabled</option>
+              </select>
+            </label>
           </div>
+          <div className="module-message">Relay and hybrid modes are preserved as-is but are not configured here. They require an odhcpd master/relay topology that must be established and validated separately in native LuCI.</div>
           <label className="office-reservation-confirm">
             <input
               type="checkbox"
@@ -6019,13 +6056,13 @@ function DhcpScopeEditor({ scope, refresh }: {
               disabled={busy || !changed}
               onChange={(event) => setConfirmed(event.target.checked)}
             />
-            <span>I confirm this DHCP pool change and authorize QuantumGrid to update the existing scope and restart dnsmasq.</span>
+            <span>I confirm these DHCP and IPv6 settings and authorize QuantumGrid to update this scope, restart dnsmasq, and restart odhcpd when IPv6 settings change.</span>
           </label>
           <div className="office-dhcp-editor-actions">
             <button className="hero-button" type="submit" disabled={!confirmed || !changed || busy}>
               <Check size={14} /> {busy ? "Applying scope…" : "Apply DHCP scope"}
             </button>
-            <span>Only start offset, pool size and lease duration change. Existing DNS, DHCPv6, RA and interface settings are preserved.</span>
+            <span>IPv4 pool range and lease values, DHCPv6 server, router advertisements and NDP are managed independently. Unchanged retains any existing relay/hybrid configuration.</span>
           </div>
         </>
       )}
@@ -6384,7 +6421,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                   </div>
                   <DhcpScopeToggle scope={scope} refresh={refresh} />
                   <DhcpScopeEditor
-                    key={`${scope.section}:${scope.start}:${scope.limit ?? ""}:${scope.lease_time || "12h"}`}
+                    key={`${scope.section}:${scope.start}:${scope.limit ?? ""}:${scope.lease_time || "12h"}:${scope.dhcpv6}:${scope.ra}:${scope.ndp}`}
                     scope={scope}
                     refresh={refresh}
                   />
