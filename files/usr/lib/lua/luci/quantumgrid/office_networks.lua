@@ -213,12 +213,83 @@ function validate_dhcp_scope_ipv6_modes(dhcpv6, ra, ndp)
 	return { dhcpv6 = dhcpv6, ra = ra, ndp = ndp }
 end
 
+function validate_dhcp_scope_ipv6_advanced(
+	ra_flags, ra_slaac, ra_dns, ra_preference, ra_lifetime,
+	dhcpv6_na, dhcpv6_pd, dhcpv6_assignall, dhcpv6_pd_min_len)
+	local valid_flags = {
+		UNCHANGED = true,
+		none = true,
+		["other-config"] = true,
+		["managed-config"] = true,
+		["managed-config+other-config"] = true
+	}
+	if type(ra_flags) ~= "string" or not valid_flags[ra_flags] then
+		return nil, "RA flags must be unchanged, none, other-config, managed-config or managed-config+other-config."
+	end
+	local function valid_toggle(value, name)
+		if value ~= "UNCHANGED" and value ~= "0" and value ~= "1" then
+			return nil, name .. " must be unchanged, enabled or disabled."
+		end
+		return value
+	end
+	local toggles = {
+		{ ra_slaac, "RA SLAAC" },
+		{ ra_dns, "RA DNS" },
+		{ dhcpv6_na, "DHCPv6 IA_NA" },
+		{ dhcpv6_pd, "DHCPv6 prefix delegation" },
+		{ dhcpv6_assignall, "DHCPv6 assign-all" }
+	}
+	for _, entry in ipairs(toggles) do
+		local value, err = valid_toggle(entry[1], entry[2])
+		if not value then return nil, err end
+	end
+	local preferences = { UNCHANGED = true, low = true, medium = true, high = true }
+	if type(ra_preference) ~= "string" or not preferences[ra_preference] then
+		return nil, "RA route preference must be unchanged, low, medium or high."
+	end
+	if type(ra_lifetime) ~= "string" then
+		return nil, "RA lifetime must be a whole number from 0 to 2700 seconds or unchanged."
+	end
+	if ra_lifetime ~= "UNCHANGED" then
+		if #ra_lifetime > 4 or not ra_lifetime:match("^%d+$") then
+			return nil, "RA lifetime must be a whole number from 0 to 2700 seconds or unchanged."
+		end
+		local lifetime = tonumber(ra_lifetime)
+		if not lifetime or lifetime < 0 or lifetime > 2700 then
+			return nil, "RA lifetime must be a whole number from 0 to 2700 seconds or unchanged."
+		end
+	end
+	if type(dhcpv6_pd_min_len) ~= "string" then
+		return nil, "Minimum delegated IPv6 prefix length must be unchanged or a whole number from 1 to 64."
+	end
+	if dhcpv6_pd_min_len ~= "UNCHANGED" then
+		if #dhcpv6_pd_min_len > 2 or not dhcpv6_pd_min_len:match("^[1-9]%d?$") then
+			return nil, "Minimum delegated IPv6 prefix length must be unchanged or a whole number from 1 to 64."
+		end
+		local prefix_length = tonumber(dhcpv6_pd_min_len)
+		if not prefix_length or prefix_length < 1 or prefix_length > 64 then
+			return nil, "Minimum delegated IPv6 prefix length must be unchanged or a whole number from 1 to 64."
+		end
+	end
+	return {
+		ra_flags = ra_flags,
+		ra_slaac = ra_slaac,
+		ra_dns = ra_dns,
+		ra_preference = ra_preference,
+		ra_lifetime = ra_lifetime,
+		dhcpv6_na = dhcpv6_na,
+		dhcpv6_pd = dhcpv6_pd,
+		dhcpv6_assignall = dhcpv6_assignall,
+		dhcpv6_pd_min_len = dhcpv6_pd_min_len
+	}
+end
+
 function snapshot_dhcp_scope_options(snapshot)
 	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
 		return nil, "A DHCP scope snapshot is required."
 	end
 	local result = {}
-	for _, name in ipairs({ "start", "limit", "leasetime", "dhcpv6", "ra", "ndp" }) do
+	for _, name in ipairs({ "start", "limit", "leasetime", "dhcpv6", "ra", "ndp", "ra_flags", "ra_slaac", "ra_dns", "ra_preference", "ra_lifetime", "dhcpv6_na", "dhcpv6_pd", "dhcpv6_assignall", "dhcpv6_pd_min_len" }) do
 		local value = snapshot[name]
 		table.insert(result, {
 			name = name,
@@ -857,7 +928,16 @@ function build_inventory(source)
 					ignore = item.ignore == true,
 					dhcpv6 = clean(item.dhcpv6, 16),
 					ra = clean(item.ra, 16),
-					ndp = clean(item.ndp, 16)
+					ndp = clean(item.ndp, 16),
+					ra_flags = values(item.ra_flags, 8),
+					ra_slaac = item.ra_slaac ~= false,
+					ra_dns = item.ra_dns ~= false,
+					ra_preference = clean(item.ra_preference, 8),
+					ra_lifetime = tonumber(item.ra_lifetime) or 2700,
+					dhcpv6_na = item.dhcpv6_na ~= false,
+					dhcpv6_pd = item.dhcpv6_pd ~= false,
+					dhcpv6_assignall = item.dhcpv6_assignall ~= false,
+					dhcpv6_pd_min_len = tonumber(item.dhcpv6_pd_min_len) or 62
 				})
 			end
 		end
