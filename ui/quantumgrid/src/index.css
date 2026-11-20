@@ -9880,3 +9880,96 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+.office-zone-policy-list {
+  display: grid;
+  gap: 10px;
+}
+.office-zone-policy-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+.office-zone-policy-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.office-zone-policy-heading > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.office-zone-policy-heading strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.office-zone-policy-heading span {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.office-zone-policy-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 7px;
+  background: rgba(255,255,255,.025);
+}
+.office-zone-policy-current span,
+.office-zone-policy-fields label > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.office-zone-policy-current strong {
+  color: var(--text);
+  font-size: 9px;
+}
+.office-zone-policy-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.office-zone-policy-fields label:not(.office-zone-masquerade) {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.office-zone-policy-fields select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
+.office-zone-masquerade {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.office-zone-policy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .office-zone-policy-fields {
+    grid-template-columns: 1fr;
+  }
+}
