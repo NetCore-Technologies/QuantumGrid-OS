@@ -34,7 +34,7 @@ function parse_policy_rules(output, family)
 		return rules, count, truncated
 	end
 
-	for line in output:gmatch("[^\\r\\n]+") do
+	for line in output:gmatch("[^\r\n]+") do
 		local priority_text, selectors = line:match("^%s*(%d+):%s*(.-)%s*$")
 		local priority = tonumber(priority_text)
 		if priority and priority >= 0 and priority <= 4294967295 and priority == math.floor(priority) then
