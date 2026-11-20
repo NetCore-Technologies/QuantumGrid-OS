@@ -6048,7 +6048,7 @@ function DhcpScopeEditor({ scope, refresh }: {
               </select>
             </label>
           </div>
-          <div className="module-message">Relay and hybrid modes are preserved as-is but are not configured here. They require an odhcpd master/relay topology that must be established and validated separately in native LuCI.</div>
+          <div className="module-message">Relay and hybrid modes are preserved as-is but are not configured here. They require an odhcpd master/relay topology that must be established and validated separately in native LuCI. DHCPv6 does not provide the default router by itself; clients that need an IPv6 default route generally also need working RA service and prefix configuration.</div>
           <label className="office-reservation-confirm">
             <input
               type="checkbox"
@@ -6414,7 +6414,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                       <b>{scope.start || "?"} / {scope.limit ?? "?"} / {scope.lease_time || "unspecified"}</b>
                       <small>CALCULATED POOL RANGE</small>
                       <b>{scope.range_valid ? scope.pool_start_ip + " – " + scope.pool_end_ip : scope.range_error || "Not calculated"}</b>
-                      <small>DHCPv6 {scope.dhcpv6 || "unspecified"} · RA {scope.ra || "unspecified"}</small>
+                      <small>DHCPv6 {scope.dhcpv6 || "default"} · RA {scope.ra || "default"} · NDP {scope.ndp || "default"}</small>
                       {scope.overlap ? <span className="office-chip warning">OVERLAPS ANOTHER DHCP POOL</span> : null}
                     </div>
                     <Status active={scope.range_valid && !scope.overlap}>{scope.ignore ? "DISABLED" : scope.overlap ? "OVERLAP" : scope.range_valid ? "RANGE VALID" : "RANGE INVALID"}</Status>
