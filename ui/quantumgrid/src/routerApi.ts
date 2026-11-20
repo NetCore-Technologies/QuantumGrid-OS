@@ -715,11 +715,37 @@ export interface RouterAuditLog {
   sampled_at: number;
 }
 
+export interface RouterRemoteSyslogStatus {
+  available: boolean;
+  service_installed: boolean;
+  config_available: boolean;
+  enabled: boolean;
+  host: string;
+  port: number;
+  protocol: "tcp" | "udp";
+  hostname: string;
+  prefix: string;
+  sampled_at: number;
+}
+
+export interface RouterRemoteSyslogUpdateResult {
+  ok: true;
+  enabled: boolean;
+  host: string;
+  port: number;
+  protocol: "tcp" | "udp";
+  hostname: string;
+  prefix: string;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
   hardware_io?: RouterHardwareIoStatus;
   office_networks?: RouterOfficeNetworks;
+  remote_syslog?: RouterRemoteSyslogStatus;
   conntrack?: RouterConntrackStatus;
   timestamp: number;
   routes_available?: boolean;
@@ -771,6 +797,7 @@ const AUDIT_URL = "/cgi-bin/luci/admin/services/quantumgrid/audit";
 const DHCP_RESERVATION_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation";
 const DHCP_RESERVATION_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-remove";
 const DHCP_SCOPE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-update";
+const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -1458,4 +1485,72 @@ export async function updateRouterDhcpScope(input: {
     throw new Error("The router did not confirm the DHCP scope update and dnsmasq restart.");
   }
   return payload as RouterDhcpScopeUpdateResult;
+}
+export async function updateRouterRemoteSyslog(input: {
+  enabled: boolean;
+  host: string;
+  port: number;
+  protocol: "tcp" | "udp";
+  hostname: string;
+  prefix: string;
+}): Promise<RouterRemoteSyslogUpdateResult> {
+  if (input.enabled) {
+    if (!/^(?:[A-Za-z0-9-]+\.)*[A-Za-z0-9-]+$/.test(input.host) || input.host.length > 253 || input.host.includes("..")) {
+      throw new Error("Enter a valid IPv4 address or DNS host name for the remote syslog server.");
+    }
+    if (!Number.isSafeInteger(input.port) || input.port < 1 || input.port > 65535) {
+      throw new Error("Remote syslog port must be a whole number from 1 to 65,535.");
+    }
+    if (input.protocol !== "tcp" && input.protocol !== "udp") {
+      throw new Error("Remote syslog transport must be TCP or UDP.");
+    }
+    if (input.hostname && (!/^(?:[A-Za-z0-9][A-Za-z0-9-]*\.)*[A-Za-z0-9][A-Za-z0-9-]*$/.test(input.hostname) || input.hostname.length > 253)) {
+      throw new Error("The sender hostname must be a valid DNS host name.");
+    }
+    if (input.prefix.length > 32 || (input.prefix !== "" && !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(input.prefix))) {
+      throw new Error("The syslog prefix may contain letters, digits, dots, underscores and hyphens (maximum 32 characters).");
+    }
+  }
+  const form = new URLSearchParams();
+  form.set("enabled", input.enabled ? "1" : "0");
+  form.set("host", input.host);
+  form.set("port", String(input.port));
+  form.set("protocol", input.protocol);
+  form.set("hostname", input.hostname);
+  form.set("prefix", input.prefix);
+  const response = await fetch(REMOTE_SYSLOG_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Remote syslog changes require an active router administrator session."
+      : "The router returned an invalid remote syslog response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid remote syslog response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("enabled" in payload) || payload.enabled !== input.enabled ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false ||
+    !("host" in payload) || typeof payload.host !== "string" ||
+    !("port" in payload) || typeof payload.port !== "number" ||
+    !("protocol" in payload) || (payload.protocol !== "tcp" && payload.protocol !== "udp")
+  ) {
+    throw new Error("The router did not confirm the remote syslog update and log-service restart.");
+  }
+  return payload as RouterRemoteSyslogUpdateResult;
 }
