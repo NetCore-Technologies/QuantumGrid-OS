@@ -182,17 +182,21 @@ basic WPA-PSK/SAE variant does not include the full EAP/RADIUS authenticator. Co
 RADIUS address or DNS hostname, a UDP authentication port (default 1812) and a shared secret of
 16–128 bytes. The server must be reachable from the router on the configured port.
 
-The shared secret is never returned by the QuantumGrid API. Leaving it blank preserves the
+The authentication shared secret is never returned by the QuantumGrid API. Leaving it blank preserves the
 existing secret only while the enterprise mode and RADIUS server remain unchanged; enabling
-enterprise security or changing the server requires a new secret. Switching back to personal or
-open security removes the RADIUS options. All changed wireless options, including the RADIUS
-secret, are included in the existing rollback snapshot if the Wi-Fi reload fails. The API exposes
-only whether a secret is configured, not its value.
+enterprise security or changing the server requires a new secret. Optional RADIUS accounting can
+use a separate IPv4/DNS server and UDP port (default 1813) with its own shared secret; leaving that
+server blank disables accounting, and leaving the server blank in the editor defaults it to the
+authentication server. Existing accounting secrets are preserved only while their server is
+unchanged. Switching back to personal or open security removes both authentication and accounting
+RADIUS options. All changed wireless options and both secrets are included in the existing rollback
+snapshot if the Wi-Fi reload fails. The API exposes only whether each secret is configured, not its
+value.
 
-This is a single-server WPA2-Enterprise authenticator configuration, not a complete NAC platform.
-The AP remains attached to its existing network. RADIUS accounting, dynamic VLAN assignment,
-802.1X switch-port control, certificate provisioning, EAP policy management and WPA3-Enterprise
-are not provided by this editor. Administrators must deploy and secure their own RADIUS service,
+This is a WPA2-Enterprise authenticator with optional accounting, not a complete NAC platform.
+The AP remains attached to its existing network. Dynamic VLAN assignment, 802.1X switch-port
+control, certificate provisioning, EAP policy management and WPA3-Enterprise are not provided by
+this editor. Administrators must deploy and secure their own RADIUS service,
 configure client EAP identities/certificates as required by their organisation, allow the router
 to reach the server, and test the authentication path before production rollout. The software
 tests validate configuration and rollback logic; they do not prove radio/driver compatibility or
