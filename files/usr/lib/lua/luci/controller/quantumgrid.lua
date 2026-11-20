@@ -2675,10 +2675,9 @@ function action_dhcp_scope_toggle()
 				end
 			end
 		end
-		local pool, pool_error = validator.validate_dhcp_scope_update(
+		local pool, pool_error = validator.validate_dhcp_pool_range(
 			type(snapshot.start) == "string" and snapshot.start or "",
 			type(snapshot.limit) == "string" and snapshot.limit or "",
-			type(snapshot.leasetime) == "string" and snapshot.leasetime or "",
 			interface_address, netmask, other_ranges)
 		if not pool then
 			respond(409, { ok = false, error = "The disabled DHCP scope cannot be safely enabled: " .. tostring(pool_error) })
