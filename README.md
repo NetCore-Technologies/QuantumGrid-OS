@@ -380,7 +380,10 @@ written to the redacted office audit log. Incorrect membership can interrupt wir
 administrator access. The editor does not create L3 interfaces, IP subnets, DHCP scopes, firewall
 zones, Wi-Fi SSIDs or downstream switch configuration; those remain separate explicit tasks.
 VLAN changes should be staged from a verified management path and tested with an out-of-band
-recovery method available.
+recovery method available. QuantumGrid checks the current administrator's IPv4 route: it blocks
+edits/removal of the VLAN carrying that session and preserves the native untagged memberships
+when the session routes directly over the bridge. Untagged membership on a port already assigned
+to another VLAN is also rejected.
 
 ## Office network inventory
 
