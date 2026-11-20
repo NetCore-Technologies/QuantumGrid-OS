@@ -4999,6 +4999,10 @@ function OfficeNetworksPage({ routerOverview }: {
         "output=" + item.output + "; forward=" + item.forward + "; masquerade=" + item.masquerade,
         item.networks.join(" "), "", "", "", "", "",
       ]),
+      ...(inventory.forwardings ?? []).map((item) => [
+        exportedAt, "Firewall forwarding", item.name, "", item.source + " → " + item.destination,
+        "CONFIGURED", "", "", "", "", "", "",
+      ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
         "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore + "; dhcpv6=" + item.dhcpv6 + "; ra=" + item.ra,
@@ -5181,11 +5185,31 @@ function OfficeNetworksPage({ routerOverview }: {
         </Panel>
       </div>
 
+      <Panel title="Inter-zone forwarding" eyebrow="FIREWALL UCI · SOURCE → DESTINATION">
+        {!inventory?.firewall_available ? (
+          <div className="module-message">Firewall configuration could not be read.</div>
+        ) : inventory.forwardings.length === 0 ? (
+          <div className="module-message">No explicit inter-zone forwarding sections were returned. Zone-level policies and firewall rules can still affect traffic; this list is not the complete packet policy.</div>
+        ) : (
+          <div className="office-forwarding-list">
+            {inventory.forwardings.map((forwarding) => (
+              <div className="office-forwarding-row" key={forwarding.name}>
+                <div><strong>{forwarding.source}</strong><span>{forwarding.name}</span></div>
+                <span className="office-forwarding-arrow">→</span>
+                <div><strong>{forwarding.destination}</strong><span>Explicit UCI forwarding</span></div>
+                <Status active={true}>CONFIGURED</Status>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">These are explicit UCI zone-forwarding entries only. They do not represent every firewall rule, rule ordering, runtime nftables verdict or a tested network path.</div>
+      </Panel>
+
       <Panel title="Office deployment readiness" eyebrow="CONFIGURATION INVENTORY · NOT A COMPLIANCE RESULT">
         <div className="office-readiness-list">
           <div><strong>Separate L3 networks</strong><span>{inventory?.interface_count ?? 0} network interface(s) found. Review the interface map to identify corporate, guest, IoT and management networks.</span></div>
           <div><strong>VLAN-aware bridges</strong><span>{inventory?.vlan_filtering_bridge_count ?? 0} bridge(s) report VLAN filtering enabled, with {inventory?.vlan_count ?? 0} bridge VLAN section(s).</span></div>
-          <div><strong>Firewall segmentation</strong><span>{inventory?.firewall_available ? zones.length + " firewall zone(s) correlated by network name." : "Firewall configuration inventory unavailable."} Actual rule evaluation and inter-VLAN traffic tests are not performed.</span></div>
+          <div><strong>Firewall segmentation</strong><span>{inventory?.firewall_available ? zones.length + " firewall zone(s) and " + inventory.forwarding_count + " explicit zone forwarding(s) are inventoried." : "Firewall configuration inventory unavailable."} Actual rule evaluation and inter-VLAN traffic tests are not performed.</span></div>
           <div><strong>Wireless mapping</strong><span>{inventory?.wireless_available ? (inventory.wifi_ap_count + " configured AP section(s); inspect the SSID-to-network associations above.") : "Wireless configuration inventory unavailable."}</span></div>
         </div>
         <div className="module-message">This release provides visibility only. VLAN creation, DHCP pool provisioning, firewall isolation, RADIUS/802.1X, site-to-site VPN policy and switch-port changes are not yet exposed as write controls. Do not treat this inventory as proof that a network is safe for production office deployment.</div>
