@@ -608,6 +608,12 @@ export interface RouterOfficeFirewallZone {
   masquerade: boolean;
 }
 
+export interface RouterOfficeForwarding {
+  name: string;
+  source: string;
+  destination: string;
+}
+
 export interface RouterOfficeDhcpScope {
   name: string;
   interface: string;
@@ -639,6 +645,8 @@ export interface RouterOfficeNetworks {
   bridges: RouterOfficeBridge[];
   vlans: RouterOfficeVlan[];
   zones: RouterOfficeFirewallZone[];
+  forwardings: RouterOfficeForwarding[];
+  forwarding_count: number;
   interface_count: number;
   bridge_count: number;
   vlan_count: number;
