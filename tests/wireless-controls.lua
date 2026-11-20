@@ -60,6 +60,45 @@ rejected_enterprise("radius.example.com", "1812", "short", "weak RADIUS shared s
 rejected_enterprise("radius.example.com", "1812", string.rep("s", 129), "oversized RADIUS shared secret")
 rejected_enterprise("radius.example.com", "1812", "a-strong-radius-secret\n", "control character in RADIUS shared secret")
 
+local enterprise_accounting = wireless.validate_update(
+	"radio0", "default_radio0", "Staff", "wpa2", "",
+	"0", "auto", "auto", "auto", "0", "1",
+	"radius.example.com", "1812", "a-strong-radius-shared-secret",
+	"accounting.example.com", "1813", "another-long-radius-secret"
+)
+assert(enterprise_accounting ~= nil, "valid RADIUS accounting configuration should pass")
+assert(enterprise_accounting.accounting_server == "accounting.example.com")
+assert(enterprise_accounting.accounting_port == "1813")
+assert(enterprise_accounting.accounting_secret_supplied == true)
+
+local enterprise_accounting_defaults = wireless.validate_update(
+	"radio0", "default_radio0", "Staff", "wpa2", "",
+	"0", "auto", "auto", "auto", "0", "1",
+	"radius.example.com", "1812", "a-strong-radius-shared-secret",
+	"", "1813", ""
+)
+assert(enterprise_accounting_defaults ~= nil and enterprise_accounting_defaults.accounting_server == "")
+assert(enterprise_accounting_defaults.accounting_secret_supplied == false,
+	"an empty accounting server should disable accounting and not request a secret")
+
+local function rejected_accounting(server, port, secret, label)
+	local result, err = wireless.validate_update(
+		"radio0", "default_radio0", "Staff", "wpa2", "",
+		"0", "auto", "auto", "auto", "0", "1",
+		"radius.example.com", "1812", "a-strong-radius-shared-secret",
+		server, port, secret
+	)
+	assert(result == nil, label .. " should be rejected")
+	assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
+end
+rejected_accounting("https://accounting.example.com", "1813", "another-long-radius-secret", "RADIUS accounting URL")
+rejected_accounting("accounting.example.com", "0", "another-long-radius-secret", "zero RADIUS accounting port")
+rejected_accounting("accounting.example.com", "65536", "another-long-radius-secret", "out-of-range RADIUS accounting port")
+rejected_accounting("accounting.example.com", "1813;uci", "another-long-radius-secret", "injected RADIUS accounting port")
+rejected_accounting("accounting.example.com", "1813", "short", "short RADIUS accounting secret")
+rejected_accounting("accounting.example.com", "1813", string.rep("s", 129), "oversized RADIUS accounting secret")
+rejected_accounting("accounting.example.com", "1813", "secret-with-control\n", "control character in RADIUS accounting secret")
+
 local enterprise_with_psk = wireless.validate_update(
 	"radio0", "default_radio0", "Staff", "wpa2", "personal-password-123",
 	"0", "auto", "auto", "auto", "0", "1",
