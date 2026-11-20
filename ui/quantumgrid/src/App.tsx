@@ -3140,6 +3140,27 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
   const cakeCount = qdiscs.filter((qdisc) => qdisc.kind.toLowerCase() === "cake").length;
   const queueConfigAvailable = sqm?.config_available === true && sqm.config_readable;
   const runtimeAvailable = sqm?.runtime_available === true;
+  const exportQdiscs = () => {
+    if (qdiscs.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Exported at (UTC)", "Qdisc", "Handle", "Device", "Parent", "Root", "Bytes", "Packets", "Dropped", "Overlimits", "Requeues", "Backlog bytes", "Backlog packets"],
+      ...qdiscs.map((qdisc) => [
+        exportedAt, qdisc.kind, qdisc.handle, qdisc.device, qdisc.parent,
+        qdisc.root, qdisc.bytes, qdisc.packets, qdisc.dropped, qdisc.overlimits,
+        qdisc.requeues, qdisc.backlog_bytes, qdisc.backlog_packets,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-qdisc-inventory-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
 
   return (
     <div className="module-page gaming-page">
@@ -3187,7 +3208,12 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
         <div className="module-message">Queue rates are configured SQM values in kbit/s. An enabled UCI section alone does not prove that its shaper is attached to the live WAN path.</div>
       </Panel>
 
-      <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={<Status active={runtimeAvailable}>{runtimeAvailable ? "RUNTIME READ" : "NOT AVAILABLE"}</Status>}>
+      <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={
+        <div className="qdisc-export-actions">
+          <Status active={runtimeAvailable}>{runtimeAvailable ? "RUNTIME READ" : "NOT AVAILABLE"}</Status>
+          <button className="hero-button wifi-export-button" onClick={exportQdiscs} disabled={qdiscs.length === 0}>Export qdisc CSV</button>
+        </div>
+      }>
         {!sqm ? (
           <div className="module-message">Waiting for router qdisc telemetry.</div>
         ) : !runtimeAvailable ? (
