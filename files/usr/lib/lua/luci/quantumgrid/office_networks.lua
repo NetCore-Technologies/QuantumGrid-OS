@@ -399,16 +399,20 @@ local ALLOWED_ZONE_POLICIES = {
 	DROP = true,
 }
 
+local function valid_zone_policy_choice(value)
+	return value == "UNCHANGED" or value == "INHERIT" or ALLOWED_ZONE_POLICIES[value] == true
+end
+
 function validate_office_zone_policy(section, output, forward, masquerade, zones)
 	if type(section) ~= "string" or #section < 1 or #section > 64
 		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
 		return nil, "The firewall zone section identifier is invalid."
 	end
-	if type(output) ~= "string" or not ALLOWED_ZONE_POLICIES[output] then
-		return nil, "Zone output policy must be ACCEPT, REJECT or DROP."
+	if type(output) ~= "string" or not valid_zone_policy_choice(output) then
+		return nil, "Zone output policy must be unchanged, inherited, ACCEPT, REJECT or DROP."
 	end
-	if type(forward) ~= "string" or not ALLOWED_ZONE_POLICIES[forward] then
-		return nil, "Zone forward policy must be ACCEPT, REJECT or DROP."
+	if type(forward) ~= "string" or not valid_zone_policy_choice(forward) then
+		return nil, "Zone forward policy must be unchanged, inherited, ACCEPT, REJECT or DROP."
 	end
 	if masquerade ~= "0" and masquerade ~= "1" then
 		return nil, "Masquerading must be explicitly enabled or disabled."
@@ -423,7 +427,9 @@ function validate_office_zone_policy(section, output, forward, masquerade, zones
 	return {
 		section = section,
 		output = output,
+		output_write = output ~= "UNCHANGED",
 		forward = forward,
+		forward_write = forward ~= "UNCHANGED",
 		masquerade = masquerade == "1",
 		masq_value = masquerade
 	}
