@@ -5278,7 +5278,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
       ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
-        "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore + "; dhcpv6=" + item.dhcpv6 + "; ra=" + item.ra,
+        "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore + "; dhcpv6=" + item.dhcpv6 + "; ra=" + item.ra + "; pool=" + (item.range_valid ? item.pool_start_ip + "-" + item.pool_end_ip : item.range_error) + "; overlaps=" + item.overlap,
         "", "", "", "", "", "",
       ]),
       ...(inventory.static_leases ?? []).map((item) => [
@@ -5370,13 +5370,20 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
               {inventory.dhcp_scopes.map((scope) => (
                 <div className="office-bridge-row" key={scope.name}>
                   <div><strong>{scope.name}</strong><span>{scope.interface}</span></div>
-                  <div><small>START OFFSET / LIMIT / LEASE</small><b>{scope.start || "?"} / {scope.limit ?? "?"} / {scope.lease_time || "unspecified"}</b><small>DHCPv6 {scope.dhcpv6 || "unspecified"} · RA {scope.ra || "unspecified"}</small></div>
-                  <Status active={!scope.ignore}>{scope.ignore ? "DISABLED" : "CONFIGURED"}</Status>
+                  <div>
+                    <small>START OFFSET / LIMIT / LEASE</small>
+                    <b>{scope.start || "?"} / {scope.limit ?? "?"} / {scope.lease_time || "unspecified"}</b>
+                    <small>CALCULATED POOL RANGE</small>
+                    <b>{scope.range_valid ? scope.pool_start_ip + " – " + scope.pool_end_ip : scope.range_error || "Not calculated"}</b>
+                    <small>DHCPv6 {scope.dhcpv6 || "unspecified"} · RA {scope.ra || "unspecified"}</small>
+                    {scope.overlap ? <span className="office-chip warning">OVERLAPS ANOTHER DHCP POOL</span> : null}
+                  </div>
+                  <Status active={scope.range_valid && !scope.overlap}>{scope.ignore ? "DISABLED" : scope.overlap ? "OVERLAP" : scope.range_valid ? "RANGE VALID" : "RANGE INVALID"}</Status>
                 </div>
               ))}
             </div>
           )}
-          <div className="module-message">Start is a DHCP pool offset, not an expanded IP range. This inventory does not calculate exclusions or verify address availability against live leases.</div>
+          <div className="module-message">Start is interpreted as an offset from the subnet network address and limit as the pool size. The range preview checks subnet boundaries and overlap between configured scopes; it does not calculate static exclusions or prove that every address is unused.</div>
         </Panel>
         <Panel title="Static DHCP reservations" eyebrow="HOST NAME · MAC · IPV4">
           {!inventory?.dhcp_available ? (
