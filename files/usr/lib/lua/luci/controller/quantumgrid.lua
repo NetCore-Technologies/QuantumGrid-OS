@@ -372,6 +372,9 @@ local function wireless_config_inventory(uci, radios)
 						encryption = tostring(section.encryption or "none"),
 						hidden = section.hidden == "1",
 						key_set = type(section.key) == "string" and section.key ~= "",
+						radius_auth_server = tostring(section.auth_server or ""),
+						radius_auth_port = tonumber(section.auth_port) or 1812,
+						radius_secret_set = type(section.auth_secret) == "string" and section.auth_secret ~= "",
 						interface_disabled = section.disabled == "1",
 						radio_disabled = uci:get("wireless", radio, "disabled") == "1",
 						channel = type(channel) == "string" and channel ~= "" and channel or "auto",
@@ -1087,7 +1090,10 @@ function action_wireless_update()
 		http.formvalue("htmode", true),
 		http.formvalue("txpower", true),
 		http.formvalue("allow_open", true),
-		http.formvalue("confirmed", true)
+		http.formvalue("confirmed", true),
+		http.formvalue("radius_server", true),
+		http.formvalue("radius_port", true),
+		http.formvalue("radius_secret", true) or ""
 	)
 	if not update then
 		respond(400, { ok = false, error = validation_error })
@@ -1136,9 +1142,17 @@ function action_wireless_update()
 
 	local current_encryption = uci:get("wireless", update.section, "encryption") or "none"
 	local current_key = uci:get("wireless", update.section, "key")
-	if update.encryption ~= "none" and not update.key_supplied
+	if update.encryption ~= "none" and update.encryption ~= "wpa2" and not update.key_supplied
 		and (current_encryption ~= update.encryption or type(current_key) ~= "string" or current_key == "") then
 		respond(400, { ok = false, error = "Enter a new passphrase when enabling or changing wireless security." })
+		return
+	end
+	local current_radius_server = uci:get("wireless", update.section, "auth_server") or ""
+	local current_radius_secret = uci:get("wireless", update.section, "auth_secret")
+	if update.encryption == "wpa2" and not update.radius_secret_supplied
+		and (current_encryption ~= "wpa2" or current_radius_server ~= update.radius_server
+			or type(current_radius_secret) ~= "string" or current_radius_secret == "") then
+		respond(400, { ok = false, error = "Enter a new RADIUS shared secret when enabling enterprise security or changing its server." })
 		return
 	end
 
@@ -1151,7 +1165,7 @@ function action_wireless_update()
 		end
 		snapshot.radio[option] = value or false
 	end
-	for _, option in ipairs({ "ssid", "encryption", "key", "hidden" }) do
+	for _, option in ipairs({ "ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
@@ -1176,6 +1190,17 @@ function action_wireless_update()
 		encryption = update.encryption,
 		hidden = update.hidden
 	}
+	if update.encryption == "wpa2" then
+		interface_updates.auth_server = update.radius_server
+		interface_updates.auth_port = update.radius_port
+		if update.radius_secret_supplied then
+			interface_updates.auth_secret = update.radius_secret
+		end
+	else
+		interface_updates.auth_server = false
+		interface_updates.auth_port = false
+		interface_updates.auth_secret = false
+	end
 	if update.encryption == "none" then
 		interface_updates.key = false
 	elseif update.key_supplied then
@@ -1239,7 +1264,10 @@ function action_wireless_update()
 		channel = update.channel,
 		htmode = update.htmode,
 		txpower = update.txpower,
-		key_set = update.encryption ~= "none",
+		key_set = update.encryption ~= "none" and update.encryption ~= "wpa2",
+		radius_auth_server = update.encryption == "wpa2" and update.radius_server or nil,
+		radius_auth_port = update.encryption == "wpa2" and tonumber(update.radius_port) or nil,
+		radius_secret_set = update.encryption == "wpa2",
 		reloaded = true,
 		rolled_back = false
 	})
