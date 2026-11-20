@@ -567,7 +567,7 @@ export interface RouterOfficeBridge {
 
 export interface RouterOfficeVlanPort {
   name: string;
-  mode: "tagged" | "untagged";
+  mode: "tagged" | "untagged" | "unspecified";
   pvid: boolean;
 }
 
