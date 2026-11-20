@@ -94,7 +94,7 @@ jobs:
 
   cleanup-obsolete-branches:
     name: Delete only verified merged branches
-    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: clean up merged branches' }}
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -107,9 +107,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           TARGET_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         shell: bash
         run: |
           set -euo pipefail
+          if [[ "${COMMIT_MESSAGE}" != "chore: clean up merged branches" ]]; then
+            echo "SKIP: this is not the requested one-time cleanup commit"
+            exit 0
+          fi
           open_heads="$(gh api --paginate "repos/${REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].head.ref')"
 
           remove_branch() {
