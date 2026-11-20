@@ -5034,22 +5034,33 @@ function SqmQueueEditor({
 }: {
   queue: RouterSqmQueue;
   saving: boolean;
-  onApply: (section: string, enabled: boolean, download: number, upload: number) => Promise<void>;
+  onApply: (section: string, enabled: boolean, download: number, upload: number, linklayer: string, overhead: number, tcMpu: number) => Promise<void>;
 }) {
   const [enabled, setEnabled] = useState(queue.enabled);
   const [download, setDownload] = useState(queue.download_kbps === undefined ? "" : String(queue.download_kbps));
   const [upload, setUpload] = useState(queue.upload_kbps === undefined ? "" : String(queue.upload_kbps));
+  const [linklayer, setLinklayer] = useState(queue.linklayer || "none");
+  const [overhead, setOverhead] = useState(String(queue.overhead ?? 0));
+  const [tcMpu, setTcMpu] = useState(String(queue.tc_mpu ?? 0));
   const [acknowledged, setAcknowledged] = useState(false);
-
   const parseRate = (value: string) => /^\d+$/.test(value) ? Number(value) : NaN;
+  const parseInteger = (value: string) => /^-?\d+$/.test(value) ? Number(value) : NaN;
   const downloadRate = parseRate(download);
   const uploadRate = parseRate(upload);
+  const overheadBytes = parseInteger(overhead);
+  const mpuBytes = parseInteger(tcMpu);
   const validRates = Number.isInteger(downloadRate) && Number.isInteger(uploadRate) &&
     downloadRate >= 64 && downloadRate <= 1000000 &&
     uploadRate >= 64 && uploadRate <= 1000000;
+  const validTuning = ["none", "ethernet", "atm", "ptm"].includes(linklayer) &&
+    Number.isInteger(overheadBytes) && overheadBytes >= -64 && overheadBytes <= 256 &&
+    Number.isInteger(mpuBytes) && mpuBytes >= 0 && mpuBytes <= 256;
   const changed = enabled !== queue.enabled ||
     downloadRate !== (queue.download_kbps ?? NaN) ||
-    uploadRate !== (queue.upload_kbps ?? NaN);
+    uploadRate !== (queue.upload_kbps ?? NaN) ||
+    linklayer !== (queue.linklayer || "none") ||
+    overheadBytes !== (queue.overhead ?? 0) ||
+    mpuBytes !== (queue.tc_mpu ?? 0);
 
   return (
     <div className="sqm-policy-editor">
@@ -5072,15 +5083,30 @@ function SqmQueueEditor({
           <input type="number" min={64} max={1000000} step={1} inputMode="numeric" value={upload}
             onChange={(event) => { setUpload(event.target.value); setAcknowledged(false); }} />
         </label>
+        <label><span>Link-layer type</span>
+          <select value={linklayer} onChange={(event) => { setLinklayer(event.target.value); setAcknowledged(false); }}>
+            <option value="none">None</option><option value="ethernet">Ethernet</option>
+            <option value="atm">ATM / ADSL</option><option value="ptm">PTM / VDSL</option>
+          </select>
+        </label>
+        <label><span>Packet overhead (bytes)</span>
+          <input type="number" min={-64} max={256} step={1} value={overhead}
+            onChange={(event) => { setOverhead(event.target.value); setAcknowledged(false); }} />
+        </label>
+        <label><span>Minimum packet unit (bytes)</span>
+          <input type="number" min={0} max={256} step={1} value={tcMpu}
+            onChange={(event) => { setTcMpu(event.target.value); setAcknowledged(false); }} />
+        </label>
       </div>
+      <p className="sqm-policy-help">Choose the link layer from your ISP connection details. Incorrect framing assumptions can reduce throughput or weaken latency control; QuantumGrid does not infer these values.</p>
       <label className="sqm-policy-ack">
         <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
-        <span>I understand applying changes restarts SQM and may briefly interrupt traffic.</span>
+        <span>I understand applying queue or link-layer changes restarts SQM and may briefly interrupt traffic.</span>
       </label>
       <div className="sqm-policy-actions">
-        <span>Only enabled, download and upload options are changed. Interface, qdisc and script are preserved.</span>
-        <button className="hero-button" disabled={!changed || !validRates || !acknowledged || saving}
-          onClick={() => { void onApply(queue.name, enabled, downloadRate, uploadRate); }}>
+        <span>Interface, queue discipline and setup script stay unchanged. Link-layer calibration affects packet-size accounting.</span>
+        <button className="hero-button" disabled={!changed || !validRates || !validTuning || !acknowledged || saving}
+          onClick={() => { void onApply(queue.name, enabled, downloadRate, uploadRate, linklayer, overheadBytes, mpuBytes); }}>
           {saving ? "Applying…" : "Apply & restart SQM"}
         </button>
       </div>
@@ -5112,11 +5138,11 @@ function GamingControlPage({ routerOverview, refresh }: {
   const runtimeAvailable = sqm?.runtime_available === true;
   const [savingQueue, setSavingQueue] = useState<string | null>(null);
   const [sqmNotice, setSqmNotice] = useState<{ success: boolean; message: string } | null>(null);
-  const applySqmQueue = async (section: string, enabled: boolean, download: number, upload: number) => {
+  const applySqmQueue = async (section: string, enabled: boolean, download: number, upload: number, linklayer: string, overhead: number, tcMpu: number) => {
     setSavingQueue(section);
     setSqmNotice(null);
     try {
-      await updateRouterSqmQueue(section, enabled, download, upload);
+      await updateRouterSqmQueue(section, enabled, download, upload, linklayer, overhead, tcMpu);
       setSqmNotice({ success: true, message: "SQM settings were saved and the service restarted." });
       refresh();
     } catch (error) {
@@ -5211,7 +5237,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         {sqmNotice ? (
           <div className={sqmNotice.success ? "sqm-policy-notice success" : "sqm-policy-notice error"} role="status">{sqmNotice.message}</div>
         ) : null}
-        <div className="module-message">Limits must be whole numbers from 64 to 1,000,000 kbit/s. Applying a change restarts SQM. The router API modifies only the selected existing queue's enabled/download/upload values and attempts to restore the previous values if the restart fails.</div>
+        <div className="module-message">Rate limits must be whole numbers from 64 to 1,000,000 kbit/s. Link-layer overhead accepts -64 to 256 bytes and minimum packet unit accepts 0 to 256 bytes. Changes apply only to the selected existing queue; the router snapshots all changed UCI values and attempts rollback if the SQM restart fails.</div>
       </Panel>
 
       <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={

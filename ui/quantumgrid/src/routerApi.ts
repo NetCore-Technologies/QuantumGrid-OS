@@ -182,6 +182,8 @@ export interface RouterSqmQueue {
   qdisc: string;
   script: string;
   linklayer: string;
+  overhead?: number;
+  tc_mpu?: number;
 }
 
 export interface RouterQdiscState {
@@ -263,6 +265,9 @@ export interface RouterSqmQueueUpdateResult {
   enabled: boolean;
   download_kbps: number;
   upload_kbps: number;
+  linklayer: string;
+  overhead_bytes: number;
+  tc_mpu_bytes: number;
   restarted: true;
   rolled_back: false;
 }
@@ -1318,6 +1323,9 @@ export async function updateRouterSqmQueue(
   enabled: boolean,
   downloadKbps: number,
   uploadKbps: number,
+  linklayer: string,
+  overheadBytes: number,
+  tcMpuBytes: number,
 ): Promise<RouterSqmQueueUpdateResult> {
   if (!/^[A-Za-z0-9_-]{1,32}$/.test(section)) {
     throw new Error("Invalid SQM queue section name.");
@@ -1326,12 +1334,18 @@ export async function updateRouterSqmQueue(
   if (!validRate(downloadKbps) || !validRate(uploadKbps)) {
     throw new Error("Download and upload rates must be whole numbers from 64 to 1,000,000 kbit/s.");
   }
+  if (!["none", "ethernet", "atm", "ptm"].includes(linklayer)) throw new Error("Choose a supported link-layer type.");
+  if (!Number.isInteger(overheadBytes) || overheadBytes < -64 || overheadBytes > 256) throw new Error("Packet overhead must be a whole number from -64 to 256 bytes.");
+  if (!Number.isInteger(tcMpuBytes) || tcMpuBytes < 0 || tcMpuBytes > 256) throw new Error("Minimum packet unit must be a whole number from 0 to 256 bytes.");
 
   const form = new URLSearchParams();
   form.set("section", section);
   form.set("enabled", enabled ? "1" : "0");
   form.set("download", String(downloadKbps));
   form.set("upload", String(uploadKbps));
+  form.set("linklayer", linklayer);
+  form.set("overhead", String(overheadBytes));
+  form.set("tc_mpu", String(tcMpuBytes));
 
   const response = await fetch(SQM_UPDATE_URL, {
     method: "POST",
@@ -1363,6 +1377,9 @@ export async function updateRouterSqmQueue(
     !("enabled" in payload) || payload.enabled !== enabled ||
     !("download_kbps" in payload) || payload.download_kbps !== downloadKbps ||
     !("upload_kbps" in payload) || payload.upload_kbps !== uploadKbps ||
+    !("linklayer" in payload) || payload.linklayer !== linklayer ||
+    !("overhead_bytes" in payload) || payload.overhead_bytes !== overheadBytes ||
+    !("tc_mpu_bytes" in payload) || payload.tc_mpu_bytes !== tcMpuBytes ||
     !("restarted" in payload) || payload.restarted !== true ||
     !("rolled_back" in payload) || payload.rolled_back !== false
   ) {

@@ -7416,7 +7416,8 @@ input::placeholder {
   color: var(--muted);
   font-size: 8px;
 }
-.sqm-policy-fields input[type="number"] {
+.sqm-policy-fields input[type="number"],
+.sqm-policy-fields select {
   width: 100%;
   min-width: 0;
   height: 36px;
@@ -7439,6 +7440,7 @@ input::placeholder {
 .sqm-policy-ack input[type="checkbox"] {
   accent-color: var(--accent, #5a88e8);
 }
+.sqm-policy-help { margin: 10px 0 0; color: var(--muted2); font-size: 8px; line-height: 1.5; }
 .sqm-policy-ack {
   display: flex;
   align-items: flex-start;

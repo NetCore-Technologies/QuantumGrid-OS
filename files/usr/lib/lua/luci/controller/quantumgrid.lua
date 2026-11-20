@@ -946,8 +946,7 @@ local function sqm_restart(sys)
 end
 
 local function restore_sqm_queue(uci, section, snapshot)
-	for _, option in ipairs({ "enabled", "download", "upload" }) do
-		local previous = snapshot[option]
+	for option, previous in pairs(snapshot) do
 		if previous == false then
 			local ok, result = pcall(uci.delete, uci, "sqm", section, option)
 			if not ok or result ~= true then
@@ -1283,7 +1282,10 @@ function action_sqm_update()
 		http.formvalue("section", true),
 		http.formvalue("enabled", true),
 		http.formvalue("download", true),
-		http.formvalue("upload", true)
+		http.formvalue("upload", true),
+		http.formvalue("linklayer", true),
+		http.formvalue("overhead", true),
+		http.formvalue("tc_mpu", true)
 	)
 	if not update then
 		respond(400, { ok = false, error = validation_error })
@@ -1300,8 +1302,22 @@ function action_sqm_update()
 		return
 	end
 
+	local snapshot_options = { "enabled", "download", "upload" }
+	local options = {
+		enabled = update.enabled,
+		download = update.download,
+		upload = update.upload
+	}
+	if update.linklayer ~= nil then
+		for _, option in ipairs({ "linklayer", "overhead", "tcMPU" }) do
+			table.insert(snapshot_options, option)
+		end
+		options.linklayer = update.linklayer
+		options.overhead = update.overhead
+		options.tcMPU = update.tc_mpu
+	end
 	local snapshot = {}
-	for _, option in ipairs({ "enabled", "download", "upload" }) do
+	for _, option in ipairs(snapshot_options) do
 		local ok, value = pcall(uci.get, uci, "sqm", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the existing SQM queue settings." })
@@ -1309,11 +1325,6 @@ function action_sqm_update()
 		end
 		snapshot[option] = value or false
 	end
-	local options = {
-		enabled = update.enabled,
-		download = update.download,
-		upload = update.upload
-	}
 	for option, value in pairs(options) do
 		local ok, result = pcall(uci.set, uci, "sqm", update.section, option, value)
 		if not ok or result ~= true then
@@ -1351,6 +1362,9 @@ function action_sqm_update()
 		enabled = update.enabled == "1",
 		download_kbps = tonumber(update.download),
 		upload_kbps = tonumber(update.upload),
+		linklayer = update.linklayer,
+		overhead_bytes = tonumber(update.overhead),
+		tc_mpu_bytes = tonumber(update.tc_mpu),
 		restarted = true,
 		rolled_back = false
 	})
@@ -1787,7 +1801,9 @@ local function sqm_status(uci, fs)
 					upload_kbps = tonumber(section.upload),
 					qdisc = tostring(section.qdisc or ""),
 					script = tostring(section.script or ""),
-					linklayer = tostring(section.linklayer or "")
+					linklayer = tostring(section.linklayer or ""),
+					overhead = tonumber(section.overhead),
+					tc_mpu = tonumber(section.tcMPU)
 				})
 			end
 		end)
