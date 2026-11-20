@@ -4211,6 +4211,7 @@ function WirelessConfigEditor({
   const supportedTxPower = [...new Set((config.txpower_levels ?? []).map((item) => item.dbm))].sort((left, right) => left - right);
   const txpowerSupported = txpower === "auto" || supportedTxPower.includes(Number(txpower)) || txpower === currentTxpower;
   const encryptionChanged = encryption !== config.encryption;
+  const pmfNeedsRepair = config.encryption === "wpa3" && config.ieee80211w !== "2";
   const enterpriseMode = encryption === "wpa2" || encryption === "wpa3";
   const passphraseRequired = encryption !== "none" && !enterpriseMode &&
     (encryptionChanged || !config.key_set) && passphrase.length === 0;
@@ -4252,7 +4253,7 @@ function WirelessConfigEditor({
     (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
       (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
         !/[\u0000-\u001f\u007f]/.test(accountingSecret))));
-  const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
+  const changed = pmfNeedsRepair || ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
     (enterpriseMode && (radiusServer !== config.radius_auth_server ||
       radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0 ||
       accountingEnabled !== Boolean(config.accounting_server) ||
@@ -4311,7 +4312,7 @@ function WirelessConfigEditor({
       <div className="wireless-config-heading">
         <div>
           <strong>{config.ssid || "Hidden / unnamed network"}</strong>
-          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {(config.encryption === "wpa2" || config.encryption === "wpa3")
+          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {config.encryption === "wpa3" ? (config.ieee80211w === "2" ? "WPA3-E PMF REQUIRED" : "WPA3-E PMF MISSING") : null} · {(config.encryption === "wpa2" || config.encryption === "wpa3")
             ? (config.radius_secret_set
               ? (config.accounting_secret_set ? "RADIUS AUTH + ACCOUNTING SET" : "RADIUS AUTH SET")
               : "RADIUS NOT CONFIGURED")
@@ -4530,6 +4531,7 @@ function WirelessConfigEditor({
       {!txpowerSupported ? <div className="module-message">Choose Auto or a transmit-power level reported by the radio driver.</div> : null}
       {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling personal security or changing the personal security mode.</div> : null}
       {enterpriseMode && encryption === "wpa3" ? <div className="module-message">WPA3-Enterprise enforces Protected Management Frames (802.11w) as required.</div> : null}
+      {pmfNeedsRepair ? <div className="module-message">This existing WPA3-Enterprise AP is missing mandatory Protected Management Frames. Saving will set 802.11w to required.</div> : null}
       {enterpriseMode && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
       {enterpriseMode && !radiusPortValid ? <div className="module-message">Enter a RADIUS authentication port from 1 to 65535.</div> : null}
       {radiusSecretRequired ? <div className="module-message">A new RADIUS shared secret is required when enabling enterprise security or changing its server.</div> : null}
