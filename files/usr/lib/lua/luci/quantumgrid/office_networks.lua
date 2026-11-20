@@ -547,6 +547,114 @@ local function valid_zone_policy_choice(value)
 	return value == "UNCHANGED" or value == "INHERIT" or ALLOWED_ZONE_POLICIES[value] == true
 end
 
+local function port_number(value, label)
+	if type(value) ~= "string" or #value > 5 or not value:match("^%d+$") then
+		return nil, label .. " must be a whole number from 1 to 65535."
+	end
+	local port = tonumber(value)
+	if not port or port < 1 or port > 65535 then
+		return nil, label .. " must be a whole number from 1 to 65535."
+	end
+	return tostring(port)
+end
+
+local function protocol_set(value)
+	if value == "tcp" then return { tcp = true } end
+	if value == "udp" then return { udp = true } end
+	if value == "tcp udp" then return { tcp = true, udp = true } end
+	return nil
+end
+
+function validate_office_port_forward(
+	name, source, destination, protocol, source_port, destination_ip, destination_port,
+	zones, interfaces, existing)
+	if type(name) ~= "string" or #name < 1 or #name > 64
+		or not name:match("^[A-Za-z0-9][A-Za-z0-9_.%-]*$") then
+		return nil, "Rule name must be 1–64 letters, digits, dots, underscores or hyphens and start with a letter or digit."
+	end
+	if type(source) ~= "string" or #source > 64 or not source:match("^[%w_.%-]+$") then
+		return nil, "Select an existing external source firewall zone."
+	end
+	if type(destination) ~= "string" or #destination > 64 or not destination:match("^[%w_.%-]+$") then
+		return nil, "Select an existing internal destination firewall zone."
+	end
+	if source == destination then return nil, "Source and destination zones must be different." end
+	local source_zone, destination_zone
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			if zone.name == source then source_zone = zone end
+			if zone.name == destination then destination_zone = zone end
+		end
+	end
+	if not source_zone or not destination_zone then
+		return nil, "Both firewall zones must already exist in the current configuration."
+	end
+	if not is_external_zone(source_zone) then
+		return nil, "Port forwarding must originate from an external WAN/WWAN firewall zone."
+	end
+	if is_external_zone(destination_zone) then
+		return nil, "The port-forward destination must be an internal LAN/office firewall zone."
+	end
+	local protocols = protocol_set(protocol)
+	if not protocols then return nil, "Protocol must be TCP, UDP or TCP + UDP." end
+	local external_port, external_error = port_number(source_port, "External port")
+	if not external_port then return nil, external_error end
+	local internal_port, internal_error = port_number(destination_port, "Destination port")
+	if not internal_port then return nil, internal_error end
+	if not valid_ipv4(destination_ip) then
+		return nil, "Destination must be a valid IPv4 address inside the selected LAN/VLAN subnet."
+	end
+	local in_destination_subnet = false
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and contains(zone_networks(destination_zone.networks), iface.name) then
+			for _, address in ipairs(values(iface.ipv4, 8)) do
+				if ipv4_in_subnet(destination_ip, address, iface.netmask) then
+					in_destination_subnet = true
+					break
+				end
+			end
+		end
+		if in_destination_subnet then break end
+	end
+	if not in_destination_subnet then
+		return nil, "Destination IPv4 address must be a usable host inside a static subnet attached to the selected destination firewall zone."
+	end
+	for _, redirect in ipairs(type(existing) == "table" and existing or {}) do
+		if type(redirect) == "table" and redirect.source == source
+			and redirect.source_port == external_port then
+			local existing_protocols = protocol_set(redirect.protocol)
+			if existing_protocols and
+				((protocols.tcp and existing_protocols.tcp) or (protocols.udp and existing_protocols.udp)) then
+				return nil, "An existing port-forward rule already uses this external port/protocol on the selected WAN zone."
+			end
+		end
+		if type(redirect) == "table" and redirect.name == name then
+			return nil, "A port-forward rule with this name already exists."
+		end
+	end
+	return {
+		name = name,
+		source = source,
+		destination = destination,
+		protocol = protocol,
+		source_port = external_port,
+		destination_ip = destination_ip,
+		destination_port = internal_port
+	}
+end
+
+function snapshot_firewall_redirect_section(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "redirect"
+		or type(snapshot[".name"]) ~= "string" or snapshot[".name"] == "" then
+		return nil, "A named firewall redirect section is required."
+	end
+	local values = {}
+	for key, value in pairs(snapshot) do
+		if type(key) == "string" and key:sub(1, 1) ~= "." then values[key] = value end
+	end
+	return { name = snapshot[".name"], values = values }
+end
+
 function validate_office_wifi_ap_network(section, network, aps, interfaces, zones)
 	if type(section) ~= "string" or #section < 1 or #section > 64
 		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
@@ -968,6 +1076,8 @@ function build_inventory(source)
 		zones = {},
 		forwardings = {},
 		forwarding_count = 0,
+		redirects = {},
+		redirect_count = 0,
 		dhcp_available = source.dhcp_available == true,
 		dhcp_scopes = {},
 		static_leases = {},
@@ -1013,6 +1123,37 @@ function build_inventory(source)
 		end
 	end
 	result.zone_count = #result.zones
+
+	local source_redirects = type(source.redirects) == "table" and source.redirects or {}
+	for _, item in ipairs(source_redirects) do
+		if type(item) == "table" and #result.redirects < 64 then
+			local section = token(item.section, 64)
+			local name = token(item.name, 64)
+			local source_zone = token(item.source, 64)
+			local destination_zone = token(item.destination, 64)
+			local protocol = item.protocol == "tcp" or item.protocol == "udp" or item.protocol == "tcp udp"
+			local source_port = tonumber(item.source_port)
+			local destination_port = tonumber(item.destination_port)
+			local destination_ip = type(item.destination_ip) == "string" and item.destination_ip or ""
+			if section and name and source_zone and destination_zone and protocol
+				and source_port and source_port >= 1 and source_port <= 65535
+				and destination_port and destination_port >= 1 and destination_port <= 65535
+				and valid_ipv4(destination_ip) then
+				table.insert(result.redirects, {
+					section = section,
+					name = name,
+					source = source_zone,
+					destination = destination_zone,
+					protocol = item.protocol,
+					source_port = source_port,
+					destination_ip = destination_ip,
+					destination_port = destination_port
+				})
+			end
+		end
+	end
+	result.redirect_count = #result.redirects
+	if #source_redirects > #result.redirects then result.truncated = true end
 
 	local source_forwardings = type(source.forwardings) == "table" and source.forwardings or {}
 	for _, item in ipairs(source_forwardings) do
