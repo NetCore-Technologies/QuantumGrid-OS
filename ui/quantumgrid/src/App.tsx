@@ -4,6 +4,7 @@ import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
 import { calculateCounterRateMbps } from "./interfaceRates";
+import { sampleWireGuardPeerRates, wireGuardPeerCounterKey, type WireGuardPeerCounterSnapshot, type WireGuardPeerMeasuredRate } from "./wireGuardPeerRates";
 import {
   collectWifiClientHistory,
   mergeWifiClientHistory,
@@ -1171,6 +1172,7 @@ function Dashboard({
   trafficHistory,
   cellularHistory,
   interfaceCounterDeltas,
+  wireGuardPeerRates,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -1185,6 +1187,7 @@ function Dashboard({
   trafficHistory: number[];
   cellularHistory: CellularHistorySample[];
   interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
+  wireGuardPeerRates: Map<string, WireGuardPeerMeasuredRate>;
 }) {
   const [mobile, setMobile] = useState(false);
 
@@ -1333,6 +1336,7 @@ function Dashboard({
             trafficHistory={trafficHistory}
             cellularHistory={cellularHistory}
             interfaceCounterDeltas={interfaceCounterDeltas}
+            wireGuardPeerRates={wireGuardPeerRates}
           />
         </section>
       </main>
@@ -2701,7 +2705,7 @@ function CellularControlPage({ routerOverview, cellularHistory }: { routerOvervi
 }
 
 
-function SecurityControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOverview: RouterOverview | null; wireGuardPeerRates: Map<string, WireGuardPeerMeasuredRate> }) {
   const security = routerOverview?.security;
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
@@ -2769,14 +2773,20 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
         exportedAt, "WireGuard interface", iface.name, iface.up ? "UP" : "DOWN", iface.device,
       ]),
       [exportedAt, "WireGuard", "Peer telemetry", wireGuardPeersAvailable ? "AVAILABLE" : "UNAVAILABLE", security.vpn.wireguard_tool_installed ? "wg tool installed" : "wg tool not installed"],
-      ...wireGuardPeers.map((peer) => [
-        exportedAt, "WireGuard peer", peer.interface,
-        peer.handshake_seen ? "HANDSHAKE SEEN" : "NO VALID HANDSHAKE",
-        "handshake_age_seconds=" + (peer.handshake_age_seconds === undefined ? "unknown" : peer.handshake_age_seconds) +
-          "; rx_bytes=" + peer.receive_bytes +
-          "; tx_bytes=" + peer.transmit_bytes +
-          "; allowed_ips=" + peer.allowed_ips.join(" "),
-      ]),
+      ...wireGuardPeers.map((peer) => {
+        const rate = wireGuardPeerRates.get(wireGuardPeerCounterKey(peer));
+        return [
+          exportedAt, "WireGuard peer", peer.interface,
+          peer.handshake_seen ? "HANDSHAKE SEEN" : "NO VALID HANDSHAKE",
+          "handshake_age_seconds=" + (peer.handshake_age_seconds === undefined ? "unknown" : peer.handshake_age_seconds) +
+            "; rx_bytes=" + peer.receive_bytes +
+            "; tx_bytes=" + peer.transmit_bytes +
+            "; measured_rx_mbps=" + (rate?.receiveMbps ?? "unknown") +
+            "; measured_tx_mbps=" + (rate?.transmitMbps ?? "unknown") +
+            "; sample_seconds=" + (rate?.sampleSeconds ?? "unknown") +
+            "; allowed_ips=" + peer.allowed_ips.join(" "),
+        ];
+      }),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
     const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
@@ -2958,30 +2968,38 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
             <>
               {security.vpn.wireguard_peers_truncated ? <div className="module-message">The peer inventory is capped at 64 entries. Export contains the visible subset only.</div> : null}
               <div className="wireguard-peer-list">
-                {wireGuardPeers.map((peer, index) => (
-                  <div className="wireguard-peer-row" key={peer.interface + "-" + index}>
-                    <div>
-                      <small>INTERFACE</small>
-                      <strong>{peer.interface}</strong>
+                {wireGuardPeers.map((peer, index) => {
+                  const rate = wireGuardPeerRates.get(wireGuardPeerCounterKey(peer));
+                  return (
+                    <div className="wireguard-peer-row" key={peer.interface + "-" + index}>
+                      <div>
+                        <small>INTERFACE</small>
+                        <strong>{peer.interface}</strong>
+                      </div>
+                      <div>
+                        <small>LAST HANDSHAKE</small>
+                        <b>{peer.handshake_seen && peer.handshake_age_seconds !== undefined ? formatUptime(peer.handshake_age_seconds) + " ago" : "Never / unavailable"}</b>
+                      </div>
+                      <div>
+                        <small>RECEIVED</small>
+                        <b>{formatTrafficBytes(peer.receive_bytes)}</b>
+                      </div>
+                      <div>
+                        <small>SENT</small>
+                        <b>{formatTrafficBytes(peer.transmit_bytes)}</b>
+                      </div>
+                      <div className="wireguard-peer-rate">
+                        <div><small>MEASURED RX RATE</small><b>{rate?.receiveMbps == null ? "N/A · awaiting valid sample" : `${fmt(rate.receiveMbps, 2)} Mbps`}</b></div>
+                        <div><small>MEASURED TX RATE</small><b>{rate?.transmitMbps == null ? "N/A · awaiting valid sample" : `${fmt(rate.transmitMbps, 2)} Mbps`}</b></div>
+                        <small>{rate?.sampleSeconds == null ? "Sample interval N/A" : `Sample interval ${fmt(rate.sampleSeconds, 1)} s`}</small>
+                      </div>
+                      <div className="wireguard-peer-allowed">
+                        <small>ALLOWED IPs ({peer.allowed_ips.length})</small>
+                        <span>{peer.allowed_ips.length > 0 ? peer.allowed_ips.join(" · ") : "None reported"}</span>
+                      </div>
                     </div>
-                    <div>
-                      <small>LAST HANDSHAKE</small>
-                      <b>{peer.handshake_seen && peer.handshake_age_seconds !== undefined ? formatUptime(peer.handshake_age_seconds) + " ago" : "Never / unavailable"}</b>
-                    </div>
-                    <div>
-                      <small>RECEIVED</small>
-                      <b>{formatTrafficBytes(peer.receive_bytes)}</b>
-                    </div>
-                    <div>
-                      <small>SENT</small>
-                      <b>{formatTrafficBytes(peer.transmit_bytes)}</b>
-                    </div>
-                    <div className="wireguard-peer-allowed">
-                      <small>ALLOWED IPs ({peer.allowed_ips.length})</small>
-                      <span>{peer.allowed_ips.length > 0 ? peer.allowed_ips.join(" · ") : "None reported"}</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
@@ -3018,6 +3036,7 @@ function DashboardPage({
   trafficHistory,
   cellularHistory,
   interfaceCounterDeltas,
+  wireGuardPeerRates,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -3027,6 +3046,7 @@ function DashboardPage({
   trafficHistory: number[];
   cellularHistory: CellularHistorySample[];
   interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
+  wireGuardPeerRates: Map<string, WireGuardPeerMeasuredRate>;
 }) {
   const wanOnline = routerOverview?.interfaces.some((item) => item.is_wan && item.up) ?? false;
   const wifiOnline = routerOverview?.wireless.some((radio) => radio.up) ?? false;
@@ -3188,7 +3208,7 @@ function DashboardPage({
   }
 
   if (page === "security") {
-    return <SecurityControlPage routerOverview={routerOverview} />;
+    return <SecurityControlPage routerOverview={routerOverview} wireGuardPeerRates={wireGuardPeerRates} />;
   }
 
   if (page === "wifi") {
@@ -4717,6 +4737,8 @@ function App() {
   const [routerOverview, setRouterOverview] = useState<RouterOverview | null>(null);
   const previousInterfaceCounters = useRef(new Map<string, InterfaceCounterSnapshot>());
   const [interfaceCounterDeltas, setInterfaceCounterDeltas] = useState<Map<string, InterfaceCounterDelta>>(new Map());
+  const previousWireGuardPeerCounters = useRef(new Map<string, WireGuardPeerCounterSnapshot>());
+  const [wireGuardPeerRates, setWireGuardPeerRates] = useState<Map<string, WireGuardPeerMeasuredRate>>(new Map());
   const previousWirelessCounters = useRef(new Map<string, { rx: number; tx: number; sampledAt: number }>());
   const [trafficHistory, setTrafficHistory] = useState<number[]>(() => Array(30).fill(0));
   const [cellularHistory, setCellularHistory] = useState<CellularHistorySample[]>([]);
@@ -4763,6 +4785,13 @@ function App() {
       }
       previousInterfaceCounters.current = nextInterfaceCounters;
       setInterfaceCounterDeltas(nextInterfaceDeltas);
+      const wireGuardSamples = sampleWireGuardPeerRates(
+        overview.security?.vpn.wireguard_peers ?? [],
+        previousWireGuardPeerCounters.current,
+        now,
+      );
+      previousWireGuardPeerCounters.current = wireGuardSamples.nextCounters;
+      setWireGuardPeerRates(wireGuardSamples.rates);
       const wan =
         overview.interfaces.find((item) => item.name === "wan" && item.up) ??
         overview.interfaces.find((item) => item.is_wan && item.up) ??
@@ -4993,6 +5022,7 @@ function App() {
       trafficHistory={trafficHistory}
       cellularHistory={cellularHistory}
       interfaceCounterDeltas={interfaceCounterDeltas}
+      wireGuardPeerRates={wireGuardPeerRates}
     />
   );
 }
