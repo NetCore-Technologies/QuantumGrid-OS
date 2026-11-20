@@ -132,6 +132,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/hardware_io.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/office_networks.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/firewall_inventory.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/firewall_runtime.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/config_backup.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/audit.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua
@@ -160,6 +161,8 @@ jobs:
         run: lua5.1 tests/office-networks.lua
       - name: Test firewall NAT redirect projection and redaction
         run: lua5.1 tests/firewall-inventory.lua
+      - name: Test live fw4 chain inventory and redaction
+        run: lua5.1 tests/firewall-runtime.lua
       - name: Test secure configuration backup validation
         run: lua5.1 tests/config-backup.lua
       - name: Test redacted and bounded office admin audit events
