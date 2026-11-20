@@ -135,6 +135,67 @@ local function network_interfaces()
 	return result
 end
 
+
+local function default_route_inventory(fs)
+	local result = { available = false, routes = {} }
+	if fs.access("/sbin/ip") ~= true then return result end
+
+	local util = require "luci.util"
+	local families = {
+		{ option = "-4", name = "IPv4" },
+		{ option = "-6", name = "IPv6" }
+	}
+	local route_types = {
+		blackhole = true, unreachable = true, prohibit = true, throw = true,
+		nat = true, unicast = true
+	}
+
+	for _, family in ipairs(families) do
+		local ok, output = pcall(util.exec, "/sbin/ip " .. family.option .. " route show table all")
+		if ok and type(output) == "string" then
+			result.available = true
+			for line in output:gmatch("[^\\r\\n]+") do
+				local route_type = "unicast"
+				local route = line
+				local first, rest = line:match("^(%S+)%s+(.*)$")
+				if first and route_types[first] and rest and rest:match("^default%s") then
+					route_type = first
+					route = rest
+				end
+				if route:match("^default%s") or route == "default" then
+					local gateway = route:match("%svia%s+(%S+)")
+					local device = route:match("%sdev%s+(%S+)")
+					local table_name = route:match("%stable%s+(%S+)") or "main"
+					local metric = tonumber(route:match("%smetric%s+(%d+)"))
+					local protocol = route:match("%sproto%s+(%S+)")
+					local valid_device = device and device:match("^[%w_.%-]+$") ~= nil
+					local valid_gateway = gateway and gateway:match("^[%w:%.%-_]+$") ~= nil
+					local valid_table = table_name:match("^[%w_.%-]+$") ~= nil
+					local valid_protocol = protocol and protocol:match("^[%w_.%-]+$") ~= nil
+					if #result.routes < 64 then
+						table.insert(result.routes, {
+							family = family.name,
+							route_type = route_type,
+							table = valid_table and table_name or "unknown",
+							device = valid_device and device or "",
+							gateway = valid_gateway and gateway or "",
+							metric = metric and metric >= 0 and metric or nil,
+							protocol = valid_protocol and protocol or ""
+						})
+					end
+				end
+			end
+		end
+	end
+
+	table.sort(result.routes, function(left, right)
+		if left.family ~= right.family then return left.family < right.family end
+		if left.table ~= right.table then return left.table < right.table end
+		return (left.metric or 2147483647) < (right.metric or 2147483647)
+	end)
+	return result
+end
+
 local function wireless_survey(ifname, frequency)
 	local response = ubus_call("iwinfo", "survey", { device = ifname }) or {}
 	local entries = type(response.results) == "table" and response.results or {}
@@ -1179,6 +1240,7 @@ function action_api()
 	local sqm = sqm_status(uci, fs)
 	local security = security_status(uci, fs)
 	local platform = platform_status(fs)
+	local route_inventory = default_route_inventory(fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -1194,6 +1256,8 @@ function action_api()
 			ping_ms = ping.latency_ms
 		},
 		interfaces = network_interfaces(),
+		routes_available = route_inventory.available,
+		routes = route_inventory.routes,
 		clients = dhcp_clients(),
 		wireless = wireless,
 		wireless_clients = wireless_clients(wireless),
