@@ -267,9 +267,12 @@ local function wireless_status()
 						end
 					end
 				end
+				local bssid = type(info.bssid) == "string" and info.bssid:lower() or nil
+				if bssid and not bssid:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then bssid = nil end
 				table.insert(item.interfaces, {
 					ifname = ifname or "",
 					ssid = config.ssid or info.ssid or "",
+					bssid = bssid,
 					mode = config.mode or info.mode or "",
 					up = interface_up,
 					survey_supported = survey.supported == true,
