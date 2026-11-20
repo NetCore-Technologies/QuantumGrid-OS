@@ -1459,23 +1459,73 @@ function formatLeaseRemaining(seconds: number | null): string {
 }
 
 function ClientLeaseList({ clients, available, maxRows }: { clients: RouterClient[]; available: boolean; maxRows?: number }) {
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState<"hostname" | "ip" | "remaining">("hostname");
+  const visibleClients = clients.filter((client) =>
+    [client.hostname, client.ip, client.mac].some((value) => value.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase()))
+  ).slice().sort((left, right) => {
+    if (sort === "ip") return left.ip.localeCompare(right.ip, undefined, { numeric: true });
+    if (sort === "remaining") {
+      const leftRemaining = left.lease_remaining_seconds ?? Number.POSITIVE_INFINITY;
+      const rightRemaining = right.lease_remaining_seconds ?? Number.POSITIVE_INFINITY;
+      return leftRemaining - rightRemaining;
+    }
+    return (left.hostname || "").localeCompare(right.hostname || "");
+  });
+  const exportLeases = () => {
+    if (visibleClients.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Exported at (UTC)", "Search filter", "Sort order", "Hostname", "IPv4 address", "MAC address", "Lease remaining seconds", "Lease remaining"],
+      ...visibleClients.map((client) => [
+        exportedAt, filter, sort, client.hostname, client.ip, client.mac,
+        client.lease_remaining_seconds, formatLeaseRemaining(client.lease_remaining_seconds),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-dhcp-leases-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
   if (!available) return <div className="module-message">DHCP client inventory is not available from this router API.</div>;
   if (clients.length === 0) return <div className="module-message">No unexpired DHCPv4 leases were reported. Static-IP devices may not appear here.</div>;
+  const displayedClients = visibleClients.slice(0, maxRows ?? visibleClients.length);
   return (
-    <div className="device-list">
-      {clients.slice(0, maxRows ?? clients.length).map((client) => (
-        <div className="device-row" key={client.mac}>
-          <div className="device-title">
-            <div className="device-icon"><Monitor size={17} /></div>
-            <div><strong>{client.hostname || "Unknown device"}</strong><span>DHCPv4 lease</span></div>
-          </div>
-          <div><small>IP ADDRESS</small><b>{client.ip}</b></div>
-          <div><small>MAC ADDRESS</small><b>{client.mac.toUpperCase()}</b></div>
-          <div><small>LEASE REMAINING</small><b>{formatLeaseRemaining(client.lease_remaining_seconds)}</b></div>
-          <div><small>SOURCE</small><b>DHCPv4</b></div>
+    <>
+      <div className="dhcp-client-tools">
+        <input type="search" aria-label="Search DHCP leases" placeholder="Search hostname, IP or MAC" value={filter} onChange={(event) => setFilter(event.target.value)} />
+        <select aria-label="Sort DHCP leases" value={sort} onChange={(event) => setSort(event.target.value as "hostname" | "ip" | "remaining")}>
+          <option value="hostname">Hostname A–Z</option>
+          <option value="ip">IP address</option>
+          <option value="remaining">Lease expiring soon</option>
+        </select>
+        <span>{visibleClients.length} of {clients.length} leases</span>
+        <button className="hero-button wifi-export-button" onClick={exportLeases} disabled={visibleClients.length === 0}>Export lease CSV</button>
+      </div>
+      {displayedClients.length === 0 ? (
+        <div className="module-message">No DHCP leases match the current search.</div>
+      ) : (
+        <div className="device-list">
+          {displayedClients.map((client) => (
+            <div className="device-row" key={client.mac}>
+              <div className="device-title">
+                <div className="device-icon"><Monitor size={17} /></div>
+                <div><strong>{client.hostname || "Unknown device"}</strong><span>DHCPv4 lease</span></div>
+              </div>
+              <div><small>IP ADDRESS</small><b>{client.ip}</b></div>
+              <div><small>MAC ADDRESS</small><b>{client.mac.toUpperCase()}</b></div>
+              <div><small>LEASE REMAINING</small><b>{formatLeaseRemaining(client.lease_remaining_seconds)}</b></div>
+              <div><small>SOURCE</small><b>DHCPv4</b></div>
+            </div>
+          ))}
         </div>
-      ))}
-    </div>
+      )}
+    </>
   );
 }
 
