@@ -118,9 +118,10 @@ function parse(payload, sampled_at)
 	return result
 end
 
-function unavailable(sampled_at, truncated)
+function unavailable(sampled_at, truncated, table_present)
 	local result = initial(sampled_at)
 	result.truncated = truncated == true
+	result.table_present = table_present == true
 	return result
 end
 
