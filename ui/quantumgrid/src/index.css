@@ -9578,3 +9578,65 @@ input::placeholder {
     grid-column: auto;
   }
 }
+
+
+/* Security Center NAT redirect inventory */
+.firewall-redirect-list {
+  display: grid;
+  gap: 8px;
+}
+.firewall-redirect-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.05fr) minmax(110px, .8fr) minmax(150px, 1fr) minmax(160px, 1.1fr) minmax(130px, .9fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+.firewall-redirect-row > div {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.firewall-redirect-heading strong {
+  color: var(--text);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.firewall-redirect-heading span,
+.firewall-redirect-row small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.firewall-redirect-row b {
+  color: var(--text);
+  font-size: 9px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.firewall-redirect-flags {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+@media (max-width: 1180px) {
+  .firewall-redirect-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .firewall-redirect-flags {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 620px) {
+  .firewall-redirect-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .firewall-redirect-flags {
+    grid-column: auto;
+  }
+}
