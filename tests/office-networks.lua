@@ -50,10 +50,10 @@ local result = office.build_inventory({
   available = true,
   sampled_at = 1700000000,
   interfaces = {
-    { name = "lan", protocol = "static", device = "br-lan", up = true, ipv4 = "192.168.10.1/24" },
+    { name = "lan", protocol = "static", device = "br-lan", up = true, ipv4 = "192.168.10.1", netmask = "255.255.255.0" },
     { name = "corp", protocol = "static", device = "br-lan.20", up = true, ipv4 = "192.168.20.1", netmask = "255.255.255.0", ip6assign = "64" },
-    { name = "guest", protocol = "static", device = "br-lan.30", up = false, ipv4 = "192.168.30.1/24" },
-    { name = "iot", protocol = "static", device = "br-lan.40", up = true, ipv4 = "192.168.40.1/24" },
+    { name = "guest", protocol = "static", device = "br-lan.30", up = false, ipv4 = "192.168.30.1", netmask = "255.255.255.0" },
+    { name = "iot", protocol = "static", device = "br-lan.40", up = true, ipv4 = "192.168.40.1", netmask = "255.255.255.0" },
   },
   bridges = {
     { name = "br-lan", type = "bridge", ports = { "lan1", "lan2", "lan3", "lan4" }, vlan_filtering = true },
@@ -68,6 +68,9 @@ local result = office.build_inventory({
   dhcp_scopes = {
     { name = "lan_dhcp", interface = "lan", start = "100", limit = "120", lease_time = "12h", ignore = false, dhcpv6 = "server", ra = "server" },
     { name = "guest_dhcp", interface = "guest", start = "50", limit = "200", lease_time = "4h", ignore = true },
+    { name = "corp_dhcp", interface = "corp", start = "150", limit = "20", lease_time = "8h", ignore = false },
+    { name = "corp_overlap", interface = "corp", start = "160", limit = "20", lease_time = "8h", ignore = false },
+    { name = "iot_invalid", interface = "iot", start = "250", limit = "10", lease_time = "8h", ignore = false },
     { name = "invalid_scope", interface = "../lan", start = "1", limit = "999999" },
   },
   static_leases = {
@@ -102,13 +105,18 @@ assert(result.vlan_count == 3, "invalid VLAN IDs must be ignored")
 assert(result.vlan_filtering_bridge_count == 1)
 assert(result.segmented_interface_count == 3)
 assert(result.wifi_ap_count == 3, "only AP sections belong in the SSID inventory")
-assert(result.dhcp_available and result.dhcp_scope_count == 2, "DHCP scope inventory should reject invalid interface names")
+assert(result.dhcp_available and result.dhcp_scope_count == 5, "DHCP scope inventory should reject invalid interface names")
 assert(result.static_lease_count == 2, "invalid MAC and IPv4 static leases must be dropped")
 assert(result.static_leases[1].mac == "aa:bb:cc:dd:ee:01", "MAC addresses should be normalized")
 assert(result.static_leases[1].section == "cfg0001", "static lease UCI section should be preserved for safe removal")
 assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" and result.forwardings[1].destination == "printers", "explicit firewall zone forwarding should be inventoried")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
+assert(result.dhcp_scopes[1].range_valid)
+assert(result.dhcp_scopes[1].pool_start_ip == "192.168.10.100" and result.dhcp_scopes[1].pool_end_ip == "192.168.10.219")
+assert(not result.dhcp_scopes[2].range_valid and result.dhcp_scopes[2].range_error == "DHCP scope is disabled.")
+assert(result.dhcp_scopes[3].overlap and result.dhcp_scopes[4].overlap, "overlapping DHCP pool ranges must be flagged")
+assert(not result.dhcp_scopes[5].range_valid and result.dhcp_scopes[5].range_error ~= "", "pools beyond the broadcast address must be rejected")
 
 local corp
 for _, iface in ipairs(result.interfaces) do
