@@ -2616,13 +2616,19 @@ function action_dhcp_scope_update()
 	local inventory = office_network_status(uci, fs)
 	local other_ranges = {}
 	for _, scope in ipairs(inventory.dhcp_scopes or {}) do
-		if scope.name ~= section and not scope.ignore and scope.range_valid then
-			table.insert(other_ranges, {
-				start = scope.pool_start_ip,
-				finish = scope.pool_end_ip
-			})
+		if scope.name ~= section and not scope.ignore then
+			if scope.range_valid then
+				table.insert(other_ranges, {
+					start = scope.pool_start_ip,
+					finish = scope.pool_end_ip
+				})
+			elseif scope.interface == network then
+				respond(409, { ok = false, error = "Another enabled DHCP scope on this interface has an uncalculable range. Resolve that scope before changing this pool." })
+				return
+			end
 		end
 	end
+
 	local update, validation_error = validator.validate_dhcp_scope_update(
 		http.formvalue("start", true),
 		http.formvalue("limit", true),
