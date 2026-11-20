@@ -1954,6 +1954,7 @@ end
 local function hardware_io_status(fs)
 	local hardware = require "luci.quantumgrid.hardware_io"
 	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
+	local input_devices = hardware.parse_input_devices(read_file("/proc/bus/input/devices"))
 	local leds = {}
 	local iterator_ok, iterator = pcall(fs.dir, "/sys/class/leds")
 	local leds_available = iterator_ok and type(iterator) == "function"
@@ -1996,8 +1997,9 @@ local function hardware_io_status(fs)
 	local button_driver_loaded = fs.access("/sys/module/gpio_button_hotplug") == true
 
 	return {
-		available = gpio.available or leds_available or button_hooks_available,
+		available = gpio.available or input_devices.available or leds_available or button_hooks_available,
 		gpio = gpio,
+		input_devices = input_devices,
 		leds_available = leds_available,
 		leds = leds,
 		button_driver_loaded = button_driver_loaded,
