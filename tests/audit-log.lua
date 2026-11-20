@@ -24,6 +24,7 @@ local escaped = audit.encode_event({
 })
 assert(escaped and escaped:find('\\"uplink\\"', 1, true), "quotes must be JSON escaped")
 assert(escaped:find("\\\\", 1, true), "backslashes must be JSON escaped")
+assert(audit.encode_event({ timestamp = 3, action = "package.feed.update", target = "opkg", outcome = "success" }) ~= nil, "package feed updates should be allowlisted")
 
 local function expect_invalid(event, label)
   local result, err = audit.encode_event(event)
