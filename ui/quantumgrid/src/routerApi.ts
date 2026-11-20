@@ -775,6 +775,22 @@ export interface RouterOfficeFirewallZoneUpdateResult {
   rolled_back: false;
 }
 
+export interface RouterOfficeSegmentCreateResult {
+  ok: true;
+  name: string;
+  device: string;
+  address: string;
+  netmask: string;
+  zone: string;
+  pool_start_ip: string;
+  pool_end_ip: string;
+  firewall_rules: 3;
+  network_reloaded: true;
+  firewall_reloaded: true;
+  dhcp_restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterOfficeForwarding {
   section: string;
   name: string;
@@ -1035,6 +1051,7 @@ const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-
 const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-add";
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
 const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-zone-update";
+const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -2115,6 +2132,114 @@ export async function updateRouterOfficeVlan(input: {
     throw new Error("The router did not confirm the bridge VLAN configuration and network reload.");
   }
   return payload as RouterOfficeVlanUpdateResult;
+}
+
+export async function createRouterOfficeSegment(input: {
+  name: string;
+  bridge: string;
+  vlanId: string;
+  address: string;
+  netmask: string;
+  zone: string;
+  dhcpStart: string;
+  dhcpLimit: string;
+  leaseTime: string;
+}): Promise<RouterOfficeSegmentCreateResult> {
+  const validName = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(input.name) &&
+    !["lan", "wan", "wan6", "loopback", "wwan", "cellular"].includes(input.name);
+  if (!validName) {
+    throw new Error("Network name must be 1–32 safe characters and cannot use a reserved interface name.");
+  }
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.bridge) ||
+      input.bridge === "." || input.bridge === "..") {
+    throw new Error("Select a valid existing VLAN-filtered bridge.");
+  }
+  if (!/^[1-9][0-9]{0,3}$/.test(input.vlanId) ||
+      Number(input.vlanId) < 1 || Number(input.vlanId) > 4094) {
+    throw new Error("Select a VLAN ID from 1 to 4094.");
+  }
+  const octets = input.address.split(".");
+  if (octets.length !== 4 || octets.some((part) =>
+    !/^(0|[1-9][0-9]{0,2})$/.test(part) || Number(part) > 255)) {
+    throw new Error("Enter a canonical dotted-decimal IPv4 gateway address.");
+  }
+  const [first, second] = octets.map(Number);
+  const privateAddress = first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168);
+  if (!privateAddress) {
+    throw new Error("Use an RFC1918 private IPv4 gateway address for an office segment.");
+  }
+  const maskOctets = input.netmask.split(".");
+  if (maskOctets.length !== 4 || maskOctets.some((part) =>
+    !/^(0|[1-9][0-9]{0,2})$/.test(part) || Number(part) > 255)) {
+    throw new Error("Enter a dotted-decimal contiguous IPv4 subnet mask.");
+  }
+  const maskBits = maskOctets.map(Number).map((value) => value.toString(2).padStart(8, "0")).join("");
+  if (!/^1{1,30}0*$/.test(maskBits) || maskBits.length !== 32) {
+    throw new Error("Subnet mask must be contiguous and between /1 and /30.");
+  }
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.zone) || input.zone === "." || input.zone === "..") {
+    throw new Error("Choose an existing internal firewall zone.");
+  }
+  if (!/^[1-9][0-9]{0,9}$/.test(input.dhcpStart) ||
+      !/^[1-9][0-9]{0,9}$/.test(input.dhcpLimit)) {
+    throw new Error("DHCP start and pool size must be positive whole numbers.");
+  }
+  if (!/^[1-9][0-9]{0,8}[smhdw]?$/.test(input.leaseTime)) {
+    throw new Error("DHCP lease time must be a positive duration such as 12h.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("name", input.name);
+  form.set("bridge", input.bridge);
+  form.set("vlan", String(Number(input.vlanId)));
+  form.set("address", input.address);
+  form.set("netmask", input.netmask);
+  form.set("zone", input.zone);
+  form.set("start", input.dhcpStart);
+  form.set("limit", input.dhcpLimit);
+  form.set("leasetime", input.leaseTime);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_SEGMENT_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Office network provisioning requires an active router administrator session."
+      : "The router returned an invalid office network provisioning response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid office network provisioning response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("name" in payload) || payload.name !== input.name ||
+    !("device" in payload) || payload.device !== input.bridge + "." + String(Number(input.vlanId)) ||
+    !("address" in payload) || payload.address !== input.address ||
+    !("netmask" in payload) || payload.netmask !== input.netmask ||
+    !("zone" in payload) || payload.zone.length === 0 ||
+    !("pool_start_ip" in payload) || typeof payload.pool_start_ip !== "string" ||
+    !("pool_end_ip" in payload) || typeof payload.pool_end_ip !== "string" ||
+    !("firewall_rules" in payload) || payload.firewall_rules !== 3 ||
+    !("network_reloaded" in payload) || payload.network_reloaded !== true ||
+    !("firewall_reloaded" in payload) || payload.firewall_reloaded !== true ||
+    !("dhcp_restarted" in payload) || payload.dhcp_restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the complete office network, firewall and DHCP transaction.");
+  }
+  return payload as RouterOfficeSegmentCreateResult;
 }
 
 export async function createRouterOfficeForwarding(input: {
