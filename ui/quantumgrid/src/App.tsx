@@ -4977,12 +4977,13 @@ function OfficeNetworksPage({ routerOverview }: {
     if (!inventory) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Category", "Name", "Device / Bridge", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "Netmask", "IPv6", "IPv6 assignment prefix"],
+      ["Exported at (UTC)", "Category", "Name", "Device / Bridge", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "Netmask", "IPv6", "MAC"],
       ...interfaces.map((item) => [
         exportedAt, "Network interface", item.name, item.device, item.protocol,
         item.up ? "UP" : "DOWN", item.firewall_zones.join(" "),
         item.wifi_aps.map((ap) => ap.ssid + (ap.disabled ? " (disabled)" : "")).join(" "),
-        item.ipv4.join(" "), item.netmask, item.ipv6.join(" "), item.ip6assign,
+        item.ipv4.join(" "), item.netmask,
+        item.ipv6.join(" ") + (item.ip6assign ? " · delegated /" + item.ip6assign : ""), "",
       ]),
       ...bridges.map((item) => [
         exportedAt, "Bridge", item.name, item.name, item.type,
@@ -4990,22 +4991,22 @@ function OfficeNetworksPage({ routerOverview }: {
       ]),
       ...vlans.map((item) => [
         exportedAt, "Bridge VLAN", item.name, item.device, item.vlan_id,
-        item.ports.map((port) => port.name + ":" + (port.mode === "tagged" ? "t" : "u") + (port.pvid ? "*" : "")).join(" "),
-        "", "", "", "",
+        item.ports.map((port) => port.name + ":" + (port.mode === "tagged" ? "t" : port.mode === "untagged" ? "u" : "") + (port.pvid ? "*" : "")).join(" "),
+        "", "", "", "", "", "",
       ]),
       ...zones.map((item) => [
         exportedAt, "Firewall zone", item.name, "", "input=" + item.input,
         "output=" + item.output + "; forward=" + item.forward + "; masquerade=" + item.masquerade,
-        item.networks.join(" "), "", "", "",
+        item.networks.join(" "), "", "", "", "", "",
       ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
-        "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore,
-        "", "DHCPv6=" + item.dhcpv6 + "; RA=" + item.ra, "", "",
+        "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore + "; dhcpv6=" + item.dhcpv6 + "; ra=" + item.ra,
+        "", "", "", "", "", "",
       ]),
       ...(inventory.static_leases ?? []).map((item) => [
         exportedAt, "Static DHCP lease", item.name, "", "", "",
-        "", "", item.ipv4, "", item.mac, "",
+        "", "", item.ipv4, "", "", item.mac,
       ]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
