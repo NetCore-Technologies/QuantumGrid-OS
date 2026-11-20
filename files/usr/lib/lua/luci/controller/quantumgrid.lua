@@ -931,6 +931,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "dhcp-reservation"}, call("action_dhcp_reservation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-reservation-remove"}, call("action_dhcp_reservation_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-scope-update"}, call("action_dhcp_scope_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
@@ -2260,6 +2261,39 @@ local function office_network_status(uci, fs)
 end
 
 
+local function remote_syslog_status(uci, fs)
+	local result = {
+		available = false,
+		service_installed = fs.access("/etc/init.d/log") == true,
+		config_available = fs.access("/etc/config/system") == true,
+		enabled = false,
+		host = "",
+		port = 514,
+		protocol = "udp",
+		hostname = "",
+		prefix = "",
+		sampled_at = os.time()
+	}
+	if not result.config_available then return result end
+
+	local section_found = false
+	local ok = pcall(function()
+		uci:foreach("system", "system", function(section)
+			if section_found then return end
+			section_found = true
+			result.host = type(section.log_ip) == "string" and section.log_ip or ""
+			result.port = tonumber(section.log_port) or 514
+			result.protocol = section.log_proto == "tcp" and "tcp" or "udp"
+			result.hostname = type(section.log_hostname) == "string" and section.log_hostname or ""
+			result.prefix = type(section.log_prefix) == "string" and section.log_prefix or ""
+			result.enabled = result.host ~= "" and section.log_remote ~= "0"
+		end)
+	end)
+	result.available = ok and section_found
+	return result
+end
+
+
 local function hardware_io_status(fs)
 	local hardware = require "luci.quantumgrid.hardware_io"
 	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
@@ -3008,6 +3042,156 @@ function action_dhcp_reservation_remove()
 	})
 end
 
+function action_remote_syslog_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.remote_syslog"
+	local host_header = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 502 and "Bad Gateway" or
+				status == 503 and "Service Unavailable" or "Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host_header or origin ~= scheme .. "://" .. host_header then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/etc/config/system") ~= true or fs.access("/etc/init.d/log") ~= true then
+		respond(503, { ok = false, error = "Native OpenWrt system logging configuration or service is unavailable." })
+		return
+	end
+
+	local update, validation_error = validator.validate({
+		enabled = http.formvalue("enabled", true),
+		host = http.formvalue("host", true) or "",
+		port = http.formvalue("port", true) or "",
+		protocol = http.formvalue("protocol", true),
+		hostname = http.formvalue("hostname", true) or "",
+		prefix = http.formvalue("prefix", true) or ""
+	})
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local section_name = nil
+	local section_lookup_ok = pcall(function()
+		uci:foreach("system", "system", function(section)
+			if not section_name then section_name = section[".name"] end
+		end)
+	end)
+	if not section_lookup_ok or type(section_name) ~= "string" or section_name == "" then
+		respond(503, { ok = false, error = "No existing system UCI section is available for remote logging settings." })
+		return
+	end
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "system", section_name)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "system" then
+		respond(503, { ok = false, error = "The existing system UCI section could not be read safely." })
+		return
+	end
+
+	local previous = {
+		log_ip = snapshot.log_ip,
+		log_port = snapshot.log_port,
+		log_proto = snapshot.log_proto,
+		log_remote = snapshot.log_remote,
+		log_hostname = snapshot.log_hostname,
+		log_prefix = snapshot.log_prefix
+	}
+	local desired = { log_remote = update.enabled and "1" or "0" }
+	if update.enabled then
+		desired.log_ip = update.host
+		desired.log_port = update.port
+		desired.log_proto = update.protocol
+		desired.log_hostname = update.hostname
+		desired.log_prefix = update.prefix
+	end
+
+	for option, value in pairs(desired) do
+		local option_ok, option_result
+		if value == "" then
+			option_ok, option_result = pcall(uci.delete, uci, "system", section_name, option)
+		else
+			option_ok, option_result = pcall(uci.set, uci, "system", section_name, option, value)
+		end
+		if not option_ok or option_result ~= true then
+			pcall(uci.revert, uci, "system")
+			respond(500, { ok = false, error = "Remote syslog settings could not be staged; the log service was not restarted." })
+			return
+		end
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "system")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "system")
+		respond(500, { ok = false, error = "Remote syslog settings could not be committed; the log service was not restarted." })
+		return
+	end
+
+	local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/log restart >/dev/null 2>&1")
+	if not restart_ok or restart_status ~= 0 then
+		local restored = true
+		for option, value in pairs(previous) do
+			local option_ok, option_result
+			if value == nil then
+				option_ok, option_result = pcall(uci.delete, uci, "system", section_name, option)
+			else
+				option_ok, option_result = pcall(uci.set, uci, "system", section_name, option, value)
+			end
+			if not option_ok or option_result ~= true then restored = false break end
+		end
+		local rollback_commit_ok, rollback_committed = false, false
+		if restored then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "system")
+		end
+		local rollback_restart_ok, rollback_restart_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_restart_ok, rollback_restart_status = pcall(sys.call, "/etc/init.d/log restart >/dev/null 2>&1")
+		end
+		local rolled_back = restored and rollback_commit_ok and rollback_committed == true
+			and rollback_restart_ok and rollback_restart_status == 0
+		record_audit(http, "system.syslog.update", "remote-syslog", "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "The log service could not restart. The previous remote syslog settings were restored."
+				or "The log service failed to restart and its previous settings could not be fully restored. Inspect /etc/config/system and log service state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "system.syslog.update", "remote-syslog", "success")
+	respond(nil, {
+		ok = true,
+		enabled = update.enabled,
+		host = update.enabled and update.host or (snapshot.log_ip or ""),
+		port = update.enabled and tonumber(update.port) or tonumber(snapshot.log_port) or 514,
+		protocol = update.enabled and update.protocol or (snapshot.log_proto == "tcp" and "tcp" or "udp"),
+		hostname = update.enabled and update.hostname or (snapshot.log_hostname or ""),
+		prefix = update.enabled and update.prefix or (snapshot.log_prefix or ""),
+		restarted = true,
+		rolled_back = false
+	})
+end
+
+
 function action_audit_log()
 	local http = require "luci.http"
 	local jsonc = require "luci.jsonc"
@@ -3075,6 +3259,7 @@ function action_api()
 	local rule_inventory = policy_rule_inventory(fs)
 	local hardware_io = hardware_io_status(fs)
 	local office_networks = office_network_status(uci, fs)
+	local remote_syslog = remote_syslog_status(uci, fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -3106,6 +3291,7 @@ function action_api()
 		platform = platform,
 		hardware_io = hardware_io,
 		office_networks = office_networks,
+		remote_syslog = remote_syslog,
 		conntrack = conntrack,
 		cellular = cellular,
 		phone = {
