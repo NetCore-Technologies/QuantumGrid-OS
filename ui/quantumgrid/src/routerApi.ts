@@ -714,7 +714,9 @@ export async function runRouterPackageOperation(
     throw new Error("Confirm the package operation before continuing.");
   }
   if (operation === "remove" &&
-      (/^kmod-/.test(packageName) || /^wpad/.test(packageName) || /^qca-nss/.test(packageName))) {
+      (/^kmod-/.test(packageName) || /^wpad/.test(packageName) ||
+       /^qca-nss/.test(packageName) || /^ath11k/.test(packageName) ||
+       /^kernel-/.test(packageName) || /^luci-mod-/.test(packageName))) {
     throw new Error("Kernel, Wi-Fi and NSS packages must be changed through an offline firmware build.");
   }
 
