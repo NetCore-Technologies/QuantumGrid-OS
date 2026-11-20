@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
+import { auditFirewallPosture } from "./firewallPosture";
 import {
   collectWifiClientHistory,
   mergeWifiClientHistory,
@@ -2302,6 +2303,7 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const activeWireGuard = security?.vpn.wireguard_interfaces.filter((item) => item.up) ?? [];
+  const firewallPosture = auditFirewallPosture(security);
   const exportSecurityInventory = () => {
     if (!security) return;
     const exportedAt = new Date().toISOString();
@@ -2316,6 +2318,10 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
         exportedAt, "Firewall zone", zone.name, "REPORTED",
         "networks=" + zone.networks.join(" ") + "; input=" + zone.input + "; output=" + zone.output +
           "; forward=" + zone.forward + "; masquerade=" + (zone.masquerade ? "on" : "off"),
+      ]),
+      ...firewallPosture.checks.map((check) => [
+        exportedAt, "Firewall posture review", check.title, check.status.toUpperCase(),
+        check.scope + ": " + check.detail,
       ]),
       ...security.nft_tables.map((table) => [exportedAt, "nftables table", table, table === "inet/fw4" ? "FIREWALL4" : "PRESENT", ""]),
       [exportedAt, "Adblock Fast", "Init service", security.adblock_fast.installed ? "INSTALLED" : "MISSING", ""],
@@ -2358,6 +2364,25 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
         <Metric title="Rules / Redirects" value={security?.firewall_config_readable ? `${fmt(security.rules_count)} / ${fmt(security.redirects_count)}` : "N/A"} unit="" detail="Configured firewall entries" icon={Activity} />
       </div>
 
+      <Panel title="Firewall posture review" eyebrow="READ-ONLY CONFIGURATION CHECKS">
+        <div className="firewall-posture-summary">
+          <div><small>REVIEW ITEMS</small><strong>{fmt(firewallPosture.reviewCount)}</strong></div>
+          <div><small>RESTRICTIVE CHECKS</small><strong>{fmt(firewallPosture.okCount)}</strong></div>
+          <div><small>UNKNOWN / NOT TESTED</small><strong>{fmt(firewallPosture.unknownCount)}</strong></div>
+        </div>
+        <div className="firewall-posture-list">
+          {firewallPosture.checks.map((check) => (
+            <div className={"firewall-posture-item " + check.status} key={check.id}>
+              <div className="firewall-posture-heading">
+                <div><strong>{check.title}</strong><span>{check.scope}</span></div>
+                <Status active={check.status === "ok"}>{check.status === "ok" ? "OK" : check.status === "review" ? "REVIEW" : "UNKNOWN"}</Status>
+              </div>
+              <p>{check.detail}</p>
+            </div>
+          ))}
+        </div>
+        <div className="module-message">This is a narrow configuration review, not a vulnerability scan. External zones are identified only by standard WAN/WWAN naming. Individual rules, rule order, port exposure, IPv6 policy and actual packet paths are not evaluated. A REVIEW item needs manual confirmation; UNKNOWN never means secure.</div>
+      </Panel>
       <Panel title="Firewall zones" eyebrow="UCI · /ETC/CONFIG/FIREWALL" action={<Status active={Boolean(security?.firewall_config_readable)}>{security?.firewall_config_readable ? "CONFIG READ" : "WAITING"}</Status>}>
         {!security ? (
           <div className="module-message">Waiting for authenticated router security telemetry.</div>
