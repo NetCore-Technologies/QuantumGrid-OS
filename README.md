@@ -92,8 +92,9 @@ summaries plus the minimal BSSID/SSID/band/channel/signal fields needed to compa
 not-observed and signal-changing access points. This comparison is page-memory-only: it is cleared
 when the Wi-Fi page is left, reloaded or its history is cleared, and is never written to browser
 storage or sent to another service. A BSSID missing from one scan is only marked not observed; it
-is not treated as proof that an access point is offline. The summary history can be exported as a
-compact CSV or cleared immediately from the Wi-Fi page. The
+is not treated as proof that an access point is offline. The comparison can be exported as a
+spreadsheet-safe CSV and the summary history can be exported as a compact CSV or cleared immediately
+from the Wi-Fi page. The
 The Wi-Fi and Network views also show the driver's frequency list, current channel and restricted-channel flags when iwinfo.freqlist reports them, plus the available transmit-power levels when iwinfo.txpowerlist is supported. These are driver-reported capabilities, not a replacement for the full regulatory database or a grant to use every level. Channel and power capability lists are cached for 60 seconds, while live interface state and station counters continue refreshing normally.
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. The station inventory summarises current associated/authorized counts and aggregate measured RX/TX throughput for stations with valid counter samples. Connected station rows show driver-reported RX/TX PHY family, MCS, spatial streams, channel width and guard-interval data where available. They also show separate current/average signal, cumulative RX/TX bytes and packets, inactive time and transmit retry/failure counters when reported. Per-station RX/TX throughput is calculated from successive iwinfo byte-counter samples and appears after the second valid sample; counter resets are discarded. Associated clients can be filtered by hostname/MAC/SSID/radio, band and authorization state, sorted by signal, negotiated PHY or measured RX/TX throughput, and exported with their station diagnostics and active filter/sort context in a spreadsheet-safe CSV. Gaming
 reports SQM queue configuration and read-only kernel qdisc
