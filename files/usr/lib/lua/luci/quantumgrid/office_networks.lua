@@ -355,6 +355,7 @@ function build_inventory(source)
 				local limit = tonumber(item.limit)
 				if limit and (limit ~= math.floor(limit) or limit < 1 or limit > 4294967294) then limit = nil end
 				table.insert(result.dhcp_scopes, {
+					section = token(item.section, 64) or name,
 					name = name,
 					interface = interface,
 					start = clean(item.start, 32),
