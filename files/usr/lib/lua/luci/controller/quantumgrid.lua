@@ -265,12 +265,20 @@ local function mwan3_status(fs)
 	if not result.installed then return result end
 
 	local response = ubus_call("mwan3", "status", { section = "interfaces" })
+	local policies = ubus_call("mwan3", "status", { section = "policies" })
+	local connected = ubus_call("mwan3", "status", { section = "connected" })
 	local normalizer = require "luci.quantumgrid.mwan3"
-	local inventory = normalizer.normalize_status(response)
+	local inventory = normalizer.normalize_status(response, policies, connected)
 	result.available = inventory.available
 	result.count = inventory.count
 	result.truncated = inventory.truncated
 	result.interfaces = inventory.interfaces
+	result.policies_available = inventory.policies_available
+	result.policy_count = inventory.policy_count
+	result.policies = inventory.policies
+	result.connected_available = inventory.connected_available
+	result.connected_ipv4 = inventory.connected_ipv4
+	result.connected_ipv6 = inventory.connected_ipv6
 	return result
 end
 
