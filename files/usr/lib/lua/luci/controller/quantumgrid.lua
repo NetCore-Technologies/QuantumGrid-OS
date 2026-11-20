@@ -890,6 +890,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 end
 
 local function sqm_restart(sys)
@@ -1293,6 +1294,64 @@ function action_set_password()
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({ ok = true })
 end
+
+function action_packages()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local util = require "luci.util"
+
+	if http.getenv("REQUEST_METHOD") ~= "GET" then
+		http.status(405, "Method Not Allowed")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "GET is required." })
+		return
+	end
+
+	local manager = "unknown"
+	local command = nil
+	if fs.access("/sbin/apk") == true then
+		manager = "apk"
+		command = "/sbin/apk list -I"
+	elseif fs.access("/usr/bin/apk") == true then
+		manager = "apk"
+		command = "/usr/bin/apk list -I"
+	elseif fs.access("/bin/opkg") == true then
+		manager = "opkg"
+		command = "/bin/opkg list-installed"
+	elseif fs.access("/usr/bin/opkg") == true then
+		manager = "opkg"
+		command = "/usr/bin/opkg list-installed"
+	end
+
+	if not command then
+		http.status(503, "Service Unavailable")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "No supported package manager was detected." })
+		return
+	end
+
+	local exec_ok, output = pcall(util.exec, command)
+	if not exec_ok or type(output) ~= "string" then
+		http.status(503, "Service Unavailable")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "The package manager could not read its installed-package database." })
+		return
+	end
+
+	local parser = require "luci.quantumgrid.packages"
+	local inventory = parser.parse(manager, output, 1500)
+	http.header("Cache-Control", "no-store")
+	http.prepare_content("application/json; charset=UTF-8")
+	http.write_json({
+		ok = true,
+		manager = inventory.manager,
+		count = inventory.count,
+		truncated = inventory.truncated,
+		packages = inventory.packages,
+		sampled_at = os.time()
+	})
+end
+
 
 function action_index()
 	require("luci.http").redirect("/quantumgrid/")
