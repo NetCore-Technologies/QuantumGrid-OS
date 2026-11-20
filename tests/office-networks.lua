@@ -6,7 +6,7 @@ local result = office.build_inventory({
   sampled_at = 1700000000,
   interfaces = {
     { name = "lan", protocol = "static", device = "br-lan", up = true, ipv4 = "192.168.10.1/24" },
-    { name = "corp", protocol = "static", device = "br-lan.20", up = true, ipv4 = "192.168.20.1/24" },
+    { name = "corp", protocol = "static", device = "br-lan.20", up = true, ipv4 = "192.168.20.1", netmask = "255.255.255.0", ip6assign = "64" },
     { name = "guest", protocol = "static", device = "br-lan.30", up = false, ipv4 = "192.168.30.1/24" },
     { name = "iot", protocol = "static", device = "br-lan.40", up = true, ipv4 = "192.168.40.1/24" },
   },
@@ -63,7 +63,8 @@ for _, iface in ipairs(result.interfaces) do
   if iface.name == "corp" then corp = iface end
 end
 assert(corp and corp.device == "br-lan.20" and corp.up)
-assert(#corp.ipv4 == 1 and corp.ipv4[1] == "192.168.20.1/24")
+assert(#corp.ipv4 == 1 and corp.ipv4[1] == "192.168.20.1")
+assert(corp.netmask == "255.255.255.0" and corp.ip6assign == "64")
 assert(#corp.vlan_ids == 1 and corp.vlan_ids[1] == 20)
 assert(#corp.firewall_zones == 1 and corp.firewall_zones[1] == "corp")
 assert(#corp.wifi_aps == 1 and corp.wifi_aps[1].ssid == "Office-Corp")
