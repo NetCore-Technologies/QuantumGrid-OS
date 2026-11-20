@@ -24,8 +24,12 @@ Every completed build must include:
 - Phone-port and recovery guides
 - The exact AW1000 build configuration
 - `BUILDINFO.txt` and `SHA256SUMS`
+- `verify-aw1000-release-manifest.sh` for on-router checksum enforcement
 
 The factory `.ubi` is the only persistent AW1000 firmware image published by QuantumGrid.
+The bundled installer verifies its exact filename and SHA-256 digest against `SHA256SUMS`
+before permitting either preflight completion or a flash write. The manifest is an integrity
+check, not a cryptographic signature or proof of publisher identity.
 The initramfs `.itb` is a RAM-boot artifact and does not install persistent firmware.
 The AW1000 profile does not produce or publish a `sysupgrade.bin` image; the release workflow
 must never require, fabricate, rename or advertise one.
