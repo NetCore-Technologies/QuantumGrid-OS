@@ -29,8 +29,8 @@ equal(rules[2].protocol, "tcp", "IP protocol selector")
 equal(rules[2].uid_range, "1000-2000", "UID range selector")
 equal(rules[2].table, "201", "policy lookup table")
 equal(rules[2].action, "lookup", "lookup action")
-equal(rules[4].action, "blackhole", "terminal action")
-equal(rules[4].table, "", "terminal action has no lookup table")
+equal(rules[3].action, "blackhole", "terminal action")
+equal(rules[3].table, "", "terminal action has no lookup table")
 
 local ipv6 = routing.parse_policy_rules("100: from 2001:db8::/32 lookup main", "IPv6")
 equal(ipv6[1].family, "IPv6", "IPv6 family")
@@ -42,7 +42,7 @@ local many = {}
 for priority = 1, 70 do
 	table.insert(many, tostring(priority) .. ": from all lookup " .. tostring(priority))
 end
-local limited, total, was_truncated = routing.parse_policy_rules(table.concat(many, "\\n"), "IPv4")
+local limited, total, was_truncated = routing.parse_policy_rules(table.concat(many, string.char(10)), "IPv4")
 equal(#limited, 64, "inventory limit")
 equal(total, 70, "complete match count")
 equal(was_truncated, true, "truncation flag")
