@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5406,6 +5406,121 @@ function DhcpScopeEditor({ scope, refresh }: {
 }
 
 
+function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
+  lease: RouterOfficeStaticLease;
+  networks: RouterOfficeInterface[];
+  onCancel: () => void;
+  onComplete: (notice: { success: boolean; message: string }) => void;
+}) {
+  const [name, setName] = useState(lease.name);
+  const [mac, setMac] = useState(lease.mac);
+  const [ipv4, setIpv4] = useState(lease.ipv4);
+  const [network, setNetwork] = useState(networks[0]?.name ?? "");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const changed = name.trim() !== lease.name || mac.trim().toLowerCase() !== lease.mac ||
+    ipv4.trim() !== lease.ipv4 || Boolean(network);
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || !changed || busy || !network) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await updateRouterDhcpReservation({
+        section: lease.section,
+        name: name.trim(),
+        mac: mac.trim(),
+        ipv4: ipv4.trim(),
+        network,
+      });
+      onComplete({
+        success: true,
+        message: "Reservation " + result.name + " was updated and dnsmasq restarted successfully.",
+      });
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The DHCP reservation could not be updated.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="office-reservation-edit-form" onSubmit={save}>
+      <div className="office-reservation-edit-heading">
+        <strong>Edit {lease.name}</strong>
+        <span>UCI section {lease.section}</span>
+      </div>
+      <div className="office-reservation-grid">
+        <label>
+          <span>Host name</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={63}
+            pattern="[A-Za-z0-9][A-Za-z0-9-]*"
+            autoComplete="off"
+            required
+          />
+        </label>
+        <label>
+          <span>MAC address</span>
+          <input
+            type="text"
+            value={mac}
+            onChange={(event) => setMac(event.target.value)}
+            maxLength={17}
+            pattern="[A-Fa-f0-9]{2}(:[A-Fa-f0-9]{2}){5}"
+            autoComplete="off"
+            required
+          />
+        </label>
+        <label>
+          <span>Reserved IPv4</span>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={ipv4}
+            onChange={(event) => setIpv4(event.target.value)}
+            maxLength={15}
+            pattern="[0-9]{1,3}(\.[0-9]{1,3}){3}"
+            autoComplete="off"
+            required
+          />
+        </label>
+        <label>
+          <span>Subnet validation LAN</span>
+          <select value={network} onChange={(event) => setNetwork(event.target.value)} required>
+            {networks.map((item) => (
+              <option key={item.name} value={item.name}>{item.name} · {item.ipv4[0]} / {item.netmask}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="office-reservation-confirm">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          disabled={busy || !changed}
+          onChange={(event) => setConfirmed(event.target.checked)}
+        />
+        <span>I confirm these replacement host details and authorize QuantumGrid to update the existing DHCP reservation and restart dnsmasq.</span>
+      </label>
+      <div className="office-reservation-edit-actions">
+        <button className="hero-button" type="submit" disabled={!confirmed || !changed || busy || !network}>
+          <Check size={14} /> {busy ? "Updating reservation…" : "Save reservation changes"}
+        </button>
+        <button className="office-remove-cancel" type="button" onClick={onCancel} disabled={busy}>Cancel</button>
+        <span>The selected LAN is used for IPv4 subnet validation only. Standard dnsmasq host reservations remain global to this dnsmasq instance.</span>
+      </div>
+      {error && <div className="module-message office-reservation-error" role="alert">{error}</div>}
+    </form>
+  );
+}
+
+
 function OfficeNetworksPage({ routerOverview, refresh }: {
   routerOverview: RouterOverview | null;
   refresh: () => void;
@@ -5418,6 +5533,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   const [reservationConfirmed, setReservationConfirmed] = useState(false);
   const [reservationBusy, setReservationBusy] = useState(false);
   const [pendingReservationRemoval, setPendingReservationRemoval] = useState("");
+  const [pendingReservationEdit, setPendingReservationEdit] = useState("");
   const [reservationRemoveBusy, setReservationRemoveBusy] = useState(false);
   const [reservationNotice, setReservationNotice] = useState<{ success: boolean; message: string } | null>(null);
   const enabledDhcpScopes = inventory?.dhcp_scopes.filter((scope) => !scope.ignore) ?? [];
@@ -5633,24 +5749,48 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           ) : (
             <div className="office-zone-list">
               {inventory.static_leases.map((lease, index) => (
-                <div className="office-zone-row" key={lease.section || lease.mac + "-" + lease.ipv4 + "-" + index}>
-                  <div><strong>{lease.name}</strong><small>{lease.mac}</small></div>
-                  <div><small>RESERVED IPV4</small><b>{lease.ipv4}</b></div>
-                  <div className="office-reservation-row-actions">
-                    <Status active={true}>STATIC</Status>
-                    {pendingReservationRemoval === lease.section ? (
-                      <div className="office-reservation-remove-confirm">
-                        <button className="office-remove-confirm" type="button" onClick={() => { void removeReservation(lease.section); }} disabled={reservationRemoveBusy}>
-                          {reservationRemoveBusy ? "Removing…" : "Confirm remove"}
+                <div className="office-reservation-entry" key={lease.section || lease.mac + "-" + lease.ipv4 + "-" + index}>
+                  <div className="office-zone-row">
+                    <div><strong>{lease.name}</strong><small>{lease.mac}</small></div>
+                    <div><small>RESERVED IPV4</small><b>{lease.ipv4}</b></div>
+                    <div className="office-reservation-row-actions">
+                      <Status active={true}>STATIC</Status>
+                      <button
+                        className="office-remove-start"
+                        type="button"
+                        onClick={() => {
+                          setReservationNotice(null);
+                          setPendingReservationRemoval("");
+                          setPendingReservationEdit(lease.section);
+                        }}
+                        disabled={!lease.section || reservationRemoveBusy}
+                      >Edit</button>
+                      {pendingReservationRemoval === lease.section ? (
+                        <div className="office-reservation-remove-confirm">
+                          <button className="office-remove-confirm" type="button" onClick={() => { void removeReservation(lease.section); }} disabled={reservationRemoveBusy}>
+                            {reservationRemoveBusy ? "Removing…" : "Confirm remove"}
+                          </button>
+                          <button className="office-remove-cancel" type="button" onClick={() => setPendingReservationRemoval("")} disabled={reservationRemoveBusy}>Cancel</button>
+                        </div>
+                      ) : (
+                        <button className="office-remove-start" type="button" onClick={() => { setReservationNotice(null); setPendingReservationEdit(""); setPendingReservationRemoval(lease.section); }} disabled={!lease.section || reservationRemoveBusy}>
+                          Remove
                         </button>
-                        <button className="office-remove-cancel" type="button" onClick={() => setPendingReservationRemoval("")} disabled={reservationRemoveBusy}>Cancel</button>
-                      </div>
-                    ) : (
-                      <button className="office-remove-start" type="button" onClick={() => { setReservationNotice(null); setPendingReservationRemoval(lease.section); }} disabled={!lease.section || reservationRemoveBusy}>
-                        Remove
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
+                  {pendingReservationEdit === lease.section && (
+                    <DhcpReservationEditor
+                      lease={lease}
+                      networks={reservationNetworks}
+                      onCancel={() => setPendingReservationEdit("")}
+                      onComplete={(notice) => {
+                        setReservationNotice(notice);
+                        setPendingReservationEdit("");
+                        refresh();
+                      }}
+                    />
+                  )}
                 </div>
               ))}
             </div>
