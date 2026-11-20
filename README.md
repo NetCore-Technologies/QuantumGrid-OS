@@ -377,8 +377,10 @@ reload causes QuantumGrid to restore the prior UCI section (or remove a newly cr
 commit the rollback and reload networking again. Failed recovery is reported as unconfirmed and
 must be inspected locally; it is not reported as a successful rollback. Change outcomes are
 written to the redacted office audit log. Incorrect membership can interrupt wired, wireless or
-administrator access. The editor does not create L3 interfaces, IP subnets, DHCP scopes, firewall
-zones, Wi-Fi SSIDs or downstream switch configuration; those remain separate explicit tasks.
+administrator access. A separate segment provisioner can attach an existing bridge VLAN to a new
+static IPv4 interface, create its DHCPv4 pool, join a pre-existing default-deny firewall zone and
+add narrow DHCP/DNS access rules. It does not create the bridge VLAN itself, configure Wi-Fi SSIDs
+or change downstream managed switches.
 VLAN changes should be staged from a verified management path and tested with an out-of-band
 recovery method available. QuantumGrid checks the current administrator's IPv4 route: it blocks
 edits/removal of the VLAN carrying that session and preserves the native untagged memberships
@@ -396,10 +398,11 @@ Both operations require an authenticated same-origin administrator POST, explici
 and produce a redacted audit event. The controller does not modify zone input/output defaults
 through this manager, so router-management access policy remains separately controlled.
 
-A forwarding entry is a directional permission, not a firewall packet-path test. This control
-does not yet edit firewall zone input/output/forward defaults, individual rule ordering, NAT,
-redirects, traffic shaping, address sets or policy-routing. Review the complete fw4 ruleset and
-test the actual path between clients before deploying segmentation to a production office.
+A forwarding entry is a directional permission, not a firewall packet-path test. The separate
+zone-policy editor can change existing zone output/forward defaults and masquerading while leaving
+router INPUT read-only. This control does not edit individual rule ordering, NAT redirects, traffic
+shaping, address sets or policy-routing. Review the complete fw4 ruleset and test the actual path
+between clients before deploying segmentation to a production office.
 
 ## Managed firewall zone policy
 
@@ -417,6 +420,34 @@ not a substitute for an out-of-band recovery path. Masquerading changes source-N
 and can alter connectivity; review the zone's networks and test real client traffic after
 applying changes. The UI and API do not edit individual firewall rules, NAT redirects, address
 sets or policy-routing entries through this zone editor.
+
+## Routed IPv4 office segment provisioning
+
+Office Networks can provision a routed IPv4 segment **on an existing bridge VLAN**. The bridge
+must already have VLAN filtering enabled and the selected VLAN must already contain validated
+switch-port membership. The administrator supplies a unique interface name, RFC1918 gateway
+address, contiguous /1–/30 netmask, DHCPv4 pool and an existing internal firewall zone.
+
+The selected zone must already default router INPUT and inter-zone FORWARD to REJECT or DROP.
+QuantumGrid does not change those zone policies. It attaches the new network interface to the zone,
+creates the DHCPv4 server scope, and installs three narrow IPv4 rules: DHCP UDP/67 and DNS UDP/53
+plus TCP/53. The DNS rules are restricted to the new subnet and gateway address. DHCPv6, router
+advertisements and NDP are explicitly disabled for this IPv4-only provisioner. WAN/WWAN zones,
+duplicate interface/device assignments, overlapping existing static subnets, uncalculable existing
+static subnets, invalid DHCP pools and truncated inventories are rejected.
+
+Network, firewall and DHCP UCI changes are committed together as a guarded multi-package operation.
+The network, firewall and dnsmasq services are then reloaded/restarted. If staging, commit or a
+service reload fails, QuantumGrid attempts to remove the partial interface/scope/rules, restore the
+firewall zone's original network list, commit the rollback and reload all affected services. A
+rollback is reported as successful only when all recovery steps are confirmed; otherwise the
+administrator is told to inspect the router locally. The action is audited.
+
+This creates an IPv4 interface and DHCPv4 scope only; it does not create the bridge VLAN, Wi-Fi
+SSID-to-VLAN binding, IPv6 configuration, static leases, NAT, inter-zone forwarding or downstream
+switch/access-point configuration. The operation is a source integration, not proof of end-to-end
+switch tagging, client DHCP, DNS or inter-VLAN reachability. Test on a non-management VLAN and keep
+an out-of-band recovery path available before production use.
 
 ## DHCPv6, router advertisements and NDP
 
@@ -441,13 +472,14 @@ rules.
 
 ## Office network inventory
 
-The authenticated **Office Networks** page provides a read-only correlation of configured
+The authenticated **Office Networks** page provides a correlated inventory and guarded configuration tools for
 network interfaces and subnet masks, IPv6 assignment prefixes, bridge devices, bridge VLAN IDs and
-tagged/untagged/PVID port membership, firewall zones and their input/output/forward policies, explicit inter-zone forwarding entries,
+tagged/untagged/PVID port membership, firewall zones and their input/output/forward policies,
+explicit inter-zone forwarding entries, routed IPv4 segments, DHCPv4 scopes and their zone associations,
 wireless AP sections mapped to network names, DHCP scope offsets/limits/lease options, and validated
 static IPv4/MAC host reservations. Interface link state is queried from the router's network-interface
-status API. The page supports office network design reviews and CSV inventory hand-off without
-inventing missing VLANs, expanding DHCP ranges incorrectly, or claiming isolation from names alone.
+status API. The page supports office network design reviews and CSV inventory hand-off without inventing missing
+VLANs, expanding DHCP ranges incorrectly, or claiming isolation from names alone.
 
 The reservation form can also prefill host, MAC and address fields from an unexpired DHCP lease
 reported by dnsmasq. It suggests a LAN only when the lease IPv4 matches a configured eligible static
@@ -544,7 +576,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings plus guarded link-layer overhead/MPU calibration with restart and rollback handling,
   Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, advanced CAKE option profiles and
   qdisc validation, radio intelligence/scheduling, traffic classification, per-client priority,
