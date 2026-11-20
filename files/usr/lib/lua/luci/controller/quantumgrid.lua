@@ -2651,6 +2651,10 @@ function action_dhcp_scope_add()
 	end
 
 	local inventory = office_network_status(uci, fs)
+	if inventory.truncated then
+		respond(409, { ok = false, error = "The router's network inventory is truncated. Resolve or reduce the inventory before creating a DHCP pool so overlaps can be checked completely." })
+		return
+	end
 	local other_ranges = {}
 	for _, scope in ipairs(inventory.dhcp_scopes or {}) do
 		if not scope.ignore then
