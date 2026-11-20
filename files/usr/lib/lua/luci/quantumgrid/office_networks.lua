@@ -284,7 +284,7 @@ function build_inventory(source)
 			local interface = token(item.interface, 64)
 			if name and interface then
 				local limit = tonumber(item.limit)
-				if limit and (limit ~= math.floor(limit) or limit < 1 or limit > 65535) then limit = nil end
+				if limit and (limit ~= math.floor(limit) or limit < 1 or limit > 4294967294) then limit = nil end
 				table.insert(result.dhcp_scopes, {
 					name = name,
 					interface = interface,
