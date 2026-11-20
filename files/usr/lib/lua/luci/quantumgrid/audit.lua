@@ -16,6 +16,7 @@ local ALLOWED_ACTIONS = {
 	["dhcp.scope.update"] = true,
 	["dhcp.scope.toggle"] = true,
 	["dhcp.scope.add"] = true,
+	["dhcp.scope.remove"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
 	["package.feed.update"] = true,
