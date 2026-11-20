@@ -63,6 +63,46 @@ local function protected_from_removal(value)
 	return false
 end
 
+local function valid_temp_path(path)
+	return type(path) == "string" and path:match("^/tmp/[A-Za-z0-9_.%-]+$") ~= nil
+end
+
+-- Reserve the pathname atomically before a shell command can write to it.
+-- O_CREAT|O_EXCL prevents following an attacker-precreated symlink in /tmp.
+function create_secure_log_file(temp_name, nixio_module)
+	if type(temp_name) ~= "function" or type(nixio_module) ~= "table"
+		or type(nixio_module.open_flags) ~= "function"
+		or type(nixio_module.open) ~= "function" then
+		return nil, "Secure temporary-file support is unavailable."
+	end
+
+	local flags_ok, flags = pcall(nixio_module.open_flags, "creat", "excl", "wronly")
+	if not flags_ok or flags == nil then
+		return nil, "Exclusive temporary-file creation is unavailable."
+	end
+
+	for _ = 1, 8 do
+		local name_ok, path = pcall(temp_name)
+		if name_ok and valid_temp_path(path) then
+			local open_ok, file = pcall(nixio_module.open, path, flags, 384)
+			if open_ok and file then
+				if type(file.close) ~= "function" then
+					os.remove(path)
+					return nil, "The temporary log file could not be closed safely."
+				end
+				local close_ok, close_result = pcall(file.close, file)
+				if close_ok and close_result ~= false then
+					return path
+				end
+				os.remove(path)
+				return nil, "The temporary log file could not be closed safely."
+			end
+		end
+	end
+
+	return nil, "A private package-operation log file could not be reserved."
+end
+
 function validate(operation, package_name, confirmed)
 	if operation ~= "update" and operation ~= "install" and operation ~= "remove" then
 		return nil, "Choose update, install or remove."
