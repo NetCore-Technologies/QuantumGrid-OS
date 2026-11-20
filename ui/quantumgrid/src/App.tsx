@@ -5413,7 +5413,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
               {reservationNotice.message}
             </div>
           )}
-          <div className="module-message">Only configured UCI host reservations are shown. Dynamic leases are listed separately on the Devices page; a reservation does not prove that the client is currently connected. Removing a reservation restarts dnsmasq; confirm only when you intend to remove that host mapping.</div>
+          <div className="module-message">Only configured UCI host reservations are shown. Dynamic leases are listed separately on the Devices page; a reservation does not prove that the client is currently connected. Reservations are global to the active dnsmasq instance and are not bound to one VLAN by this selector. Removing a reservation restarts dnsmasq; confirm only when you intend to remove that host mapping.</div>
         </Panel>
       </div>
 
@@ -5489,7 +5489,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
               <button className="hero-button" type="submit" disabled={!reservationConfirmed || reservationBusy || !selectedReservationNetwork}>
                 <Check size={15} /> {reservationBusy ? "Saving reservation…" : "Add reservation"}
               </button>
-              <span>Only new reservations are supported in this control. Duplicate MAC/IP entries, addresses outside the selected subnet and addresses currently leased to another MAC are rejected.</span>
+              <span>The selected scope validates the subnet only: OpenWrt stores this as a global dnsmasq host entry, not a VLAN-specific reservation. Duplicate MAC/IP entries, out-of-subnet addresses and addresses leased to another MAC are rejected.</span>
             </div>
             {reservationNotice && (
               <div className={reservationNotice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={reservationNotice.success ? "status" : "alert"}>
