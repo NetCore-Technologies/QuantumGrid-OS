@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, scanRouterWifi, type RouterClient, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -1955,6 +1955,21 @@ function DiagnosticsControlPage({
   const lastSample = routerOverview
     ? new Date(routerOverview.timestamp * 1000).toLocaleString()
     : "N/A";
+  const [latencyTest, setLatencyTest] = useState<RouterLatencyTest | null>(null);
+  const [testingLatency, setTestingLatency] = useState(false);
+  const [latencyTestError, setLatencyTestError] = useState("");
+
+  const runLatencyTest = async () => {
+    setTestingLatency(true);
+    setLatencyTestError("");
+    try {
+      setLatencyTest(await runRouterLatencyTest());
+    } catch (error) {
+      setLatencyTestError(error instanceof Error ? error.message : "The latency test failed.");
+    } finally {
+      setTestingLatency(false);
+    }
+  };
 
   return (
     <div className="module-page">
@@ -1963,15 +1978,16 @@ function DiagnosticsControlPage({
         <div>
           <div className="setup-kicker">READ-ONLY CONNECTIVITY CHECKS</div>
           <h1>Diagnostics</h1>
-          <p>Inspect the authenticated router API, WAN interface state and the current single-target Internet reachability probe.</p>
+          <p>Inspect authenticated router telemetry and run an on-demand, five-packet ICMP latency test to a fixed public target.</p>
           <button className="hero-button" onClick={refresh}><RefreshCw size={16} /> Refresh diagnostics</button>
         </div>
       </section>
 
       <div className="metrics">
         <Metric title="Internet Probe" value={routerOverview ? (stats.reachable ? "ONLINE" : "NO REPLY") : "N/A"} unit="" detail="Single ICMP target · 1.1.1.1" icon={Signal} />
-        <Metric title="Latency" value={stats.latency === null ? "N/A" : fmt(stats.latency, 1)} unit={stats.latency === null ? "" : "ms"} detail="Latest successful probe" icon={Activity} />
-        <Metric title="Probe Change" value={stats.probeDelta === null ? "N/A" : fmt(stats.probeDelta, 1)} unit={stats.probeDelta === null ? "" : "ms"} detail="Absolute change between samples" icon={CircleGauge} />
+        <Metric title="Latest latency" value={stats.latency === null ? "N/A" : fmt(stats.latency, 1)} unit={stats.latency === null ? "" : "ms"} detail="One-packet telemetry sample" icon={Activity} />
+        <Metric title="Measured packet loss" value={latencyTest ? fmt(latencyTest.packet_loss_percent, 1) : "N/A"} unit={latencyTest ? "%" : ""} detail="Five-packet diagnostic window" icon={CircleGauge} />
+        <Metric title="Measured jitter" value={latencyTest?.jitter_ms === undefined ? "N/A" : fmt(latencyTest.jitter_ms, 1)} unit={latencyTest?.jitter_ms === undefined ? "" : "ms"} detail="Mean consecutive RTT difference" icon={Activity} />
         <Metric title="WAN Links Up" value={routerOverview ? fmt(wanInterfaces.filter((item) => item.up).length) : "N/A"} unit={routerOverview ? `/${wanInterfaces.length}` : ""} detail="Reported WAN interfaces" icon={Globe2} />
       </div>
 
@@ -1997,8 +2013,27 @@ function DiagnosticsControlPage({
         </Panel>
       </div>
 
-      <Panel title="Measurement boundaries" eyebrow="WHAT THIS PAGE DOES NOT CLAIM">
-        <div className="module-message">The current API provides a single ICMP reachability/latency sample. It does not yet run continuous ping, traceroute, DNS resolution tests, packet-loss windows or bufferbloat tests. No packet-loss percentage is inferred from a missing reply.</div>
+      <Panel title="Multi-packet latency test" eyebrow="ON-DEMAND · FIVE ICMP PACKETS">
+        <div className="module-message">Sends five ICMP echo requests from the router to the fixed target 1.1.1.1. The router caches results for 30 seconds to protect low-resource devices.</div>
+        <button className="hero-button" onClick={runLatencyTest} disabled={testingLatency}>
+          <Activity size={16} /> {testingLatency ? "Running five-packet test…" : "Run latency test"}
+        </button>
+        {latencyTestError && <div className="module-message" role="alert">{latencyTestError}</div>}
+        {latencyTest && (
+          <InfoRows rows={[
+            ["TARGET", latencyTest.target],
+            ["PACKETS", `${latencyTest.packets_received} / ${latencyTest.packets_sent} received`],
+            ["PACKET LOSS", `${fmt(latencyTest.packet_loss_percent, 1)}%`],
+            ["RTT MIN / AVG / MAX", [latencyTest.min_ms, latencyTest.average_ms, latencyTest.max_ms].map((value) => value === undefined ? "N/A" : `${fmt(value, 2)} ms`).join(" / ")],
+            ["JITTER", latencyTest.jitter_ms === undefined ? "N/A · fewer than two replies" : `${fmt(latencyTest.jitter_ms, 2)} ms`],
+            ["JITTER METHOD", latencyTest.jitter_method],
+            ["SAMPLED AT", new Date(latencyTest.sampled_at * 1000).toLocaleString()],
+            ["CACHE", latencyTest.cached ? `CACHED · retry in ${latencyTest.retry_after_seconds ?? 0}s` : "FRESH"],
+          ]} />
+        )}
+      </Panel>
+      <Panel title="Measurement boundaries" eyebrow="INTERPRETING THE NUMBERS">
+        <div className="module-message">Packet loss is the missing-reply fraction within these five requests to this one target. Jitter is the mean absolute difference between consecutive successful RTT samples, not an RFC 3550 RTP jitter value. This is an on-demand unloaded-route sample, not a controlled bufferbloat test, continuous monitor, DNS test or proof that every Internet destination is reachable.</div>
       </Panel>
     </div>
   );
