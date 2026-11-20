@@ -1497,8 +1497,8 @@ function ClientLeaseList({ clients, available, maxRows }: { clients: RouterClien
         client.lease_remaining_seconds, formatLeaseRemaining(client.lease_remaining_seconds),
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-dhcp-leases-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
@@ -1635,8 +1635,8 @@ function WirelessClientList({
         client.tx_retries, client.tx_failed,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = `quantumgrid-wifi-stations-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
@@ -1854,8 +1854,8 @@ function NetworkControlPage({
         route.device, route.gateway, route.metric, route.protocol,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-default-routes-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
@@ -2302,8 +2302,8 @@ function CellularSignalHistory({ history }: { history: CellularHistorySample[] }
         sample.rssi_dbm, sample.rsrp_dbm, sample.rsrq_db, sample.snr_db,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-cellular-rf-history-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
@@ -2517,8 +2517,8 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
         exportedAt, "WireGuard interface", iface.name, iface.up ? "UP" : "DOWN", iface.device,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-security-inventory-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
@@ -3291,8 +3291,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           .join(" / "),
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = `quantumgrid-wifi-history-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
@@ -3364,8 +3364,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         sample.authorized, sample.signalDbm, sample.rxMbps, sample.txMbps,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = `quantumgrid-wifi-client-history-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
@@ -3860,8 +3860,8 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
         qdisc.requeues, qdisc.backlog_bytes, qdisc.backlog_packets,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-qdisc-inventory-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
