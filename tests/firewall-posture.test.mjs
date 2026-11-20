@@ -14,6 +14,7 @@ const security = (overrides = {}) => ({
     forward: "REJECT",
     masquerade: true,
   }],
+  rules: [],
   rules_count: 12,
   redirects_count: 1,
   nft_available: true,
@@ -108,4 +109,62 @@ test("custom rules are always marked unknown because counts are not rule evaluat
   const rules = result.checks.find((item) => item.id === "rule-evaluation");
   assert.equal(rules?.status, "unknown");
   assert.match(rules?.detail ?? "", /not been evaluated/);
+});
+
+test("enabled ACCEPT rules sourced from WAN-like zones are flagged for review", () => {
+  const result = auditFirewallPosture(security({
+    rules: [{
+      name: "allow-admin",
+      source_zone: "wan",
+      destination_zone: "lan",
+      protocol: "tcp",
+      target: "ACCEPT",
+      family: "ipv4",
+      source_port: "",
+      destination_port: "8443",
+      enabled: true,
+      source_ip_match: false,
+      destination_ip_match: false,
+      source_mac_match: false,
+    }],
+  }));
+  const finding = result.checks.find((item) => item.id === "external-allow-rule:allow-admin");
+  assert.equal(finding?.status, "review");
+  assert.match(finding?.detail ?? "", /does not prove public reachability/i);
+});
+
+test("disabled and LAN-origin ACCEPT rules are not classified as external allow rules", () => {
+  const result = auditFirewallPosture(security({
+    rules: [
+      {
+        name: "disabled-wan",
+        source_zone: "wan",
+        destination_zone: "lan",
+        protocol: "tcp",
+        target: "ACCEPT",
+        family: "ipv4",
+        source_port: "",
+        destination_port: "8443",
+        enabled: false,
+        source_ip_match: false,
+        destination_ip_match: false,
+        source_mac_match: false,
+      },
+      {
+        name: "lan-dns",
+        source_zone: "lan",
+        destination_zone: "",
+        protocol: "udp",
+        target: "ACCEPT",
+        family: "ipv4",
+        source_port: "",
+        destination_port: "53",
+        enabled: true,
+        source_ip_match: false,
+        destination_ip_match: false,
+        source_mac_match: false,
+      },
+    ],
+  }));
+  assert.equal(result.checks.some((item) => item.id.startsWith("external-allow-rule:")), false);
 });
