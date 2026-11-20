@@ -85,6 +85,8 @@ export interface RouterWirelessClient {
   signal_current_dbm?: number;
   rx_rate_mbps?: number;
   tx_rate_mbps?: number;
+  measured_rx_mbps?: number;
+  measured_tx_mbps?: number;
   rx_details?: RouterWifiRateDetails;
   tx_details?: RouterWifiRateDetails;
   frequency_mhz?: number;
