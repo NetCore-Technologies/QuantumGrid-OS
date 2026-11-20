@@ -243,6 +243,9 @@ reject_segment({ name = "lan" }, "reserved interface name")
 reject_segment({ bridge = "br-other" }, "unknown bridge")
 reject_segment({ vlan = "30" }, "nonexistent bridge VLAN")
 reject_segment({ address = "192.168.1.10" }, "overlapping existing subnet")
+reject_segment({ interfaces = {
+  { name = "broken", protocol = "static", device = "br-other", ipv4 = { "192.168.50.1" }, netmask = "255.0.255.0" }
+} }, "unparseable existing static subnet")
 reject_segment({ address = "192.168.20.0" }, "subnet network address as gateway")
 reject_segment({ address = "8.8.8.8" }, "public address as office gateway")
 reject_segment({ netmask = "255.0.255.0" }, "non-contiguous subnet mask")
