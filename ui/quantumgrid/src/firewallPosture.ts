@@ -35,6 +35,12 @@ function looksLikeExternalName(value: string): boolean {
   return EXTERNAL_ZONE_NAMES.has(name) || /^wwan\d+$/.test(name) || /^wan\d+$/.test(name);
 }
 
+function hasPotentialExternalSource(sourceZone: string): boolean {
+  const names = normalizeName(sourceZone).split(/\s+/).filter(Boolean);
+  // An omitted source zone is an unrestricted source match and therefore needs review.
+  return names.length === 0 || names.some(looksLikeExternalName);
+}
+
 function policyCheck(
   zoneName: string,
   policyName: "input" | "forward",
@@ -160,7 +166,7 @@ export function auditFirewallPosture(
   const externalAllowRules = (security.rules ?? []).filter((rule) =>
     rule.enabled === true &&
     rule.target.trim().toUpperCase() === "ACCEPT" &&
-    looksLikeExternalName(rule.source_zone),
+    hasPotentialExternalSource(rule.source_zone),
   );
   for (const rule of externalAllowRules) {
     checks.push({
@@ -168,7 +174,9 @@ export function auditFirewallPosture(
       title: "Enabled external allow rule",
       scope: "Rule " + rule.name,
       status: "review",
-      detail: "This enabled ACCEPT rule is sourced from a standard WAN/WWAN-named zone. Review its protocol, port constraints and address-match conditions. Raw address values are not collected; this check does not prove public reachability.",
+      detail: rule.source_zone.trim()
+        ? "This enabled ACCEPT rule names a standard WAN/WWAN source zone. Review its protocol, port constraints and address-match conditions. Raw address values are not collected; this check does not prove public reachability."
+        : "This enabled ACCEPT rule has no explicit source-zone restriction and may match more than WAN traffic. Review its protocol, port constraints and address-match conditions. Raw address values are not collected; this check does not prove public reachability.",
     });
   }
 

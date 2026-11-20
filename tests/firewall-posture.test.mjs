@@ -168,3 +168,45 @@ test("disabled and LAN-origin ACCEPT rules are not classified as external allow 
   }));
   assert.equal(result.checks.some((item) => item.id.startsWith("external-allow-rule:")), false);
 });
+
+test("multiple source zones are checked for WAN-like sources", () => {
+  const result = auditFirewallPosture(security({
+    rules: [{
+      name: "wan-and-lan",
+      source_zone: "lan wan6",
+      destination_zone: "",
+      protocol: "tcp",
+      target: "ACCEPT",
+      family: "ipv6",
+      source_port: "",
+      destination_port: "443",
+      enabled: true,
+      source_ip_match: false,
+      destination_ip_match: false,
+      source_mac_match: false,
+    }],
+  }));
+  assert.equal(result.checks.some((item) => item.id === "external-allow-rule:wan-and-lan"), true);
+});
+
+test("source-unrestricted ACCEPT rules are flagged for manual review", () => {
+  const result = auditFirewallPosture(security({
+    rules: [{
+      name: "all-zones-accept",
+      source_zone: "",
+      destination_zone: "",
+      protocol: "tcp",
+      target: "ACCEPT",
+      family: "",
+      source_port: "",
+      destination_port: "8443",
+      enabled: true,
+      source_ip_match: false,
+      destination_ip_match: false,
+      source_mac_match: false,
+    }],
+  }));
+  const finding = result.checks.find((item) => item.id === "external-allow-rule:all-zones-accept");
+  assert.equal(finding?.status, "review");
+  assert.match(finding?.detail ?? "", /no explicit source-zone restriction/i);
+});

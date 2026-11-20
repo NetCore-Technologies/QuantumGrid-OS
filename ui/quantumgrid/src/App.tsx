@@ -2411,7 +2411,7 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
             </div>
           ))}
         </div>
-        <div className="module-message">This is a narrow configuration review, not a vulnerability scan. External zones are identified only by standard WAN/WWAN naming. Individual rules, rule order, port exposure, IPv6 policy and actual packet paths are not evaluated. A REVIEW item needs manual confirmation; UNKNOWN never means secure.</div>
+        <div className="module-message">This is a narrow configuration review, not a vulnerability scan. External zones are identified only by standard WAN/WWAN naming. Enabled ACCEPT rule summaries are flagged when their source names a WAN/WWAN zone or has no explicit source-zone restriction. Full rule matching, rule order, port exposure, IPv6 policy and actual packet paths are not evaluated. A REVIEW item needs manual confirmation; UNKNOWN never means secure.</div>
       </Panel>
       <Panel title="Firewall rule inventory" eyebrow="UCI RULE SUMMARIES · ADDRESSES REDACTED">
         {!security ? (
