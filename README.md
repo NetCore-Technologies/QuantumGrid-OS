@@ -310,10 +310,11 @@ static IPv4/MAC host reservations. Interface link state is queried from the rout
 status API. The page supports office network design reviews and CSV inventory hand-off without
 inventing missing VLANs, expanding DHCP ranges incorrectly, or claiming isolation from names alone.
 
-Guarded **Add** and **Remove** static reservation controls are also available for existing
-enabled DHCP scopes on static IPv4 LAN interfaces. Creation validates the hostname, unicast MAC,
-canonical IPv4 address, subnet membership, existing reservations and current DHCP leases. Removal
-targets a validated UCI host-section ID and snapshots the original section before changing it. Both
+Guarded **Add**, **Edit** and **Remove** static reservation controls are also available for
+existing enabled DHCP scopes on static IPv4 LAN interfaces. Creation and editing validate the
+hostname, unicast MAC, canonical IPv4 address, subnet membership, duplicate reservations and
+current DHCP leases. Editing preserves the original UCI host section and unrelated dnsmasq options;
+removal targets a validated UCI host-section ID and snapshots the original section. All three
 operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
 Existing DHCP scope edits are limited to start offset, pool size and lease duration. The server
 checks address boundaries and collisions against other enabled scopes, and fails closed if a sibling
@@ -322,8 +323,8 @@ restarts dnsmasq and attempts rollback on failure. It does not create new scopes
 DHCPv6, RA or network interface settings.
 
 The selected LAN is used for reservation subnet validation only: a standard dnsmasq host section is
-global to that dnsmasq instance, not a per-VLAN reservation binding. Editing reservations in place,
-creating DHCP pools, and migrating live clients are not exposed yet.
+global to that dnsmasq instance, not a per-VLAN reservation binding. Creating or removing DHCP server
+scopes, changing network interfaces, and migrating active clients are not exposed yet.
 
 This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
 switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
