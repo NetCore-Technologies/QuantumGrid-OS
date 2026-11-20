@@ -31,6 +31,11 @@ local result = office.build_inventory({
     { name = "Bad-MAC", mac = "aa:bb:cc:dd:ee:gg", ipv4 = "192.168.20.32" },
     { name = "Bad-IP", mac = "aa:bb:cc:dd:ee:03", ipv4 = "300.1.2.3" },
   },
+  forwardings = {
+    { name = "corp_to_printers", source = "corp", destination = "printers" },
+    { name = "guest_to_lan", source = "guest", destination = "lan" },
+    { name = "../unsafe", source = "corp", destination = "lan" },
+  },
   zones = {
     { name = "lan", networks = { "lan" }, input = "ACCEPT", output = "ACCEPT", forward = "ACCEPT" },
     { name = "corp", networks = { "corp" }, input = "ACCEPT", output = "ACCEPT", forward = "REJECT" },
@@ -55,6 +60,7 @@ assert(result.wifi_ap_count == 3, "only AP sections belong in the SSID inventory
 assert(result.dhcp_available and result.dhcp_scope_count == 2, "DHCP scope inventory should reject invalid interface names")
 assert(result.static_lease_count == 2, "invalid MAC and IPv4 static leases must be dropped")
 assert(result.static_leases[1].mac == "aa:bb:cc:dd:ee:01", "MAC addresses should be normalized")
+assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" and result.forwardings[1].destination == "printers", "explicit firewall zone forwarding should be inventoried")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
 
@@ -110,4 +116,4 @@ end
 local capped = office.build_inventory(oversized)
 assert(capped.interface_count == 64 and capped.vlan_count == 64 and capped.truncated)
 
-print("office-networks: VLANs, bridges, firewall and SSID correlation tests passed")
+print("office-networks: VLANs, bridges, firewall forwarding, DHCP and SSID correlation tests passed")
