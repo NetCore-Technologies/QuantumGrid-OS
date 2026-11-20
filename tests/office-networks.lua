@@ -46,6 +46,39 @@ for _, values in ipairs(invalid_reservations) do
   assert(valid == nil, "invalid static reservation input must be rejected")
 end
 
+local valid_scope, scope_error = office.validate_dhcp_scope_update(
+  "100", "120", "12h", "192.168.10.1", "255.255.255.0", {})
+assert(valid_scope and valid_scope.pool_start_ip == "192.168.10.100")
+assert(valid_scope.pool_end_ip == "192.168.10.219" and valid_scope.lease_seconds == 43200)
+
+local minute_scope = office.validate_dhcp_scope_update(
+  "20", "10", "30d", "10.0.0.1", "255.255.255.0", {})
+assert(minute_scope and minute_scope.lease_seconds == 2592000)
+
+local invalid_scope_updates = {
+  { "0", "20", "12h" },
+  { "01", "20", "12h" },
+  { "20", "0", "12h" },
+  { "20", "10", "5s" },
+  { "20", "10", "366d" },
+  { "240", "30", "12h" },
+}
+for _, values in ipairs(invalid_scope_updates) do
+  local updated = office.validate_dhcp_scope_update(
+    values[1], values[2], values[3], "192.168.10.1", "255.255.255.0", {})
+  assert(updated == nil, "invalid DHCP scope updates must be rejected")
+end
+
+local overlapping_scope, overlapping_error = office.validate_dhcp_scope_update(
+  "100", "120", "12h", "192.168.10.1", "255.255.255.0",
+  { { start = "192.168.10.150", finish = "192.168.10.180" } })
+assert(overlapping_scope == nil and overlapping_error:find("overlaps", 1, true),
+  "new DHCP pool must not overlap an existing enabled scope")
+
+local gateway_scope = office.validate_dhcp_scope_update(
+  "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
+assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
+
 local result = office.build_inventory({
   available = true,
   sampled_at = 1700000000,
