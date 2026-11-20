@@ -174,6 +174,30 @@ controls remain unconnected and read-only.
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.
 
+## WPA2-Enterprise Wi-Fi
+
+The existing Wi-Fi AP editor supports **WPA2-Enterprise with an external RADIUS authentication
+server**. The AW1000 firmware selects OpenWrt's full-featured wpad-openssl variant because the
+basic WPA-PSK/SAE variant does not include the full EAP/RADIUS authenticator. Configure an IPv4
+RADIUS address or DNS hostname, a UDP authentication port (default 1812) and a shared secret of
+16–128 bytes. The server must be reachable from the router on the configured port.
+
+The shared secret is never returned by the QuantumGrid API. Leaving it blank preserves the
+existing secret only while the enterprise mode and RADIUS server remain unchanged; enabling
+enterprise security or changing the server requires a new secret. Switching back to personal or
+open security removes the RADIUS options. All changed wireless options, including the RADIUS
+secret, are included in the existing rollback snapshot if the Wi-Fi reload fails. The API exposes
+only whether a secret is configured, not its value.
+
+This is a single-server WPA2-Enterprise authenticator configuration, not a complete NAC platform.
+The AP remains attached to its existing network. RADIUS accounting, dynamic VLAN assignment,
+802.1X switch-port control, certificate provisioning, EAP policy management and WPA3-Enterprise
+are not provided by this editor. Administrators must deploy and secure their own RADIUS service,
+configure client EAP identities/certificates as required by their organisation, allow the router
+to reach the server, and test the authentication path before production rollout. The software
+tests validate configuration and rollback logic; they do not prove radio/driver compatibility or
+successful authentication against a live RADIUS server.
+
 ## Firmware images
 
 The Arcadyan AW1000 release has one persistent firmware format: the device-specific
