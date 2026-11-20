@@ -7723,3 +7723,151 @@ input::placeholder {
   .conntrack-history-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .conntrack-history-chart { gap: 3px; padding-left: 6px; padding-right: 6px; }
 }
+
+
+/* Guarded wireless configuration editor */
+.wireless-config-list {
+  display: grid;
+  gap: 12px;
+}
+.wireless-config-editor {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.wireless-config-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.wireless-config-heading > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.wireless-config-heading strong {
+  color: var(--text);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.wireless-config-heading span {
+  color: var(--muted2);
+  font-size: 8px;
+  letter-spacing: .05em;
+  overflow-wrap: anywhere;
+}
+.wireless-config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.wireless-config-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.wireless-config-field > span {
+  color: var(--muted2);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .09em;
+}
+.wireless-config-field input,
+.wireless-config-field select {
+  width: 100%;
+  min-width: 0;
+  min-height: 37px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: rgba(0,0,0,.19);
+  font: inherit;
+  font-size: 10px;
+}
+.wireless-config-field input:focus,
+.wireless-config-field select:focus {
+  border-color: var(--accent, #5a88e8);
+  box-shadow: 0 0 0 2px rgba(90,136,232,.14);
+}
+.wireless-config-field input:disabled {
+  opacity: .5;
+  cursor: not-allowed;
+}
+.wireless-config-field small {
+  color: var(--muted2);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.wireless-config-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+}
+.wireless-config-options label,
+.wireless-config-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.wireless-config-options input,
+.wireless-config-confirm input {
+  flex: 0 0 auto;
+  margin: 1px 0 0;
+  accent-color: var(--accent, #5a88e8);
+}
+.wireless-config-options .wireless-config-risk {
+  color: #f0bd79;
+}
+.wireless-config-note {
+  margin: 0;
+}
+.wireless-config-confirm {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255,255,255,.025);
+}
+.wireless-config-result {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.wireless-config-result.success {
+  color: #9ce0bd;
+  border-color: rgba(89,190,139,.35);
+  background: rgba(89,190,139,.07);
+}
+.wireless-config-result.error {
+  color: #ffaaa4;
+  border-color: rgba(224,105,96,.35);
+  background: rgba(224,105,96,.07);
+}
+.wireless-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.wireless-config-actions button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+@media (max-width: 760px) {
+  .wireless-config-grid { grid-template-columns: 1fr; }
+  .wireless-config-actions { justify-content: stretch; }
+  .wireless-config-actions button { flex: 1 1 100%; }
+}
