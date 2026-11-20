@@ -346,6 +346,93 @@ local function network_device_vlan(device)
 	return nil, nil
 end
 
+local function parse_bridge_ports(value)
+	local result = {}
+	if type(value) == "string" then
+		for item in value:gmatch("%S+") do table.insert(result, item) end
+	elseif type(value) == "table" then
+		for _, item in ipairs(value) do
+			if type(item) ~= "string" then return nil, "Bridge port membership entries must be strings." end
+			table.insert(result, item)
+		end
+	else
+		return nil, "At least one explicit bridge port membership is required."
+	end
+	if #result < 1 or #result > 32 then
+		return nil, "A bridge VLAN must contain between 1 and 32 explicit port memberships."
+	end
+	return result
+end
+
+function validate_bridge_vlan(device, vlan_id, requested_ports, bridge_ports, existing_vlans, current_section)
+	if type(device) ~= "string" or #device < 1 or #device > 64
+		or not device:match("^[%w_.%-]+$") then
+		return nil, "Select an existing bridge device."
+	end
+	if type(vlan_id) ~= "string" or #vlan_id > 4 or not vlan_id:match("^[1-9]%d*$") then
+		return nil, "VLAN ID must be a whole number from 1 to 4094."
+	end
+	local numeric_vlan = tonumber(vlan_id)
+	if not numeric_vlan or numeric_vlan < 1 or numeric_vlan > 4094 then
+		return nil, "VLAN ID must be a whole number from 1 to 4094."
+	end
+
+	local allowed_ports = {}
+	for _, raw_port in ipairs(type(bridge_ports) == "table" and bridge_ports or {}) do
+		if type(raw_port) == "string" and raw_port:match("^[%w_.%-]+$") then
+			allowed_ports[raw_port] = true
+		end
+	end
+	if not next(allowed_ports) then
+		return nil, "The bridge has no validated member ports to configure."
+	end
+
+	local requested, parse_error = parse_bridge_ports(requested_ports)
+	if not requested then return nil, parse_error end
+	local normalized, seen = {}, {}
+	local pvid_ports = {}
+	for _, raw in ipairs(requested) do
+		local port = parse_port(raw)
+		if not port or port.mode == "unspecified" then
+			return nil, "Every selected port must explicitly be tagged (:t), untagged (:u) or untagged PVID (:u*)."
+		end
+		if not allowed_ports[port.name] then
+			return nil, "A selected port is not a member of the chosen bridge."
+		end
+		if seen[port.name] then
+			return nil, "A bridge port may appear only once in a VLAN membership list."
+		end
+		seen[port.name] = true
+		if port.pvid then pvid_ports[port.name] = true end
+		normalized[#normalized + 1] = port.name .. (port.mode == "tagged" and ":t" or port.pvid and ":u*" or ":u")
+	end
+
+	for _, existing in ipairs(type(existing_vlans) == "table" and existing_vlans or {}) do
+		if type(existing) == "table" and existing.section ~= current_section then
+			if existing.device == device and tonumber(existing.vlan) == numeric_vlan then
+				return nil, "This VLAN ID already exists on the selected bridge."
+			end
+			if existing.device == device then
+				local existing_ports = parse_bridge_ports(existing.ports) or {}
+				for _, raw in ipairs(existing_ports) do
+					local old_port = parse_port(raw)
+					if old_port and old_port.pvid and pvid_ports[old_port.name] then
+						return nil, "A switch port can have only one untagged PVID across the bridge."
+					end
+				end
+			end
+		end
+	end
+
+	return {
+		device = device,
+		vlan_id = numeric_vlan,
+		ports = normalized,
+		port_count = #normalized,
+		section = current_section
+	}
+end
+
 function build_inventory(source)
 	source = type(source) == "table" and source or {}
 	local result = {
