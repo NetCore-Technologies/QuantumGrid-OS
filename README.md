@@ -154,7 +154,8 @@ data is read from OpenWrt's iwinfo ubus API; the client inventory can filter and
 reported TX retries and failed packets, and exports the active diagnostic filters with each row.
 Missing driver counters remain unavailable rather than being inferred; retry/failure counts are
 cumulative station counters, not a measured packet-loss percentage. The Security Center exports a
-read-only firewall, nftables, Adblock Fast and VPN inventory without including keys or credentials. A single ICMP probe is
+read-only firewall, nftables, Adblock Fast and VPN inventory without including keys or credentials.
+The 5G page exports its retained QMI RF samples as CSV, preserving unavailable readings as blank fields. A single ICMP probe is
 shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
 
 The custom API route is protected by LuCI's authenticated administrator tree and accepts no
