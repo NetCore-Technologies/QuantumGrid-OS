@@ -62,6 +62,17 @@ assert(result.vlans[1].ports[2].mode == "tagged")
 assert(result.vlans[1].ports[3].mode == "untagged" and result.vlans[1].ports[3].pvid)
 assert(result.vlans[1].ports[4] == nil, "malformed switch ports must be dropped")
 
+local explicitness = office.build_inventory({
+  available = true,
+  vlans = {
+    { name = "vlan70", device = "br-test", vlan = 70, ports = { "lan1", "lan2:t*", "lan3u" } }
+  }
+})
+assert(explicitness.vlans[1].ports[1].mode == "unspecified", "bare port entries must not be guessed as tagged or untagged")
+assert(explicitness.vlans[1].ports[2] == nil, "tagged PVID suffixes are invalid")
+assert(explicitness.vlans[1].ports[3] == nil, "mode suffixes require a colon")
+
+
 local iot
 for _, iface in ipairs(result.interfaces) do
   if iface.name == "iot" then iot = iface end
