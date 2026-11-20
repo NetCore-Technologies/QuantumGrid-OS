@@ -207,6 +207,9 @@ reported TX retries and failed packets, and exports the active diagnostic filter
 Missing driver counters remain unavailable rather than being inferred; retry/failure counts are
 cumulative station counters, not a measured packet-loss percentage. The Security Center exports a
 read-only firewall, nftables, Adblock Fast and VPN inventory without including keys or credentials.
+WireGuard peer health also reports last-handshake age, receive/transmit counters and allowed IPs.
+The fixed `wg show all dump` parser deliberately discards private keys, preshared keys, public
+keys and endpoint addresses before the data reaches the UI or CSV export.
 The 5G page exports its retained QMI RF samples as CSV, preserving unavailable readings as blank fields. Gaming provides searchable/sortable kernel qdisc inventory and exports the visible read-only byte, packet, drop, overlimit and backlog counters for support review. The dashboard single ICMP probe remains a reachability/latency sample; Diagnostics separately runs the explicitly requested five-packet test. Neither feature is a controlled-load bufferbloat benchmark.
 
 The custom API route is protected by LuCI's authenticated administrator tree and accepts no
