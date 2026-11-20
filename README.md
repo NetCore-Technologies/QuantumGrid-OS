@@ -87,7 +87,12 @@ while scanning. The same page groups observed BSSIDs by reported band/channel an
 reported signal; these counts are scan visibility only, not airtime or interference measurements.
 Scan inventories can be searched by SSID/BSSID/radio, band, channel, security or mode; filtered by band/security; sorted by signal, channel or SSID; and exported using the visible filtered result set with a one-click filter reset.
 They can also be exported as CSV; network-controlled text is quoted and spreadsheet formula
-prefixes are neutralised in the export. The page keeps the last ten distinct manual scan
+prefixes are neutralised in the export. The Wi-Fi page also builds a read-only shortlist from
+unrestricted channels returned by the radio driver, comparing nearby BSSID signal and advertised
+channel-width overlap within each radio/band. The router's own BSSID is excluded when reported.
+Scores are relative to that shortlist, not measured airtime, CCA busy time, noise or guaranteed
+interference; unavailable widths are marked and use a 20 MHz fallback. No channel settings are
+changed. The page keeps the last ten distinct manual scan
 summaries plus the minimal BSSID/SSID/band/channel/signal fields needed to compare newly observed,
 not-observed and signal-changing access points. This comparison is page-memory-only: it is cleared
 when the Wi-Fi page is left, reloaded or its history is cleared, and is never written to browser
