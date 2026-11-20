@@ -144,6 +144,7 @@ artifact; it is not a persistent firmware installer. The release also includes
 |---|---|
 | `*-arcadyan_aw1000-squashfs-factory.ubi` | AW1000 persistent firmware image; use only with the verified AW1000-specific installation route |
 | `*-arcadyan_aw1000-initramfs-uImage.itb` | Temporary RAM boot for supported recovery and development workflows |
+| `install-aw1000-ubi.sh` | Read-only preflight by default; confirmed factory UBI writer for the standard AW1000 MTD layout |
 | `*-packages.tar.zst` | Package output from the same firmware build |
 | `SHA256SUMS` | Verify the published release assets |
 | `BUILDINFO.txt` | Source commits, configuration hash and build metadata |
