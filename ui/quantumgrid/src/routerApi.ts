@@ -828,6 +828,15 @@ export interface RouterOfficeDhcpScope {
   dhcpv6: string;
   ra: string;
   ndp: string;
+  ra_flags: string[];
+  ra_slaac: boolean;
+  ra_dns: boolean;
+  ra_preference: string;
+  ra_lifetime: number;
+  dhcpv6_na: boolean;
+  dhcpv6_pd: boolean;
+  dhcpv6_assignall: boolean;
+  dhcpv6_pd_min_len: number;
   range_valid: boolean;
   pool_start_ip: string;
   pool_end_ip: string;
@@ -910,6 +919,15 @@ export interface RouterDhcpScopeUpdateResult {
   dhcpv6: string;
   ra: string;
   ndp: string;
+  ra_flags: string[];
+  ra_slaac: boolean;
+  ra_dns: boolean;
+  ra_preference: string;
+  ra_lifetime: number;
+  dhcpv6_na: boolean;
+  dhcpv6_pd: boolean;
+  dhcpv6_assignall: boolean;
+  dhcpv6_pd_min_len: number;
   restarted: true;
   dnsmasq_restarted: true;
   odhcpd_restarted: boolean;
@@ -1774,6 +1792,15 @@ export async function updateRouterDhcpScope(input: {
   dhcpv6: "UNCHANGED" | "disabled" | "server";
   ra: "UNCHANGED" | "disabled" | "server";
   ndp: "UNCHANGED" | "disabled";
+  ra_flags: "UNCHANGED" | "none" | "other-config" | "managed-config" | "managed-config+other-config";
+  ra_slaac: "UNCHANGED" | "0" | "1";
+  ra_dns: "UNCHANGED" | "0" | "1";
+  ra_preference: "UNCHANGED" | "low" | "medium" | "high";
+  ra_lifetime: string;
+  dhcpv6_na: "UNCHANGED" | "0" | "1";
+  dhcpv6_pd: "UNCHANGED" | "0" | "1";
+  dhcpv6_assignall: "UNCHANGED" | "0" | "1";
+  dhcpv6_pd_min_len: string;
 }): Promise<RouterDhcpScopeUpdateResult> {
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) || input.section === "." || input.section === "..") {
     throw new Error("Invalid DHCP scope section identifier.");
@@ -1790,6 +1817,34 @@ export async function updateRouterDhcpScope(input: {
   if (!validDhcpv6.has(input.dhcpv6) || !validRa.has(input.ra) || !validNdp.has(input.ndp)) {
     throw new Error("DHCPv6 and RA must be unchanged, disabled or server; NDP must be unchanged or disabled. Relay/hybrid requires native odhcpd master configuration.");
   }
+  const validFlags = new Set([
+    "UNCHANGED",
+    "none",
+    "other-config",
+    "managed-config",
+    "managed-config+other-config",
+  ]);
+  const validToggle = (value: string) => value === "UNCHANGED" || value === "0" || value === "1";
+  if (!validFlags.has(input.ra_flags) ||
+      !validToggle(input.ra_slaac) || !validToggle(input.ra_dns) ||
+      !validToggle(input.dhcpv6_na) || !validToggle(input.dhcpv6_pd) ||
+      !validToggle(input.dhcpv6_assignall)) {
+    throw new Error("Invalid RA flags or DHCPv6/SLAAC boolean option.");
+  }
+  if (!["UNCHANGED", "low", "medium", "high"].includes(input.ra_preference)) {
+    throw new Error("RA route preference must be unchanged, low, medium or high.");
+  }
+  if (input.ra_lifetime !== "UNCHANGED" &&
+      (!/^[0-9]{1,4}$/.test(input.ra_lifetime) ||
+       Number(input.ra_lifetime) < 0 || Number(input.ra_lifetime) > 2700)) {
+    throw new Error("RA lifetime must be unchanged or a whole number from 0 to 2700 seconds.");
+  }
+  if (input.dhcpv6_pd_min_len !== "UNCHANGED" &&
+      (!/^[1-9][0-9]?$/.test(input.dhcpv6_pd_min_len) ||
+       Number(input.dhcpv6_pd_min_len) < 1 || Number(input.dhcpv6_pd_min_len) > 64)) {
+    throw new Error("Minimum delegated IPv6 prefix length must be unchanged or a whole number from 1 to 64.");
+  }
+
   const form = new URLSearchParams();
   form.set("section", input.section);
   form.set("start", input.start);
@@ -1798,6 +1853,15 @@ export async function updateRouterDhcpScope(input: {
   form.set("dhcpv6", input.dhcpv6);
   form.set("ra", input.ra);
   form.set("ndp", input.ndp);
+  form.set("ra_flags", input.ra_flags);
+  form.set("ra_slaac", input.ra_slaac);
+  form.set("ra_dns", input.ra_dns);
+  form.set("ra_preference", input.ra_preference);
+  form.set("ra_lifetime", input.ra_lifetime);
+  form.set("dhcpv6_na", input.dhcpv6_na);
+  form.set("dhcpv6_pd", input.dhcpv6_pd);
+  form.set("dhcpv6_assignall", input.dhcpv6_assignall);
+  form.set("dhcpv6_pd_min_len", input.dhcpv6_pd_min_len);
   form.set("confirmed", "1");
   const response = await fetch(DHCP_SCOPE_UPDATE_URL, {
     method: "POST",
@@ -1822,6 +1886,18 @@ export async function updateRouterDhcpScope(input: {
   if ("error" in payload && typeof payload.error === "string") {
     throw new Error(payload.error);
   }
+  const expectedFlags: Record<string, string[]> = {
+    none: ["none"],
+    "other-config": ["other-config"],
+    "managed-config": ["managed-config"],
+    "managed-config+other-config": ["managed-config", "other-config"],
+  };
+  const ipv6RestartRequested = input.dhcpv6 !== "UNCHANGED" || input.ra !== "UNCHANGED" ||
+    input.ndp !== "UNCHANGED" || input.ra_flags !== "UNCHANGED" ||
+    input.ra_slaac !== "UNCHANGED" || input.ra_dns !== "UNCHANGED" ||
+    input.ra_preference !== "UNCHANGED" || input.ra_lifetime !== "UNCHANGED" ||
+    input.dhcpv6_na !== "UNCHANGED" || input.dhcpv6_pd !== "UNCHANGED" ||
+    input.dhcpv6_assignall !== "UNCHANGED" || input.dhcpv6_pd_min_len !== "UNCHANGED";
   if (
     !response.ok || !("ok" in payload) || payload.ok !== true ||
     !("section" in payload) || payload.section !== input.section ||
@@ -1836,13 +1912,32 @@ export async function updateRouterDhcpScope(input: {
       (input.ra !== "UNCHANGED" && payload.ra !== input.ra) ||
     !("ndp" in payload) || typeof payload.ndp !== "string" ||
       (input.ndp !== "UNCHANGED" && payload.ndp !== input.ndp) ||
+    !("ra_flags" in payload) || !Array.isArray(payload.ra_flags) ||
+      (input.ra_flags !== "UNCHANGED" &&
+        JSON.stringify(payload.ra_flags) !== JSON.stringify(expectedFlags[input.ra_flags])) ||
+    !("ra_slaac" in payload) || typeof payload.ra_slaac !== "boolean" ||
+      (input.ra_slaac !== "UNCHANGED" && payload.ra_slaac !== (input.ra_slaac === "1")) ||
+    !("ra_dns" in payload) || typeof payload.ra_dns !== "boolean" ||
+      (input.ra_dns !== "UNCHANGED" && payload.ra_dns !== (input.ra_dns === "1")) ||
+    !("ra_preference" in payload) || typeof payload.ra_preference !== "string" ||
+      (input.ra_preference !== "UNCHANGED" && payload.ra_preference !== input.ra_preference) ||
+    !("ra_lifetime" in payload) || typeof payload.ra_lifetime !== "number" ||
+      (input.ra_lifetime !== "UNCHANGED" && payload.ra_lifetime !== Number(input.ra_lifetime)) ||
+    !("dhcpv6_na" in payload) || typeof payload.dhcpv6_na !== "boolean" ||
+      (input.dhcpv6_na !== "UNCHANGED" && payload.dhcpv6_na !== (input.dhcpv6_na === "1")) ||
+    !("dhcpv6_pd" in payload) || typeof payload.dhcpv6_pd !== "boolean" ||
+      (input.dhcpv6_pd !== "UNCHANGED" && payload.dhcpv6_pd !== (input.dhcpv6_pd === "1")) ||
+    !("dhcpv6_assignall" in payload) || typeof payload.dhcpv6_assignall !== "boolean" ||
+      (input.dhcpv6_assignall !== "UNCHANGED" && payload.dhcpv6_assignall !== (input.dhcpv6_assignall === "1")) ||
+    !("dhcpv6_pd_min_len" in payload) || typeof payload.dhcpv6_pd_min_len !== "number" ||
+      (input.dhcpv6_pd_min_len !== "UNCHANGED" && payload.dhcpv6_pd_min_len !== Number(input.dhcpv6_pd_min_len)) ||
     !("restarted" in payload) || payload.restarted !== true ||
     !("dnsmasq_restarted" in payload) || payload.dnsmasq_restarted !== true ||
     !("odhcpd_restarted" in payload) || typeof payload.odhcpd_restarted !== "boolean" ||
-      payload.odhcpd_restarted !== (input.dhcpv6 !== "UNCHANGED" || input.ra !== "UNCHANGED" || input.ndp !== "UNCHANGED") ||
+      payload.odhcpd_restarted !== ipv6RestartRequested ||
     !("rolled_back" in payload) || payload.rolled_back !== false
   ) {
-    throw new Error("The router did not confirm the DHCP, DHCPv6/RA/NDP settings and required service restarts.");
+    throw new Error("The router did not confirm the DHCP, RA, DHCPv6 and delegated-prefix settings with required service restarts.");
   }
   return payload as RouterDhcpScopeUpdateResult;
 }
