@@ -8748,3 +8748,59 @@ input::placeholder {
     justify-self: start;
   }
 }
+
+
+/* Configuration backup — explicit consent for secret-bearing archives */
+.config-backup-warning {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+  padding: 14px 15px;
+  border: 1px solid rgba(219,40,95,.28);
+  border-radius: 10px;
+  background: rgba(219,40,95,.055);
+}
+.config-backup-warning strong {
+  color: #ffadc1;
+  font-size: 11px;
+}
+.config-backup-warning span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+.config-backup-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 0;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.config-backup-confirm input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--blue);
+}
+.config-backup-actions {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.config-backup-actions > span {
+  max-width: 430px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.config-backup-success {
+  border-color: rgba(66,223,157,.25);
+  color: #9cecc9;
+}
+.config-backup-error {
+  border-color: rgba(219,40,95,.3);
+  color: #ff9ab3;
+}
