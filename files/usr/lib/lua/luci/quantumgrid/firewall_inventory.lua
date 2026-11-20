@@ -24,6 +24,7 @@ function summarize_redirect(section, index)
 	local name = rule_value(section.name or section[".name"], 64)
 	if name == "" then name = "unnamed-redirect-" .. tostring(index or 1) end
 	return {
+		section = rule_value(section[".name"], 64),
 		name = name,
 		source_zone = rule_value(section.src, 48),
 		destination_zone = rule_value(section.dest, 48),
