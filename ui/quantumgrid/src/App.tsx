@@ -4185,6 +4185,10 @@ function WirelessConfigEditor({
   const [radiusServer, setRadiusServer] = useState(config.radius_auth_server || "");
   const [radiusPort, setRadiusPort] = useState(String(config.radius_auth_port || 1812));
   const [radiusSecret, setRadiusSecret] = useState("");
+  const [accountingServer, setAccountingServer] = useState(config.accounting_server || "");
+  const [accountingPort, setAccountingPort] = useState(String(config.accounting_port || 1813));
+  const [accountingSecret, setAccountingSecret] = useState("");
+  const [accountingEnabled, setAccountingEnabled] = useState(Boolean(config.accounting_server));
   const [hidden, setHidden] = useState(config.hidden);
   const [channel, setChannel] = useState(config.channel || "auto");
   const [htmode, setHtmode] = useState(config.htmode || "auto");
@@ -4227,12 +4231,34 @@ function WirelessConfigEditor({
     (radiusServerValid && radiusPortValid && !radiusSecretRequired &&
       (radiusSecret.length === 0 || (radiusSecretBytes >= 16 && radiusSecretBytes <= 128 &&
         !/[\u0000-\u001f\u007f]/.test(radiusSecret))));
+  const accountingServerValue = accountingServer || radiusServer;
+  const accountingLabels = accountingServerValue.split(".");
+  const accountingServerValid = accountingServerValue.length >= 1 && accountingServerValue.length <= 253 &&
+    /^[A-Za-z0-9.-]+$/.test(accountingServerValue) && !accountingServerValue.startsWith(".") &&
+    !accountingServerValue.endsWith(".") && !accountingServerValue.includes("..") &&
+    accountingLabels.every((label) => label.length >= 1 && label.length <= 63 &&
+      /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)) &&
+    !(accountingLabels.length === 4 && accountingLabels.every((label) => /^\\d+$/.test(label)) &&
+      !accountingLabels.every((label) => Number(label) >= 0 && Number(label) <= 255));
+  const accountingPortValid = /^[0-9]{1,5}$/.test(accountingPort) &&
+    Number(accountingPort) >= 1 && Number(accountingPort) <= 65535;
+  const accountingSecretBytes = new TextEncoder().encode(accountingSecret).length;
+  const accountingSecretRequired = encryption === "wpa2" && accountingEnabled &&
+    (!config.accounting_secret_set || accountingServerValue !== config.accounting_server) &&
+    accountingSecret.length === 0;
+  const accountingReady = encryption !== "wpa2" || !accountingEnabled ||
+    (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
+      (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
+        !/[\\u0000-\\u001f\\u007f]/.test(accountingSecret))));
   const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
     (encryption === "wpa2" && (radiusServer !== config.radius_auth_server ||
-      radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0)) ||
+      radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0 ||
+      accountingEnabled !== Boolean(config.accounting_server) ||
+      (accountingEnabled && (accountingServerValue !== config.accounting_server ||
+        accountingPort !== String(config.accounting_port || 1813) || accountingSecret.length > 0)))) ||
     hidden !== config.hidden || channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
   const ready = changed && channelSupported && htmodeSupported && txpowerSupported &&
-    !passphraseRequired && radiusReady && (encryption !== "none" || allowOpen) &&
+    !passphraseRequired && radiusReady && accountingReady && (encryption !== "none" || allowOpen) &&
     confirmDisconnect && !saving;
 
   const apply = async () => {
@@ -4249,6 +4275,9 @@ function WirelessConfigEditor({
         radiusServer,
         radiusPort,
         radiusSecret,
+        accountingServer: encryption === "wpa2" && accountingEnabled ? accountingServerValue : "",
+        accountingPort,
+        accountingSecret,
         hidden,
         channel,
         htmode,
@@ -4257,6 +4286,7 @@ function WirelessConfigEditor({
       });
       setPassphrase("");
       setRadiusSecret("");
+      setAccountingSecret("");
       setAllowOpen(false);
       setConfirmDisconnect(false);
       setNotice({
@@ -4358,6 +4388,51 @@ function WirelessConfigEditor({
               />
               <small>The secret is stored only in router configuration and is never returned by the API.</small>
             </label>
+            <label className="wireless-config-field wireless-config-accounting-toggle">
+              <input type="checkbox" checked={accountingEnabled} onChange={(event) => setAccountingEnabled(event.target.checked)} />
+              <span>Enable RADIUS accounting (optional)</span>
+            </label>
+            {accountingEnabled ? (
+              <>
+                <label className="wireless-config-field">
+                  <span>RADIUS ACCOUNTING SERVER</span>
+                  <input
+                    value={accountingServer}
+                    onChange={(event) => setAccountingServer(event.target.value)}
+                    placeholder={radiusServer || "accounting.example.com"}
+                    autoComplete="off"
+                  />
+                  <small>Defaults to the authentication server when left blank.</small>
+                </label>
+                <label className="wireless-config-field">
+                  <span>RADIUS ACCOUNTING PORT</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={65535}
+                    step={1}
+                    value={accountingPort}
+                    onChange={(event) => setAccountingPort(event.target.value)}
+                    inputMode="numeric"
+                  />
+                  <small>UDP accounting port; the standard default is 1813.</small>
+                </label>
+                <label className="wireless-config-field">
+                  <span>RADIUS ACCOUNTING SHARED SECRET</span>
+                  <input
+                    type="password"
+                    value={accountingSecret}
+                    onChange={(event) => setAccountingSecret(event.target.value)}
+                    placeholder={config.accounting_secret_set &&
+                      accountingServerValue === config.accounting_server
+                        ? "Leave blank to retain the existing secret"
+                        : "Enter 16–128 characters"}
+                    autoComplete="new-password"
+                  />
+                  <small>The accounting secret is stored only on the router and is never returned by the API.</small>
+                </label>
+              </>
+            ) : null}
           </>
         ) : null}
         <label className="wireless-config-field">
@@ -4429,6 +4504,10 @@ function WirelessConfigEditor({
           setRadiusServer(config.radius_auth_server || "");
           setRadiusPort(String(config.radius_auth_port || 1812));
           setRadiusSecret("");
+          setAccountingServer(config.accounting_server || "");
+          setAccountingPort(String(config.accounting_port || 1813));
+          setAccountingSecret("");
+          setAccountingEnabled(Boolean(config.accounting_server));
           setHidden(config.hidden);
           setChannel(currentChannel);
           setHtmode(currentHtmode);
@@ -4448,6 +4527,12 @@ function WirelessConfigEditor({
       {encryption === "wpa2" && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
       {encryption === "wpa2" && !radiusPortValid ? <div className="module-message">Enter a RADIUS authentication port from 1 to 65535.</div> : null}
       {radiusSecretRequired ? <div className="module-message">A new RADIUS shared secret is required when enabling enterprise security or changing its server.</div> : null}
+      {encryption === "wpa2" && accountingEnabled && !accountingServerValid ? <div className="module-message">Enter a valid accounting server or authentication server fallback.</div> : null}
+      {encryption === "wpa2" && accountingEnabled && !accountingPortValid ? <div className="module-message">Enter a RADIUS accounting port from 1 to 65535.</div> : null}
+      {accountingSecretRequired ? <div className="module-message">A new accounting shared secret is required when enabling accounting or changing its server.</div> : null}
+      {encryption === "wpa2" && accountingEnabled && accountingSecret.length > 0 &&
+        (accountingSecretBytes < 16 || accountingSecretBytes > 128 || /[\\u0000-\\u001f\\u007f]/.test(accountingSecret))
+        ? <div className="module-message">Accounting shared secret must be 16–128 bytes and contain no control characters.</div> : null}
       {encryption === "wpa2" && radiusSecret.length > 0 &&
         (radiusSecretBytes < 16 || radiusSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(radiusSecret))
         ? <div className="module-message">RADIUS shared secret must be 16–128 bytes and contain no control characters.</div> : null}
