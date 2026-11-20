@@ -74,4 +74,15 @@ for _, action in ipairs({
     "office network write actions must be accepted by the redacted audit log")
 end
 
+local zone_event = audit.encode_event({
+  timestamp = 1700000002,
+  actor = "root",
+  remote_ip = "192.0.2.10",
+  action = "office.zone.update",
+  target = "cfg_corp",
+  outcome = "success",
+})
+assert(type(zone_event) == "string" and zone_event:find('"action":"office.zone.update"', 1, true),
+  "firewall zone policy updates should be allowlisted and auditable")
+
 print("audit: allowlist, secret exclusion, escaping, validation and bounded parsing passed")
