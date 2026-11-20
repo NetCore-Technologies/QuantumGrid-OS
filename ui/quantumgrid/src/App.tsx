@@ -1503,8 +1503,12 @@ function WirelessClientList({
   const [filter, setFilter] = useState("");
   const [authorizationFilter, setAuthorizationFilter] = useState<"all" | "authorized" | "associated">("all");
   const [bandFilter, setBandFilter] = useState("all");
-  const [sort, setSort] = useState<"signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "mac">("signal");
+  const [transmissionFilter, setTransmissionFilter] = useState<"all" | "issues" | "failures" | "unavailable">("all");
+  const [sort, setSort] = useState<"signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "retries" | "failures" | "mac">("signal");
   const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
+  const stationsWithRetries = clients.filter((client) => typeof client.tx_retries === "number" && Number.isFinite(client.tx_retries) && client.tx_retries > 0).length;
+  const stationsWithFailures = clients.filter((client) => typeof client.tx_failed === "number" && Number.isFinite(client.tx_failed) && client.tx_failed > 0).length;
+  const stationsWithCompleteTxCounters = clients.filter((client) => typeof client.tx_retries === "number" && typeof client.tx_failed === "number").length;
   const availableBands = [...new Set(clients.map((client) => client.band || "Unknown"))].sort();
   const authorizedCount = clients.filter((client) => client.authorized).length;
   const associatedOnlyCount = clients.length - authorizedCount;
@@ -1530,7 +1534,14 @@ function WirelessClientList({
         (authorizationFilter === "authorized" && client.authorized) ||
         (authorizationFilter === "associated" && !client.authorized);
       const matchesBand = bandFilter === "all" || (client.band || "Unknown") === bandFilter;
-      return matchesText && matchesAuthorization && matchesBand;
+      const hasTxRetries = typeof client.tx_retries === "number" && Number.isFinite(client.tx_retries);
+      const hasTxFailures = typeof client.tx_failed === "number" && Number.isFinite(client.tx_failed);
+      const hasTxIssue = (hasTxRetries && client.tx_retries! > 0) || (hasTxFailures && client.tx_failed! > 0);
+      const matchesTransmission = transmissionFilter === "all" ||
+        (transmissionFilter === "issues" && hasTxIssue) ||
+        (transmissionFilter === "failures" && hasTxFailures && client.tx_failed! > 0) ||
+        (transmissionFilter === "unavailable" && (!hasTxRetries || !hasTxFailures));
+      return matchesText && matchesAuthorization && matchesBand && matchesTransmission;
     })
     .slice()
     .sort((left, right) => {
@@ -1539,15 +1550,17 @@ function WirelessClientList({
       if (sort === "tx") return (right.tx_rate_mbps ?? -Infinity) - (left.tx_rate_mbps ?? -Infinity);
       if (sort === "measured-rx") return (right.measured_rx_mbps ?? -Infinity) - (left.measured_rx_mbps ?? -Infinity);
       if (sort === "measured-tx") return (right.measured_tx_mbps ?? -Infinity) - (left.measured_tx_mbps ?? -Infinity);
+      if (sort === "retries") return (right.tx_retries ?? -1) - (left.tx_retries ?? -1);
+      if (sort === "failures") return (right.tx_failed ?? -1) - (left.tx_failed ?? -1);
       return (right.signal_dbm ?? -Infinity) - (left.signal_dbm ?? -Infinity);
     });
   const exportStations = () => {
     if (visibleClients.length === 0) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Search filter", "Band filter", "Authorization filter", "Sort order", "Hostname", "SSID", "MAC", "Radio", "Interface", "Band", "Authorized", "Signal average dBm", "Signal current dBm", "Noise dBm", "RX Mbps", "TX Mbps", "RX PHY", "TX PHY", "Measured RX Mbps", "Measured TX Mbps", "RX bytes", "RX packets", "TX bytes", "TX packets", "Connected seconds", "Inactive ms", "TX retries", "TX failed"],
+      ["Exported at (UTC)", "Search filter", "Band filter", "Authorization filter", "TX diagnostics filter", "Sort order", "Hostname", "SSID", "MAC", "Radio", "Interface", "Band", "Authorized", "Signal average dBm", "Signal current dBm", "Noise dBm", "RX Mbps", "TX Mbps", "RX PHY", "TX PHY", "Measured RX Mbps", "Measured TX Mbps", "RX bytes", "RX packets", "TX bytes", "TX packets", "Connected seconds", "Inactive ms", "TX retries", "TX failed"],
       ...visibleClients.map((client) => [
-        exportedAt, filter, bandFilter, authorizationFilter, sort,
+        exportedAt, filter, bandFilter, authorizationFilter, transmissionFilter, sort,
         hostnames.get(client.mac.toLowerCase()) ?? "", client.ssid, client.mac, client.radio, client.ifname,
         client.band, client.authorized, client.signal_avg_dbm, client.signal_current_dbm, client.noise_dbm,
         client.rx_rate_mbps, client.tx_rate_mbps, formatWifiRateDetails(client.rx_details),
@@ -1580,6 +1593,11 @@ function WirelessClientList({
         <Metric title="Measured RX" value={measuredStations.length ? `${fmt(totalMeasuredRx, 2)} Mbps` : "N/A"} unit="" detail={measuredCoverage} icon={Download} />
         <Metric title="Measured TX" value={measuredStations.length ? `${fmt(totalMeasuredTx, 2)} Mbps` : "N/A"} unit="" detail={measuredCoverage} icon={Upload} />
       </div>
+      <div className="wifi-station-diagnostics" role="status">
+        <span><strong>{fmt(stationsWithRetries)}</strong> stations report TX retries</span>
+        <span><strong>{fmt(stationsWithFailures)}</strong> report failed TX packets</span>
+        <span><strong>{fmt(stationsWithCompleteTxCounters)}/{fmt(clients.length)}</strong> have both counters</span>
+      </div>
       <div className="wifi-station-tools">
         <input
           type="search"
@@ -1597,12 +1615,20 @@ function WirelessClientList({
           <option value="authorized">Authorized only</option>
           <option value="associated">Associated, not authorized</option>
         </select>
-        <select aria-label="Sort associated Wi-Fi clients" value={sort} onChange={(event) => setSort(event.target.value as "signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "mac")}>
+        <select aria-label="Filter station transmission diagnostics" value={transmissionFilter} onChange={(event) => setTransmissionFilter(event.target.value as "all" | "issues" | "failures" | "unavailable")}>
+          <option value="all">All TX diagnostics</option>
+          <option value="issues">Any TX retries or failures</option>
+          <option value="failures">Failed TX packets only</option>
+          <option value="unavailable">Missing TX counters</option>
+        </select>
+        <select aria-label="Sort associated Wi-Fi clients" value={sort} onChange={(event) => setSort(event.target.value as "signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "retries" | "failures" | "mac")}>
           <option value="signal">Strongest signal</option>
           <option value="rx">Highest RX PHY rate</option>
           <option value="tx">Highest TX PHY rate</option>
           <option value="measured-rx">Highest measured RX throughput</option>
           <option value="measured-tx">Highest measured TX throughput</option>
+          <option value="retries">Most TX retries</option>
+          <option value="failures">Most failed TX packets</option>
           <option value="mac">MAC address A–Z</option>
         </select>
         <span>{visibleClients.length} of {clients.length} clients</span>
