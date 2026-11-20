@@ -1,6 +1,42 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local package_operations = require "luci.quantumgrid.package_operations"
 
+local temp_candidates = { "/tmp/qg-package-log-collision", "/tmp/qg-package-log-reserved" }
+local temp_index = 0
+local open_attempts = {}
+local secure_nixio = {
+	open_flags = function(create_flag, exclusive_flag, write_flag)
+		assert(create_flag == "creat" and exclusive_flag == "excl" and write_flag == "wronly")
+		return "exclusive-create-flags"
+	end,
+	open = function(path, flags, mode)
+		table.insert(open_attempts, { path = path, flags = flags, mode = mode })
+		if #open_attempts == 1 then return nil, "path already exists" end
+		return { close = function() return true end }
+	end
+}
+local secure_log_path, secure_log_error = package_operations.create_secure_log_file(function()
+	temp_index = temp_index + 1
+	return temp_candidates[temp_index]
+end, secure_nixio)
+assert(secure_log_path == "/tmp/qg-package-log-reserved", secure_log_error)
+assert(#open_attempts == 2, "an exclusive-create collision must retry with another temporary name")
+assert(open_attempts[2].flags == "exclusive-create-flags")
+assert(open_attempts[2].mode == 384, "package logs must be created with mode 0600")
+
+local open_called = false
+local invalid_path, invalid_path_error = package_operations.create_secure_log_file(function()
+	return "/var/run/not-a-package-log"
+end, {
+	open_flags = secure_nixio.open_flags,
+	open = function()
+		open_called = true
+		return { close = function() return true end }
+	end
+})
+assert(invalid_path == nil and type(invalid_path_error) == "string")
+assert(not open_called, "temporary log paths outside /tmp must be rejected before opening")
+
 local update = package_operations.validate("update", "", "1")
 assert(update ~= nil and update.operation == "update" and update.package == "")
 
