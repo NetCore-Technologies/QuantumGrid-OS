@@ -753,12 +753,26 @@ export interface RouterOfficeInterface {
 }
 
 export interface RouterOfficeFirewallZone {
+  section: string;
   name: string;
   networks: string[];
   input: string;
   output: string;
   forward: string;
   masquerade: boolean;
+}
+
+export interface RouterOfficeFirewallZoneUpdateResult {
+  ok: true;
+  section: string;
+  name: string;
+  input: string;
+  output: string;
+  forward: string;
+  masquerade: boolean;
+  input_unchanged: true;
+  reloaded: true;
+  rolled_back: false;
 }
 
 export interface RouterOfficeForwarding {
@@ -1020,6 +1034,7 @@ const BRIDGE_VLAN_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-
 const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-remove";
 const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-add";
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
+const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-zone-update";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -2150,6 +2165,67 @@ export async function createRouterOfficeForwarding(input: {
     throw new Error("The router did not confirm the firewall forwarding and reload.");
   }
   return payload as RouterOfficeForwardingCreateResult;
+}
+
+export async function updateRouterOfficeZonePolicy(input: {
+  section: string;
+  output: "ACCEPT" | "REJECT" | "DROP";
+  forward: "ACCEPT" | "REJECT" | "DROP";
+  masquerade: boolean;
+}): Promise<RouterOfficeFirewallZoneUpdateResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) ||
+      input.section === "." || input.section === "..") {
+    throw new Error("Invalid firewall zone section identifier.");
+  }
+  const allowed = new Set(["ACCEPT", "REJECT", "DROP"]);
+  if (!allowed.has(input.output) || !allowed.has(input.forward)) {
+    throw new Error("Zone output and forward policies must be ACCEPT, REJECT or DROP.");
+  }
+  if (typeof input.masquerade !== "boolean") {
+    throw new Error("Masquerading must be explicitly enabled or disabled.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", input.section);
+  form.set("output", input.output);
+  form.set("forward", input.forward);
+  form.set("masquerade", input.masquerade ? "1" : "0");
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_ZONE_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Firewall zone policy changes require an active router administrator session."
+      : "The router returned an invalid firewall zone policy response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid firewall zone policy response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== input.section ||
+    !("name" in payload) || typeof payload.name !== "string" ||
+    !("input" in payload) || typeof payload.input !== "string" ||
+    !("output" in payload) || payload.output !== input.output ||
+    !("forward" in payload) || payload.forward !== input.forward ||
+    !("masquerade" in payload) || payload.masquerade !== input.masquerade ||
+    !("input_unchanged" in payload) || payload.input_unchanged !== true ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm zone policy changes, input preservation and firewall reload.");
+  }
+  return payload as RouterOfficeFirewallZoneUpdateResult;
 }
 
 export async function removeRouterOfficeForwarding(section: string): Promise<RouterOfficeForwardingRemoveResult> {
