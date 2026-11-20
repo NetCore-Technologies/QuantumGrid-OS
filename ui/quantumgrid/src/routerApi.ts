@@ -260,6 +260,15 @@ export interface RouterVpnInterface {
   device: string;
 }
 
+export interface RouterWireGuardPeer {
+  interface: string;
+  handshake_age_seconds?: number;
+  handshake_seen: boolean;
+  receive_bytes: number;
+  transmit_bytes: number;
+  allowed_ips: string[];
+}
+
 export interface RouterSecurityStatus {
   firewall_installed: boolean;
   firewall_config_available: boolean;
@@ -279,6 +288,10 @@ export interface RouterSecurityStatus {
     wireguard_tool_installed: boolean;
     openvpn_service_installed: boolean;
     wireguard_interfaces: RouterVpnInterface[];
+    wireguard_peers_available: boolean;
+    wireguard_peer_count: number;
+    wireguard_peers_truncated: boolean;
+    wireguard_peers: RouterWireGuardPeer[];
     openvpn_enabled_instances: number;
   };
 }
