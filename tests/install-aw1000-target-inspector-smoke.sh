@@ -70,8 +70,13 @@ contains "$OUTPUT" "Standard AW1000 MTD geometry: NO MATCH / UNKNOWN" "expanded 
 contains "$OUTPUT" "RESULT: STOP — partition geometry" "expanded layout"
 
 # Duplicate partition labels must be treated as ambiguous, never a layout match.
+cat > "$TEST_ROOT/proc/mtd" <<'MTD'
+dev:    size   erasesize  name
+mtd18: 06400000 00040000 "rootfs"
+mtd20: 06400000 00040000 "rootfs_1"
+MTD
 cp "$TEST_ROOT/proc/mtd" "$TEST_ROOT/proc/mtd.duplicate"
-printf 'mtd22: 06400000 00040000 "rootfs"\\n' >> "$TEST_ROOT/proc/mtd.duplicate"
+printf 'mtd21: 06400000 00040000 "rootfs"\\n' >> "$TEST_ROOT/proc/mtd.duplicate"
 cp "$TEST_ROOT/proc/mtd.duplicate" "$TEST_ROOT/proc/mtd"
 OUTPUT="$(QG_INSPECT_ROOT="$TEST_ROOT" sh "$INSPECTOR")"
 contains "$OUTPUT" "rootfs: missing or ambiguous" "duplicate rootfs"
