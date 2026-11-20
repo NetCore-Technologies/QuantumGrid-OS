@@ -111,6 +111,7 @@ jobs:
           bash -n tests/install-aw1000-target-inspector-smoke.sh
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
+          sh -n files/usr/bin/quantumgrid-hardware-io
           bash -n tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
