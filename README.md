@@ -449,6 +449,24 @@ switch/access-point configuration. The operation is a source integration, not pr
 switch tagging, client DHCP, DNS or inter-VLAN reachability. Test on a non-management VLAN and keep
 an out-of-band recovery path available before production use.
 
+## Static SSID-to-VLAN binding
+
+The existing AP editor can bind an SSID to one existing **static L3 network interface**, including
+a routed interface created on an existing bridge VLAN by Office Networks. The selected interface
+must have a validated network device and belong to exactly one internal firewall zone; WAN/WWAN
+networks and ambiguous zone associations are rejected. The chosen logical network is written to
+the native wireless AP `network` option in the same UCI snapshot as SSID/security changes, and is
+restored if the Wi-Fi reload fails.
+
+The editor inventories existing AP-to-network mappings without returning credentials. It requires
+one explicit target network, so legacy APs with no network or multiple network attachments must be
+normalized by an administrator before saving. QuantumGrid checks the current administrator's
+IPv4 return route and blocks a change that would remove that network from the AP currently carrying
+the admin session, or move another SSID onto that management network. Use a separate AP or an
+out-of-band connection for those changes. This is static per-SSID network binding, not RADIUS
+dynamic VLAN assignment; each SSID should be mapped to one routed VLAN interface and clients
+should be tested on the actual switch/AP path after deployment.
+
 ## DHCPv6, router advertisements and NDP
 
 Each eligible DHCP scope now exposes per-scope **DHCPv6**, **Router Advertisement (RA)** and
