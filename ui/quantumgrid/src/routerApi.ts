@@ -497,9 +497,25 @@ export interface RouterLedDevice {
   controllable: boolean;
 }
 
+export interface RouterInputDevice {
+  name: string;
+  bus?: string;
+  handlers: string[];
+  event_nodes: string[];
+  button_like: boolean;
+}
+
+export interface RouterInputDeviceInventory {
+  available: boolean;
+  devices: RouterInputDevice[];
+  count: number;
+  truncated: boolean;
+}
+
 export interface RouterHardwareIoStatus {
   available: boolean;
   gpio: RouterGpioInventory;
+  input_devices: RouterInputDeviceInventory;
   leds_available: boolean;
   leds: RouterLedDevice[];
   button_driver_loaded: boolean;
