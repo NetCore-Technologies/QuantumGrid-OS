@@ -2252,11 +2252,13 @@ function NetworkControlPage({
       <Panel
         title="Multi-WAN health"
         eyebrow="MWAN3 TRACKING · READ-ONLY"
-        action={<Status active={Boolean(mwan3?.available)}>{!mwan3?.installed ? "NOT INSTALLED" : mwan3.available ? "LIVE" : "UNAVAILABLE"}</Status>}
+        action={<Status active={Boolean(mwan3?.available)}>{!routerOverview ? "WAITING" : !mwan3 ? "API UPDATE REQUIRED" : !mwan3.installed ? "NOT INSTALLED" : mwan3.available ? "LIVE" : "UNAVAILABLE"}</Status>}
       >
         {!routerOverview ? (
           <div className="module-message">Waiting for authenticated router telemetry.</div>
-        ) : !mwan3?.installed ? (
+        ) : !mwan3 ? (
+          <div className="module-message">This router API does not report Multi-WAN telemetry. Update QuantumGrid firmware to enable the view.</div>
+        ) : !mwan3.installed ? (
           <div className="module-message">The mwan3 service is not installed in this firmware.</div>
         ) : !mwan3.available ? (
           <div className="module-message">The mwan3 tracking API is unavailable. This is unknown state, not proof that a WAN link is down.</div>
