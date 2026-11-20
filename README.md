@@ -391,7 +391,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/remove, and existing DHCP pool editors, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/edit/remove, and existing DHCP pool editors, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
