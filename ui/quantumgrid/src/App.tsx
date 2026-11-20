@@ -1543,9 +1543,11 @@ function WirelessClientList({
     });
   const exportStations = () => {
     if (visibleClients.length === 0) return;
+    const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Hostname", "SSID", "MAC", "Radio", "Interface", "Band", "Authorized", "Signal average dBm", "Signal current dBm", "Noise dBm", "RX Mbps", "TX Mbps", "RX PHY", "TX PHY", "Measured RX Mbps", "Measured TX Mbps", "RX bytes", "RX packets", "TX bytes", "TX packets", "Connected seconds", "Inactive ms", "TX retries", "TX failed"],
+      ["Exported at (UTC)", "Search filter", "Band filter", "Authorization filter", "Sort order", "Hostname", "SSID", "MAC", "Radio", "Interface", "Band", "Authorized", "Signal average dBm", "Signal current dBm", "Noise dBm", "RX Mbps", "TX Mbps", "RX PHY", "TX PHY", "Measured RX Mbps", "Measured TX Mbps", "RX bytes", "RX packets", "TX bytes", "TX packets", "Connected seconds", "Inactive ms", "TX retries", "TX failed"],
       ...visibleClients.map((client) => [
+        exportedAt, filter, bandFilter, authorizationFilter, sort,
         hostnames.get(client.mac.toLowerCase()) ?? "", client.ssid, client.mac, client.radio, client.ifname,
         client.band, client.authorized, client.signal_avg_dbm, client.signal_current_dbm, client.noise_dbm,
         client.rx_rate_mbps, client.tx_rate_mbps, formatWifiRateDetails(client.rx_details),
@@ -2655,10 +2657,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const exportWifiScan = () => {
     if (!scan || visibleScanResults.length === 0) return;
     const scannedAt = new Date(scan.scanned_at * 1000).toISOString();
+    const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | null | undefined>> = [
-      ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Cipher suites", "Mode", "PHY operation"],
+      ["Scanned at (UTC)", "Exported at (UTC)", "Search filter", "Band filter", "Security filter", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Cipher suites", "Mode", "PHY operation"],
       ...visibleScanResults.map((network) => [
-        scannedAt, network.radio, network.ifname, network.ssid, network.bssid,
+        scannedAt, exportedAt, scanFilter, scanBandFilter, scanSecurityFilter, network.radio, network.ifname, network.ssid, network.bssid,
         network.band, network.channel, network.frequency_mhz, network.signal_dbm,
         network.quality, network.quality_max, network.security,
         network.authentication?.join("/"), network.ciphers?.join("/"), network.mode, describeScanOperation(network),
