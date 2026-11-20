@@ -2989,8 +2989,8 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
                         <b>{formatTrafficBytes(peer.transmit_bytes)}</b>
                       </div>
                       <div className="wireguard-peer-rate">
-                        <div><small>MEASURED RX RATE</small><b>{rate?.receiveMbps == null ? "N/A · awaiting valid sample" : `${fmt(rate.receiveMbps, 2)} Mbps`}</b></div>
-                        <div><small>MEASURED TX RATE</small><b>{rate?.transmitMbps == null ? "N/A · awaiting valid sample" : `${fmt(rate.transmitMbps, 2)} Mbps`}</b></div>
+                        <div><small>MEASURED RX RATE</small><b>{rate?.receiveMbps == null ? "N/A · no valid counter sample" : `${fmt(rate.receiveMbps, 2)} Mbps`}</b></div>
+                        <div><small>MEASURED TX RATE</small><b>{rate?.transmitMbps == null ? "N/A · no valid counter sample" : `${fmt(rate.transmitMbps, 2)} Mbps`}</b></div>
                         <small>{rate?.sampleSeconds == null ? "Sample interval N/A" : `Sample interval ${fmt(rate.sampleSeconds, 1)} s`}</small>
                       </div>
                       <div className="wireguard-peer-allowed">
@@ -3003,7 +3003,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               </div>
             </>
           )}
-          <div className="module-message">A handshake timestamp is not a guarantee of end-to-end reachability. Private keys, preshared keys, public keys and endpoint addresses are deliberately omitted from this API and the security export.</div>
+          <div className="module-message">Peer RX/TX rates are calculated from successive transfer-counter samples. The first sample, a counter reset, a gap over 60 seconds or duplicate interface/AllowedIPs identities remain N/A rather than being estimated. A handshake timestamp is not a guarantee of end-to-end reachability. Private keys, preshared keys, public keys and endpoint addresses are deliberately omitted from this API and the security export.</div>
         </Panel>
       </div>
 
