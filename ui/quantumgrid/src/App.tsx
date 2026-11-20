@@ -2745,11 +2745,72 @@ function csvCell(value: string | number | boolean | null | undefined): string {
   return '"' + text.replace(/"/g, '""') + '"';
 }
 
+type WifiScanHistoryNetwork = Pick<
+  RouterWifiScan["results"][number],
+  "bssid" | "ssid" | "band" | "channel" | "signal_dbm"
+>;
+
 type WifiScanHistorySample = {
   scannedAt: number;
   accessPoints: number;
   bandCounts: Record<string, number>;
+  networks: WifiScanHistoryNetwork[];
 };
+
+type WifiScanComparison = {
+  newlyObserved: WifiScanHistoryNetwork[];
+  notObserved: WifiScanHistoryNetwork[];
+  signalChanges: Array<{
+    network: WifiScanHistoryNetwork;
+    previousDbm: number;
+    currentDbm: number;
+    deltaDb: number;
+  }>;
+};
+
+function compareWifiScanHistory(
+  current: WifiScanHistorySample,
+  previous: WifiScanHistorySample,
+): WifiScanComparison {
+  const previousByBssid = new Map(
+    previous.networks
+      .filter((network) => network.bssid.trim().length > 0)
+      .map((network) => [network.bssid.toLowerCase(), network]),
+  );
+  const currentByBssid = new Map(
+    current.networks
+      .filter((network) => network.bssid.trim().length > 0)
+      .map((network) => [network.bssid.toLowerCase(), network]),
+  );
+
+  const newlyObserved = current.networks.filter(
+    (network) => network.bssid.trim().length > 0 && !previousByBssid.has(network.bssid.toLowerCase()),
+  );
+  const notObserved = previous.networks.filter(
+    (network) => network.bssid.trim().length > 0 && !currentByBssid.has(network.bssid.toLowerCase()),
+  );
+  const signalChanges = current.networks.flatMap((network) => {
+    const previousSignal = previousByBssid.get(network.bssid.toLowerCase())?.signal_dbm;
+    const currentSignal = network.signal_dbm;
+    if (
+      previousSignal === undefined ||
+      currentSignal === undefined ||
+      !Number.isFinite(previousSignal) ||
+      !Number.isFinite(currentSignal) ||
+      previousSignal === currentSignal
+    ) {
+      return [];
+    }
+    return [{
+      network,
+      previousDbm: previousSignal,
+      currentDbm: currentSignal,
+      deltaDb: currentSignal - previousSignal,
+    }];
+  }).sort((left, right) => Math.abs(right.deltaDb) - Math.abs(left.deltaDb));
+
+  return { newlyObserved, notObserved, signalChanges };
+}
 
 function describeScanOperation(network: RouterWifiScan["results"][number]): string {
   const describeWidth = (kind: "HT" | "VHT" | "HE" | "EHT", width: number | undefined) => {
@@ -2853,6 +2914,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       })
     : [];
   const channelGroups = scan ? summarizeWifiChannels(scan.results) : [];
+  const latestScanHistory = scanHistory[scanHistory.length - 1] ?? null;
+  const previousScanHistory = scanHistory.length > 1 ? scanHistory[scanHistory.length - 2] : null;
+  const scanComparison = latestScanHistory && previousScanHistory
+    ? compareWifiScanHistory(latestScanHistory, previousScanHistory)
+    : null;
   const strongestNetwork = scan?.results
     .filter((network) => typeof network.signal_dbm === "number" && Number.isFinite(network.signal_dbm))
     .reduce<RouterWifiScan["results"][number] | null>(
@@ -2933,6 +2999,9 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
             scannedAt: result.scanned_at,
             accessPoints: result.results.length,
             bandCounts,
+            networks: result.results.map(({ bssid, ssid, band, channel, signal_dbm }) => ({
+              bssid, ssid, band, channel, signal_dbm,
+            })),
           }];
         });
       }
@@ -3070,6 +3139,72 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         )}
         <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Security labels come from iwinfo encryption metadata; missing metadata is marked Unknown rather than treated as an open network. Take repeat scans from the router’s actual installation location before comparing environments.</div>
       </Panel>
+      <Panel title="Scan-to-scan changes" eyebrow="LATEST TWO DISTINCT MANUAL SCANS">
+        {!scanComparison ? (
+          <div className="module-message">Complete two distinct manual scans to compare access-point visibility and signal readings.</div>
+        ) : (
+          <>
+            <div className="wifi-scan-comparison-metrics">
+              <div><small>NEWLY OBSERVED</small><strong>{fmt(scanComparison.newlyObserved.length)}</strong></div>
+              <div><small>NOT OBSERVED NOW</small><strong>{fmt(scanComparison.notObserved.length)}</strong></div>
+              <div><small>SIGNAL CHANGED</small><strong>{fmt(scanComparison.signalChanges.length)}</strong></div>
+            </div>
+            <div className="wifi-scan-change-columns">
+              <section>
+                <div className="wifi-scan-change-heading"><strong>Newly observed</strong><span>{scanComparison.newlyObserved.length} BSSID(s)</span></div>
+                {scanComparison.newlyObserved.length === 0 ? (
+                  <div className="module-message">No new BSSIDs in the latest scan.</div>
+                ) : (
+                  <div className="wifi-scan-change-list">
+                    {scanComparison.newlyObserved.slice(0, 6).map((network) => (
+                      <div key={network.bssid} className="wifi-scan-change-row">
+                        <strong>{network.ssid || "Hidden network"}</strong>
+                        <span>{network.band || "Unknown band"} · {network.channel === undefined ? "Channel N/A" : `CH ${network.channel}`}</span>
+                        <small>{network.bssid}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {scanComparison.newlyObserved.length > 6 ? <small className="wifi-scan-change-overflow">Showing 6 of {scanComparison.newlyObserved.length} new BSSIDs.</small> : null}
+              </section>
+              <section>
+                <div className="wifi-scan-change-heading"><strong>Not observed in latest</strong><span>{scanComparison.notObserved.length} BSSID(s)</span></div>
+                {scanComparison.notObserved.length === 0 ? (
+                  <div className="module-message">All prior BSSIDs were also observed in the latest scan.</div>
+                ) : (
+                  <div className="wifi-scan-change-list">
+                    {scanComparison.notObserved.slice(0, 6).map((network) => (
+                      <div key={network.bssid} className="wifi-scan-change-row">
+                        <strong>{network.ssid || "Hidden network"}</strong>
+                        <span>{network.band || "Unknown band"} · {network.channel === undefined ? "Channel N/A" : `CH ${network.channel}`}</span>
+                        <small>{network.bssid}</small>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {scanComparison.notObserved.length > 6 ? <small className="wifi-scan-change-overflow">Showing 6 of {scanComparison.notObserved.length} not observed.</small> : null}
+              </section>
+            </div>
+            <section className="wifi-scan-signal-changes">
+              <div className="wifi-scan-change-heading"><strong>Largest signal changes</strong><span>Absolute dB change · max 6</span></div>
+              {scanComparison.signalChanges.length === 0 ? (
+                <div className="module-message">No comparable numeric signal changes were returned for the same BSSIDs.</div>
+              ) : (
+                <div className="wifi-scan-change-list">
+                  {scanComparison.signalChanges.slice(0, 6).map(({ network, previousDbm, currentDbm, deltaDb }) => (
+                    <div key={network.bssid} className="wifi-scan-change-row wifi-scan-signal-row">
+                      <strong>{network.ssid || "Hidden network"}</strong>
+                      <span>{fmt(previousDbm)} → {fmt(currentDbm)} dBm · {deltaDb > 0 ? "+" : ""}{fmt(deltaDb)} dB</span>
+                      <small>{network.bssid}</small>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+            <div className="module-message">A BSSID not observed in one scan may simply have been missed by the radio or driver; it is not proof that the access point is offline. Signal deltas compare driver-reported RSSI for matching BSSIDs only. These observations do not measure airtime, interference or recommend a channel.</div>
+          </>
+        )}
+      </Panel>
       <Panel
         title="Manual scan history"
         eyebrow="LAST 10 DISTINCT SCANS · THIS UI SESSION"
@@ -3101,7 +3236,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
             })}
           </div>
         )}
-        <div className="module-message">Only distinct, completed manual scans are recorded. The last ten summaries are kept in page memory and cleared when the page is reloaded; no BSSIDs or SSIDs from earlier scans are retained in this history.</div>
+        <div className="module-message">Only distinct, completed manual scans are recorded. The last ten summaries and the minimum BSSID/SSID/band/channel/signal fields needed for comparison stay in page memory only; they are cleared when this page is left, reloaded or the history is cleared. No scan history is written to browser storage or sent to another service.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />
