@@ -156,6 +156,10 @@ local policy_zones = {
   { section = "cfg_wan", name = "wan" },
 }
 local valid_zone_policy = office.validate_office_zone_policy("cfg_corp", "REJECT", "REJECT", "0", policy_zones)
+local unchanged_policy = office.validate_office_zone_policy("cfg_corp", "UNCHANGED", "INHERIT", "0", policy_zones)
+assert(unchanged_policy and unchanged_policy.output_write == false and unchanged_policy.forward_write == true)
+assert(unchanged_policy.forward == "INHERIT",
+  "an explicit inherit choice must remove the zone override while UNCHANGED leaves it as-is")
 assert(valid_zone_policy and valid_zone_policy.output == "REJECT" and valid_zone_policy.forward == "REJECT")
 assert(valid_zone_policy.masquerade == false and valid_zone_policy.masq_value == "0")
 local masquerade_policy = office.validate_office_zone_policy("cfg_guest", "ACCEPT", "DROP", "1", policy_zones)
@@ -170,6 +174,7 @@ reject_zone_policy("../firewall", "REJECT", "REJECT", "0", "path-like zone secti
 reject_zone_policy("missing", "REJECT", "REJECT", "0", "unknown zone section")
 reject_zone_policy("cfg_corp", "INVALID", "REJECT", "0", "unknown zone output policy")
 reject_zone_policy("cfg_corp", "REJECT", "ACCEPT;uci", "0", "injected zone forward policy")
+reject_zone_policy("cfg_corp", "UNCHANGED", "DROP;uci", "0", "injected inherited/forward policy value")
 reject_zone_policy("cfg_corp", "REJECT", "REJECT", "true", "non-canonical masquerade flag")
 
 local zone_snapshot, zone_snapshot_error = office.snapshot_firewall_zone_policy_options({
