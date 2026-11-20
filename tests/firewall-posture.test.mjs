@@ -192,6 +192,51 @@ test("multiple source zones are checked for WAN-like sources", () => {
 });
 
 
+test("parsed fw4 chain snapshot is reported separately from security verdicts", () => {
+  const result = auditFirewallPosture(security({
+    nft_runtime: {
+      available: true,
+      table_present: true,
+      chains: [],
+      chain_count: 4,
+      rule_count: 31,
+      truncated: false,
+      sampled_at: 1700000000,
+    },
+  }));
+  const snapshot = result.checks.find((item) => item.id === "fw4-chain-snapshot");
+  assert.equal(snapshot?.status, "ok");
+  assert.match(snapshot?.detail ?? "", /metadata snapshot/i);
+});
+
+test("unavailable and truncated fw4 chain snapshots remain unknown", () => {
+  const unavailable = auditFirewallPosture(security({
+    nft_runtime: {
+      available: false,
+      table_present: true,
+      chains: [],
+      chain_count: 0,
+      rule_count: 0,
+      truncated: false,
+      sampled_at: 1700000000,
+    },
+  }));
+  assert.equal(unavailable.checks.find((item) => item.id === "fw4-chain-snapshot")?.status, "unknown");
+
+  const truncated = auditFirewallPosture(security({
+    nft_runtime: {
+      available: true,
+      table_present: true,
+      chains: [],
+      chain_count: 70,
+      rule_count: 400,
+      truncated: true,
+      sampled_at: 1700000000,
+    },
+  }));
+  assert.equal(truncated.checks.find((item) => item.id === "fw4-chain-snapshot")?.status, "unknown");
+});
+
 test("WAN port forwards are listed for manual review and unscoped forwards are highlighted", () => {
   const result = auditFirewallPosture(security({
     redirects: [{
