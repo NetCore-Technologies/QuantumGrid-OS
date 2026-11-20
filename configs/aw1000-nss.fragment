@@ -1,0 +1,26 @@
+# QuantumGrid optional Qualcomm NSS profile for the Arcadyan AW1000.
+# Build only with QG_ENABLE_NSS=1 using the pinned qosmio/openwrt-ipq 25.12-nss tree.
+# This is a separate experimental firmware profile; the default profile stays upstream OpenWrt.
+#
+# NSS Wi-Fi data-path integration.
+CONFIG_ATH11K_NSS_SUPPORT=y
+CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y
+CONFIG_ATH11K_MEM_PROFILE_1G=y
+CONFIG_NSS_MEM_PROFILE_HIGH=y
+#
+# NSS firmware 12.5 supports the Wi-Fi AP/STA offload path used here.
+# It does not support 802.11s mesh; QuantumGrid uses usteer for optional multi-AP roaming.
+CONFIG_NSS_FIRMWARE_VERSION_12_5=y
+# CONFIG_ATH11K_NSS_MESH_SUPPORT is not set
+#
+# Required NSS datapath capabilities for routed AW1000 use.
+CONFIG_NSS_DRV_BRIDGE_ENABLE=y
+CONFIG_NSS_DRV_IPV6_ENABLE=y
+CONFIG_NSS_DRV_PPPOE_ENABLE=y
+CONFIG_NSS_DRV_VLAN_ENABLE=y
+CONFIG_NSS_DRV_WIFIOFFLOAD_ENABLE=y
+CONFIG_NSS_DRV_WIFI_EXT_VDEV_ENABLE=y
+#
+# Optional packages supported by the pinned NSS feed.
+CONFIG_PACKAGE_kmod-qca-mcs=y
+CONFIG_PACKAGE_sqm-scripts-nss=y
