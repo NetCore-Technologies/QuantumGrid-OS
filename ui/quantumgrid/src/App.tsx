@@ -4977,16 +4977,16 @@ function OfficeNetworksPage({ routerOverview }: {
     if (!inventory) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Category", "Name", "Device / Bridge", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "IPv6"],
+      ["Exported at (UTC)", "Category", "Name", "Device / Bridge", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "Netmask", "IPv6", "IPv6 assignment prefix"],
       ...interfaces.map((item) => [
         exportedAt, "Network interface", item.name, item.device, item.protocol,
         item.up ? "UP" : "DOWN", item.firewall_zones.join(" "),
         item.wifi_aps.map((ap) => ap.ssid + (ap.disabled ? " (disabled)" : "")).join(" "),
-        item.ipv4.join(" "), item.ipv6.join(" "),
+        item.ipv4.join(" "), item.netmask, item.ipv6.join(" "), item.ip6assign,
       ]),
       ...bridges.map((item) => [
         exportedAt, "Bridge", item.name, item.name, item.type,
-        item.ports.join(" ") + "; vlan_filtering=" + item.vlan_filtering, "", "", "", "",
+        item.ports.join(" ") + "; vlan_filtering=" + item.vlan_filtering, "", "", "", "", "", "",
       ]),
       ...vlans.map((item) => [
         exportedAt, "Bridge VLAN", item.name, item.device, item.vlan_id,
@@ -5005,7 +5005,7 @@ function OfficeNetworksPage({ routerOverview }: {
       ]),
       ...(inventory.static_leases ?? []).map((item) => [
         exportedAt, "Static DHCP lease", item.name, "", "", "",
-        "", "", item.ipv4, item.mac,
+        "", "", item.ipv4, "", item.mac, "",
       ]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
@@ -5052,6 +5052,7 @@ function OfficeNetworksPage({ routerOverview }: {
             <div><span>Network interfaces / bridges / VLANs</span><Status active={inventory.available}>{inventory.available ? "READABLE" : "UNAVAILABLE"}</Status></div>
             <div><span>Firewall zones</span><Status active={inventory.firewall_available}>{inventory.firewall_available ? "READABLE" : "UNAVAILABLE"}</Status></div>
             <div><span>Wireless AP configuration</span><Status active={inventory.wireless_available}>{inventory.wireless_available ? "READABLE" : "UNAVAILABLE"}</Status></div>
+            <div><span>DHCP pools / reservations</span><Status active={inventory.dhcp_available}>{inventory.dhcp_available ? "READABLE" : "UNAVAILABLE"}</Status></div>
           </div>
           {inventory.truncated && <div className="module-message">One or more inventories exceeded the API display limit. Exported data is also limited to the returned entries.</div>}
         </Panel>
@@ -5069,7 +5070,7 @@ function OfficeNetworksPage({ routerOverview }: {
               <div className="office-network-row" key={item.name}>
                 <div><strong>{item.name}</strong><small>{item.protocol || "Protocol not set"}</small></div>
                 <div><b>{item.device || "Device not set"}</b><small>{item.vlan_ids.length ? "VLAN " + item.vlan_ids.join(", ") : "No direct bridge-VLAN match"}</small></div>
-                <div><b>{item.ipv4.join(", ") || "No IPv4 address"}</b><small>{item.ipv6.join(", ") || "No IPv6 address reported"}</small></div>
+                <div><b>{item.ipv4.join(", ") || "No IPv4 address"}</b><small>{item.netmask ? "Netmask " + item.netmask : "Netmask not set"} · {item.ipv6.join(", ") || "No IPv6 address reported"}{item.ip6assign ? " · IPv6 assignment /" + item.ip6assign : ""}</small></div>
                 <div>{item.firewall_zones.length ? item.firewall_zones.map((zone) => <span className="office-chip" key={zone}>{zone}</span>) : <small>Not mapped to a reported zone</small>}</div>
                 <div>{item.wifi_aps.length ? item.wifi_aps.map((ap) => <span className={ap.disabled ? "office-chip disabled" : "office-chip"} key={ap.section}>{ap.ssid || ap.section}{ap.disabled ? " · OFF" : ""}</span>) : <small>No AP mapped</small>}</div>
                 <Status active={item.up}>{item.up ? "UP" : "DOWN"}</Status>
