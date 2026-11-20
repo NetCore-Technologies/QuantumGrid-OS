@@ -547,6 +547,73 @@ local function valid_zone_policy_choice(value)
 	return value == "UNCHANGED" or value == "INHERIT" or ALLOWED_ZONE_POLICIES[value] == true
 end
 
+function validate_office_wifi_ap_network(section, network, aps, interfaces, zones)
+	if type(section) ~= "string" or #section < 1 or #section > 64
+		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
+		return nil, "The wireless AP section identifier is invalid."
+	end
+	if type(network) ~= "string" or #network < 1 or #network > 64
+		or not network:match("^[%w_.%-]+$") then
+		return nil, "Select an existing office LAN/VLAN network."
+	end
+	local ap_found = false
+	for _, ap in ipairs(type(aps) == "table" and aps or {}) do
+		if type(ap) == "table" and ap.section == section then ap_found = true break end
+	end
+	if not ap_found then
+		return nil, "The selected wireless AP section no longer exists."
+	end
+	local interface_found = false
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and iface.name == network then
+			interface_found = true
+			break
+		end
+	end
+	if not interface_found then
+		return nil, "The selected network interface is not present in the current office network inventory."
+	end
+	if EXTERNAL_ZONE_NAMES[network:lower()] then
+		return nil, "A WAN/WWAN interface cannot be assigned as a wireless client network."
+	end
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if is_external_zone(zone) then
+			for _, attached in ipairs(zone_networks(zone.networks)) do
+				if attached == network then
+					return nil, "A network attached to an external WAN/WWAN firewall zone cannot be assigned to a wireless AP."
+				end
+			end
+		end
+	end
+	return { section = section, network = network }
+end
+
+function snapshot_wifi_ap_network(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "wifi-iface"
+		or snapshot.mode ~= "ap" or type(snapshot[".name"]) ~= "string"
+		or snapshot[".name"] == "" then
+		return nil, "A named wireless AP section is required."
+	end
+	local raw = snapshot.network
+	if raw == nil then
+		return { section = snapshot[".name"], present = false, value = {} }
+	end
+	local value = {}
+	if type(raw) == "string" then
+		value[1] = raw
+	elseif type(raw) == "table" then
+		for _, item in ipairs(raw) do
+			if type(item) ~= "string" or not item:match("^[%w_.%-]+$") then
+				return nil, "The original AP network binding contains an invalid value."
+			end
+			table.insert(value, item)
+		end
+	else
+		return nil, "The original AP network binding could not be snapshotted safely."
+	end
+	return { section = snapshot[".name"], present = true, value = value }
+end
+
 function validate_office_zone_policy(section, output, forward, masquerade, zones)
 	if type(section) ~= "string" or #section < 1 or #section > 64
 		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
