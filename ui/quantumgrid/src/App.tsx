@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6652,6 +6652,16 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         refresh={refresh}
       />
 
+      <OfficeSegmentManager
+        available={Boolean(inventory?.available && inventory?.firewall_available && inventory?.dhcp_available)}
+        truncated={Boolean(inventory?.truncated)}
+        interfaces={interfaces}
+        bridges={bridges}
+        vlans={vlans}
+        zones={zones}
+        refresh={refresh}
+      />
+
       <div className="office-two-column">
         <Panel title="Bridge devices" eyebrow="NETWORK DEVICE SECTIONS">
           {!inventory?.available || bridges.length === 0 ? (
@@ -7024,6 +7034,216 @@ function OfficeForwardingManager({
         </div>
       ) : null}
       <div className="module-message">The API never edits zone input/output policies through this control. WAN/WWAN zones cannot be selected as a forwarding source; an external zone may be a destination (for example, staff → WAN). Forwardings are directional and are not a substitute for reviewing the full firewall ruleset or testing the packet path. Changes are committed to UCI, followed by firewall reload and rollback attempts on failure.</div>
+    </Panel>
+  );
+}
+
+function OfficeSegmentManager({
+  available,
+  truncated,
+  interfaces,
+  bridges,
+  vlans,
+  zones,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  interfaces: RouterOfficeInterface[];
+  bridges: RouterOfficeBridge[];
+  vlans: RouterOfficeVlan[];
+  zones: RouterOfficeFirewallZone[];
+  refresh: () => void;
+}) {
+  const [name, setName] = useState("corp20");
+  const [vlanSection, setVlanSection] = useState("");
+  const [address, setAddress] = useState("192.168.20.1");
+  const [netmask, setNetmask] = useState("255.255.255.0");
+  const [zoneSection, setZoneSection] = useState("");
+  const [dhcpStart, setDhcpStart] = useState("100");
+  const [dhcpLimit, setDhcpLimit] = useState("100");
+  const [leaseTime, setLeaseTime] = useState("12h");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const eligibleVlans = vlans.filter((vlan) =>
+    bridges.some((bridge) => bridge.name === vlan.device && bridge.vlan_filtering &&
+      bridge.ports.length > 0) && vlan.ports.length > 0
+  );
+  const selectedVlan = eligibleVlans.find((vlan) => vlan.name === vlanSection) ?? eligibleVlans[0];
+  const externalNames = ["wan", "wan6", "wwan", "cellular"];
+  const eligibleZones = zones.filter((zone) =>
+    !externalNames.includes(zone.name.toLowerCase()) &&
+    !zone.networks.some((network) => externalNames.includes(network.toLowerCase())) &&
+    (zone.input === "REJECT" || zone.input === "DROP") &&
+    (zone.forward === "REJECT" || zone.forward === "DROP")
+  );
+  const selectedZone = eligibleZones.find((zone) => zone.section === zoneSection) ?? eligibleZones[0];
+  const nameValid = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(name) &&
+    !["lan", "wan", "wan6", "loopback", "wwan", "cellular"].includes(name);
+  const nameUnique = !interfaces.some((item) => item.name === name);
+  const addressParts = address.split(".");
+  const addressValid = addressParts.length === 4 && addressParts.every((part) =>
+    /^(0|[1-9][0-9]{0,2})$/.test(part) && Number(part) <= 255
+  );
+  const addressNumbers = addressValid ? addressParts.map(Number) : [];
+  const privateAddress = addressValid && (
+    addressNumbers[0] === 10 ||
+    (addressNumbers[0] === 172 && addressNumbers[1] >= 16 && addressNumbers[1] <= 31) ||
+    (addressNumbers[0] === 192 && addressNumbers[1] === 168)
+  );
+  const maskParts = netmask.split(".");
+  const maskValidOctets = maskParts.length === 4 && maskParts.every((part) =>
+    /^(0|[1-9][0-9]{0,2})$/.test(part) && Number(part) <= 255
+  );
+  const maskBits = maskValidOctets
+    ? maskParts.map((part) => Number(part).toString(2).padStart(8, "0")).join("")
+    : "";
+  const maskValid = /^1{1,30}0*$/.test(maskBits) && maskBits.length === 32;
+  const dhcpValid = /^[1-9][0-9]{0,9}$/.test(dhcpStart) &&
+    /^[1-9][0-9]{0,9}$/.test(dhcpLimit) &&
+    /^[1-9][0-9]{0,8}[smhdw]?$/.test(leaseTime);
+  const ready = available && !truncated && Boolean(selectedVlan) && Boolean(selectedZone) &&
+    nameValid && nameUnique && privateAddress && maskValid && dhcpValid &&
+    confirmed && !saving;
+
+  const updateField = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    setConfirmed(false);
+    setNotice(null);
+  };
+  const provision = async () => {
+    if (!ready || !selectedVlan || !selectedZone) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterOfficeSegment({
+        name,
+        bridge: selectedVlan.device,
+        vlanId: String(selectedVlan.vlan_id),
+        address,
+        netmask,
+        zone: selectedZone.section,
+        dhcpStart,
+        dhcpLimit,
+        leaseTime,
+      });
+      setNotice({
+        success: true,
+        message: result.name + " is configured on " + result.device + " at " +
+          result.address + "/" + maskBits.replace(/0/g, "").length +
+          ". DHCP serves " + result.pool_start_ip + " – " + result.pool_end_ip +
+          "; DHCP/DNS firewall rules were installed and all three services reloaded.",
+      });
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The office network could not be provisioned.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Panel title="Provision an IPv4 office network" eyebrow="EXISTING VLAN · STATIC GATEWAY · DHCP · DEFAULT-DENY FIREWALL">
+      {!available ? (
+        <div className="module-message">Network, firewall or DHCP configuration is unavailable. Segment provisioning is disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The router inventory is truncated. Resolve the inventory before provisioning so subnet, VLAN and DHCP conflicts can be checked completely.</div>
+      ) : eligibleVlans.length === 0 ? (
+        <div className="module-message">Create and verify an existing bridge VLAN with explicit switch-port membership before provisioning an L3 network.</div>
+      ) : null}
+      <div className="office-segment-manager">
+        <div className="office-segment-fields">
+          <label>
+            <span>NETWORK NAME</span>
+            <input value={name} onChange={(event) => updateField(setName)(event.target.value)} maxLength={32} placeholder="corp20" autoComplete="off" />
+            {!nameValid ? <small>Use 1–32 letters, digits, underscores or hyphens; reserved WAN/LAN names are blocked.</small> :
+              !nameUnique ? <small>A network interface with this name already exists.</small> : null}
+          </label>
+          <label>
+            <span>EXISTING VLAN / BRIDGE</span>
+            <select
+              value={selectedVlan?.name ?? ""}
+              onChange={(event) => { setVlanSection(event.target.value); setConfirmed(false); setNotice(null); }}
+              disabled={saving || eligibleVlans.length === 0}
+            >
+              {eligibleVlans.map((vlan) => (
+                <option key={vlan.name} value={vlan.name}>VLAN {vlan.vlan_id} · {vlan.device} · {vlan.ports.length} port memberships</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>GATEWAY IPv4</span>
+            <input value={address} onChange={(event) => updateField(setAddress)(event.target.value)} maxLength={15} placeholder="192.168.20.1" inputMode="decimal" />
+            {address.length > 0 && !privateAddress ? <small>Use an RFC1918 private gateway address in canonical dotted-decimal format.</small> : null}
+          </label>
+          <label>
+            <span>SUBNET MASK</span>
+            <input value={netmask} onChange={(event) => updateField(setNetmask)(event.target.value)} maxLength={15} placeholder="255.255.255.0" inputMode="decimal" />
+            {!maskValid ? <small>Use a contiguous IPv4 mask from /1 through /30.</small> : null}
+          </label>
+          <label>
+            <span>FIREWALL ZONE</span>
+            <select
+              value={selectedZone?.section ?? ""}
+              onChange={(event) => { setZoneSection(event.target.value); setConfirmed(false); setNotice(null); }}
+              disabled={saving || eligibleZones.length === 0}
+            >
+              {eligibleZones.map((zone) => (
+                <option key={zone.section} value={zone.section}>{zone.name} · input {zone.input} · forward {zone.forward}</option>
+              ))}
+            </select>
+            {eligibleZones.length === 0 ? <small>Configure an internal zone with router INPUT and inter-zone FORWARD set to REJECT or DROP first.</small> : null}
+          </label>
+          <label>
+            <span>DHCP START OFFSET</span>
+            <input type="number" min={1} step={1} value={dhcpStart} onChange={(event) => updateField(setDhcpStart)(event.target.value)} inputMode="numeric" />
+          </label>
+          <label>
+            <span>DHCP POOL SIZE</span>
+            <input type="number" min={1} step={1} value={dhcpLimit} onChange={(event) => updateField(setDhcpLimit)(event.target.value)} inputMode="numeric" />
+          </label>
+          <label>
+            <span>DHCP LEASE TIME</span>
+            <input value={leaseTime} onChange={(event) => updateField(setLeaseTime)(event.target.value)} maxLength={16} placeholder="12h" />
+          </label>
+        </div>
+        <div className="office-segment-policy">
+          <div>
+            <strong>Built-in isolation baseline</strong>
+            <span>The selected firewall zone must already reject router INPUT and inter-zone FORWARD by default. QuantumGrid leaves those zone policies unchanged and adds only three IPv4 rules: DHCP UDP/67 and DNS TCP/UDP 53, each limited to this gateway address.</span>
+          </div>
+          <div>
+            <strong>Provisioning transaction</strong>
+            <span>Creates one static L3 interface on the existing bridge VLAN, attaches it to the selected zone, creates one DHCP pool, commits network/firewall/DHCP UCI and reloads network, firewall and dnsmasq. Failure triggers a cross-package rollback attempt.</span>
+          </div>
+        </div>
+        <label className="office-reservation-confirm">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+            disabled={!available || truncated || saving || !selectedVlan || !selectedZone}
+          />
+          <span>I confirm this VLAN, gateway subnet, DHCP pool and firewall zone. I understand that network/firewall reloads can interrupt connectivity and that this operation creates a routed IPv4 segment.</span>
+        </label>
+        <div className="office-segment-actions">
+          <button className="hero-button" type="button" onClick={() => void provision()} disabled={!ready}>
+            {saving ? "Provisioning…" : "Provision office network"}
+          </button>
+        </div>
+        {notice ? (
+          <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+            {notice.message}
+          </div>
+        ) : null}
+      </div>
+      <div className="module-message">This provisions IPv4 only and requires a pre-existing bridge VLAN. It does not add Wi-Fi SSIDs, DHCPv6/RA, static leases, IPv6 addresses, inter-zone forwarding or downstream switch configuration. Validate the switch/AP path from an out-of-band management connection before production use.</div>
     </Panel>
   );
 }
