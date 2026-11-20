@@ -68,7 +68,7 @@ repartition flash, change MIBIB, write bootloader data or attempt to support exp
 1. Connect the UART console and boot the matching AW1000 initramfs temporarily using the
    device's U-Boot/TFTP procedure above. Do not run the installer from an installed NoobWRT or
    OpenWrt root filesystem.
-2. Copy the factory UBI image, `install-aw1000-ubi.sh`, `verify-aw1000-release-manifest.sh`
+2. Copy the read-only `inspect-aw1000-install-target.sh` helper as well if the target layout has not yet been recorded. Copy the factory UBI image, `install-aw1000-ubi.sh`, `verify-aw1000-release-manifest.sh`
    and `SHA256SUMS` into the same directory on the RAM-booted router (for example `/tmp`).
    You may also verify the release on your Linux host with `sha256sum -c SHA256SUMS` before transfer.
 3. Run the read-only preflight first:
