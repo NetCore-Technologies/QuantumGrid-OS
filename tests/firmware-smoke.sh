@@ -698,6 +698,7 @@ grep -Fq 'function validate_dhcp_scope_update' "$ROOT/files/usr/lib/lua/luci/qua
 grep -Fq 'function action_dhcp_scope_update()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'quantumgrid", "dhcp-scope-update"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'record_audit(http, "dhcp.scope.update"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'uncalculable range' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'dhcp.scope.update' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'updateRouterDhcpScope' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'function DhcpScopeEditor' "$ROOT/ui/quantumgrid/src/App.tsx"
