@@ -44,23 +44,27 @@ repartition flash, change MIBIB, write bootloader data or attempt to support exp
 1. Connect the UART console and boot the matching AW1000 initramfs temporarily using the
    device's U-Boot/TFTP procedure above. Do not run the installer from an installed NoobWRT or
    OpenWrt root filesystem.
-2. Copy the factory UBI image, `install-aw1000-ubi.sh`, `verify-aw1000-release-manifest.sh` and `SHA256SUMS` into the same directory on the RAM-booted router (for example `/tmp`). You may also verify the release on your Linux host with `sha256sum -c SHA256SUMS` before transfer.
-4. Run the read-only preflight first:
+2. Copy the factory UBI image, `install-aw1000-ubi.sh`, `verify-aw1000-release-manifest.sh`
+   and `SHA256SUMS` into the same directory on the RAM-booted router (for example `/tmp`).
+   You may also verify the release on your Linux host with `sha256sum -c SHA256SUMS` before transfer.
+3. Run the read-only preflight first:
 
    ```sh
    sh /tmp/install-aw1000-ubi.sh /tmp/QuantumGrid-OS-<version>-AW1000-squashfs-factory.ubi --manifest /tmp/SHA256SUMS
    ```
 
-5. Proceed only when the script confirms the correct board, a RAM initramfs root, and the
+4. Proceed only when the script confirms the correct board, a RAM initramfs root, and the
    expected `mtd18`/`mtd20` standard 100 MiB rootfs partitions. Expanded or unknown layouts
    are refused.
-6. To write, run the same command with `--write` (and keep `--manifest /tmp/SHA256SUMS`). At the UART console, type exactly
-   `ERASE rootfs` when prompted. The script invokes `ubiformat` only for `/dev/mtd18`;
+5. To write, run the same command with `--write` (and keep `--manifest /tmp/SHA256SUMS`).
+   At the UART console, type exactly `ERASE rootfs` when prompted. The script invokes
+   `ubiformat` only for `/dev/mtd18`;
    `rootfs_1` (`/dev/mtd20`) and bootloader/calibration partitions are not written.
 
-The default invocation is read-only. Both dry-run and write modes require a matching SHA-256 entry in the release manifest, checked by the bundled verifier. The write path also requires root, a valid UBI# image header,
-the exact standard partition sizes/erase geometry, the initramfs root check and interactive
-confirmation. A failed check stops before `ubiformat`.
+The default invocation is read-only. Both dry-run and write modes require a matching SHA-256
+entry in the release manifest, checked by the bundled verifier. The write path also requires root,
+a valid UBI# image header, the exact standard partition sizes/erase geometry, the initramfs root
+check and interactive confirmation. A failed check stops before `ubiformat`.
 
 **Do not use this installer for an expanded/merged MTD layout, a different AW1000 partition
 map, or any other device.** Those layouts need a separately built and independently validated
