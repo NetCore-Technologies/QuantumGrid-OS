@@ -1803,6 +1803,8 @@ function NetworkControlPage({
   interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
+  const routes = routerOverview?.routes ?? [];
+  const [routeFamily, setRouteFamily] = useState<"all" | "IPv4" | "IPv6">("all");
   const [interfaceScope, setInterfaceScope] = useState<"all" | "wan" | "lan">("all");
   const [interfaceSort, setInterfaceSort] = useState<"name" | "rx" | "tx" | "errors">("name");
   const visibleInterfaces = interfaces.filter((item) =>
@@ -1821,6 +1823,34 @@ function NetworkControlPage({
     }
     return left.name.localeCompare(right.name);
   });
+  const visibleRoutes = routes
+    .filter((route) => routeFamily === "all" || route.family === routeFamily)
+    .slice()
+    .sort((left, right) => left.family.localeCompare(right.family) ||
+      left.table.localeCompare(right.table) ||
+      (left.metric ?? Number.MAX_SAFE_INTEGER) - (right.metric ?? Number.MAX_SAFE_INTEGER));
+
+  const exportRoutes = () => {
+    if (!routerOverview?.routes_available || visibleRoutes.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Exported at (UTC)", "Family filter", "Family", "Route type", "Table", "Device", "Gateway", "Metric", "Protocol"],
+      ...visibleRoutes.map((route) => [
+        exportedAt, routeFamily, route.family, route.route_type, route.table,
+        route.device, route.gateway, route.metric, route.protocol,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-default-routes-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
   const exportInterfaces = () => {
     if (visibleInterfaces.length === 0) return;
     const exportedAt = new Date().toISOString();
@@ -1862,7 +1892,7 @@ function NetworkControlPage({
         <div>
           <div className="setup-kicker">LIVE ROUTER INTERFACES</div>
           <h1>Network</h1>
-          <p>Current WAN/LAN interface state, kernel byte counters, IPv4 addresses and wireless radio status from the authenticated router API.</p>
+          <p>WAN/LAN interface telemetry, IPv4/IPv6 default routes across kernel policy tables, kernel counters and wireless radio status from the authenticated router API.</p>
         </div>
       </section>
 
@@ -1926,6 +1956,47 @@ function NetworkControlPage({
           </>
         )}
         <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Short-interval error/drop deltas compare successive API samples, remain N/A on the first sample or after a counter reset, and do not estimate packet loss. Counters the driver does not expose remain N/A. CSV export includes the active scope and sort filters.</div>
+      </Panel>
+
+      <Panel
+        title="Default routes"
+        eyebrow="KERNEL ROUTING TABLES · READ-ONLY"
+        action={
+          <div className="network-interface-tools">
+            <select aria-label="Filter default route family" value={routeFamily} onChange={(event) => setRouteFamily(event.target.value as "all" | "IPv4" | "IPv6")}>
+              <option value="all">IPv4 + IPv6</option>
+              <option value="IPv4">IPv4 only</option>
+              <option value="IPv6">IPv6 only</option>
+            </select>
+            <button className="hero-button wifi-export-button" onClick={exportRoutes} disabled={!routerOverview?.routes_available || visibleRoutes.length === 0}>Export route CSV</button>
+          </div>
+        }
+      >
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !routerOverview.routes_available ? (
+          <div className="module-message">The router could not read its kernel routing table. The ip utility may not be installed.</div>
+        ) : visibleRoutes.length === 0 ? (
+          <div className="module-message">No default routes were returned for the selected address family.</div>
+        ) : (
+          <>
+            <div className="module-message">{visibleRoutes.length} default routes shown across all kernel routing tables. Table names such as 201 or 202 may be used by policy-routing and Multi-WAN configurations.</div>
+            <div className="device-list">
+              {visibleRoutes.map((route, index) => (
+                <div className="device-row default-route-row" key={route.family + "-" + route.table + "-" + route.device + "-" + index}>
+                  <div className="device-title">
+                    <div className="device-icon"><Globe2 size={17} /></div>
+                    <div><strong>{route.family} · {route.table}</strong><span>{route.route_type} · {route.protocol || "protocol N/A"}</span></div>
+                  </div>
+                  <div><small>DEVICE</small><b>{route.device || "N/A"}</b></div>
+                  <div><small>GATEWAY</small><b>{route.gateway || "On-link / unspecified"}</b></div>
+                  <div><small>METRIC</small><b>{route.metric === undefined ? "N/A" : fmt(route.metric)}</b></div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+        <div className="module-message">This is a snapshot of default routes across kernel tables, not an evaluation of ip rule priorities, mwan3 tracking health, connection marks or the route selected for a particular packet. A lower metric only compares routes within the same routing table. Route presence does not by itself prove upstream reachability.</div>
       </Panel>
 
       <div className="module-grid">
