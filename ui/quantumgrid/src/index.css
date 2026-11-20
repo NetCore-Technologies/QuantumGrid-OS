@@ -9109,6 +9109,23 @@ input::placeholder {
   background: rgba(255,255,255,.035);
   font-size: 10px;
 }
+
+.office-dhcp-editor-fields select {
+  width: 100%;
+  min-width: 0;
+  min-height: 35px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: var(--surface);
+  font-size: 10px;
+}
+.office-dhcp-editor-fields select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(71,121,255,.12);
+}
 .office-dhcp-editor-fields input:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 2px rgba(71,121,255,.12);
