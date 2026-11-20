@@ -606,10 +606,32 @@ export interface RouterOfficeFirewallZone {
   masquerade: boolean;
 }
 
+export interface RouterOfficeDhcpScope {
+  name: string;
+  interface: string;
+  start: string;
+  limit?: number;
+  lease_time: string;
+  ignore: boolean;
+  dhcpv6: string;
+  ra: string;
+}
+
+export interface RouterOfficeStaticLease {
+  name: string;
+  mac: string;
+  ipv4: string;
+}
+
 export interface RouterOfficeNetworks {
   available: boolean;
   firewall_available: boolean;
   wireless_available: boolean;
+  dhcp_available: boolean;
+  dhcp_scopes: RouterOfficeDhcpScope[];
+  static_leases: RouterOfficeStaticLease[];
+  dhcp_scope_count: number;
+  static_lease_count: number;
   truncated: boolean;
   interfaces: RouterOfficeInterface[];
   bridges: RouterOfficeBridge[];
