@@ -98,7 +98,10 @@ from the Wi-Fi page. The
 The Wi-Fi and Network views also show the driver's frequency list, current channel and restricted-channel flags when iwinfo.freqlist reports them, plus the available transmit-power levels when iwinfo.txpowerlist is supported. These are driver-reported capabilities, not a replacement for the full regulatory database or a grant to use every level. Channel and power capability lists are cached for 60 seconds, while live interface state and station counters continue refreshing normally.
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. The station inventory summarises current associated/authorized counts and aggregate measured RX/TX throughput for stations with valid counter samples. Connected station rows show driver-reported RX/TX PHY family, MCS, spatial streams, channel width and guard-interval data where available. They also show separate current/average signal, cumulative RX/TX bytes and packets, inactive time and transmit retry/failure counters when reported. Per-station RX/TX throughput is calculated from successive iwinfo byte-counter samples and appears after the second valid sample; counter resets are discarded. Associated clients can be filtered by hostname/MAC/SSID/radio, band and authorization state, sorted by signal, negotiated PHY or measured RX/TX throughput, and exported with their station diagnostics and active filter/sort context in a spreadsheet-safe CSV. Gaming
 reports SQM queue configuration and read-only kernel qdisc
-counters; it does not yet write queue policy or measure jitter, packet loss or bufferbloat.
+counters; it does not yet write queue policy, classify traffic or apply per-client priority.
+Diagnostics has a separate on-demand five-packet ICMP test to the fixed target 1.1.1.1,
+reporting the measured received/sent ratio, packet-loss percentage, RTT minimum/average/maximum
+and mean absolute difference between consecutive successful RTT samples (jitter).
 The 5G page reads QMI registration, serving radio interface, roaming state, data-session status
 and RF measurements where the modem reports them. It retains up to 30 distinct modem RF samples
 in the current UI session, without assigning a synthetic signal score. QMI values are cached
@@ -165,8 +168,7 @@ reported TX retries and failed packets, and exports the active diagnostic filter
 Missing driver counters remain unavailable rather than being inferred; retry/failure counts are
 cumulative station counters, not a measured packet-loss percentage. The Security Center exports a
 read-only firewall, nftables, Adblock Fast and VPN inventory without including keys or credentials.
-The 5G page exports its retained QMI RF samples as CSV, preserving unavailable readings as blank fields. Gaming provides searchable/sortable kernel qdisc inventory and exports the visible read-only byte, packet, drop, overlimit and backlog counters for support review. A single ICMP probe is
-shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
+The 5G page exports its retained QMI RF samples as CSV, preserving unavailable readings as blank fields. Gaming provides searchable/sortable kernel qdisc inventory and exports the visible read-only byte, packet, drop, overlimit and backlog counters for support review. The dashboard single ICMP probe remains a reachability/latency sample; Diagnostics separately runs the explicitly requested five-packet test. Neither feature is a controlled-load bufferbloat benchmark.
 
 The custom API route is protected by LuCI's authenticated administrator tree and accepts no
 arbitrary shell commands, UCI writes or caller-selected ubus methods.
@@ -207,7 +209,7 @@ as such.
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
   safe first-boot default for the FXS service, Pages workflow and release build workflow.
 - **Active development:** service-backed telemetry, UI-to-ubus control wiring, radio intelligence,
-  latency policy and modem observability.
+  SQM policy controls, controlled-load bufferbloat testing and modem observability.
 - **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
 
 See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).
