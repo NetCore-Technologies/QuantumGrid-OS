@@ -657,6 +657,24 @@ export interface RouterOfficeNetworks {
   sampled_at: number;
 }
 
+export interface RouterAuditEvent {
+  timestamp: number;
+  actor: string;
+  remote_ip: string;
+  action: string;
+  target: string;
+  outcome: "success" | "failed";
+}
+
+export interface RouterAuditLog {
+  ok: true;
+  available: boolean;
+  events: RouterAuditEvent[];
+  count: number;
+  truncated: boolean;
+  sampled_at: number;
+}
+
 export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
@@ -709,6 +727,7 @@ const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backup";
+const AUDIT_URL = "/cgi-bin/luci/admin/services/quantumgrid/audit";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -1220,4 +1239,32 @@ export async function downloadRouterConfigBackup(): Promise<void> {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
+
+export async function fetchRouterAuditLog(): Promise<RouterAuditLog> {
+  const response = await fetch(AUDIT_URL, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "The audit log requires an active router administrator session."
+      : "The router could not read its administrative audit log.");
+  }
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== "object" || payload === null ||
+    !("ok" in payload) || payload.ok !== true ||
+    !("available" in payload) || typeof payload.available !== "boolean" ||
+    !("events" in payload) || !Array.isArray(payload.events) ||
+    !("count" in payload) || typeof payload.count !== "number" ||
+    !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
+  ) {
+    throw new Error("The router returned an invalid audit-log response.");
+  }
+  return payload as RouterAuditLog;
 }
