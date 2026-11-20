@@ -3539,8 +3539,11 @@ function action_office_zone_update()
 		for _, zone in ipairs(inventory.zones or {}) do
 			if zone.section == update.section then target_zone = zone break end
 		end
-		local management_match = target_zone and office_zone_matches_management_route(
-			target_zone, inventory, http.getenv("REMOTE_ADDR")) or nil
+		local management_match = nil
+		if target_zone then
+			management_match = office_zone_matches_management_route(
+				target_zone, inventory, http.getenv("REMOTE_ADDR"))
+		end
 		if management_match == nil then
 			respond(409, { ok = false, error = "QuantumGrid cannot prove that a restrictive output policy will preserve the current administrator's return route. Use a verified out-of-band session or leave the output policy unchanged." })
 			return
