@@ -83,20 +83,23 @@ jobs:
           copy_required() {
             local pattern="$1"
             local output="$2"
-            local source
-            source="$(find "$IMAGE_DIR" -maxdepth 1 -type f -name "$pattern" -print -quit)"
-            if [[ -z "$source" ]]; then
-              echo "Required AW1000 image was not produced: $pattern" >&2
+            local -a matches=()
+            mapfile -t matches < <(find "$IMAGE_DIR" -maxdepth 1 -type f -name "$pattern" -print | sort)
+            if [[ ${#matches[@]} -ne 1 ]]; then
+              echo "Expected exactly one AW1000 image for pattern '$pattern'; found ${#matches[@]}." >&2
+              printf '  %s\n' "${matches[@]}" >&2
               exit 1
             fi
+            local source="${matches[0]}"
+            [[ -s "$source" ]] || { echo "AW1000 image is empty: $source" >&2; exit 1; }
             cp "$source" "dist/$output"
             printf 'Included: %s\n' "$source"
           }
 
-          copy_required "*arcadyan_aw1000-squashfs-sysupgrade.bin" \
-            "QuantumGrid-OS-${VERSION}-AW1000-squashfs-sysupgrade.bin"
           copy_required "*arcadyan_aw1000-squashfs-factory.ubi" \
             "QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi"
+          bash scripts/verify-aw1000-ubi.sh \
+            "dist/QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi"
           copy_required "*arcadyan_aw1000-initramfs-uImage.itb" \
             "QuantumGrid-OS-${VERSION}-AW1000-initramfs-uImage.itb"
 
@@ -132,6 +135,8 @@ jobs:
             echo "Device: Arcadyan AW1000"
             echo "Target: qualcommax/ipq807x"
             echo "Profile: arcadyan_aw1000"
+            echo "Persistent firmware format: squashfs factory UBI (.ubi)"
+            echo "No sysupgrade.bin image is produced or published for this profile"
             echo "Phone service: installed, disabled by default"
             echo "Voice prerequisites: matching kernel, VoLTE SIM and user-supplied Skyworks SLIC patch"
             echo "NSS acceleration: not included or claimed by this upstream OpenWrt build"
