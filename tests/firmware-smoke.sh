@@ -495,4 +495,9 @@ if bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$WRONG_EXTENSION"; then
     exit 1
 fi
 
-echo "QuantumGrid AW1000 target, UBI-only release validation, RJ11, QMI history and Wi-Fi scan checks passed."
+grep -Fq 'install-aw1000-ubi.sh' "$ROOT/.github/workflows/firmware-release.yml"
+grep -Fq 'UBI installer preflight' "$ROOT/README.md"
+grep -Fq 'standard 100 MiB / 256 KiB AW1000 partition' "$ROOT/scripts/install-aw1000-ubi.sh"
+grep -Fq 'rootfs_1' "$ROOT/scripts/install-aw1000-ubi.sh"
+bash "$ROOT/tests/install-aw1000-ubi-smoke.sh"
+echo "QuantumGrid AW1000 target, UBI-only release validation, guarded installer, RJ11, QMI history and Wi-Fi scan checks passed."
