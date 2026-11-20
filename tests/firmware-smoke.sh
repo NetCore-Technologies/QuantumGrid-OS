@@ -915,7 +915,7 @@ grep -Fq 'read_file("/proc/device-tree/compatible")' "$ROOT/files/usr/lib/lua/lu
 grep -Fq 'board_reference = board_reference' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'RouterBoardGpioReference' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'AW1000 board pin reference' "$ROOT/ui/quantumgrid/src/App.tsx"
-grep -Fq 'TLMM GPIO 67' "$ROOT/files/usr/bin/quantumgrid-hardware-io"
+grep -Fq 'Reset TLMM 67 active-low' "$ROOT/files/usr/bin/quantumgrid-hardware-io"
 grep -Fq 'hardware-board-pin-row' "$ROOT/ui/quantumgrid/src/index.css"
 grep -Fq 'arcadyan,aw1000' "$ROOT/tests/hardware-io.lua"
 echo "QuantumGrid AW1000 target, guarded hardware I/O, office DHCP management, redacted audit log, firewall NAT review, live fw4 runtime inventory and firmware integration checks passed."
