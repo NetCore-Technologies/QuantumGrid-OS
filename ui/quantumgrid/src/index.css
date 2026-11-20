@@ -6627,6 +6627,27 @@ input::placeholder {
   font-size: 8px;
 }
 .security-export-button { margin-top: 10px; }
+.qdisc-tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.3fr) minmax(170px, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.qdisc-tools input,
+.qdisc-tools select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font: inherit;
+  font-size: 8px;
+}
+.qdisc-tools span { color: var(--muted2); font-size: 7px; white-space: nowrap; }
 .qdisc-export-actions {
   display: flex;
   align-items: center;
@@ -6921,6 +6942,12 @@ input::placeholder {
   }
   .network-interface-tools {
     grid-template-columns: 1fr 1fr;
+  }
+  .qdisc-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+  .qdisc-tools span {
+    white-space: normal;
   }
   .dhcp-client-tools {
     grid-template-columns: 1fr 1fr;
