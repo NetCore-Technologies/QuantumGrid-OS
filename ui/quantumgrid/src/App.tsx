@@ -4998,6 +4998,15 @@ function OfficeNetworksPage({ routerOverview }: {
         "output=" + item.output + "; forward=" + item.forward + "; masquerade=" + item.masquerade,
         item.networks.join(" "), "", "", "",
       ]),
+      ...(inventory.dhcp_scopes ?? []).map((item) => [
+        exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
+        "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore,
+        "", "DHCPv6=" + item.dhcpv6 + "; RA=" + item.ra, "", "",
+      ]),
+      ...(inventory.static_leases ?? []).map((item) => [
+        exportedAt, "Static DHCP lease", item.name, "", "", "",
+        "", "", item.ipv4, item.mac,
+      ]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
     const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
@@ -5034,6 +5043,7 @@ function OfficeNetworksPage({ routerOverview }: {
         <Metric title="Bridge Devices" value={inventory?.available ? fmt(inventory.bridge_count) : "N/A"} unit="" detail={inventory ? inventory.vlan_filtering_bridge_count + " with VLAN filtering" : "Waiting for router inventory"} icon={Database} />
         <Metric title="Bridge VLANs" value={inventory?.available ? fmt(inventory.vlan_count) : "N/A"} unit="" detail={inventory ? inventory.segmented_interface_count + " L3 interfaces linked to a VLAN" : "Waiting for router inventory"} icon={SlidersHorizontal} />
         <Metric title="Wi-Fi Access Points" value={inventory?.available ? fmt(inventory.wifi_ap_count) : "N/A"} unit="" detail="Configured AP sections, including disabled entries" icon={Wifi} />
+        <Metric title="DHCP / Reservations" value={inventory?.dhcp_available ? fmt(inventory.dhcp_scope_count) + " / " + fmt(inventory.static_lease_count) : "N/A"} unit="" detail="Scopes / static host mappings" icon={Database} />
       </div>
 
       {inventory && (
@@ -5069,6 +5079,45 @@ function OfficeNetworksPage({ routerOverview }: {
         )}
         <div className="module-message">Zone and SSID associations are correlated by their configured network names. Device names and VLAN matches are derived from the configured L3 device (for example, br-lan.20). No firewall packet-flow, switch hardware forwarding or client isolation test is performed here.</div>
       </Panel>
+
+      <div className="office-two-column">
+        <Panel title="DHCP server scopes" eyebrow="DHCP UCI · RANGE OFFSETS AND OPTIONS">
+          {!inventory?.dhcp_available ? (
+            <div className="module-message">DHCP configuration could not be read.</div>
+          ) : inventory.dhcp_scopes.length === 0 ? (
+            <div className="module-message">No DHCP scope sections were returned.</div>
+          ) : (
+            <div className="office-bridge-list">
+              {inventory.dhcp_scopes.map((scope) => (
+                <div className="office-bridge-row" key={scope.name}>
+                  <div><strong>{scope.name}</strong><span>{scope.interface}</span></div>
+                  <div><small>START OFFSET / LIMIT / LEASE</small><b>{scope.start || "?"} / {scope.limit ?? "?"} / {scope.lease_time || "unspecified"}</b><small>DHCPv6 {scope.dhcpv6 || "unspecified"} · RA {scope.ra || "unspecified"}</small></div>
+                  <Status active={!scope.ignore}>{scope.ignore ? "DISABLED" : "CONFIGURED"}</Status>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="module-message">Start is a DHCP pool offset, not an expanded IP range. This inventory does not calculate exclusions or verify address availability against live leases.</div>
+        </Panel>
+        <Panel title="Static DHCP reservations" eyebrow="HOST NAME · MAC · IPV4">
+          {!inventory?.dhcp_available ? (
+            <div className="module-message">DHCP host configuration could not be read.</div>
+          ) : inventory.static_leases.length === 0 ? (
+            <div className="module-message">No valid static DHCP reservations were found.</div>
+          ) : (
+            <div className="office-zone-list">
+              {inventory.static_leases.map((lease, index) => (
+                <div className="office-zone-row" key={lease.mac + "-" + lease.ipv4 + "-" + index}>
+                  <div><strong>{lease.name}</strong><small>{lease.mac}</small></div>
+                  <div><small>RESERVED IPV4</small><b>{lease.ipv4}</b></div>
+                  <Status active={true}>STATIC</Status>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="module-message">Only configured UCI host reservations are shown. Dynamic leases are listed separately on the Devices page; a reservation does not prove that the client is currently connected.</div>
+        </Panel>
+      </div>
 
       <Panel title="Bridge VLAN membership" eyebrow="TAGGED / UNTAGGED SWITCH PORT INVENTORY">
         {!inventory?.available ? (
