@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6607,30 +6607,13 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         <DhcpScopeCreateForm networks={dhcpCreationNetworks} refresh={refresh} />
       </Panel>
 
-      <Panel title="Bridge VLAN membership" eyebrow="TAGGED / UNTAGGED SWITCH PORT INVENTORY">
-        {!inventory?.available ? (
-          <div className="module-message">Bridge configuration is unavailable.</div>
-        ) : vlans.length === 0 ? (
-          <div className="module-message">No network bridge-vlan sections were detected. This can be normal for an untagged single-LAN setup; it does not prove that the switch has no VLAN capability.</div>
-        ) : (
-          <div className="office-vlan-list">
-            {vlans.map((vlan) => (
-              <div className="office-vlan-card" key={vlan.name}>
-                <div className="office-vlan-heading"><div><strong>VLAN {vlan.vlan_id}</strong><span>{vlan.name} · {vlan.device}</span></div><Status active={bridges.some((bridge) => bridge.name === vlan.device && bridge.vlan_filtering)}>BRIDGE FILTERING {bridges.some((bridge) => bridge.name === vlan.device && bridge.vlan_filtering) ? "ON" : "NOT CONFIRMED"}</Status></div>
-                <div className="office-vlan-ports">
-                  {vlan.ports.map((port) => (
-                    <div className="office-vlan-port" key={port.name}>
-                      <strong>{port.name}</strong><span>{port.mode.toUpperCase()}</span>{port.pvid ? <small>PVID</small> : null}
-                    </div>
-                  ))}
-                  {vlan.ports.length === 0 && <small>No parseable switch ports were reported.</small>}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="module-message">Tagged/untagged/PVID markers reflect the bridge-vlan UCI port suffixes. A bridge VLAN entry alone does not prove that a managed switch or downstream access point is configured correctly.</div>
-      </Panel>
+      <OfficeBridgeVlanManager
+        available={Boolean(inventory?.available)}
+        truncated={Boolean(inventory?.truncated)}
+        bridges={bridges}
+        vlans={vlans}
+        refresh={refresh}
+      />
 
       <div className="office-two-column">
         <Panel title="Bridge devices" eyebrow="NETWORK DEVICE SECTIONS">
@@ -6700,6 +6683,280 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   );
 }
 
+
+type OfficeVlanPortMode = "excluded" | "tagged" | "untagged" | "untagged-pvid";
+
+function OfficeBridgeVlanManager({
+  available,
+  truncated,
+  bridges,
+  vlans,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  bridges: RouterOfficeBridge[];
+  vlans: RouterOfficeVlan[];
+  refresh: () => void;
+}) {
+  const vlanBridges = bridges.filter((bridge) => bridge.vlan_filtering && bridge.ports.length > 0);
+  const [device, setDevice] = useState("");
+  const [editingSection, setEditingSection] = useState("");
+  const [vlanId, setVlanId] = useState("");
+  const [portModes, setPortModes] = useState<Record<string, OfficeVlanPortMode>>({});
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState("");
+  const [removalBusy, setRemovalBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const activeDevice = vlanBridges.some((bridge) => bridge.name === device)
+    ? device
+    : vlanBridges[0]?.name ?? "";
+  const activeBridge = vlanBridges.find((bridge) => bridge.name === activeDevice);
+  const selectedPorts = activeBridge?.ports.flatMap((name) => {
+    const mode = portModes[name] ?? "excluded";
+    if (mode === "excluded") return [];
+    return [{
+      name,
+      mode: mode === "tagged" ? "tagged" as const : "untagged" as const,
+      pvid: mode === "untagged-pvid",
+    }];
+  }) ?? [];
+  const pvidCount = selectedPorts.filter((port) => port.pvid).length;
+  const vlanNumber = Number(vlanId);
+  const validVlanId = /^[1-9][0-9]{0,3}$/.test(vlanId) && vlanNumber >= 1 && vlanNumber <= 4094;
+  const ready = available && !truncated && Boolean(activeBridge) &&
+    validVlanId && selectedPorts.length > 0 && pvidCount <= selectedPorts.length &&
+    confirmed && !saving;
+
+  const resetEditor = () => {
+    setEditingSection("");
+    setVlanId("");
+    setPortModes({});
+    setConfirmed(false);
+  };
+  const editVlan = (vlan: RouterOfficeVlan) => {
+    const next: Record<string, OfficeVlanPortMode> = {};
+    for (const port of vlan.ports) {
+      next[port.name] = port.mode === "tagged"
+        ? "tagged"
+        : port.pvid ? "untagged-pvid" : "untagged";
+    }
+    setDevice(vlan.device);
+    setEditingSection(vlan.name);
+    setVlanId(String(vlan.vlan_id));
+    setPortModes(next);
+    setConfirmed(false);
+    setNotice(null);
+  };
+  const saveVlan = async () => {
+    if (!ready || !activeBridge) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterOfficeVlan({
+        section: editingSection || undefined,
+        device: activeBridge.name,
+        vlanId,
+        ports: selectedPorts,
+      });
+      setNotice({
+        success: true,
+        message: "VLAN " + result.vlan_id + " membership on " + result.device +
+          " was saved and the network reload completed.",
+      });
+      resetEditor();
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The bridge VLAN could not be saved.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const removeVlan = async (section: string) => {
+    if (!section || removalBusy) return;
+    setRemovalBusy(true);
+    setNotice(null);
+    try {
+      const result = await removeRouterOfficeVlan(section);
+      setRemoving("");
+      if (editingSection === section) resetEditor();
+      setNotice({
+        success: true,
+        message: "VLAN " + result.vlan_id + " was removed from " + result.device +
+          " and the network reload completed.",
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The bridge VLAN could not be removed.",
+      });
+    } finally {
+      setRemovalBusy(false);
+    }
+  };
+
+  return (
+    <Panel title="Bridge VLAN management" eyebrow="NETWORK UCI · GUARDED CONFIGURATION">
+      {!available ? (
+        <div className="module-message">Network configuration is unavailable. VLAN changes are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The network inventory is truncated. Resolve the inventory limit before editing VLANs so duplicate IDs and PVID assignments can be checked completely.</div>
+      ) : vlanBridges.length === 0 ? (
+        <div className="module-message">No bridge with VLAN filtering enabled and declared switch ports was found. Configure and verify bridge VLAN filtering through native LuCI before using this manager.</div>
+      ) : null}
+      <div className="office-vlan-manager">
+        <div className="office-vlan-manager-list">
+          {vlans.length === 0 ? (
+            <div className="module-message">No bridge VLAN sections are currently configured.</div>
+          ) : (
+            vlans.map((vlan) => {
+              const filtering = vlanBridges.some((bridge) => bridge.name === vlan.device);
+              return (
+                <div className="office-vlan-card" key={vlan.name}>
+                  <div className="office-vlan-heading">
+                    <div>
+                      <strong>VLAN {vlan.vlan_id}</strong>
+                      <span>{vlan.name} · {vlan.device}</span>
+                    </div>
+                    <Status active={filtering}>{filtering ? "FILTERING ON" : "NOT MANAGEABLE"}</Status>
+                  </div>
+                  <div className="office-vlan-ports">
+                    {vlan.ports.map((port) => (
+                      <div className="office-vlan-port" key={port.name}>
+                        <strong>{port.name}</strong>
+                        <span>{port.mode.toUpperCase()}</span>
+                        {port.pvid ? <small>PVID</small> : null}
+                      </div>
+                    ))}
+                    {vlan.ports.length === 0 ? <small>No parseable switch ports were reported.</small> : null}
+                  </div>
+                  <div className="office-vlan-actions">
+                    <button className="office-remove-start" type="button" onClick={() => editVlan(vlan)} disabled={!filtering || saving || removalBusy}>
+                      Edit membership
+                    </button>
+                    {removing === vlan.name ? (
+                      <div className="office-vlan-remove-confirm">
+                        <span>Remove VLAN {vlan.vlan_id} and reload networking?</span>
+                        <button className="office-remove-start" type="button" onClick={() => void removeVlan(vlan.name)} disabled={removalBusy}>
+                          {removalBusy ? "Removing…" : "Confirm removal"}
+                        </button>
+                        <button className="office-remove-start" type="button" onClick={() => setRemoving("")} disabled={removalBusy}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button className="office-remove-start" type="button" onClick={() => setRemoving(vlan.name)} disabled={!filtering || saving || removalBusy}>
+                        Remove VLAN
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div className="office-vlan-editor">
+          <div className="office-vlan-editor-heading">
+            <strong>{editingSection ? "Edit bridge VLAN" : "Create bridge VLAN"}</strong>
+            <span>{editingSection ? "Update existing membership" : "Add a VLAN to an existing bridge"}</span>
+          </div>
+          <div className="office-vlan-editor-fields">
+            <label>
+              <span>VLAN-FILTERED BRIDGE</span>
+              <select
+                value={activeDevice}
+                onChange={(event) => {
+                  setDevice(event.target.value);
+                  resetEditor();
+                  setNotice(null);
+                }}
+                disabled={saving || vlanBridges.length === 0}
+              >
+                {vlanBridges.map((bridge) => (
+                  <option value={bridge.name} key={bridge.name}>{bridge.name} · {bridge.ports.length} port(s)</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>VLAN ID</span>
+              <input
+                type="number"
+                min={1}
+                max={4094}
+                step={1}
+                value={vlanId}
+                onChange={(event) => { setVlanId(event.target.value); setConfirmed(false); }}
+                placeholder="20"
+                inputMode="numeric"
+                disabled={saving || !activeBridge}
+              />
+            </label>
+          </div>
+          <div className="office-vlan-port-editor">
+            <div className="office-vlan-port-editor-heading">
+              <strong>Switch port membership</strong>
+              <span>Port modes must be explicit; a port can be assigned only one PVID across this bridge.</span>
+            </div>
+            {!activeBridge ? (
+              <div className="module-message">No manageable bridge is selected.</div>
+            ) : (
+              activeBridge.ports.map((port) => (
+                <label className="office-vlan-port-edit-row" key={port}>
+                  <strong>{port}</strong>
+                  <select
+                    value={portModes[port] ?? "excluded"}
+                    onChange={(event) => {
+                      setPortModes((current) => ({ ...current, [port]: event.target.value as OfficeVlanPortMode }));
+                      setConfirmed(false);
+                    }}
+                    disabled={saving}
+                  >
+                    <option value="excluded">Not a member</option>
+                    <option value="tagged">Tagged</option>
+                    <option value="untagged">Untagged</option>
+                    <option value="untagged-pvid">Untagged · PVID</option>
+                  </select>
+                </label>
+              ))
+            )}
+          </div>
+          <div className="office-vlan-membership-summary">
+            <span>{selectedPorts.length} selected port(s)</span>
+            <span>{selectedPorts.filter((port) => port.mode === "tagged").length} tagged</span>
+            <span>{selectedPorts.filter((port) => port.mode === "untagged").length} untagged</span>
+            <span>{pvidCount} PVID</span>
+          </div>
+          <label className="office-reservation-confirm">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+              disabled={!activeBridge || saving || !validVlanId || selectedPorts.length === 0}
+            />
+            <span>I understand that reloading network configuration can interrupt connectivity. I have checked the management-port tagging and VLAN assignments before applying this change.</span>
+          </label>
+          <div className="office-vlan-editor-actions">
+            <button className="hero-button" type="button" onClick={resetEditor} disabled={!editingSection && !vlanId && !Object.keys(portModes).length || saving}>
+              {editingSection ? "Cancel edit" : "Clear form"}
+            </button>
+            <button className="hero-button" type="button" onClick={() => void saveVlan()} disabled={!ready}>
+              {saving ? "Applying…" : editingSection ? "Save VLAN membership" : "Create VLAN"}
+            </button>
+          </div>
+          {notice ? (
+            <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+              {notice.message}
+            </div>
+          ) : null}
+        </div>
+      </div>
+      <div className="module-message">Changes update native OpenWrt network UCI and trigger a network reload. Incorrect VLAN membership can disconnect wireless clients, wired devices or the administrator session. QuantumGrid validates bridge ports, duplicate IDs and PVID collisions, and restores the previous UCI section when a reload fails; it cannot prove that downstream switches or access points are configured correctly.</div>
+    </Panel>
+  );
+}
 
 function HardwareBoardPinList({ title, entries }: {
   title: string;
