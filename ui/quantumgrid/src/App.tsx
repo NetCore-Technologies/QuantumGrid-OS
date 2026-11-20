@@ -4168,13 +4168,17 @@ type InterfaceCounterDelta = {
 function WirelessConfigEditor({
   config,
   radio,
+  networkInterfaces,
   refresh,
 }: {
   config: RouterWirelessConfig;
   radio?: RouterWirelessRadio;
+  networkInterfaces: RouterOfficeInterface[];
   refresh: () => void;
 }) {
+  const currentNetwork = config.networks.length === 1 ? config.networks[0] : "";
   const [ssid, setSsid] = useState(config.ssid);
+  const [network, setNetwork] = useState(currentNetwork);
   const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed" | "wpa2" | "wpa3" | "none">(
     config.encryption === "sae" || config.encryption === "sae-mixed" ||
     config.encryption === "wpa2" || config.encryption === "wpa3" || config.encryption === "none"
@@ -4210,6 +4214,13 @@ function WirelessConfigEditor({
   const currentTxpower = config.txpower === undefined ? "auto" : String(config.txpower);
   const supportedTxPower = [...new Set((config.txpower_levels ?? []).map((item) => item.dbm))].sort((left, right) => left - right);
   const txpowerSupported = txpower === "auto" || supportedTxPower.includes(Number(txpower)) || txpower === currentTxpower;
+  const externalZoneNames = new Set(["wan", "wan6", "wwan", "cellular"]);
+  const eligibleNetworkInterfaces = networkInterfaces.filter((item) =>
+    item.protocol === "static" && item.device.length > 0 && item.firewall_zones.length > 0 &&
+    item.firewall_zones.every((zone) => !externalZoneNames.has(zone.toLowerCase()))
+  );
+  const networkSupported = eligibleNetworkInterfaces.some((item) => item.name === network);
+  const networkChanged = network !== currentNetwork;
   const encryptionChanged = encryption !== config.encryption;
   const pmfNeedsRepair = config.encryption === "wpa3" && config.ieee80211w !== "2";
   const enterpriseMode = encryption === "wpa2" || encryption === "wpa3";
@@ -4253,7 +4264,7 @@ function WirelessConfigEditor({
     (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
       (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
         !/[\u0000-\u001f\u007f]/.test(accountingSecret))));
-  const changed = pmfNeedsRepair || ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
+  const changed = pmfNeedsRepair || ssid !== config.ssid || networkChanged || encryptionChanged || passphrase.length > 0 ||
     (enterpriseMode && (radiusServer !== config.radius_auth_server ||
       radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0 ||
       accountingEnabled !== Boolean(config.accounting_server) ||
@@ -4261,8 +4272,8 @@ function WirelessConfigEditor({
         accountingPort !== String(config.accounting_port || 1813) || accountingSecret.length > 0)))) ||
     hidden !== config.hidden || channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
   const ready = changed && channelSupported && htmodeSupported && txpowerSupported &&
-    !passphraseRequired && radiusReady && accountingReady && (encryption !== "none" || allowOpen) &&
-    confirmDisconnect && !saving;
+    networkSupported && !passphraseRequired && radiusReady && accountingReady &&
+    (encryption !== "none" || allowOpen) && confirmDisconnect && !saving;
 
   const apply = async () => {
     if (!ready) return;
@@ -4273,6 +4284,7 @@ function WirelessConfigEditor({
         radio: config.radio,
         section: config.section,
         ssid,
+        network,
         encryption,
         key: passphrase,
         radiusServer,
@@ -4326,6 +4338,26 @@ function WirelessConfigEditor({
         <label className="wireless-config-field">
           <span>NETWORK NAME (SSID)</span>
           <input value={ssid} maxLength={32} onChange={(event) => setSsid(event.target.value)} autoComplete="off" />
+        </label>
+        <label className="wireless-config-field">
+          <span>ROUTED NETWORK / VLAN</span>
+          <select
+            value={network}
+            onChange={(event) => {
+              setNetwork(event.target.value);
+              setConfirmDisconnect(false);
+              setNotice(null);
+            }}
+            disabled={saving || eligibleNetworkInterfaces.length === 0}
+          >
+            <option value="">Select one internal static network</option>
+            {eligibleNetworkInterfaces.map((item) => (
+              <option value={item.name} key={item.name}>
+                {item.name} · {item.device} · {item.firewall_zones.join(", ")}
+              </option>
+            ))}
+          </select>
+          <small>Each SSID maps to one existing routed interface. Create its VLAN, gateway, DHCP pool and firewall zone in Office Networks first.</small>
         </label>
         <label className="wireless-config-field">
           <span>SECURITY</span>
@@ -4494,7 +4526,7 @@ function WirelessConfigEditor({
         ) : null}
       </div>
       <div className="module-message wireless-config-note">
-        The existing AP is edited in place; no new SSID or radio is created. Personal passphrases and RADIUS shared secrets are never returned by the router API. A blank existing secret is preserved only when its RADIUS server is unchanged. WPA3-Enterprise forces 802.11w Protected Management Frames to required; clients that do not support PMF cannot connect. Enterprise mode uses the router’s current AP network; RADIUS dynamic VLAN assignment is not configured here. Channel, width and transmit power are radio-wide and may affect every SSID on this radio. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
+        The existing AP is edited in place; no new SSID or radio is created. Each AP is attached to one existing static L3 network interface, allowing a dedicated SSID to use an existing routed VLAN. The target network must belong to exactly one internal firewall zone; WAN/WWAN and ambiguous mappings are rejected. A management-route guard prevents moving the AP carrying the current administrator session away from that network. Personal passphrases and RADIUS shared secrets are never returned by the router API. WPA3-Enterprise forces 802.11w Protected Management Frames to required. RADIUS dynamic VLAN assignment remains unsupported; use one SSID per routed VLAN. Channel, width and transmit power remain radio-wide. Applying changes reloads Wi-Fi and can disconnect clients.
       </div>
       <label className="wireless-config-confirm">
         <input type="checkbox" checked={confirmDisconnect} onChange={(event) => setConfirmDisconnect(event.target.checked)} />
@@ -4504,6 +4536,7 @@ function WirelessConfigEditor({
       <div className="wireless-config-actions">
         <button className="hero-button" onClick={() => {
           setSsid(config.ssid);
+          setNetwork(currentNetwork);
           setEncryption(config.encryption === "sae" || config.encryption === "sae-mixed" ||
             config.encryption === "wpa2" || config.encryption === "wpa3" || config.encryption === "none" ? config.encryption : "psk2");
           setPassphrase("");
@@ -4530,6 +4563,8 @@ function WirelessConfigEditor({
       {!htmodeSupported ? <div className="module-message">Choose Auto or a width/PHY mode reported by the radio driver.</div> : null}
       {!txpowerSupported ? <div className="module-message">Choose Auto or a transmit-power level reported by the radio driver.</div> : null}
       {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling personal security or changing the personal security mode.</div> : null}
+      {!networkSupported ? <div className="module-message">Select one existing static network attached to a single internal firewall zone. No WAN/WWAN or ambiguous network mapping may be used.</div> : null}
+      {config.networks.length !== 1 ? <div className="module-message">This AP currently has {config.networks.length === 0 ? "no" : "multiple"} network attachment(s). Choose one explicit internal network before saving to normalize its VLAN binding.</div> : null}
       {enterpriseMode && encryption === "wpa3" ? <div className="module-message">WPA3-Enterprise enforces Protected Management Frames (802.11w) as required.</div> : null}
       {pmfNeedsRepair ? <div className="module-message">This existing WPA3-Enterprise AP is missing mandatory Protected Management Frames. Saving will set 802.11w to required.</div> : null}
       {enterpriseMode && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
@@ -4873,9 +4908,10 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
               <div className="wireless-config-list">
                 {wirelessConfigs.sections.map((config) => (
                   <WirelessConfigEditor
-                    key={[config.section, config.ssid, config.encryption, config.hidden, config.channel, config.htmode, config.txpower, config.key_set].join(":")}
+                    key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.channel, config.htmode, config.txpower, config.key_set].join(":")}
                     config={config}
                     radio={radios.find((item) => item.name === config.radio)}
+                    networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
                     refresh={refresh}
                   />
                 ))}
