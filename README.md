@@ -385,6 +385,22 @@ edits/removal of the VLAN carrying that session and preserves the native untagge
 when the session routes directly over the bridge. Untagged membership on a port already assigned
 to another VLAN is also rejected.
 
+## Managed office firewall forwarding
+
+The Office Networks page can add and remove explicit inter-zone forwarding entries. Creation
+requires two existing, distinct firewall zones; standard WAN/WWAN zones and zones mapped to
+WAN/WWAN networks are blocked as sources but may be destinations. The operation creates a
+native UCI `firewall.forwarding` section, commits it and reloads the native firewall service.
+Removal snapshots and restores the complete forwarding section if a firewall reload fails.
+Both operations require an authenticated same-origin administrator POST, explicit confirmation
+and produce a redacted audit event. The controller does not modify zone input/output defaults
+through this manager, so router-management access policy remains separately controlled.
+
+A forwarding entry is a directional permission, not a firewall packet-path test. This control
+does not yet edit firewall zone input/output/forward defaults, individual rule ordering, NAT,
+redirects, traffic shaping, address sets or policy-routing. Review the complete fw4 ruleset and
+test the actual path between clients before deploying segmentation to a production office.
+
 ## Office network inventory
 
 The authenticated **Office Networks** page provides a read-only correlation of configured
