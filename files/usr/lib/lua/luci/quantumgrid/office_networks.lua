@@ -188,7 +188,6 @@ function build_inventory(source)
 	if #source_leases > 256 then result.truncated = true end
 	if #source_zones > #result.zones then result.truncated = true end
 
-	local bridge_names = {}
 	for _, item in ipairs(source_bridges) do
 		if type(item) == "table" then
 			local name = token(item.name, 64)
@@ -200,7 +199,6 @@ function build_inventory(source)
 					ports = ports,
 					vlan_filtering = item.vlan_filtering == true
 				})
-				bridge_names[name] = true
 			end
 		end
 	end
