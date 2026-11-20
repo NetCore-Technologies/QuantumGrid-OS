@@ -68,6 +68,14 @@ esac
 printf 'Board identity: %s\n' "$BOARD_NAME"
 printf 'Root filesystem: %s\n' "$ROOT_FS"
 
+printf 'MTD partition map (from /proc/mtd):\n'
+if [ -r "$MTD_FILE" ]; then
+  sed -n '1,65p' "$MTD_FILE"
+else
+  printf 'unavailable\n'
+fi
+printf '\n'
+
 ROOTFS_ENTRY=$(mtd_entry rootfs 2>/dev/null || true)
 ROOTFS1_ENTRY=$(mtd_entry rootfs_1 2>/dev/null || true)
 ROOTFS_OK=0
