@@ -332,6 +332,22 @@ a compliance result. Write-capable office provisioning remains gated on transact
 handling, management-plane lockout protection, and device-specific bridge/switch validation.
 The parser and correlation rules, including IP/MAC validation, are covered by `tests/office-networks.lua` in the normal CI gate, including DHCP host/subnet checks and live-lease collision detection, DHCP pool range validation and overlap checks.
 
+## Remote syslog forwarding
+
+The System page can configure the native OpenWrt remote log forwarder through the existing
+`system` UCI section. It supports an IPv4 address or DNS name, a destination port, TCP or UDP,
+optional sender hostname and message prefix. Changes require an authenticated same-origin POST
+and explicit confirmation, are validated before writing, and restart the native `log` service.
+The previous UCI values are snapshotted and a rollback/restart is attempted if the service restart
+fails. The local log buffer remains enabled.
+
+**Transport security limitation:** OpenWrt's built-in `logread` forwarder supports TCP or UDP
+syslog, not TLS. This feature does not encrypt or authenticate the remote connection and does not
+verify that the collector received the messages. Use a trusted management VLAN or VPN between the
+router and collector; do not send logs over an untrusted public network. IPv6 literal destinations,
+TLS syslog, certificate management, collector health tests and multi-destination forwarding are not
+implemented. The validation rules are covered by `tests/remote-syslog.lua` in CI.
+
 ## Configuration backup
 
 The authenticated System page can generate a configuration archive using the router's native
@@ -352,7 +368,7 @@ compatible device/firmware and the documented recovery process. Validation rules
 The Office **Admin Audit** page exposes an authenticated read-only history for supported actions:
 first-boot root-password setup, Wi-Fi configuration changes, SQM queue changes, DHCP scope
 updates, static DHCP reservation add/remove, APK/OPKG install/remove/feed-update operations,
-manual LED brightness changes and configuration backup downloads. Each event records only a timestamp, the current administrator label, remote source IP,
+manual LED brightness changes, remote syslog destination updates and configuration backup downloads. Each event records only a timestamp, the current administrator label, remote source IP,
 allowlisted action, target label and success/failure outcome. Submitted passwords, SSIDs, keys,
 VPN private keys, package command output and arbitrary configuration values are not part of the
 event schema.
@@ -374,7 +390,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/remove, and existing DHCP pool editors, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/remove, and existing DHCP pool editors, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
