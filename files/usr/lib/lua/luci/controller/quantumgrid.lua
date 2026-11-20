@@ -988,6 +988,35 @@ local function wireless_channel_allowed(radio_name, channel)
 	return false
 end
 
+local function wireless_radio_modes(radio_name)
+	local result = {}
+	for _, radio in ipairs(wireless_status()) do
+		if radio.name == radio_name then
+			for _, iface in ipairs(radio.interfaces or {}) do
+				for _, mode in ipairs(iface.ht_modes or {}) do
+					if type(mode) == "string" then result[mode] = true end
+				end
+			end
+			break
+		end
+	end
+	return result
+end
+
+local function wireless_radio_power_levels(radio_name)
+	for _, radio in ipairs(wireless_status()) do
+		if radio.name == radio_name then
+			local result = {}
+			for _, item in ipairs(radio.txpower_levels or {}) do
+				if tonumber(item.dbm) then result[tostring(tonumber(item.dbm))] = true end
+			end
+			return result
+		end
+	end
+	return {}
+end
+
+
 function action_wireless_update()
 	local http = require "luci.http"
 	local sys = require "luci.sys"
@@ -1028,6 +1057,8 @@ function action_wireless_update()
 		http.formvalue("key", true) or "",
 		http.formvalue("hidden", true),
 		http.formvalue("channel", true),
+		http.formvalue("htmode", true),
+		http.formvalue("txpower", true),
 		http.formvalue("allow_open", true),
 		http.formvalue("confirmed", true)
 	)
@@ -1058,6 +1089,24 @@ function action_wireless_update()
 		return
 	end
 
+	local current_htmode = uci:get("wireless", update.radio, "htmode") or "auto"
+	if update.htmode ~= current_htmode and update.htmode ~= "auto" then
+		local supported_modes = wireless_radio_modes(update.radio)
+		if not supported_modes[update.htmode] then
+			respond(400, { ok = false, error = "That width/PHY mode is not reported as supported by the selected radio." })
+			return
+		end
+	end
+
+	local current_txpower = uci:get("wireless", update.radio, "txpower") or "auto"
+	if update.txpower ~= current_txpower and update.txpower ~= "auto" then
+		local supported_power = wireless_radio_power_levels(update.radio)
+		if not supported_power[update.txpower] then
+			respond(400, { ok = false, error = "That transmit-power level is not reported as available by the selected radio." })
+			return
+		end
+	end
+
 	local current_encryption = uci:get("wireless", update.section, "encryption") or "none"
 	local current_key = uci:get("wireless", update.section, "key")
 	if update.encryption ~= "none" and not update.key_supplied
@@ -1067,7 +1116,7 @@ function action_wireless_update()
 	end
 
 	local snapshot = { radio = {}, interface = {} }
-	for _, option in ipairs({ "channel" }) do
+	for _, option in ipairs({ "channel", "htmode", "txpower" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.radio, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected radio settings." })
@@ -1084,7 +1133,11 @@ function action_wireless_update()
 		snapshot.interface[option] = value or false
 	end
 
-	local radio_updates = { channel = update.channel }
+	local radio_updates = {
+		channel = update.channel,
+		htmode = update.htmode == "auto" and false or update.htmode,
+		txpower = update.txpower == "auto" and false or update.txpower
+	}
 	local interface_updates = {
 		ssid = update.ssid,
 		encryption = update.encryption,
@@ -1149,6 +1202,8 @@ function action_wireless_update()
 		encryption = update.encryption,
 		hidden = update.hidden == "1",
 		channel = update.channel,
+		htmode = update.htmode,
+		txpower = update.txpower,
 		key_set = update.encryption ~= "none",
 		reloaded = true,
 		rolled_back = false
