@@ -11,10 +11,10 @@ assert(not office.ipv4_in_subnet("192.168.20.255", "192.168.20.1", "255.255.255.
 assert(not office.ipv4_in_subnet("192.168.20.30", "192.168.20.1", "255.255.0.255"), "non-contiguous netmasks must be rejected")
 assert(not office.ipv4_in_subnet("192.168.20.30", "192.168.20.1", "255.255.255.254"), "point-to-point /31 scopes must not accept host reservations")
 assert(office.live_lease_conflict(
-  "1700000000 aa:bb:cc:dd:ee:02 192.168.20.30 Office-Laptop *\\n",
+  "1700000000 aa:bb:cc:dd:ee:02 192.168.20.30 Office-Laptop *\n",
   "192.168.20.30", "aa:bb:cc:dd:ee:01"), "a live lease to a different MAC must block the reservation")
 assert(not office.live_lease_conflict(
-  "1700000000 aa:bb:cc:dd:ee:01 192.168.20.30 Office-Printer *\\n",
+  "1700000000 aa:bb:cc:dd:ee:01 192.168.20.30 Office-Printer *\n",
   "192.168.20.30", "AA:BB:CC:DD:EE:01"), "the same MAC may keep its current address")
 assert(not office.live_lease_conflict("unparseable lease", "192.168.20.30", "aa:bb:cc:dd:ee:01"))
 
