@@ -9045,3 +9045,14 @@ input::placeholder {
     justify-content: flex-start;
   }
 }
+
+
+.office-chip.warning {
+  border-color: rgba(219,40,95,.35);
+  color: #ffadc1;
+  background: rgba(219,40,95,.07);
+}
+.office-bridge-row .office-chip.warning {
+  align-self: start;
+  white-space: normal;
+}
