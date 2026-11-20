@@ -4238,7 +4238,7 @@ function WirelessConfigEditor({
     !accountingServerValue.endsWith(".") && !accountingServerValue.includes("..") &&
     accountingLabels.every((label) => label.length >= 1 && label.length <= 63 &&
       /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)) &&
-    !(accountingLabels.length === 4 && accountingLabels.every((label) => /^\\d+$/.test(label)) &&
+    !(accountingLabels.length === 4 && accountingLabels.every((label) => /^\d+$/.test(label)) &&
       !accountingLabels.every((label) => Number(label) >= 0 && Number(label) <= 255));
   const accountingPortValid = /^[0-9]{1,5}$/.test(accountingPort) &&
     Number(accountingPort) >= 1 && Number(accountingPort) <= 65535;
@@ -4249,7 +4249,7 @@ function WirelessConfigEditor({
   const accountingReady = encryption !== "wpa2" || !accountingEnabled ||
     (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
       (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
-        !/[\\u0000-\\u001f\\u007f]/.test(accountingSecret))));
+        !/[\u0000-\u001f\u007f]/.test(accountingSecret))));
   const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
     (encryption === "wpa2" && (radiusServer !== config.radius_auth_server ||
       radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0 ||
@@ -4531,7 +4531,7 @@ function WirelessConfigEditor({
       {encryption === "wpa2" && accountingEnabled && !accountingPortValid ? <div className="module-message">Enter a RADIUS accounting port from 1 to 65535.</div> : null}
       {accountingSecretRequired ? <div className="module-message">A new accounting shared secret is required when enabling accounting or changing its server.</div> : null}
       {encryption === "wpa2" && accountingEnabled && accountingSecret.length > 0 &&
-        (accountingSecretBytes < 16 || accountingSecretBytes > 128 || /[\\u0000-\\u001f\\u007f]/.test(accountingSecret))
+        (accountingSecretBytes < 16 || accountingSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(accountingSecret))
         ? <div className="module-message">Accounting shared secret must be 16–128 bytes and contain no control characters.</div> : null}
       {encryption === "wpa2" && radiusSecret.length > 0 &&
         (radiusSecretBytes < 16 || radiusSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(radiusSecret))
