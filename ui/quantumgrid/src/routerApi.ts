@@ -307,6 +307,7 @@ export interface RouterWireGuardPeer {
 }
 
 export interface RouterFirewallRedirect {
+  section: string;
   name: string;
   source_zone: string;
   destination_zone: string;
