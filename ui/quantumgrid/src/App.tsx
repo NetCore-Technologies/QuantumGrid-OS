@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -2483,7 +2483,141 @@ function DiagnosticsControlPage({
   );
 }
 
-function SystemControlPage({ routerOverview, stats }: { routerOverview: RouterOverview | null; stats: Stats }) {
+function RemoteSyslogSettings({ status, refresh }: {
+  status?: RouterRemoteSyslogStatus;
+  refresh: () => void;
+}) {
+  const [enabled, setEnabled] = useState(status?.enabled ?? false);
+  const [host, setHost] = useState(status?.host ?? "");
+  const [port, setPort] = useState(String(status?.port ?? 514));
+  const [protocol, setProtocol] = useState<"tcp" | "udp">(status?.protocol ?? "udp");
+  const [hostname, setHostname] = useState(status?.hostname ?? "");
+  const [prefix, setPrefix] = useState(status?.prefix ?? "");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    setEnabled(status?.enabled ?? false);
+    setHost(status?.host ?? "");
+    setPort(String(status?.port ?? 514));
+    setProtocol(status?.protocol ?? "udp");
+    setHostname(status?.hostname ?? "");
+    setPrefix(status?.prefix ?? "");
+    setConfirmed(false);
+  }, [status?.enabled, status?.host, status?.port, status?.protocol, status?.hostname, status?.prefix]);
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || busy || !status?.service_installed || !status.config_available) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterRemoteSyslog({
+        enabled,
+        host: host.trim(),
+        port: Number(port),
+        protocol,
+        hostname: hostname.trim(),
+        prefix: prefix.trim(),
+      });
+      setEnabled(result.enabled);
+      setHost(result.host);
+      setPort(String(result.port));
+      setProtocol(result.protocol);
+      setHostname(result.hostname);
+      setPrefix(result.prefix);
+      setConfirmed(false);
+      setNotice({
+        success: true,
+        message: result.enabled
+          ? "Remote syslog forwarding is enabled to " + result.host + ":" + result.port + " over " + result.protocol.toUpperCase() + "."
+          : "Remote syslog forwarding has been disabled.",
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "Remote syslog settings could not be updated.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="Remote system logging"
+      eyebrow="NATIVE OPENWRT LOGREAD · CENTRAL OFFICE COLLECTION"
+      action={<Status active={Boolean(status?.enabled)}>{status?.enabled ? "FORWARDING" : status?.available ? "DISABLED" : "UNAVAILABLE"}</Status>}
+    >
+      {!status?.service_installed || !status.config_available ? (
+        <div className="module-message">The native OpenWrt log service or system configuration is unavailable on this firmware.</div>
+      ) : (
+        <form className="remote-syslog-form" onSubmit={save}>
+          <div className="remote-syslog-warning" role="note">
+            <strong>Transport is not encrypted.</strong>
+            <span>OpenWrt's built-in forwarder supports TCP or UDP syslog, not TLS. Use a trusted management network or VPN between the router and log collector. Do not send operational logs across an untrusted public network.</span>
+          </div>
+          <label className="remote-syslog-enabled">
+            <input type="checkbox" checked={enabled} disabled={busy} onChange={(event) => setEnabled(event.target.checked)} />
+            <span>Enable remote syslog forwarding</span>
+          </label>
+          {enabled && (
+            <div className="remote-syslog-fields">
+              <label>
+                <span>Server IPv4 / DNS name</span>
+                <input type="text" value={host} onChange={(event) => setHost(event.target.value)} placeholder="syslog.office.example" maxLength={253} required />
+              </label>
+              <label>
+                <span>Port</span>
+                <input type="number" value={port} onChange={(event) => setPort(event.target.value)} min={1} max={65535} step={1} required />
+              </label>
+              <label>
+                <span>Transport</span>
+                <select value={protocol} onChange={(event) => setProtocol(event.target.value as "tcp" | "udp")}>
+                  <option value="udp">UDP</option>
+                  <option value="tcp">TCP</option>
+                </select>
+              </label>
+              <label>
+                <span>Sender hostname (optional)</span>
+                <input type="text" value={hostname} onChange={(event) => setHostname(event.target.value)} placeholder="aw1000-office-router" maxLength={253} />
+              </label>
+              <label>
+                <span>Message prefix (optional)</span>
+                <input type="text" value={prefix} onChange={(event) => setPrefix(event.target.value)} placeholder="office-site1" maxLength={32} />
+              </label>
+            </div>
+          )}
+          <label className="remote-syslog-confirm">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={busy}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            <span>I confirm this destination and authorize QuantumGrid to update the native system logging settings and restart the log service.</span>
+          </label>
+          <div className="remote-syslog-actions">
+            <button className="hero-button" type="submit" disabled={!confirmed || busy || (enabled && (!host.trim() || !port))}>
+              <Check size={14} /> {busy ? "Applying logging…" : "Apply remote logging"}
+            </button>
+            <span>Local log buffering stays enabled. Changes are limited to the native remote destination options and can be disabled here.</span>
+          </div>
+          {notice && (
+            <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
+              {notice.message}
+            </div>
+          )}
+        </form>
+      )}
+    </Panel>
+  );
+}
+
+
+function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview: RouterOverview | null; stats: Stats; refresh: () => void }) {
   const memory = routerOverview?.system.memory;
   const load = routerOverview?.system.load_avg ?? [];
   const [backupConfirmed, setBackupConfirmed] = useState(false);
@@ -2541,6 +2675,7 @@ function SystemControlPage({ routerOverview, stats }: { routerOverview: RouterOv
         </Panel>
       </div>
       <div className="module-message">Values are reported by the router API; some hardware/firmware builds may not expose CPU, memory or thermal data for every sample.</div>
+      <RemoteSyslogSettings status={routerOverview?.remote_syslog} refresh={refresh} />
       <Panel title="Configuration backup" eyebrow="NATIVE SYSUPGRADE · PRIVATE RECOVERY ARCHIVE">
         <div className="config-backup-warning" role="note">
           <strong>This archive contains secrets.</strong>
@@ -3419,7 +3554,7 @@ function DashboardPage({
   if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
   if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} interfaceCounterDeltas={interfaceCounterDeltas} />;
   if (page === "diagnostics") return <DiagnosticsControlPage stats={stats} telemetryError={telemetryError} routerOverview={routerOverview} refresh={refresh} />;
-  if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} />;
+  if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} refresh={refresh} />;
   if (page === "analytics") return <AnalyticsControlPage stats={stats} trafficHistory={trafficHistory} />;
   if (page === "5g") return <CellularControlPage routerOverview={routerOverview} cellularHistory={cellularHistory} />;
 
