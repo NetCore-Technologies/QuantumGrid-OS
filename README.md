@@ -278,8 +278,12 @@ The authenticated QuantumGrid **Hardware I/O** page reads the kernel GPIO debugf
 when it is mounted and readable, including chip ranges, line labels, consumers, direction and
 reported high/low state. It flags button-like lines only when their kernel label or consumer
 contains a button/reset/WPS/power/key/WLAN hint; this is not a verified physical AW1000 pin map
-or a live button-event stream. GPIO ownership, event wiring, direction changes and output writes
-remain read-only/locked until the board pin map and recovery-safe behaviour are validated.
+or a live button-event stream. The UI and `quantumgrid-hardware-io buttons` command also inventory
+the native `gpio-button-hotplug` driver and existing `/etc/rc.button` handler names. OpenWrt procd
+dispatches events to the handler matching the kernel-reported button name; QuantumGrid deliberately
+does not wrap or replace these handlers, which may implement reset/WPS behaviour. GPIO ownership,
+event interception, direction changes and output writes remain read-only/locked until the board pin
+map and recovery-safe behaviour are validated.
 
 The same page enumerates Linux LED-class devices under `/sys/class/leds`. An administrator can
 change brightness only for a discovered device whose kernel trigger is explicitly reported as
