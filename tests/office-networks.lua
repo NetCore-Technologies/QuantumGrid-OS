@@ -150,6 +150,43 @@ local gateway_scope = office.validate_dhcp_scope_update(
   "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
 
+local valid_bridge_vlan, vlan_error = office.validate_bridge_vlan(
+  "br-lan", "20", { "lan1:t", "lan2:u*", "lan3:u" },
+  { "lan1", "lan2", "lan3", "lan4" }, {
+    { section = "vlan10", device = "br-lan", vlan = "10", ports = { "lan1:u*", "lan2:t" } }
+  })
+assert(valid_bridge_vlan and valid_bridge_vlan.vlan_id == 20)
+assert(valid_bridge_vlan.ports[1] == "lan1:t" and valid_bridge_vlan.ports[2] == "lan2:u*")
+assert(valid_bridge_vlan.port_count == 3)
+
+local edited_bridge_vlan = office.validate_bridge_vlan(
+  "br-lan", "10", { "lan1:t", "lan2:u*" },
+  { "lan1", "lan2", "lan3" }, {
+    { section = "vlan10", device = "br-lan", vlan = "10", ports = { "lan1:u*", "lan2:t" } }
+  }, "vlan10")
+assert(edited_bridge_vlan and edited_bridge_vlan.vlan_id == 10,
+  "editing an existing VLAN must ignore its own ID and PVID snapshot")
+
+local function reject_bridge_vlan(device, vlan, ports, members, existing, section, label)
+  local value, err = office.validate_bridge_vlan(device, vlan, ports, members, existing, section)
+  assert(value == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should report why it was rejected")
+end
+reject_bridge_vlan("br-lan;uci", "20", { "lan1:t" }, { "lan1" }, {}, nil, "injected bridge device")
+reject_bridge_vlan("br-lan", "0", { "lan1:t" }, { "lan1" }, {}, nil, "zero VLAN ID")
+reject_bridge_vlan("br-lan", "4095", { "lan1:t" }, { "lan1" }, {}, nil, "out-of-range VLAN ID")
+reject_bridge_vlan("br-lan", "20", {}, { "lan1" }, {}, nil, "empty VLAN membership")
+reject_bridge_vlan("br-lan", "20", { "lan1" }, { "lan1" }, {}, nil, "implicit port mode")
+reject_bridge_vlan("br-lan", "20", { "lan9:t" }, { "lan1", "lan2" }, {}, nil, "port outside selected bridge")
+reject_bridge_vlan("br-lan", "20", { "lan1:t", "lan1:u*" }, { "lan1" }, {}, nil, "duplicate port entry")
+reject_bridge_vlan("br-lan", "20", { "lan1:t", "lan2:u*" }, { "lan1", "lan2" }, {
+  { section = "other", device = "br-lan", vlan = "20", ports = { "lan2:t" } }
+}, nil, "duplicate bridge VLAN ID")
+reject_bridge_vlan("br-lan", "20", { "lan1:t", "lan2:u*" }, { "lan1", "lan2" }, {
+  { section = "other", device = "br-lan", vlan = "30", ports = { "lan2:u*" } }
+}, nil, "duplicate PVID across VLANs")
+reject_bridge_vlan("br-lan", "20", { "lan1:t" }, {}, {}, nil, "bridge without declared ports")
+
 local result = office.build_inventory({
   available = true,
   sampled_at = 1700000000,
