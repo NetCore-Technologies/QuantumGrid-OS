@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -116,6 +116,23 @@ function fmt(value: number, digits = 0) {
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   });
+}
+
+function formatDurationSeconds(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return "N/A";
+  let remaining = Math.floor(value);
+  const days = Math.floor(remaining / 86400);
+  remaining %= 86400;
+  const hours = Math.floor(remaining / 3600);
+  remaining %= 3600;
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
+  const parts: string[] = [];
+  if (days > 0) parts.push(days + "d");
+  if (hours > 0 || days > 0) parts.push(hours + "h");
+  if (minutes > 0 || hours > 0 || days > 0) parts.push(minutes + "m");
+  parts.push(seconds + "s");
+  return parts.join(" ");
 }
 
 function Status({ children, active = true }: { children: React.ReactNode; active?: boolean }) {
@@ -4354,7 +4371,7 @@ function WirelessConfigEditor({
 }
 
 
-function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOverview | null; refresh: () => void }) {
   const radios = routerOverview?.wireless ?? [];
   const wirelessConfigs = routerOverview?.wireless_configs;
   const clients = routerOverview?.clients ?? [];
@@ -5492,7 +5509,7 @@ function ipv4SubnetContainsHost(address: string, interfaceAddress: string, netma
   if (prefix < 1 || prefix > 30) return false;
   const network = (router & mask) >>> 0;
   const broadcast = (network | inverse) >>> 0;
-  return ((ip & mask) >>> 0) === network && ip > network && ip < broadcast;
+  return ((ip & mask) >>> 0) === network && ip > network && ip < broadcast && ip !== router;
 }
 
 
@@ -5514,7 +5531,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!confirmed || busy || !network) return;
+    if (!confirmed || busy || !selectedNetwork) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -5531,7 +5548,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
       setStart("");
       setLimit("");
       setLeaseTime("12h");
-      setConfirmed(false);
+      setConfirmedNetwork(null);
       refresh();
     } catch (cause) {
       setNotice({
@@ -5567,7 +5584,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
           <input
             type="text"
             value={leaseTime}
-            onChange={(event) => { setLeaseTime(event.target.value); setConfirmed(false); }}
+            onChange={(event) => { setLeaseTime(event.target.value); setConfirmedNetwork(null); }}
             placeholder="12h"
             maxLength={16}
             pattern="[1-9][0-9]{0,8}[smhdw]?"
@@ -5582,7 +5599,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
             max={4294967294}
             step={1}
             value={start}
-            onChange={(event) => { setStart(event.target.value); setConfirmed(false); }}
+            onChange={(event) => { setStart(event.target.value); setConfirmedNetwork(null); }}
             placeholder="100"
             required
           />
@@ -5595,7 +5612,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
             max={4294967294}
             step={1}
             value={limit}
-            onChange={(event) => { setLimit(event.target.value); setConfirmed(false); }}
+            onChange={(event) => { setLimit(event.target.value); setConfirmedNetwork(null); }}
             placeholder="120"
             required
           />
@@ -5673,7 +5690,7 @@ function DhcpScopeToggle({ scope, refresh }: {
           ? (enable ? "DHCP scope enabled and dnsmasq restarted." : "DHCP scope disabled and dnsmasq restarted.")
           : (enable ? "DHCP scope was already enabled." : "DHCP scope was already disabled."),
       });
-      setConfirmed(false);
+      setConfirmedNetwork(null);
       refresh();
     } catch (cause) {
       setNotice({
@@ -5712,7 +5729,7 @@ function DhcpScopeToggle({ scope, refresh }: {
             onClick={() => {
               setDeletePending(true);
               setDeleteConfirmed(false);
-              setConfirmed(false);
+              setConfirmedNetwork(null);
             }}
             disabled={busy || deleteBusy}
           >Delete DHCP scope</button>

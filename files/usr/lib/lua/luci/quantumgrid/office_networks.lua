@@ -322,7 +322,8 @@ function ipv4_in_subnet(address, interface_address, netmask)
 	local size = 2 ^ (32 - prefix)
 	local host_network = math.floor(host / size) * size
 	local router_network = math.floor(router / size) * size
-	return host_network == router_network and host > host_network and host < host_network + size - 1
+	return host_network == router_network and host ~= router
+		and host > host_network and host < host_network + size - 1
 end
 
 local function parse_vlan_id(value)
