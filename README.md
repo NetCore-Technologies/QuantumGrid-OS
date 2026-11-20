@@ -87,7 +87,7 @@ while scanning. The same page groups observed BSSIDs by reported band/channel an
 reported signal; these counts are scan visibility only, not airtime or interference measurements.
 Scan inventories can be searched by SSID/BSSID/radio, band, channel, security or mode; filtered by band/security; sorted by signal, channel or SSID; and exported using the visible filtered result set with a one-click filter reset.
 They can also be exported as CSV; network-controlled text is quoted and spreadsheet formula
-prefixes are neutralised in the export. The Wi-Fi page also builds a read-only shortlist from
+prefixes are neutralised in the export. The Wi-Fi page also includes an authenticated editor for existing AP interfaces: SSID, WPA2/WPA3 security, a new or preserved passphrase, hidden SSID and driver-reported unrestricted channel selection. It commits only the selected AP/radio options, reloads Wi-Fi and attempts restoration if reload fails; width, power, band steering and full radio enable/disable controls are not yet connected. The image includes upstream usteer and its LuCI app for optional multi-AP steering, but the usteer daemon is disabled by first-boot defaults until an administrator defines the participating SSIDs and policy. The native app is available at `/cgi-bin/luci/admin/network/usteer`. The Wi-Fi page also builds a read-only shortlist from
 unrestricted channels returned by the radio driver, comparing nearby BSSID signal and advertised
 channel-width overlap within each radio/band. The router's own BSSID is excluded when reported.
 Scores are relative to that shortlist, not measured airtime, CCA busy time, noise or guaranteed
