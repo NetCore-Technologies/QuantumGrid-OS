@@ -2497,16 +2497,6 @@ function RemoteSyslogSettings({ status, refresh }: {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
-  useEffect(() => {
-    setEnabled(status?.enabled ?? false);
-    setHost(status?.host ?? "");
-    setPort(String(status?.port ?? 514));
-    setProtocol(status?.protocol ?? "udp");
-    setHostname(status?.hostname ?? "");
-    setPrefix(status?.prefix ?? "");
-    setConfirmed(false);
-  }, [status?.enabled, status?.host, status?.port, status?.protocol, status?.hostname, status?.prefix]);
-
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!confirmed || busy || !status?.service_installed || !status.config_available) return;
@@ -2675,7 +2665,11 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
         </Panel>
       </div>
       <div className="module-message">Values are reported by the router API; some hardware/firmware builds may not expose CPU, memory or thermal data for every sample.</div>
-      <RemoteSyslogSettings status={routerOverview?.remote_syslog} refresh={refresh} />
+      <RemoteSyslogSettings
+        key={JSON.stringify(routerOverview?.remote_syslog ?? null)}
+        status={routerOverview?.remote_syslog}
+        refresh={refresh}
+      />
       <Panel title="Configuration backup" eyebrow="NATIVE SYSUPGRADE · PRIVATE RECOVERY ARCHIVE">
         <div className="config-backup-warning" role="note">
           <strong>This archive contains secrets.</strong>
@@ -5306,8 +5300,23 @@ function AuditLogPage() {
   }, []);
 
   useEffect(() => {
-    void loadAudit();
-  }, [loadAudit]);
+    let active = true;
+    fetchRouterAuditLog()
+      .then((result) => {
+        if (active) setInventory(result);
+      })
+      .catch((cause) => {
+        if (active) {
+          setError(cause instanceof Error ? cause.message : "The administrative audit log is unavailable.");
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const events = inventory?.events ?? [];
   const visible = events.filter((event) => {
@@ -5466,19 +5475,16 @@ function DhcpScopeCreateForm({ networks, refresh }: {
   refresh: () => void;
 }) {
   const [network, setNetwork] = useState(networks[0]?.name ?? "");
+  const selectedNetwork = networks.some((item) => item.name === network)
+    ? network
+    : networks[0]?.name ?? "";
   const [start, setStart] = useState("");
   const [limit, setLimit] = useState("");
   const [leaseTime, setLeaseTime] = useState("12h");
-  const [confirmed, setConfirmed] = useState(false);
+  const [confirmedNetwork, setConfirmedNetwork] = useState<string | null>(null);
+  const confirmed = confirmedNetwork === selectedNetwork;
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
-
-  useEffect(() => {
-    if (!networks.some((item) => item.name === network)) {
-      setNetwork(networks[0]?.name ?? "");
-      setConfirmed(false);
-    }
-  }, [networks, network]);
 
   const create = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -5487,7 +5493,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
     setNotice(null);
     try {
       const result = await createRouterDhcpScope({
-        network,
+        network: selectedNetwork,
         start: start.trim(),
         limit: limit.trim(),
         lease_time: leaseTime.trim(),
@@ -5524,7 +5530,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
       <div className="office-reservation-grid">
         <label>
           <span>Existing static LAN</span>
-          <select value={network} onChange={(event) => { setNetwork(event.target.value); setConfirmed(false); }} required>
+          <select value={selectedNetwork} onChange={(event) => { setNetwork(event.target.value); setConfirmedNetwork(null); }} required>
             {networks.map((item) => (
               <option key={item.name} value={item.name}>{item.name} · {item.ipv4[0]} / {item.netmask}</option>
             ))}
@@ -5574,12 +5580,12 @@ function DhcpScopeCreateForm({ networks, refresh }: {
           type="checkbox"
           checked={confirmed}
           disabled={busy}
-          onChange={(event) => setConfirmed(event.target.checked)}
+          onChange={(event) => setConfirmedNetwork(event.target.checked ? selectedNetwork : null)}
         />
         <span>I confirm this LAN should start issuing DHCP leases from the calculated address pool, and authorize QuantumGrid to create the scope and restart dnsmasq.</span>
       </label>
       <div className="office-reservation-edit-actions">
-        <button className="hero-button" type="submit" disabled={!confirmed || busy || !network || !start || !limit}>
+        <button className="hero-button" type="submit" disabled={!confirmed || busy || !selectedNetwork || !start || !limit}>
           <Check size={14} /> {busy ? "Creating DHCP scope…" : "Create DHCP scope"}
         </button>
         <span>Only an existing static IPv4 interface is used. The router validates pool boundaries and overlap. This does not create VLANs, firewall zones, Wi-Fi SSIDs or network interfaces.</span>
@@ -5727,13 +5733,6 @@ function DhcpScopeEditor({ scope, refresh }: {
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
-
-  useEffect(() => {
-    setStart(scope.start);
-    setLimit(String(scope.limit ?? ""));
-    setLeaseTime(scope.lease_time || "12h");
-    setConfirmed(false);
-  }, [scope.start, scope.limit, scope.lease_time]);
 
   const changed = start !== scope.start || limit !== String(scope.limit ?? "") || leaseTime !== (scope.lease_time || "12h");
   const save = async (event: FormEvent<HTMLFormElement>) => {
@@ -6163,7 +6162,11 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                     <Status active={scope.range_valid && !scope.overlap}>{scope.ignore ? "DISABLED" : scope.overlap ? "OVERLAP" : scope.range_valid ? "RANGE VALID" : "RANGE INVALID"}</Status>
                   </div>
                   <DhcpScopeToggle scope={scope} refresh={refresh} />
-                  <DhcpScopeEditor scope={scope} refresh={refresh} />
+                  <DhcpScopeEditor
+                    key={`${scope.section}:${scope.start}:${scope.limit ?? ""}:${scope.lease_time || "12h"}`}
+                    scope={scope}
+                    refresh={refresh}
+                  />
                 </div>
               ))}
             </div>
