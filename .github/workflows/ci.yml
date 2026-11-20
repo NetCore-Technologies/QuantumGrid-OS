@@ -35,6 +35,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/office-vlan-api.test.mjs
       - name: Test guarded inter-zone forwarding API requests and response verification
         run: node --experimental-strip-types --test ../../tests/office-forwarding-api.test.mjs
+      - name: Test guarded firewall zone policy API requests and response verification
+        run: node --experimental-strip-types --test ../../tests/office-zone-policy-api.test.mjs
       - name: Test Wi-Fi channel planner
         run: node --experimental-strip-types --test ../../tests/wifi-channel-planner.test.mjs
       - name: Test local Wi-Fi client history
