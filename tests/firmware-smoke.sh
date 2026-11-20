@@ -340,7 +340,7 @@ grep -Fq 'adblock-fast' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua
 grep -Fq 'network.interface.' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'item["ipv6-address"]' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'ipv6 = ipv6_addresses' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
-grep -Fq 'ipv6: string[]' "$ROOT/ui/quantumgrid/src/routerApi.ts"
+grep -Fq 'ipv6?: string[]' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'IPv6 addresses' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'local function default_route_inventory(fs)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'command = "/sbin/ip -4 route show table all"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
