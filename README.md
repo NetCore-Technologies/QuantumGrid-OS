@@ -136,7 +136,9 @@ requires substantial disk space, RAM and time; use a Linux build host with suffi
 
 The Arcadyan AW1000 release has one persistent firmware format: the device-specific
 squashfs factory UBI image. The initramfs image is a temporary RAM-boot recovery/development
-artifact; it is not a persistent firmware installer.
+artifact; it is not a persistent firmware installer. The release also includes
+`install-aw1000-ubi.sh`, a conservative on-router preflight/installer for the original AW1000
+100 MiB MTD layout. It defaults to dry-run and requires interactive confirmation before writing.
 
 | Artifact | Intended use |
 |---|---|
@@ -146,11 +148,18 @@ artifact; it is not a persistent firmware installer.
 | `SHA256SUMS` | Verify the published release assets |
 | `BUILDINFO.txt` | Source commits, configuration hash and build metadata |
 
-QuantumGrid does **not** produce or publish a `sysupgrade.bin` image for the AW1000 profile.
-Do not upload the `.ubi` file to a generic LuCI sysupgrade form or assume a stock-firmware
-web installer accepts it. The factory UBI image is **not** a universal stock-firmware installer.
-Follow [Docs/RECOVERY.md](Docs/RECOVERY.md), back up first and verify the exact image and checksum.
-Do not flash an image until its AW1000-specific installation route is confirmed.
+QuantumGrid intentionally publishes **no `sysupgrade.bin`** for the AW1000 build. The
+persistent release artifact is the factory `.ubi` image. Do not upload it to a generic LuCI
+sysupgrade form or assume a stock-firmware web installer accepts it.
+
+For the original standard AW1000 layout, boot the matching initramfs temporarily over UART/TFTP,
+verify the release checksum, transfer the factory image and installer script, then run the
+installer once without `--write` to inspect its preflight. It accepts only the expected AW1000
+board identity and standard `mtd18`/`mtd20` 100 MiB rootfs layout; it refuses expanded layouts
+and installed squashfs roots. A real write requires `--write` plus typing `ERASE rootfs` at the
+router console. It writes only `rootfs` (`mtd18`) and leaves `rootfs_1` (`mtd20`) untouched.
+This is a destructive recovery/install operation, not a generic in-service upgrade. See
+[Docs/RECOVERY.md](Docs/RECOVERY.md) and back up first.
 
 ## Publish the website
 
