@@ -2991,6 +2991,32 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   const tools = platform?.tools ?? [];
   const services = platform?.services ?? [];
   const storage = platform?.storage ?? [];
+  const exportPlatformInventory = () => {
+    if (!platform?.available) return;
+    const generatedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Generated at (UTC)", "Hostname", "Section", "Item", "Status", "Detail", "Total bytes", "Available bytes", "Used percent"],
+      [generatedAt, platform.hostname, "Platform", "Firmware identity", "AVAILABLE",
+        [platform.model, platform.board_name, platform.distribution, platform.version, platform.revision,
+          platform.target, platform.kernel, platform.description].filter(Boolean).join(" | "), "", "", ""],
+      [generatedAt, platform.hostname, "Package manager", platform.package_manager, "DETECTED", "", "", "", ""],
+      ...modules.map((item) => [generatedAt, platform.hostname, "Kernel module", item.name, item.loaded ? "LOADED" : "NOT LOADED", "", "", "", ""]),
+      ...tools.map((item) => [generatedAt, platform.hostname, "Diagnostic tool", item.name, item.available ? "AVAILABLE" : "MISSING", "", "", "", ""]),
+      ...services.map((item) => [generatedAt, platform.hostname, "Init script", item.name, item.installed ? "PRESENT" : "MISSING", "Presence is not runtime health", "", "", ""]),
+      ...storage.map((item) => [generatedAt, platform.hostname, "MTD partition", item.device, item.name, `erase block ${item.erase_size_bytes} bytes`, item.size_bytes, "", ""]),
+      ...(platform.block_devices ?? []).map((item) => [generatedAt, platform.hostname, "Block device", item.name, "REPORTED", `major:minor ${item.major}:${item.minor}`, item.size_bytes, "", ""]),
+      ...(platform.mounts ?? []).map((item) => [generatedAt, platform.hostname, "Mount", item.mountpoint, item.read_only ? "READ ONLY" : "READ / WRITE", `${item.source} · ${item.filesystem}`, item.total_bytes, item.available_bytes, item.used_percent]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `quantumgrid-platform-inventory-${generatedAt.replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
   return (
     <div className="module-page">
       <section className="module-hero">
@@ -2999,7 +3025,10 @@ function AdvancedControlPage({ routerOverview, refresh }: {
           <div className="setup-kicker">READ-ONLY PLATFORM INVENTORY</div>
           <h1>Advanced</h1>
           <p>Firmware identity, target platform, loaded kernel modules, installed service scripts, diagnostic tools and flash partitions reported by the running router.</p>
-          <button className="hero-button" onClick={refresh}><RefreshCw size={16} /> Refresh platform inventory</button>
+          <div className="platform-actions">
+            <button className="hero-button" onClick={refresh}><RefreshCw size={16} /> Refresh platform inventory</button>
+            <button className="hero-button" onClick={exportPlatformInventory} disabled={!platform?.available}>Export inventory CSV</button>
+          </div>
         </div>
       </section>
       {!platform?.available ? (
@@ -3096,7 +3125,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
           </div>
         </>
       )}
-      <div className="module-message">This page is read-only. It does not install packages, load/unload modules, change service state or write firmware. Module and service presence are reported separately from operational status.</div>
+      <div className="module-message">This page is read-only. It does not install packages, load/unload modules, change service state or write firmware. Export quotes values and neutralises spreadsheet formula prefixes. Module and service presence are reported separately from operational status.</div>
     </div>
   );
 }

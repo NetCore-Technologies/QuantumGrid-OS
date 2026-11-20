@@ -103,7 +103,8 @@ router configuration. The Advanced page reports system.board firmware identity, 
 modules, init-script and diagnostic-tool presence, package-manager detection, MTD partitions,
 block devices and important system mounts, including total/available capacity and usage where
 statvfs is supported. These checks are read-only; service-script presence is not presented as proof
-that a service is running. Advanced policy controls remain unconnected and read-only.
+that a service is running. The Advanced inventory can be exported as a spreadsheet-safe support
+CSV. Advanced policy controls remain unconnected and read-only.
 
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.

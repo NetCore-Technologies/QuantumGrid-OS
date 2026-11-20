@@ -7043,3 +7043,5 @@ input::placeholder {
     grid-row: 2;
   }
 }
+
+.platform-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
