@@ -2433,14 +2433,26 @@ function action_config_backup()
 		return
 	end
 
-	local temp_ok, generated_path = pcall(os.tmpname)
-	if not temp_ok then
-		respond(500, { ok = false, error = "A temporary backup path could not be allocated." })
+	local util = require "luci.util"
+	local mktemp_command = nil
+	if fs.access("/bin/mktemp") == true then
+		mktemp_command = "/bin/mktemp"
+	elseif fs.access("/usr/bin/mktemp") == true then
+		mktemp_command = "/usr/bin/mktemp"
+	end
+	if not mktemp_command then
+		respond(503, { ok = false, error = "A secure mktemp utility is unavailable; no backup was created." })
 		return
 	end
+	local temp_ok, temp_output = pcall(util.exec,
+		mktemp_command .. " /tmp/quantumgrid-config-backup.XXXXXX")
+	local generated_path = type(temp_output) == "string"
+		and temp_output:match("^([^\\r\\n]+)") or nil
+	if generated_path then generated_path = generated_path:gsub("%s+$", "") end
+	if not temp_ok then generated_path = nil end
 	local backup_path, path_error = validator.validate_temp_path(generated_path)
-	if not backup_path then
-		respond(500, { ok = false, error = path_error })
+	if not backup_path or fs.access(backup_path) ~= true then
+		respond(500, { ok = false, error = path_error or "The secure temporary backup file was not created." })
 		return
 	end
 
