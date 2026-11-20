@@ -6456,7 +6456,36 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
             {(hardware.button_handlers ?? []).map((name) => <span key={name}>{name}</span>)}
           </div>
         )}
-        <div className="module-message">OpenWrt procd dispatches Linux button events to the matching /etc/rc.button handler. QuantumGrid inventories these existing names but does not replace, wrap or intercept reset/WPS actions, and does not yet display a live press/release event stream.</div>
+        <div className="module-message">OpenWrt procd dispatches Linux button events to the matching /etc/rc.button handler. QuantumGrid observes the separate procd hotplug.button ubus notification stream; it does not replace, wrap, intercept or delay reset/WPS handlers.</div>
+      </Panel>
+
+      <Panel title="Live press/release events" eyebrow="PROCD UBUS · READ-ONLY OBSERVER" action={<Status active={hardware?.button_events?.monitor_available === true}>{hardware?.button_events?.monitor_available ? "MONITORING" : "WAITING"}</Status>}>
+        <div className="hardware-button-status">
+          <div><span>Event listener</span><Status active={hardware?.button_events?.monitor_available === true}>{hardware?.button_events?.monitor_available ? "CONNECTED" : "NOT CONNECTED"}</Status></div>
+          <div><span>Captured since boot</span><strong>{fmt(hardware?.button_events?.count ?? 0)}</strong></div>
+        </div>
+        {!hardware?.button_events?.monitor_available ? (
+          <div className="module-message">The read-only event observer is not connected yet. Confirm the QuantumGrid button-event service is enabled and procd exposes hotplug.button.</div>
+        ) : (hardware.button_events.events ?? []).length === 0 ? (
+          <div className="module-message">The observer is connected, but no button press/release events have been captured since boot. A button event is shown only when the kernel button driver reports it.</div>
+        ) : (
+          <div className="hardware-button-event-list">
+            {hardware.button_events.events.slice().reverse().slice(0, 20).map((event) => (
+              <div className="hardware-button-event-row" key={event.sequence + "-" + event.button + "-" + event.action}>
+                <div>
+                  <strong>{event.button}</strong>
+                  <span>{event.action.toUpperCase()} · {event.type.toUpperCase()} · SEQ {event.sequence}</span>
+                </div>
+                <div>
+                  <strong>{event.action === "released" ? "Held " + event.seen_seconds + " s" : "Press started"}</strong>
+                  <span>{new Date(event.timestamp * 1000).toLocaleString()}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        {(hardware?.button_events?.count ?? 0) >= 64 && <div className="module-message">The on-router event ring keeps the most recent 64 records; older events roll off automatically.</div>}
+        <div className="module-message">Events are copied from procd's ubus notification payload into a bounded local ring. SEEN is the duration reported by the kernel between state transitions; release events normally carry the hold duration. QuantumGrid never opens /dev/input/event* or changes /etc/rc.button.</div>
       </Panel>
 
       <Panel title="Linux input devices" eyebrow="READ-ONLY · /PROC/BUS/INPUT/DEVICES">
@@ -6531,7 +6560,7 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
       <Panel title="Hardware safety boundary" eyebrow="AW1000 PIN-MAP VALIDATION">
         <div className="hardware-safety-grid">
           <div><strong>GPIO input</strong><Status active={gpio?.available === true}>READ-ONLY</Status><span>GPIO line ownership, direction and level are reported only when the kernel debugfs interface exposes them.</span></div>
-          <div><strong>Button events</strong><Status active={false}>NOT YET WIRED</Status><span>Raw hotplug events and press/hold actions are not surfaced as live event streams yet.</span></div>
+          <div><strong>Button events</strong><Status active={hardware?.button_events?.monitor_available === true}>READ-ONLY UBUS</Status><span>Recent procd press/release notifications are recorded locally; native handlers remain untouched.</span></div>
           <div><strong>GPIO outputs</strong><Status active={false}>LOCKED</Status><span>No direct pin writes without a verified AW1000 pin map, ownership checks and recovery-safe policy.</span></div>
           <div><strong>LED class</strong><Status active={leds.some((led) => led.controllable)}>BOUNDED CONTROL</Status><span>Only kernel-exported LED devices with a confirmed none trigger can be adjusted.</span></div>
         </div>

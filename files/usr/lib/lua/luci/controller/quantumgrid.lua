@@ -2302,6 +2302,10 @@ local function hardware_io_status(fs)
 	local hardware = require "luci.quantumgrid.hardware_io"
 	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
 	local input_devices = hardware.parse_input_devices(read_file("/proc/bus/input/devices"))
+	local button_events = hardware.parse_button_events(
+		read_file("/var/run/quantumgrid/button-events.tsv"), os.time())
+	button_events.monitor_available =
+		fs.access("/var/run/quantumgrid/button-events.monitor") == true
 	local leds = {}
 	local iterator_ok, iterator = pcall(fs.dir, "/sys/class/leds")
 	local leds_available = iterator_ok and type(iterator) == "function"
@@ -2352,6 +2356,7 @@ local function hardware_io_status(fs)
 		button_driver_loaded = button_driver_loaded,
 		button_hooks_available = button_hooks_available,
 		button_handlers = button_handlers,
+		button_events = button_events,
 		sampled_at = os.time()
 	}
 end

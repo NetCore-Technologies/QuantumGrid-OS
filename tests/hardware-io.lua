@@ -56,6 +56,30 @@ end
 local cappedInputs = hardware.parse_input_devices(table.concat(manyInputs, "\n"))
 assert(cappedInputs.count == 40 and #cappedInputs.devices == 32 and cappedInputs.truncated, "input inventory must be capped")
 
+local buttonEvents = hardware.parse_button_events([[
+1700000001|101|reset|pressed|0|key
+1700000006|102|reset|released|5|key
+1700000007|103|wps|pressed|0|key
+]], 1700000010)
+assert(buttonEvents.available and buttonEvents.count == 3 and #buttonEvents.events == 3)
+assert(not buttonEvents.monitor_available, "the monitor connection state is supplied by the controller")
+assert(buttonEvents.events[1].button == "reset" and buttonEvents.events[1].action == "pressed")
+assert(buttonEvents.events[2].seen_seconds == 5 and buttonEvents.events[2].sequence == "102")
+assert(buttonEvents.events[3].type == "key" and buttonEvents.sampled_at == 1700000010)
+assert(not hardware.parse_button_events(nil).available, "a missing event log must be unavailable")
+
+local manyButtonEvents = {}
+for index = 1, 70 do
+	table.insert(manyButtonEvents, string.format("%d|%d|reset|released|%d|key", 1700000000 + index, index, index))
+end
+table.insert(manyButtonEvents, "1700000100|101|bad/name|pressed|0|key")
+table.insert(manyButtonEvents, "1700000101|102|reset|timeout|3|key")
+table.insert(manyButtonEvents, "1700000102|103|wps|released|999999999|key")
+local cappedButtonEvents = hardware.parse_button_events(table.concat(manyButtonEvents, "\n"))
+assert(cappedButtonEvents.count == 70 and #cappedButtonEvents.events == 64 and cappedButtonEvents.truncated)
+assert(cappedButtonEvents.events[1].sequence == "7" and cappedButtonEvents.events[64].sequence == "70",
+	"the parser must retain the latest 64 well-formed events")
+
 local trigger = hardware.parse_trigger_text("none timer [heartbeat] default-on")
 assert(trigger.available and trigger.active == "heartbeat", "active LED trigger should be parsed")
 local noTrigger = hardware.parse_trigger_text("trigger data unavailable")
@@ -82,4 +106,4 @@ expect_invalid("status", "1", 0, "zero maximum")
 expect_invalid("status", "1", 65536, "unsupported maximum")
 expect_invalid(string.rep("a", 65), "1", 255, "overlong LED name")
 
-print("hardware-io: GPIO, input-device, trigger and LED validation tests passed")
+print("hardware-io: GPIO, input-device, button-event, trigger and LED validation tests passed")

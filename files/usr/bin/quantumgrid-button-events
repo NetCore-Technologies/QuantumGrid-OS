@@ -1,0 +1,79 @@
+#!/bin/sh
+# Read-only subscriber for OpenWrt procd button hotplug notifications.
+# Never opens input devices or modifies /etc/rc.button handlers.
+
+set -eu
+LC_ALL=C
+export LC_ALL
+umask 077
+
+STATE_DIR=/var/run/quantumgrid
+EVENT_FILE="$STATE_DIR/button-events.tsv"
+MONITOR_FILE="$STATE_DIR/button-events.monitor"
+TEMP_FILE="$STATE_DIR/button-events.tsv.tmp"
+
+mkdir -p "$STATE_DIR"
+chmod 700 "$STATE_DIR"
+
+cleanup() {
+  rm -f "$MONITOR_FILE" "$TEMP_FILE"
+}
+trap cleanup 0 HUP INT TERM
+
+record_event() {
+  raw_event="$1"
+  action="$(jsonfilter -s "$raw_event" -e '@.event.ACTION' 2>/dev/null | sed -n '1p')"
+  button="$(jsonfilter -s "$raw_event" -e '@.event.BUTTON' 2>/dev/null | sed -n '1p')"
+  seen="$(jsonfilter -s "$raw_event" -e '@.event.SEEN' 2>/dev/null | sed -n '1p')"
+  sequence="$(jsonfilter -s "$raw_event" -e '@.event.SEQNUM' 2>/dev/null | sed -n '1p')"
+  event_type="$(jsonfilter -s "$raw_event" -e '@.event.TYPE' 2>/dev/null | sed -n '1p')"
+
+  case "$action" in
+    pressed|released) ;;
+    *) return 0 ;;
+  esac
+  case "$button" in
+    ''|*[!A-Za-z0-9_.-]*) return 0 ;;
+  esac
+  case "$seen" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  case "$sequence" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+  case "$event_type" in
+    switch) ;;
+    *) event_type=key ;;
+  esac
+
+  timestamp="$(date +%s)"
+  case "$timestamp" in
+    ''|*[!0-9]*) return 0 ;;
+  esac
+
+  {
+    if [ -r "$EVENT_FILE" ]; then
+      tail -n 63 "$EVENT_FILE" || return 1
+    fi
+    printf '%s|%s|%s|%s|%s|%s\n' \
+      "$timestamp" "$sequence" "$button" "$action" "$seen" "$event_type"
+  } > "$TEMP_FILE" || {
+    rm -f "$TEMP_FILE"
+    return 1
+  }
+  mv "$TEMP_FILE" "$EVENT_FILE"
+}
+
+while :
+do
+  if ubus list 2>/dev/null | grep -Fxq 'hotplug.button'; then
+    date +%s > "$MONITOR_FILE"
+    ubus subscribe hotplug.button 2>/dev/null |
+      while IFS= read -r event
+      do
+        record_event "$event" || :
+      done
+  fi
+  rm -f "$MONITOR_FILE"
+  sleep 2
+done

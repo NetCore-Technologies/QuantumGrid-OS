@@ -1,0 +1,7 @@
+#!/bin/sh
+# Enable the passive button-event observer on first boot.
+if [ -x /etc/init.d/quantumgrid-button-events ]; then
+  /etc/init.d/quantumgrid-button-events enable >/dev/null 2>&1 || true
+  /etc/init.d/quantumgrid-button-events start >/dev/null 2>&1 || true
+fi
+exit 0

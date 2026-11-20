@@ -63,7 +63,19 @@ show_buttons() {
   else
     echo "GPIO debugfs is not readable; button-like GPIO labels are unavailable."
   fi
-  echo "Native hotplug handlers are listed, not intercepted; a label is not a verified physical mapping."
+  echo "=== Read-only procd button-event monitor ==="
+  if [ -r /var/run/quantumgrid/button-events.monitor ]; then
+    echo "Monitor: subscribed to hotplug.button"
+  else
+    echo "Monitor: unavailable or waiting for procd"
+  fi
+  if [ -r /var/run/quantumgrid/button-events.tsv ]; then
+    echo "Recent events (timestamp, button, action, SEEN seconds, type, sequence):"
+    tail -n 10 /var/run/quantumgrid/button-events.tsv | awk -F '|' 'NF == 6 { printf "  %s  %s  %s  SEEN=%ss  %s  #%s\\n", $1, $3, $4, $5, $6, $2 }'
+  else
+    echo "No button events have been captured since this boot."
+  fi
+  echo "Events are observed through procd ubus notifications; native /etc/rc.button handlers are not intercepted."
 }
 
 show_leds() {

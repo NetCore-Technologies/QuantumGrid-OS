@@ -143,6 +143,49 @@ function parse_input_devices(contents)
 	return result
 end
 
+local MAX_BUTTON_EVENTS = 64
+
+function parse_button_events(contents, sampled_at)
+	local result = {
+		available = type(contents) == "string",
+		monitor_available = false,
+		events = {},
+		count = 0,
+		truncated = false,
+		sampled_at = tonumber(sampled_at) or os.time()
+	}
+	if type(contents) ~= "string" then return result end
+
+	for line in contents:gmatch("[^\r\n]+") do
+		local timestamp, sequence, button, action, seen, event_type =
+			line:match("^(%d+)|(%d+)|([%w_.%-]+)|([%a]+)|(%d+)|([%a]+)$")
+		local at = tonumber(timestamp)
+		local duration = tonumber(seen)
+		if timestamp and #timestamp <= 12 and sequence and #sequence <= 20
+			and button and #button <= 64
+			and (action == "pressed" or action == "released")
+			and seen and #seen <= 9
+			and (event_type == "key" or event_type == "switch")
+			and at and at >= 0 and at <= 999999999999
+			and duration and duration >= 0 and duration <= 31536000 then
+			result.count = result.count + 1
+			if #result.events >= MAX_BUTTON_EVENTS then
+				table.remove(result.events, 1)
+				result.truncated = true
+			end
+			table.insert(result.events, {
+				timestamp = at,
+				sequence = sequence,
+				button = safe_text(button, 64),
+				action = action,
+				seen_seconds = duration,
+				type = event_type
+			})
+		end
+	end
+	return result
+end
+
 function parse_trigger_text(contents)
 	if type(contents) ~= "string" then
 		return { available = false, active = nil }

@@ -537,6 +537,24 @@ export interface RouterInputDeviceInventory {
   truncated: boolean;
 }
 
+export interface RouterButtonEvent {
+  timestamp: number;
+  sequence: string;
+  button: string;
+  action: "pressed" | "released";
+  seen_seconds: number;
+  type: "key" | "switch";
+}
+
+export interface RouterButtonEventInventory {
+  available: boolean;
+  monitor_available: boolean;
+  events: RouterButtonEvent[];
+  count: number;
+  truncated: boolean;
+  sampled_at: number;
+}
+
 export interface RouterHardwareIoStatus {
   available: boolean;
   gpio: RouterGpioInventory;
@@ -546,6 +564,7 @@ export interface RouterHardwareIoStatus {
   button_driver_loaded: boolean;
   button_hooks_available: boolean;
   button_handlers: string[];
+  button_events: RouterButtonEventInventory;
   sampled_at: number;
 }
 

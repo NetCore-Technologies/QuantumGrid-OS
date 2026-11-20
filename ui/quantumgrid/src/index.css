@@ -9414,3 +9414,46 @@ input::placeholder {
 .office-live-lease-row .status {
   flex: 0 0 auto;
 }
+
+/* Bounded procd button-event monitor */
+.hardware-button-event-list {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.hardware-button-event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.hardware-button-event-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.hardware-button-event-row > div:last-child {
+  text-align: right;
+}
+.hardware-button-event-row strong {
+  color: var(--text);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.hardware-button-event-row span {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .hardware-button-event-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .hardware-button-event-row > div:last-child {
+    text-align: left;
+  }
+}

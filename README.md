@@ -279,14 +279,20 @@ The authenticated QuantumGrid **Hardware I/O** page reads the kernel GPIO debugf
 when it is mounted and readable, including chip ranges, line labels, consumers, direction and
 reported high/low state. It flags button-like lines only when their kernel label or consumer
 contains a button/reset/WPS/power/key/WLAN hint; this is not a verified physical AW1000 pin map
-or a live button-event stream. The UI and `quantumgrid-hardware-io buttons` command also inventory
-the native `gpio-button-hotplug` driver and existing `/etc/rc.button` handler names. OpenWrt procd
-dispatches events to the handler matching the kernel-reported button name; QuantumGrid deliberately
-does not wrap or replace these handlers, which may implement reset/WPS behaviour. GPIO ownership,
+or an inferred physical button mapping. The UI and `quantumgrid-hardware-io buttons` command
+also inventory the native `gpio-button-hotplug` driver and existing `/etc/rc.button` handler names.
+A separate procd-managed service subscribes read-only to procd's `hotplug.button` ubus notification
+object and keeps the latest 64 validated press/release records under `/var/run/quantumgrid`.
+The authenticated Hardware I/O page and CLI show button name, action, kernel-reported SEEN duration,
+sequence number and timestamp. The listener observes the notification stream; it does not execute,
+wrap, replace, intercept or delay native handlers, including reset/WPS behaviour. The service is
+enabled by the first-boot defaults script and automatically reconnects if ubus is unavailable.
+GPIO ownership,
 event interception, direction changes and output writes remain read-only/locked until the board pin
 map and recovery-safe behaviour are validated. It also reads `/proc/bus/input/devices` to list
 kernel input-device names, handler names and `eventN` nodes, but it never opens those event devices
-or consumes input events.
+or consumes input events. Button telemetry comes only from procd's ubus notifications; it does not
+read from input event nodes or modify native hotplug scripts.
 
 The same page enumerates Linux LED-class devices under `/sys/class/leds`. An administrator can
 change brightness only for a discovered device whose kernel trigger is explicitly reported as
