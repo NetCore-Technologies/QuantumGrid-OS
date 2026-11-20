@@ -6684,7 +6684,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
 }
 
 
-type OfficeVlanPortMode = "excluded" | "tagged" | "untagged" | "untagged-pvid";
+type OfficeVlanPortMode = "excluded" | "unspecified" | "tagged" | "untagged" | "untagged-pvid";
 
 function OfficeBridgeVlanManager({
   available,
@@ -6715,7 +6715,7 @@ function OfficeBridgeVlanManager({
   const activeBridge = vlanBridges.find((bridge) => bridge.name === activeDevice);
   const selectedPorts = activeBridge?.ports.flatMap((name) => {
     const mode = portModes[name] ?? "excluded";
-    if (mode === "excluded") return [];
+    if (mode === "excluded" || mode === "unspecified") return [];
     return [{
       name,
       mode: mode === "tagged" ? "tagged" as const : "untagged" as const,
@@ -6725,9 +6725,10 @@ function OfficeBridgeVlanManager({
   const pvidCount = selectedPorts.filter((port) => port.pvid).length;
   const vlanNumber = Number(vlanId);
   const validVlanId = /^[1-9][0-9]{0,3}$/.test(vlanId) && vlanNumber >= 1 && vlanNumber <= 4094;
+  const unresolvedPortModes = activeBridge?.ports.some((port) => portModes[port] === "unspecified") ?? false;
   const ready = available && !truncated && Boolean(activeBridge) &&
-    validVlanId && selectedPorts.length > 0 && pvidCount <= selectedPorts.length &&
-    confirmed && !saving;
+    validVlanId && selectedPorts.length > 0 && !unresolvedPortModes &&
+    pvidCount <= selectedPorts.length && confirmed && !saving;
 
   const resetEditor = () => {
     setEditingSection("");
@@ -6740,7 +6741,8 @@ function OfficeBridgeVlanManager({
     for (const port of vlan.ports) {
       next[port.name] = port.mode === "tagged"
         ? "tagged"
-        : port.pvid ? "untagged-pvid" : "untagged";
+        : port.mode === "unspecified" ? "unspecified"
+          : port.pvid ? "untagged-pvid" : "untagged";
     }
     setDevice(vlan.device);
     setEditingSection(vlan.name);
@@ -6915,6 +6917,7 @@ function OfficeBridgeVlanManager({
                     disabled={saving}
                   >
                     <option value="excluded">Not a member</option>
+                    <option value="unspecified">Current mode unknown — choose explicitly</option>
                     <option value="tagged">Tagged</option>
                     <option value="untagged">Untagged</option>
                     <option value="untagged-pvid">Untagged · PVID</option>
@@ -6928,6 +6931,7 @@ function OfficeBridgeVlanManager({
             <span>{selectedPorts.filter((port) => port.mode === "tagged").length} tagged</span>
             <span>{selectedPorts.filter((port) => port.mode === "untagged").length} untagged</span>
             <span>{pvidCount} PVID</span>
+            {unresolvedPortModes ? <span>Resolve unknown existing port modes before saving</span> : null}
           </div>
           <label className="office-reservation-confirm">
             <input
