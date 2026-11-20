@@ -1,6 +1,30 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local office = require "luci.quantumgrid.office_networks"
 
+local reservation, reservation_error = office.validate_reservation(
+  "Office-Printer", "AA:BB:CC:DD:EE:01", "192.168.20.30")
+assert(reservation and reservation.mac == "aa:bb:cc:dd:ee:01" and reservation.ipv4_number > 0)
+assert(office.ipv4_in_subnet(reservation.ipv4, "192.168.20.1", "255.255.255.0"))
+assert(not office.ipv4_in_subnet("192.168.21.30", "192.168.20.1", "255.255.255.0"))
+assert(not office.ipv4_in_subnet("192.168.20.1", "192.168.20.1", "255.255.255.0"), "the router address cannot be reserved")
+assert(not office.ipv4_in_subnet("192.168.20.255", "192.168.20.1", "255.255.255.0"), "the subnet broadcast address cannot be reserved")
+assert(not office.ipv4_in_subnet("192.168.20.30", "192.168.20.1", "255.255.0.255"), "non-contiguous netmasks must be rejected")
+assert(not office.ipv4_in_subnet("192.168.20.30", "192.168.20.1", "255.255.255.254"), "point-to-point /31 scopes must not accept host reservations")
+
+local invalid_reservations = {
+  { "bad name", "aa:bb:cc:dd:ee:01", "192.168.20.30" },
+  { "../printer", "aa:bb:cc:dd:ee:01", "192.168.20.30" },
+  { "Printer", "aa:bb:cc:dd:ee:03", "not-an-ip" },
+  { "Printer", "01:bb:cc:dd:ee:03", "192.168.20.30" },
+  { "Printer", "00:00:00:00:00:00", "192.168.20.30" },
+  { "Printer", "aa:bb:cc:dd:ee:03", "127.0.0.1" },
+  { "Printer", "aa:bb:cc:dd:ee:03", "224.0.0.1" },
+}
+for _, values in ipairs(invalid_reservations) do
+  local valid = office.validate_reservation(values[1], values[2], values[3])
+  assert(valid == nil, "invalid static reservation input must be rejected")
+end
+
 local result = office.build_inventory({
   available = true,
   sampled_at = 1700000000,
