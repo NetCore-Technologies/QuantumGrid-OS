@@ -146,8 +146,7 @@ unavailable telemetry remain unknown. Security Center returns up to 64 firewall 
 with zone direction, protocol, target, port constraints and presence flags for address matches;
 raw IP and MAC values are omitted. Summaries can be searched, sorted and exported, but rule
 order, NAT, full address matching and actual packet matching are not evaluated. This is not a
-vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, loaded kernel
-modules, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
+vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, a bounded installed-module inventory parsed from the running kernel's `modules.dep` and compared with live `/proc/modules` state, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
 connection-tracking count, configured maximum, free capacity and 75%/90% warning thresholds, plus a
 30-sample session-only occupancy trend and CSV export, MTD partitions,
 block devices and important system mounts, including total/available capacity and usage where
