@@ -132,7 +132,7 @@ end
 
 function validate_reservation_confirmation(value)
 	if value ~= "1" then
-		return nil, "Explicit confirmation is required before creating a static DHCP reservation."
+		return nil, "Explicit confirmation is required before changing DHCP configuration."
 	end
 	return true
 end
