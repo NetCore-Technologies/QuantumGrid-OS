@@ -48,6 +48,9 @@ local function parse_port(value)
 	if type(value) ~= "string" then return nil end
 	local bare = value:match("^([%w_.%-]+)$")
 	if bare then
+		-- A mode suffix attached directly to a numbered switch port is malformed;
+		-- require "lan3:u" / "lan3:t", never "lan3u" / "lan3t".
+		if bare:match("%d[ut]$") then return nil end
 		return { name = bare, mode = "unspecified", pvid = false }
 	end
 	-- A tagged member cannot carry the untagged/PVID marker. Reject it
