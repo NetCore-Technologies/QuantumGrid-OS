@@ -153,6 +153,21 @@ export interface RouterFirewallZone {
   masquerade: boolean;
 }
 
+export interface RouterFirewallRule {
+  name: string;
+  source_zone: string;
+  destination_zone: string;
+  protocol: string;
+  target: string;
+  family: string;
+  source_port: string;
+  destination_port: string;
+  enabled: boolean;
+  source_ip_match: boolean;
+  destination_ip_match: boolean;
+  source_mac_match: boolean;
+}
+
 export interface RouterVpnInterface {
   name: string;
   up: boolean;
@@ -164,6 +179,7 @@ export interface RouterSecurityStatus {
   firewall_config_available: boolean;
   firewall_config_readable: boolean;
   zones: RouterFirewallZone[];
+  rules: RouterFirewallRule[];
   rules_count: number;
   redirects_count: number;
   nft_available: boolean;
