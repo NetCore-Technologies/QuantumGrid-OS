@@ -115,8 +115,11 @@ configuration and WireGuard/OpenVPN service state without exposing VPN secrets o
 router configuration. The Security Center adds a read-only firewall posture review: it flags
 ACCEPT input/forward defaults only on zones with standard WAN/WWAN names for manual review,
 reports restrictive defaults separately, and leaves custom external-zone names, unavailable
-telemetry and individual rule evaluation as unknown. This is not a vulnerability scan and it
-does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, loaded kernel
+telemetry and individual rule evaluation as unknown. Security Center also returns up to 64
+firewall rule summaries with zone direction, protocol, target, port constraints and presence
+flags for address matches; raw IP and MAC values are omitted. Rule summaries can be searched,
+sorted and exported, but rule order, NAT and actual packet matching are not evaluated. This is
+not a vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, loaded kernel
 modules, init-script and diagnostic-tool presence, package-manager detection, MTD partitions,
 block devices and important system mounts, including total/available capacity and usage where
 statvfs is supported. These checks are read-only; service-script presence is not presented as proof
