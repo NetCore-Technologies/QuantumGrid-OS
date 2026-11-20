@@ -113,6 +113,14 @@ local function ipv4_prefix(netmask)
 	return prefix
 end
 
+function validate_reservation_section(section)
+	if type(section) ~= "string" or #section < 1 or #section > 64
+		or not section:match("^[A-Za-z0-9_.%-]+$") or section == "." or section == ".." then
+		return nil, "The DHCP reservation section identifier is invalid."
+	end
+	return section
+end
+
 function validate_reservation_confirmation(value)
 	if value ~= "1" then
 		return nil, "Explicit confirmation is required before creating a static DHCP reservation."
@@ -292,6 +300,7 @@ function build_inventory(source)
 			local address = type(item.ipv4) == "string" and item.ipv4 or ""
 			if valid_mac(mac) and valid_ipv4(address) then
 				table.insert(result.static_leases, {
+					section = token(item.section, 64) or "",
 					name = name ~= "" and name or "Unnamed host",
 					mac = mac,
 					ipv4 = address
