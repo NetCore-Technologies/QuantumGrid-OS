@@ -1585,6 +1585,7 @@ function action_index()
 end
 
 local function security_status(uci, fs)
+	local firewall_inventory = require "luci.quantumgrid.firewall_inventory"
 	local result = {
 		firewall_installed = fs.access("/etc/init.d/firewall") == true,
 		firewall_config_available = fs.access("/etc/config/firewall") == true,
@@ -1674,23 +1675,8 @@ local function security_status(uci, fs)
 		uci:foreach("firewall", "redirect", function(section)
 			result.redirects_count = result.redirects_count + 1
 			if #result.redirects < 64 then
-				local name = rule_value(section.name or section[".name"], 64)
-				if name == "" then name = "unnamed-redirect-" .. tostring(result.redirects_count) end
-				table.insert(result.redirects, {
-					name = name,
-					source_zone = rule_value(section.src, 48),
-					destination_zone = rule_value(section.dest, 48),
-					protocol = rule_value(section.proto, 48),
-					target = rule_value(section.target, 24):upper(),
-					family = rule_value(section.family, 16),
-					external_port = rule_value(section.src_dport, 64),
-					internal_port = rule_value(section.dest_port, 64),
-					enabled = section.enabled ~= "0",
-					source_ip_match = has_rule_value(section.src_ip),
-					source_mac_match = has_rule_value(section.src_mac),
-					destination_ip_match = has_rule_value(section.dest_ip),
-					source_destination_ip_match = has_rule_value(section.src_dip)
-				})
+				local summary = firewall_inventory.summarize_redirect(section, result.redirects_count)
+				if summary then table.insert(result.redirects, summary) end
 			else
 				result.redirects_truncated = true
 			end
