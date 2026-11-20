@@ -4,6 +4,7 @@ local MAX_INTERFACES = 64
 local MAX_BRIDGES = 32
 local MAX_VLANS = 64
 local MAX_ZONES = 32
+local MAX_FORWARDINGS = 64
 local MAX_APS = 32
 
 local function clean(value, limit)
@@ -101,6 +102,8 @@ function build_inventory(source)
 		bridges = {},
 		vlans = {},
 		zones = {},
+		forwardings = {},
+		forwarding_count = 0,
 		dhcp_available = source.dhcp_available == true,
 		dhcp_scopes = {},
 		static_leases = {},
@@ -144,6 +147,24 @@ function build_inventory(source)
 		end
 	end
 	result.zone_count = #result.zones
+
+	local source_forwardings = type(source.forwardings) == "table" and source.forwardings or {}
+	for _, item in ipairs(source_forwardings) do
+		if type(item) == "table" and #result.forwardings < MAX_FORWARDINGS then
+			local name = token(item.name, 64)
+			local source_zone = token(item.source, 64)
+			local destination_zone = token(item.destination, 64)
+			if name and source_zone and destination_zone then
+				table.insert(result.forwardings, {
+					name = name,
+					source = source_zone,
+					destination = destination_zone
+				})
+			end
+		end
+	end
+	result.forwarding_count = #result.forwardings
+	if #source_forwardings > #result.forwardings then result.truncated = true end
 
 	local source_scopes = type(source.dhcp_scopes) == "table" and source.dhcp_scopes or {}
 	for _, item in ipairs(source_scopes) do
