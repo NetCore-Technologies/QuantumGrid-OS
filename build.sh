@@ -3,8 +3,22 @@ set -Eeuo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 OPENWRT_DIR="${PROJECT_ROOT}/openwrt"
-OPENWRT_REPO="https://github.com/openwrt/openwrt.git"
-OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"
+QG_ENABLE_NSS="${QG_ENABLE_NSS:-0}"
+case "$QG_ENABLE_NSS" in
+    1|true|TRUE|yes|YES) QG_ENABLE_NSS=1 ;;
+    0|false|FALSE|no|NO) QG_ENABLE_NSS=0 ;;
+    *) printf '\nERROR: QG_ENABLE_NSS must be 0/1, true/false or yes/no\n' >&2; exit 1 ;;
+esac
+
+if [[ "$QG_ENABLE_NSS" == "1" ]]; then
+    OPENWRT_REPO="${QG_NSS_OPENWRT_REPO:-https://github.com/qosmio/openwrt-ipq.git}"
+    OPENWRT_REF="${QG_NSS_OPENWRT_REF:-d6848fa2ea00193b5b7d3973e3990da7f608027c}"
+    BUILD_PROFILE="AW1000 NSS (experimental)"
+else
+    OPENWRT_REPO="${QG_OPENWRT_REPO:-https://github.com/openwrt/openwrt.git}"
+    OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"
+    BUILD_PROFILE="AW1000 stable OpenWrt"
+fi
 BUILD_JOBS="${QG_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)}"
 
 die() {
@@ -22,8 +36,10 @@ done
 printf '\n==============================================\n'
 printf '        QUANTUMGRID OS BUILD SYSTEM\n'
 printf '==============================================\n'
-printf 'OpenWrt ref: %s\n' "$OPENWRT_REF"
-printf 'Build jobs:  %s\n' "$BUILD_JOBS"
+printf 'Build profile: %s\n' "$BUILD_PROFILE"
+printf 'OpenWrt repo: %s\n' "$OPENWRT_REPO"
+printf 'OpenWrt ref:  %s\n' "$OPENWRT_REF"
+printf 'Build jobs:   %s\n' "$BUILD_JOBS"
 
 printf '\n[1/9] Preparing OpenWrt source...\n'
 if [[ ! -d "$OPENWRT_DIR/.git" ]]; then
@@ -34,6 +50,10 @@ if [[ ! -d "$OPENWRT_DIR/.git" ]]; then
 else
     if [[ -n "$(git -C "$OPENWRT_DIR" status --porcelain --untracked-files=no)" ]]; then
         die "OpenWrt checkout has modified tracked files; refusing to overwrite local source changes"
+    fi
+    CURRENT_ORIGIN="$(git -C "$OPENWRT_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$CURRENT_ORIGIN" != "$OPENWRT_REPO" ]]; then
+        git -C "$OPENWRT_DIR" remote set-url origin "$OPENWRT_REPO"
     fi
 fi
 
@@ -68,11 +88,26 @@ if [[ -f "$PROJECT_ROOT/configs/aw1000.config" ]]; then
 fi
 [[ -s "$CONFIG_FILE" ]] || die "AW1000 configuration not found: $CONFIG_FILE"
 cp "$CONFIG_FILE" "$OPENWRT_DIR/.config"
+if [[ "$QG_ENABLE_NSS" == "1" ]]; then
+    NSS_FRAGMENT="$PROJECT_ROOT/configs/aw1000-nss.fragment"
+    [[ -s "$NSS_FRAGMENT" ]] || die "NSS configuration fragment not found: $NSS_FRAGMENT"
+    printf '\nApplying opt-in AW1000 NSS configuration fragment...\n'
+    cat "$NSS_FRAGMENT" >> "$OPENWRT_DIR/.config"
+fi
 cd "$OPENWRT_DIR"
 make defconfig
 grep -qx 'CONFIG_TARGET_qualcommax=y' .config || die "qualcommax target was not selected"
 grep -qx 'CONFIG_TARGET_qualcommax_ipq807x=y' .config || die "ipq807x subtarget was not selected"
 grep -qx 'CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y' .config || die "Arcadyan AW1000 profile was not selected"
+if [[ "$QG_ENABLE_NSS" == "1" ]]; then
+    grep -qx 'CONFIG_ATH11K_NSS_SUPPORT=y' .config || die "ath11k NSS Wi-Fi support was not selected"
+    grep -qx 'CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y' .config || die "mac80211 NSS support was not selected"
+    grep -qx 'CONFIG_NSS_FIRMWARE_VERSION_12_5=y' .config || die "NSS firmware 12.5 was not selected"
+    grep -qx 'CONFIG_PACKAGE_kmod-qca-nss-drv=y' .config || die "NSS core driver package was not selected"
+    grep -qx 'CONFIG_PACKAGE_kmod-qca-nss-ecm=y' .config || die "NSS ECM package was not selected"
+    grep -qx 'CONFIG_NSS_DRV_WIFIOFFLOAD_ENABLE=y' .config || die "NSS Wi-Fi offload support was not enabled"
+    printf 'Validated NSS Wi-Fi, firmware, core-driver and ECM selections.\n'
+fi
 
 printf '\n[8/10] Running OpenWrt prerequisites...\n'
 make prereq
