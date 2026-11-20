@@ -2772,15 +2772,15 @@ function compareWifiScanHistory(
   current: WifiScanHistorySample,
   previous: WifiScanHistorySample,
 ): WifiScanComparison {
-  const previousByBssid = new Map(
+  const previousByBssid = new Map<string, WifiScanHistoryNetwork>(
     previous.networks
       .filter((network) => network.bssid.trim().length > 0)
-      .map((network) => [network.bssid.toLowerCase(), network]),
+      .map((network): [string, WifiScanHistoryNetwork] => [network.bssid.toLowerCase(), network]),
   );
-  const currentByBssid = new Map(
+  const currentByBssid = new Map<string, WifiScanHistoryNetwork>(
     current.networks
       .filter((network) => network.bssid.trim().length > 0)
-      .map((network) => [network.bssid.toLowerCase(), network]),
+      .map((network): [string, WifiScanHistoryNetwork] => [network.bssid.toLowerCase(), network]),
   );
 
   const newlyObserved = current.networks.filter(
