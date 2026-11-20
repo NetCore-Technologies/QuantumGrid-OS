@@ -87,4 +87,64 @@ local target_limited = mwan3.normalize_status({
 assert(#target_limited.interfaces[1].track_targets == 8, "track target inventory is bounded")
 assert(target_limited.truncated == true, "target truncation is reported")
 
+
+local policy_status = mwan3.normalize_status(nil, {
+	policies = {
+		ipv4 = {
+			balanced = {
+				{ interface = "wan", percent = 60 },
+				{ interface = "wwan", percent = 40 }
+			},
+			["bad;policy"] = { { interface = "wan", percent = 100 } }
+		},
+		ipv6 = {
+			backup = {
+				{ interface = "wwan", percent = 100 }
+			}
+		}
+	}
+}, {
+	connected = {
+		ipv4 = { "192.0.2.0/24", "198.51.100.0/24", "bad network;command" },
+		ipv6 = { "2001:db8::/32" }
+	}
+})
+assert(policy_status.available == false, "interface status remains independently unavailable")
+assert(policy_status.policies_available == true and policy_status.policy_count == 2, "policy inventory availability and count")
+assert(#policy_status.policies == 2, "valid IPv4 and IPv6 policies retained")
+assert(policy_status.policies[1].family == "IPv4" and policy_status.policies[1].name == "balanced", "policy family and name")
+assert(policy_status.policies[1].members[1].interface == "wan" and policy_status.policies[1].members[1].percent == 60, "policy weights retained")
+assert(policy_status.policies[2].family == "IPv6" and policy_status.policies[2].name == "backup", "IPv6 policy retained")
+assert(policy_status.connected_available == true, "connected-network telemetry available")
+assert(#policy_status.connected_ipv4 == 2 and policy_status.connected_ipv4[1] == "192.0.2.0/24", "IPv4 networks sanitized and sorted")
+assert(#policy_status.connected_ipv6 == 1 and policy_status.connected_ipv6[1] == "2001:db8::/32", "IPv6 connected network retained")
+
+local policy_many = {}
+for index = 1, 20 do
+	policy_many["policy" .. tostring(index)] = {
+		{ interface = "wan", percent = 100 }
+	}
+end
+local many_policies = mwan3.normalize_status(nil, { policies = { ipv4 = policy_many } })
+assert(many_policies.policy_count == 20 and #many_policies.policies == 16, "policy inventory bound")
+assert(many_policies.truncated == true, "policy truncation reported")
+
+local too_many_members = {}
+for index = 1, 20 do
+	table.insert(too_many_members, { interface = "wan" .. tostring(index), percent = 5 })
+end
+local members_limited = mwan3.normalize_status(nil, {
+	policies = { ipv4 = { balanced = too_many_members } }
+})
+assert(#members_limited.policies[1].members == 16, "policy members bounded")
+assert(members_limited.truncated == true, "member truncation reported")
+
+local many_networks = {}
+for index = 1, 70 do
+	table.insert(many_networks, "192.0.2." .. tostring(index) .. "/32")
+end
+local network_limited = mwan3.normalize_status(nil, nil, { connected = { ipv4 = many_networks } })
+assert(#network_limited.connected_ipv4 == 64, "connected networks bounded")
+assert(network_limited.truncated == true, "connected network truncation reported")
+
 print("mwan3-status: all telemetry normalization tests passed")
