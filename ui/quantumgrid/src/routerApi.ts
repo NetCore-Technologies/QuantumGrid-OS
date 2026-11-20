@@ -615,6 +615,7 @@ export interface RouterOfficeForwarding {
 }
 
 export interface RouterOfficeDhcpScope {
+  section: string;
   name: string;
   interface: string;
   start: string;
