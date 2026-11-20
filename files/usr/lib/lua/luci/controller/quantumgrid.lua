@@ -2057,6 +2057,110 @@ local function platform_status(fs)
 end
 
 
+local function office_network_status(uci)
+	local source = {
+		available = false,
+		firewall_available = false,
+		wireless_available = false,
+		interfaces = {},
+		bridges = {},
+		vlans = {},
+		zones = {},
+		wifi_aps = {},
+		sampled_at = os.time()
+	}
+	local network_ok = pcall(function()
+		uci:foreach("network", "interface", function(section)
+			if #source.interfaces >= 64 then return end
+			local name = tostring(section[".name"] or "")
+			if not name:match("^[%w_.%-]+$") then return end
+			local status = ubus_call("network.interface." .. name, "status", {}) or {}
+			local device = section.device
+			if type(device) ~= "string" or device == "" then
+				device = type(section.ifname) == "string" and section.ifname or ""
+			end
+			if type(device) ~= "string" or not device:match("^[%w_.%-]+$") then device = "" end
+			table.insert(source.interfaces, {
+				name = name,
+				protocol = tostring(section.proto or ""),
+				device = device,
+				up = status.up == true,
+				ipv4 = section.ipaddr,
+				ipv6 = section.ip6addr
+			})
+		end)
+		uci:foreach("network", "device", function(section)
+			if #source.bridges >= 32 then return end
+			if section.type == "bridge" then
+				local name = tostring(section.name or "")
+				if name:match("^[%w_.%-]+$") then
+					table.insert(source.bridges, {
+						name = name,
+						type = section.type,
+						ports = section.ports,
+						vlan_filtering = section.vlan_filtering == "1"
+					})
+				end
+			end
+		end)
+		uci:foreach("network", "bridge-vlan", function(section)
+			if #source.vlans >= 64 then return end
+			local name = tostring(section[".name"] or "")
+			local device = tostring(section.device or "")
+			if name:match("^[%w_.%-]+$") and device:match("^[%w_.%-]+$")
+				and tonumber(section.vlan) then
+				table.insert(source.vlans, {
+					name = name,
+					device = device,
+					vlan = section.vlan,
+					ports = section.ports
+				})
+			end
+		end)
+	end)
+	source.available = network_ok
+
+	local firewall_ok = pcall(function()
+		uci:foreach("firewall", "zone", function(section)
+			if #source.zones >= 32 then return end
+			local name = tostring(section.name or section[".name"] or "")
+			if name:match("^[%w_.%-]+$") then
+				table.insert(source.zones, {
+					name = name,
+					networks = section.network,
+					input = section.input,
+					output = section.output,
+					forward = section.forward,
+					masquerade = section.masq == "1"
+				})
+			end
+		end)
+	end)
+	source.firewall_available = firewall_ok
+
+	local wireless_ok = pcall(function()
+		uci:foreach("wireless", "wifi-iface", function(section)
+			if #source.wifi_aps >= 32 then return end
+			local name = tostring(section[".name"] or "")
+			if name:match("^[%w_.%-]+$") then
+				table.insert(source.wifi_aps, {
+					section = name,
+					mode = section.mode,
+					ssid = section.ssid,
+					device = section.device,
+					networks = section.network,
+					disabled = section.disabled == "1"
+				})
+			end
+		end)
+	end)
+	source.wireless_available = wireless_ok
+
+	local parser = require "luci.quantumgrid.office_networks"
+	return parser.build_inventory(source)
+end
+
+
 local function hardware_io_status(fs)
 	local hardware = require "luci.quantumgrid.hardware_io"
 	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
@@ -2244,6 +2348,7 @@ function action_api()
 	local route_inventory = default_route_inventory(fs)
 	local rule_inventory = policy_rule_inventory(fs)
 	local hardware_io = hardware_io_status(fs)
+	local office_networks = office_network_status(uci)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -2274,6 +2379,7 @@ function action_api()
 		security = security,
 		platform = platform,
 		hardware_io = hardware_io,
+		office_networks = office_networks,
 		conntrack = conntrack,
 		cellular = cellular,
 		phone = {
