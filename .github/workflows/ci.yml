@@ -107,6 +107,7 @@ jobs:
           bash -n scripts/verify-aw1000-ubi.sh
           bash -n scripts/install-aw1000-ubi.sh
           sh -n scripts/inspect-aw1000-install-target.sh
+          sh -n files/etc/uci-defaults/91-quantumgrid-usteer-safe
           bash -n tests/install-aw1000-target-inspector-smoke.sh
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
