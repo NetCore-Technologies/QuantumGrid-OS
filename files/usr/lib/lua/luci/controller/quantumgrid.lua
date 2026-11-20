@@ -218,6 +218,42 @@ local function default_route_inventory(fs)
 	return result
 end
 
+local function policy_rule_inventory(fs)
+	local result = { available = false, rules = {}, count = 0, truncated = false }
+	if fs.access("/sbin/ip") ~= true then return result end
+
+	local routing = require "luci.quantumgrid.routing"
+	local util = require "luci.util"
+	local families = {
+		{ command = "/sbin/ip -4 rule show", name = "IPv4" },
+		{ command = "/sbin/ip -6 rule show", name = "IPv6" }
+	}
+
+	for _, family in ipairs(families) do
+		local ok, output = pcall(util.exec, family.command)
+		if ok and type(output) == "string" then
+			result.available = true
+			local rules, count, truncated = routing.parse_policy_rules(output, family.name)
+			result.count = result.count + count
+			result.truncated = result.truncated or truncated
+			for _, rule in ipairs(rules) do
+				if #result.rules < 64 then
+					table.insert(result.rules, rule)
+				else
+					result.truncated = true
+				end
+			end
+		end
+	end
+
+	table.sort(result.rules, function(left, right)
+		if left.family ~= right.family then return left.family < right.family end
+		if left.priority ~= right.priority then return left.priority < right.priority end
+		return left.selectors < right.selectors
+	end)
+	return result
+end
+
 local function wireless_survey(ifname, frequency)
 	local response = ubus_call("iwinfo", "survey", { device = ifname }) or {}
 	local entries = type(response.results) == "table" and response.results or {}
@@ -1263,6 +1299,7 @@ function action_api()
 	local security = security_status(uci, fs)
 	local platform = platform_status(fs)
 	local route_inventory = default_route_inventory(fs)
+	local rule_inventory = policy_rule_inventory(fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -1280,6 +1317,10 @@ function action_api()
 		interfaces = network_interfaces(),
 		routes_available = route_inventory.available,
 		routes = route_inventory.routes,
+		policy_rules_available = rule_inventory.available,
+		policy_rules_count = rule_inventory.count,
+		policy_rules_truncated = rule_inventory.truncated,
+		policy_rules = rule_inventory.rules,
 		clients = dhcp_clients(),
 		wireless = wireless,
 		wireless_clients = wireless_clients(wireless),
