@@ -2729,6 +2729,68 @@ function action_config_backup()
 end
 
 
+local function bridge_vlan_management_context(remote_ip, target_bridge)
+	if type(target_bridge) ~= "string" or not target_bridge:match("^[%w_.%-]+$") then
+		return nil, "The target bridge identifier is invalid."
+	end
+	if type(remote_ip) ~= "string" then
+		return nil, "The router cannot identify the current administrator's IPv4 management path."
+	end
+	local a, b, c, d = remote_ip:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then
+		return nil, "Manage bridge VLANs over an IPv4 administrator session so the management path can be protected."
+	end
+	for _, value in ipairs({ a, b, c, d }) do
+		local octet = tonumber(value)
+		if not octet or octet < 0 or octet > 255 or tostring(octet) ~= value then
+			return nil, "The current administrator IPv4 address is invalid; no VLAN change was made."
+		end
+	end
+	local util = require "luci.util"
+	local ok, output = pcall(util.exec, "/sbin/ip -4 route get " .. remote_ip .. " 2>/dev/null")
+	if not ok or type(output) ~= "string" then
+		return nil, "The current administrator route could not be inspected. No VLAN change was made."
+	end
+	local route_device = output:match("%sdev%s+([%w_.%-]+)")
+	if not route_device then
+		return nil, "The current administrator route has no validated output device. No VLAN change was made."
+	end
+	local base_bridge, vlan_id = route_device:match("^([%w_.%-]+)%.(%d+)$")
+	if base_bridge == target_bridge then
+		local numeric = tonumber(vlan_id)
+		if numeric and numeric >= 1 and numeric <= 4094 then
+			return { bridge = target_bridge, vlan_id = numeric, native_bridge = false }
+		end
+	end
+	if route_device == target_bridge then
+		return { bridge = target_bridge, native_bridge = true }
+	end
+	return { bridge = target_bridge, native_bridge = false }
+end
+
+local function bridge_vlan_untagged_map(ports)
+	local result = {}
+	for _, raw in ipairs(type(ports) == "table" and ports or {}) do
+		if type(raw) == "string" then
+			local name = raw:match("^([%w_.%-]+):u%*?$")
+			if name then result[name] = raw end
+		end
+	end
+	return result
+end
+
+local function native_bridge_untagged_path_preserved(previous_ports, next_ports)
+	local previous = bridge_vlan_untagged_map(previous_ports)
+	local next_values = bridge_vlan_untagged_map(next_ports)
+	for name, raw in pairs(previous) do
+		if next_values[name] ~= raw then return false end
+	end
+	for name, raw in pairs(next_values) do
+		if previous[name] ~= raw then return false end
+	end
+	return true
+end
+
 local function restore_bridge_vlan_section(uci, section, snapshot)
 	if type(snapshot) ~= "table" or type(section) ~= "string"
 		or type(snapshot.device) ~= "string" or type(snapshot.vlan) ~= "string" then
@@ -2880,6 +2942,23 @@ function action_bridge_vlan_update()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
+	local management, management_error = bridge_vlan_management_context(
+		http.getenv("REMOTE_ADDR"), update.device)
+	if not management then
+		respond(409, { ok = false, error = management_error })
+		return
+	end
+	if management.vlan_id and management.vlan_id == update.vlan_id then
+		respond(409, { ok = false, error = "This is the VLAN carrying the current administrator session. It cannot be edited from that session." })
+		return
+	end
+	if management.native_bridge then
+		local previous_ports = snapshot and snapshot.ports or {}
+		if not native_bridge_untagged_path_preserved(previous_ports, update.ports) then
+			respond(409, { ok = false, error = "This administrator session is using the bridge's native untagged path. The operation must preserve every existing untagged port membership exactly; add tagged membership or use an out-of-band management path." })
+			return
+		end
+	end
 
 	local section = requested_section
 	if section == "" then
@@ -3017,6 +3096,20 @@ function action_bridge_vlan_remove()
 		vlan = current.vlan,
 		ports = type(current.ports) == "table" and current.ports or false
 	}
+	local management, management_error = bridge_vlan_management_context(
+		http.getenv("REMOTE_ADDR"), previous.device)
+	if not management then
+		respond(409, { ok = false, error = management_error })
+		return
+	end
+	if management.vlan_id and tonumber(previous.vlan) == management.vlan_id then
+		respond(409, { ok = false, error = "This is the VLAN carrying the current administrator session. It cannot be removed from that session." })
+		return
+	end
+	if management.native_bridge and next(bridge_vlan_untagged_map(previous.ports)) ~= nil then
+		respond(409, { ok = false, error = "This VLAN contains untagged members on the bridge's native administrator path. Remove it only through an out-of-band management path." })
+		return
+	end
 	if type(previous.device) ~= "string" or previous.device == ""
 		or type(previous.vlan) ~= "string" or previous.vlan == "" then
 		respond(409, { ok = false, error = "The current bridge VLAN is incomplete and cannot be removed safely." })
