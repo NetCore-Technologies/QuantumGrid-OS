@@ -376,6 +376,8 @@ local function wireless_clients(radios)
 							associated = true,
 							authorized = station.authorized == true,
 							signal_dbm = tonumber(station.signal_avg) or tonumber(station.signal),
+							signal_avg_dbm = tonumber(station.signal_avg),
+							signal_current_dbm = tonumber(station.signal),
 							noise_dbm = tonumber(station.noise),
 							rx_rate_mbps = rx_rate and rx_rate > 0 and rx_rate / 1000 or nil,
 							tx_rate_mbps = tx_rate and tx_rate > 0 and tx_rate / 1000 or nil,

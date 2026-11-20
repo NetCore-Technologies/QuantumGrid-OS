@@ -1521,18 +1521,26 @@ function WirelessClientList({
               <span>
                 {client.ssid || client.ifname} · {client.mac.toUpperCase()}
                 {client.connected_seconds === undefined ? "" : ` · connected ${formatUptime(client.connected_seconds)}`}
+                {client.inactive_ms === undefined ? "" : ` · inactive ${fmt(client.inactive_ms / 1000, 1)}s`}
                 {client.tx_retries === undefined ? "" : ` · TX retries ${fmt(client.tx_retries)}`}
+                {client.tx_failed === undefined ? "" : ` · TX failed ${fmt(client.tx_failed)}`}
               </span>
             </div>
           </div>
           <b>{client.band}</b>
-          <b>{client.signal_dbm === undefined ? "N/A" : `${fmt(client.signal_dbm)} dBm`}</b>
+          <div className="wifi-client-signal-cell">
+            <b>{client.signal_dbm === undefined ? "N/A" : `${fmt(client.signal_dbm)} dBm`}</b>
+            <small>{client.signal_avg_dbm === undefined ? "Average N/A" : "Average " + fmt(client.signal_avg_dbm) + " dBm"}</small>
+            {client.signal_current_dbm === undefined ? null : <small>Current {fmt(client.signal_current_dbm)} dBm</small>}
+          </div>
           <div className="wifi-client-rate-cell">
             <b>{client.rx_rate_mbps === undefined || client.tx_rate_mbps === undefined
               ? "N/A"
               : `${fmt(client.rx_rate_mbps, 1)} / ${fmt(client.tx_rate_mbps, 1)} Mbps`}</b>
             <small>RX {formatWifiRateDetails(client.rx_details)}</small>
             <small>TX {formatWifiRateDetails(client.tx_details)}</small>
+            <small>RX total {formatTrafficBytes(client.rx_bytes)} · {client.rx_packets === undefined ? "N/A" : fmt(client.rx_packets)} packets</small>
+            <small>TX total {formatTrafficBytes(client.tx_bytes)} · {client.tx_packets === undefined ? "N/A" : fmt(client.tx_packets)} packets</small>
           </div>
           <span className={client.authorized ? "priority-pill high" : "priority-pill normal"}>
             {client.authorized ? "AUTHORIZED" : "ASSOCIATED"}

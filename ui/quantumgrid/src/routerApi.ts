@@ -81,6 +81,8 @@ export interface RouterWirelessClient {
   associated: boolean;
   authorized: boolean;
   signal_dbm?: number;
+  signal_avg_dbm?: number;
+  signal_current_dbm?: number;
   rx_rate_mbps?: number;
   tx_rate_mbps?: number;
   rx_details?: RouterWifiRateDetails;
