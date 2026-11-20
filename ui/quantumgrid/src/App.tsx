@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5180,6 +5180,8 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   const [reservationNetwork, setReservationNetwork] = useState("");
   const [reservationConfirmed, setReservationConfirmed] = useState(false);
   const [reservationBusy, setReservationBusy] = useState(false);
+  const [pendingReservationRemoval, setPendingReservationRemoval] = useState("");
+  const [reservationRemoveBusy, setReservationRemoveBusy] = useState(false);
   const [reservationNotice, setReservationNotice] = useState<{ success: boolean; message: string } | null>(null);
   const enabledDhcpScopes = inventory?.dhcp_scopes.filter((scope) => !scope.ignore) ?? [];
   const reservationNetworks = (inventory?.interfaces ?? []).filter((item) =>
@@ -5217,6 +5219,27 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
       });
     } finally {
       setReservationBusy(false);
+    }
+  };
+  const removeReservation = async (section: string) => {
+    if (!section || reservationRemoveBusy) return;
+    setReservationRemoveBusy(true);
+    setReservationNotice(null);
+    try {
+      const result = await removeRouterDhcpReservation(section);
+      setReservationNotice({
+        success: true,
+        message: "Reservation " + result.name + " was removed and dnsmasq restarted successfully.",
+      });
+      setPendingReservationRemoval("");
+      refresh();
+    } catch (cause) {
+      setReservationNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The DHCP reservation could not be removed.",
+      });
+    } finally {
+      setReservationRemoveBusy(false);
     }
   };
   const interfaces = inventory?.interfaces ?? [];
@@ -5363,15 +5386,34 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           ) : (
             <div className="office-zone-list">
               {inventory.static_leases.map((lease, index) => (
-                <div className="office-zone-row" key={lease.mac + "-" + lease.ipv4 + "-" + index}>
+                <div className="office-zone-row" key={lease.section || lease.mac + "-" + lease.ipv4 + "-" + index}>
                   <div><strong>{lease.name}</strong><small>{lease.mac}</small></div>
                   <div><small>RESERVED IPV4</small><b>{lease.ipv4}</b></div>
-                  <Status active={true}>STATIC</Status>
+                  <div className="office-reservation-row-actions">
+                    <Status active={true}>STATIC</Status>
+                    {pendingReservationRemoval === lease.section ? (
+                      <div className="office-reservation-remove-confirm">
+                        <button className="office-remove-confirm" type="button" onClick={() => { void removeReservation(lease.section); }} disabled={reservationRemoveBusy}>
+                          {reservationRemoveBusy ? "Removing…" : "Confirm remove"}
+                        </button>
+                        <button className="office-remove-cancel" type="button" onClick={() => setPendingReservationRemoval("")} disabled={reservationRemoveBusy}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button className="office-remove-start" type="button" onClick={() => { setReservationNotice(null); setPendingReservationRemoval(lease.section); }} disabled={!lease.section || reservationRemoveBusy}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
-          <div className="module-message">Only configured UCI host reservations are shown. Dynamic leases are listed separately on the Devices page; a reservation does not prove that the client is currently connected.</div>
+          {reservationNotice && (
+            <div className={reservationNotice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={reservationNotice.success ? "status" : "alert"}>
+              {reservationNotice.message}
+            </div>
+          )}
+          <div className="module-message">Only configured UCI host reservations are shown. Dynamic leases are listed separately on the Devices page; a reservation does not prove that the client is currently connected. Removing a reservation restarts dnsmasq; confirm only when you intend to remove that host mapping.</div>
         </Panel>
       </div>
 
