@@ -3152,17 +3152,20 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       setClientHistoryState((current) => ({ ...current, error: "Waiting for live router telemetry." }));
       return;
     }
-    const sampledAt = routerOverview.timestamp;
+    const sampledAt = Math.floor(Date.now() / 1000);
     const incoming = collectWifiClientHistory(routerOverview, sampledAt);
     if (incoming.length === 0) {
       setClientHistoryState((current) => ({ ...current, error: "No associated Wi-Fi clients were reported in this sample." }));
       return;
     }
-    const next = mergeWifiClientHistory(clientHistory, incoming, sampledAt, clientHistoryRetention);
-    if (next.length === clientHistory.length) {
-      setClientHistoryState((current) => ({ ...current, error: "This router telemetry sample has already been saved." }));
+    const hasUnsavedObservation = incoming.some((sample) =>
+      !clientHistory.some((saved) => saved.sampledAt === sample.sampledAt && saved.mac === sample.mac)
+    );
+    if (!hasUnsavedObservation) {
+      setClientHistoryState((current) => ({ ...current, error: "This client snapshot has already been saved." }));
       return;
     }
+    const next = mergeWifiClientHistory(clientHistory, incoming, sampledAt, clientHistoryRetention);
     let error = "";
     try {
       window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(next));
