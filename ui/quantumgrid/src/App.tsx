@@ -2586,8 +2586,10 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     ? scan.results
       .filter((network) => {
         const query = scanFilter.trim().toLocaleLowerCase();
-        const matchesText = !query || [network.ssid, network.bssid, network.radio, network.ifname, network.band]
-          .some((value) => value.toLocaleLowerCase().includes(query));
+        const matchesText = !query || [
+          network.ssid, network.bssid, network.radio, network.ifname, network.band,
+          network.security, network.mode, network.channel === undefined ? "" : String(network.channel),
+        ].some((value) => value.toLocaleLowerCase().includes(query));
         const matchesSecurity = scanSecurityFilter === "all" ||
           (scanSecurityFilter === "open" && network.security === "Open") ||
           (scanSecurityFilter === "unknown" && network.security === "Unknown") ||
@@ -2644,11 +2646,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   };
 
   const exportWifiScan = () => {
-    if (!scan || scan.results.length === 0) return;
+    if (!scan || visibleScanResults.length === 0) return;
     const scannedAt = new Date(scan.scanned_at * 1000).toISOString();
     const rows: Array<Array<string | number | null | undefined>> = [
       ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Cipher suites", "Mode", "PHY operation"],
-      ...scan.results.map((network) => [
+      ...visibleScanResults.map((network) => [
         scannedAt, network.radio, network.ifname, network.ssid, network.bssid,
         network.band, network.channel, network.frequency_mhz, network.signal_dbm,
         network.quality, network.quality_max, network.security,
@@ -2659,7 +2661,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = `quantumgrid-wifi-scan-${scannedAt.replace(/[:.]/g, "-")}.csv`;
+    link.download = `quantumgrid-wifi-scan-filtered-${scannedAt.replace(/[:.]/g, "-")}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -2721,7 +2723,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         action={
           <div className="wifi-scan-actions">
             <button className="hero-button wifi-scan-button" onClick={() => void runWirelessScan()} disabled={!routerOverview || scanLoading}>{scanLoading ? "Scanning…" : scan ? "Scan again" : "Scan nearby networks"}</button>
-            <button className="hero-button wifi-export-button" onClick={exportWifiScan} disabled={!scan || scan.results.length === 0}>Export CSV</button>
+            <button className="hero-button wifi-export-button" onClick={exportWifiScan} disabled={!scan || visibleScanResults.length === 0}>Export filtered CSV</button>
           </div>
         }
       >
@@ -2758,6 +2760,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
                     <option value="ssid">SSID A–Z</option>
                   </select>
                   <span>{visibleScanResults.length} of {scan.results.length} access points</span>
+                  <button className="hero-button wifi-export-button" onClick={() => {
+                    setScanFilter("");
+                    setScanSecurityFilter("all");
+                    setScanBandFilter("all");
+                  }} disabled={!scanFilter && scanSecurityFilter === "all" && scanBandFilter === "all"}>Reset filters</button>
                 </div>
                 {visibleScanResults.length === 0 ? (
                   <div className="module-message">No access points match this filter.</div>
