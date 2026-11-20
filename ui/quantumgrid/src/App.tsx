@@ -2919,6 +2919,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const scanComparison = latestScanHistory && previousScanHistory
     ? compareWifiScanHistory(latestScanHistory, previousScanHistory)
     : null;
+  const scanComparisonHasChanges = Boolean(scanComparison && (
+    scanComparison.newlyObserved.length > 0 ||
+    scanComparison.notObserved.length > 0 ||
+    scanComparison.signalChanges.length > 0
+  ));
   const strongestNetwork = scan?.results
     .filter((network) => typeof network.signal_dbm === "number" && Number.isFinite(network.signal_dbm))
     .reduce<RouterWifiScan["results"][number] | null>(
@@ -2951,6 +2956,33 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = `quantumgrid-wifi-history-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
+  const exportScanComparison = () => {
+    if (!scanComparison || !previousScanHistory || !latestScanHistory || !scanComparisonHasChanges) return;
+    const previousAt = new Date(previousScanHistory.scannedAt * 1000).toISOString();
+    const latestAt = new Date(latestScanHistory.scannedAt * 1000).toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Previous scan (UTC)", "Latest scan (UTC)", "Change type", "SSID", "BSSID", "Band", "Channel", "Previous signal dBm", "Latest signal dBm", "Signal delta dB"],
+      ...scanComparison.newlyObserved.map((network) => [
+        previousAt, latestAt, "NEWLY OBSERVED", network.ssid, network.bssid, network.band, network.channel, "", network.signal_dbm, "",
+      ]),
+      ...scanComparison.notObserved.map((network) => [
+        previousAt, latestAt, "NOT OBSERVED IN LATEST", network.ssid, network.bssid, network.band, network.channel, network.signal_dbm, "", "",
+      ]),
+      ...scanComparison.signalChanges.map(({ network, previousDbm, currentDbm, deltaDb }) => [
+        previousAt, latestAt, "SIGNAL CHANGED", network.ssid, network.bssid, network.band, network.channel, previousDbm, currentDbm, deltaDb,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `quantumgrid-wifi-scan-comparison-${latestAt.replace(/[:.]/g, "-")}.csv`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -3139,7 +3171,11 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         )}
         <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Security labels come from iwinfo encryption metadata; missing metadata is marked Unknown rather than treated as an open network. Take repeat scans from the router’s actual installation location before comparing environments.</div>
       </Panel>
-      <Panel title="Scan-to-scan changes" eyebrow="LATEST TWO DISTINCT MANUAL SCANS">
+      <Panel
+        title="Scan-to-scan changes"
+        eyebrow="LATEST TWO DISTINCT MANUAL SCANS"
+        action={<button className="hero-button wifi-export-button" onClick={exportScanComparison} disabled={!scanComparisonHasChanges}>Export comparison CSV</button>}
+      >
         {!scanComparison ? (
           <div className="module-message">Complete two distinct manual scans to compare access-point visibility and signal readings.</div>
         ) : (
