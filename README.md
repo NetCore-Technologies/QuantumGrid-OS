@@ -193,10 +193,10 @@ RADIUS options. All changed wireless options and both secrets are included in th
 snapshot if the Wi-Fi reload fails. The API exposes only whether each secret is configured, not its
 value.
 
-This is a WPA2-Enterprise authenticator with optional accounting, not a complete NAC platform.
-The AP remains attached to its existing network. Dynamic VLAN assignment, 802.1X switch-port
-control, certificate provisioning, EAP policy management and WPA3-Enterprise are not provided by
-this editor. Administrators must deploy and secure their own RADIUS service,
+This editor supports WPA2-Enterprise and WPA3-Enterprise with mandatory 802.11w Protected
+Management Frames on WPA3, plus optional accounting. It is not a complete NAC platform. The AP
+remains attached to its existing network. Dynamic VLAN assignment, 802.1X switch-port control,
+certificate provisioning and EAP policy management are not provided by this editor. Administrators must deploy and secure their own RADIUS service,
 configure client EAP identities/certificates as required by their organisation, allow the router
 to reach the server, and test the authentication path before production rollout. The software
 tests validate configuration and rollback logic; they do not prove radio/driver compatibility or
