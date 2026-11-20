@@ -70,9 +70,10 @@ function containsPort(value: string, wanted: number): boolean {
 }
 
 function redirectReviewChecks(redirect: RouterFirewallRedirect): FirewallPostureCheck[] {
+  const redirectId = redirect.section || redirect.name;
   if (!redirect.enabled || !hasPotentialExternalSource(redirect.source_zone)) return [];
   const checks: FirewallPostureCheck[] = [{
-    id: "external-redirect:" + redirect.name,
+    id: "external-redirect:" + redirectId,
     title: "Enabled external NAT redirect",
     scope: "Redirect " + redirect.name,
     status: "review",
@@ -81,7 +82,7 @@ function redirectReviewChecks(redirect: RouterFirewallRedirect): FirewallPosture
 
   if (!redirect.external_port.trim()) {
     checks.push({
-      id: "external-redirect-any-port:" + redirect.name,
+      id: "external-redirect-any-port:" + redirectId,
       title: "External redirect has no port constraint",
       scope: "Redirect " + redirect.name,
       status: "review",
@@ -95,7 +96,7 @@ function redirectReviewChecks(redirect: RouterFirewallRedirect): FirewallPosture
     .map(([, name]) => name);
   if (exposedServices.length > 0) {
     checks.push({
-      id: "external-redirect-admin-service:" + redirect.name,
+      id: "external-redirect-admin-service:" + redirectId,
       title: "External redirect maps to an administrative or data service port",
       scope: "Redirect " + redirect.name,
       status: "review",
@@ -106,7 +107,7 @@ function redirectReviewChecks(redirect: RouterFirewallRedirect): FirewallPosture
 
   if (!redirect.source_ip_match && !redirect.source_zone.trim()) {
     checks.push({
-      id: "external-redirect-unrestricted-source:" + redirect.name,
+      id: "external-redirect-unrestricted-source:" + redirectId,
       title: "External redirect has no reported source restriction",
       scope: "Redirect " + redirect.name,
       status: "review",
