@@ -94,30 +94,33 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 
 	local valid_accounting_server, valid_accounting_port, valid_accounting_secret = "", "1813", ""
 	local accounting_secret_supplied = false
-	if encryption == "wpa2" and type(accounting_server) == "string" and accounting_server ~= "" then
-		if not valid_radius_host(accounting_server) then
-			return nil, "RADIUS accounting server must be an IPv4 address or valid DNS hostname."
+	if encryption == "wpa2" then
+		if type(accounting_server) ~= "string" then
+			return nil, "RADIUS accounting server must be supplied as a string; use an empty value to disable accounting."
 		end
-		if type(accounting_port) ~= "string" or not accounting_port:match("^%d+$") then
-			return nil, "RADIUS accounting port must be a whole number from 1 to 65535."
+		if accounting_server ~= "" then
+			if not valid_radius_host(accounting_server) then
+				return nil, "RADIUS accounting server must be an IPv4 address or valid DNS hostname."
+			end
+			if type(accounting_port) ~= "string" or not accounting_port:match("^%d+$") then
+				return nil, "RADIUS accounting port must be a whole number from 1 to 65535."
+			end
+			local port_number = tonumber(accounting_port)
+			if not port_number or port_number < 1 or port_number > 65535 then
+				return nil, "RADIUS accounting port must be a whole number from 1 to 65535."
+			end
+			if type(accounting_secret) ~= "string" then
+				return nil, "RADIUS accounting shared secret must be text."
+			end
+			if accounting_secret ~= "" then
+				local secret, secret_error = valid_text(accounting_secret, 16, 128, "RADIUS accounting shared secret")
+				if not secret then return nil, secret_error end
+				valid_accounting_secret = secret
+				accounting_secret_supplied = true
+			end
+			valid_accounting_server = accounting_server
+			valid_accounting_port = tostring(port_number)
 		end
-		local port_number = tonumber(accounting_port)
-		if not port_number or port_number < 1 or port_number > 65535 then
-			return nil, "RADIUS accounting port must be a whole number from 1 to 65535."
-		end
-		if type(accounting_secret) ~= "string" then
-			return nil, "RADIUS accounting shared secret must be text."
-		end
-		if accounting_secret ~= "" then
-			local secret, secret_error = valid_text(accounting_secret, 16, 128, "RADIUS accounting shared secret")
-			if not secret then return nil, secret_error end
-			valid_accounting_secret = secret
-			accounting_secret_supplied = true
-		end
-		valid_accounting_server = accounting_server
-		valid_accounting_port = tostring(port_number)
-	elseif encryption == "wpa2" and accounting_server ~= nil and type(accounting_server) ~= "string" then
-		return nil, "RADIUS accounting server must be text."
 	end
 
 	if type(key) ~= "string" then
