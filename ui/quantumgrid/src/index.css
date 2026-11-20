@@ -8611,3 +8611,86 @@ input::placeholder {
     gap: 6px;
   }
 }
+
+
+/* Installed and loaded Linux kernel module inventory */
+.kernel-module-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.kernel-module-toolbar > input {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  background: rgba(0,0,0,.18);
+  font: inherit;
+  font-size: 9px;
+}
+.kernel-module-toolbar > span {
+  color: var(--muted2);
+  font-size: 8px;
+  white-space: nowrap;
+}
+.kernel-module-filter {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.kernel-module-filter button {
+  min-height: 27px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted2);
+  background: rgba(255,255,255,.025);
+  font: inherit;
+  font-size: 8px;
+  cursor: pointer;
+}
+.kernel-module-filter button.active {
+  color: var(--text);
+  border-color: rgba(86,168,205,.45);
+  background: rgba(86,168,205,.12);
+}
+.kernel-module-list {
+  display: grid;
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.kernel-module-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.kernel-module-row:last-child { border-bottom: 0; }
+.kernel-module-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.kernel-module-row strong {
+  color: var(--text);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.kernel-module-row small {
+  color: var(--muted2);
+  font-size: 7px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .kernel-module-toolbar { grid-template-columns: 1fr; }
+}
