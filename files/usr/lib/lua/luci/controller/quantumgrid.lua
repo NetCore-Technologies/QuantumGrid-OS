@@ -2073,9 +2073,10 @@ local function platform_status(fs)
 end
 
 
-local function office_network_status(uci)
+local function office_network_status(uci, fs)
 	local source = {
 		available = false,
+		truncated = false,
 		firewall_available = false,
 		wireless_available = false,
 		interfaces = {},
@@ -2087,7 +2088,7 @@ local function office_network_status(uci)
 	}
 	local network_ok = pcall(function()
 		uci:foreach("network", "interface", function(section)
-			if #source.interfaces >= 64 then return end
+			if #source.interfaces >= 64 then source.truncated = true return end
 			local name = tostring(section[".name"] or "")
 			if not name:match("^[%w_.%-]+$") then return end
 			local status = ubus_call("network.interface." .. name, "status", {}) or {}
@@ -2106,7 +2107,7 @@ local function office_network_status(uci)
 			})
 		end)
 		uci:foreach("network", "device", function(section)
-			if #source.bridges >= 32 then return end
+			if #source.bridges >= 32 then source.truncated = true return end
 			if section.type == "bridge" then
 				local name = tostring(section.name or "")
 				if name:match("^[%w_.%-]+$") then
@@ -2120,7 +2121,7 @@ local function office_network_status(uci)
 			end
 		end)
 		uci:foreach("network", "bridge-vlan", function(section)
-			if #source.vlans >= 64 then return end
+			if #source.vlans >= 64 then source.truncated = true return end
 			local name = tostring(section[".name"] or "")
 			local device = tostring(section.device or "")
 			if name:match("^[%w_.%-]+$") and device:match("^[%w_.%-]+$")
@@ -2134,11 +2135,11 @@ local function office_network_status(uci)
 			end
 		end)
 	end)
-	source.available = network_ok
+	source.available = network_ok and fs.access("/etc/config/network") == true
 
 	local firewall_ok = pcall(function()
 		uci:foreach("firewall", "zone", function(section)
-			if #source.zones >= 32 then return end
+			if #source.zones >= 32 then source.truncated = true return end
 			local name = tostring(section.name or section[".name"] or "")
 			if name:match("^[%w_.%-]+$") then
 				table.insert(source.zones, {
@@ -2152,11 +2153,11 @@ local function office_network_status(uci)
 			end
 		end)
 	end)
-	source.firewall_available = firewall_ok
+	source.firewall_available = firewall_ok and fs.access("/etc/config/firewall") == true
 
 	local wireless_ok = pcall(function()
 		uci:foreach("wireless", "wifi-iface", function(section)
-			if #source.wifi_aps >= 32 then return end
+			if #source.wifi_aps >= 32 then source.truncated = true return end
 			local name = tostring(section[".name"] or "")
 			if name:match("^[%w_.%-]+$") then
 				table.insert(source.wifi_aps, {
@@ -2170,7 +2171,7 @@ local function office_network_status(uci)
 			end
 		end)
 	end)
-	source.wireless_available = wireless_ok
+	source.wireless_available = wireless_ok and fs.access("/etc/config/wireless") == true
 
 	local parser = require "luci.quantumgrid.office_networks"
 	return parser.build_inventory(source)
@@ -2364,7 +2365,7 @@ function action_api()
 	local route_inventory = default_route_inventory(fs)
 	local rule_inventory = policy_rule_inventory(fs)
 	local hardware_io = hardware_io_status(fs)
-	local office_networks = office_network_status(uci)
+	local office_networks = office_network_status(uci, fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
