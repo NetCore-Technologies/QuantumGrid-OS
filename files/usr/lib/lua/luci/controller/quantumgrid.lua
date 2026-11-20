@@ -910,6 +910,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
+	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
@@ -2391,6 +2392,104 @@ function action_led_update()
 		persistent = false
 	})
 end
+
+function action_config_backup()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local validator = require "luci.quantumgrid.config_backup"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 405 and "Method Not Allowed" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	local confirmed, confirmation_error = validator.validate_confirmation(
+		http.formvalue("confirmed", true))
+	if not confirmed then
+		respond(400, { ok = false, error = confirmation_error })
+		return
+	end
+	if fs.access("/sbin/sysupgrade") ~= true then
+		respond(503, { ok = false, error = "The native sysupgrade backup utility is unavailable." })
+		return
+	end
+
+	local temp_ok, generated_path = pcall(os.tmpname)
+	if not temp_ok then
+		respond(500, { ok = false, error = "A temporary backup path could not be allocated." })
+		return
+	end
+	local backup_path, path_error = validator.validate_temp_path(generated_path)
+	if not backup_path then
+		respond(500, { ok = false, error = path_error })
+		return
+	end
+
+	local command_ok, command_status = pcall(sys.call,
+		"/sbin/sysupgrade -b " .. backup_path .. " >/dev/null 2>&1")
+	if not command_ok or command_status ~= 0 then
+		os.remove(backup_path)
+		respond(503, { ok = false, error = "The router could not create a configuration backup archive." })
+		return
+	end
+
+	local archive, open_error = io.open(backup_path, "rb")
+	if not archive then
+		os.remove(backup_path)
+		respond(500, { ok = false, error = "The configuration backup was created but could not be read: " .. tostring(open_error or "unknown error") })
+		return
+	end
+	local size = archive:seek("end")
+	local validated_size, size_error = validator.validate_archive_size(size)
+	if not validated_size then
+		archive:close()
+		os.remove(backup_path)
+		respond(503, { ok = false, error = size_error })
+		return
+	end
+	local seek_ok = archive:seek("set", 0)
+	if seek_ok ~= 0 then
+		archive:close()
+		os.remove(backup_path)
+		respond(500, { ok = false, error = "The configuration backup archive could not be rewound for download." })
+		return
+	end
+	local read_ok, contents = pcall(archive.read, archive, "*a")
+	local close_ok = pcall(archive.close, archive)
+	os.remove(backup_path)
+	if not read_ok or not close_ok or type(contents) ~= "string" or #contents ~= validated_size then
+		respond(500, { ok = false, error = "The configuration backup archive could not be read completely." })
+		return
+	end
+
+	local filename = "quantumgrid-config-backup-" .. tostring(os.date("!%Y%m%dT%H%M%SZ")) .. ".tar.gz"
+	http.header("Cache-Control", "no-store")
+	http.header("X-Content-Type-Options", "nosniff")
+	http.header("Content-Disposition", 'attachment; filename="' .. filename .. '"')
+	http.header("Content-Length", tostring(validated_size))
+	http.prepare_content("application/gzip")
+	http.write(contents)
+end
+
 
 function action_api()
 	local http = require "luci.http"
