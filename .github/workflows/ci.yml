@@ -98,6 +98,7 @@ jobs:
           bash -n build.sh quantumgrid-configure.sh scripts/setup-aw1000-phone-feed.sh scripts/verify-aw1000-ubi.sh tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/sqm.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
       - name: Test bounded SQM queue update validation
