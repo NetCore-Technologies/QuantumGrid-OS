@@ -316,15 +316,18 @@ canonical IPv4 address, subnet membership, existing reservations and current DHC
 targets a validated UCI host-section ID and snapshots the original section before changing it. Both
 operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
 The selected LAN is used for subnet validation only: a standard dnsmasq host section is global to
-that dnsmasq instance, not a per-VLAN reservation binding. Editing reservations in place, creating
-DHCP pools, and migrating live clients are not exposed yet.
+that dnsmasq instance, not a per-VLAN reservation binding. An existing enabled DHCP scope can also
+be edited in the UI, but only for its start offset, pool size and lease duration. The server recalculates
+subnet boundaries, rejects overlaps with other enabled scopes, commits the existing UCI section and
+restarts dnsmasq with a rollback attempt on failure. It cannot create new scopes, alter DHCPv6/RA/DNS
+settings, change network interfaces or migrate active clients.
 
 This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
 switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
 packet paths. A configured VLAN or a restrictive-looking firewall zone is not a security test or
 a compliance result. Write-capable office provisioning remains gated on transaction/rollback
 handling, management-plane lockout protection, and device-specific bridge/switch validation.
-The parser and correlation rules, including IP/MAC validation, are covered by `tests/office-networks.lua` in the normal CI gate, including DHCP host/subnet checks and live-lease collision detection.
+The parser and correlation rules, including IP/MAC validation, are covered by `tests/office-networks.lua` in the normal CI gate, including DHCP host/subnet checks and live-lease collision detection, DHCP pool range validation and overlap checks.
 
 ## Configuration backup
 
@@ -368,7 +371,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export and guarded add/remove static DHCP reservations, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/remove, and existing DHCP pool editors, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
