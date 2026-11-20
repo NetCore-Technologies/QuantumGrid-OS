@@ -10,6 +10,8 @@ grep -qx 'CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y' "$CONFIG"
 grep -qx 'CONFIG_PACKAGE_luci-compat=y' "$CONFIG"
 grep -qx 'CONFIG_PACKAGE_luci-lua-runtime=y' "$CONFIG"
 grep -qx 'CONFIG_PACKAGE_rpcd-mod-iwinfo=y' "$CONFIG"
+grep -Fq 'CONFIG_BUSYBOX_DEFAULT_SHA256SUM=y' "$CONFIG"
+grep -Fq 'CONFIG_BUSYBOX_DEFAULT_FEATURE_MD5_SHA1_SUM_CHECK=y' "$CONFIG"
 
 for package in kmod-usb-serial-option kmod-aw1000-fxs fxsd luci-app-fxs; do
     grep -qx "CONFIG_PACKAGE_${package}=y" "$CONFIG"
