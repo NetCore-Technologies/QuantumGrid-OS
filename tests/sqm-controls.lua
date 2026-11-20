@@ -16,7 +16,8 @@ assert(valid.upload == "18000")
 
 local disabled = sqm.validate_queue_update("cfg012345", "0", "64", "64")
 assert(disabled ~= nil and disabled.enabled == "0", "existing anonymous queue names are allowed")
-assert(sqm.MIN_RATE_KBPS == 64 and sqm.MAX_RATE_KBPS == 1000000)
+assert(sqm.validate_queue_update("wan", "1", "1000000", "64") ~= nil, "rate boundaries should pass")
+assert(sqm.validate_queue_update("wan", "1", "1000001", "64") == nil, "rates above the upper boundary should fail")
 
 expect_invalid("../network", "1", "95000", "18000", "path-like section")
 expect_invalid("wan;uci", "1", "95000", "18000", "command-like section")
