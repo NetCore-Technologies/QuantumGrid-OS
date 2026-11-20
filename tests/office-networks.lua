@@ -46,6 +46,19 @@ for _, values in ipairs(invalid_reservations) do
   assert(valid == nil, "invalid static reservation input must be rejected")
 end
 
+local rollback_snapshot = office.snapshot_dhcp_scope_options({
+  [".type"] = "dhcp",
+  start = "100",
+  leasetime = "12h",
+})
+assert(rollback_snapshot and #rollback_snapshot == 3)
+assert(rollback_snapshot[1].name == "start" and rollback_snapshot[1].present and rollback_snapshot[1].value == "100")
+assert(rollback_snapshot[2].name == "limit" and not rollback_snapshot[2].present and rollback_snapshot[2].value == nil,
+  "rollback snapshots must preserve the absence of optional UCI values")
+assert(rollback_snapshot[3].name == "leasetime" and rollback_snapshot[3].present and rollback_snapshot[3].value == "12h")
+local invalid_snapshot = office.snapshot_dhcp_scope_options({ [".type"] = "host" })
+assert(invalid_snapshot == nil, "only DHCP server sections may be snapshotted for pool updates")
+
 local valid_scope, scope_error = office.validate_dhcp_scope_update(
   "100", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(valid_scope and valid_scope.pool_start_ip == "192.168.10.100")
