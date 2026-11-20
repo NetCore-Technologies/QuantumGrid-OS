@@ -148,6 +148,7 @@ it can request a confirmed write. It defaults to read-only preflight.
 | `*-arcadyan_aw1000-squashfs-factory.ubi` | AW1000 persistent firmware image; use only with the verified AW1000-specific installation route |
 | `*-arcadyan_aw1000-initramfs-uImage.itb` | Temporary RAM boot for supported recovery and development workflows |
 | `install-aw1000-ubi.sh` | Read-only preflight by default; confirmed factory UBI writer for the standard AW1000 MTD layout |
+| `inspect-aw1000-install-target.sh` | Read-only board, root mount, MTD geometry and required-tool inspection on the currently installed router |
 | `verify-aw1000-release-manifest.sh` | Require one matching SHA-256 manifest entry before the installer proceeds |
 | `*-packages.tar.zst` | Package output from the same firmware build |
 | `SHA256SUMS` | Verify the published release assets |
@@ -158,8 +159,7 @@ persistent release artifact is the factory `.ubi` image. Do not upload it to a g
 sysupgrade form or assume a stock-firmware web installer accepts it.
 
 For the original standard AW1000 layout, boot the matching initramfs temporarily over UART/TFTP,
-verify the release checksum, and transfer the factory image, `SHA256SUMS`, `install-aw1000-ubi.sh`
-and `verify-aw1000-release-manifest.sh` into the same temporary directory (for example `/tmp`).
+run `inspect-aw1000-install-target.sh` on the currently installed router first, then boot the matching initramfs over UART/TFTP. Verify the release checksum and transfer the factory image, `SHA256SUMS`, `inspect-aw1000-install-target.sh`, `install-aw1000-ubi.sh` and `verify-aw1000-release-manifest.sh` into `/tmp`.
 Then run the installer once without `--write` to inspect its preflight. It accepts only the expected AW1000
 board identity and standard `mtd18`/`mtd20` 100 MiB rootfs layout; it refuses expanded layouts
 and installed squashfs roots. A real write requires `--write` plus typing `ERASE rootfs` at the
