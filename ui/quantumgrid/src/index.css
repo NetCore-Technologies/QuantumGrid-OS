@@ -8319,3 +8319,50 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+.hardware-input-list {
+  display: grid;
+  gap: 8px;
+}
+.hardware-input-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(130px, .9fr) minmax(120px, .8fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.hardware-input-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.hardware-input-row strong {
+  color: var(--text);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.hardware-input-row span {
+  color: var(--muted);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.hardware-input-row small {
+  color: var(--muted2);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+@media (max-width: 760px) {
+  .hardware-input-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 480px) {
+  .hardware-input-row {
+    grid-template-columns: 1fr;
+  }
+}
