@@ -27,6 +27,22 @@ local function read_number(path)
 	return value and tonumber(value:match("^%s*([%d%.]+)")) or nil
 end
 
+local function record_audit(http, action, target, outcome)
+	local require_ok, audit = pcall(require, "luci.quantumgrid.audit")
+	if not require_ok or type(audit) ~= "table" or type(audit.append) ~= "function" then
+		return false
+	end
+	local ok, recorded = pcall(audit.append, {
+		timestamp = os.time(),
+		actor = "root",
+		remote_ip = http.getenv("REMOTE_ADDR") or "",
+		action = action,
+		target = target,
+		outcome = outcome
+	})
+	return ok and recorded == true
+end
+
 local function ubus_call(object, method, arguments)
 	local util = require "luci.util"
 	local ok, result = pcall(util.ubus, object, method, arguments or {})
@@ -911,6 +927,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
+	entry({"admin", "services", "quantumgrid", "audit"}, call("action_audit_log")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
@@ -2500,6 +2517,41 @@ function action_config_backup()
 	http.header("Content-Length", tostring(validated_size))
 	http.prepare_content("application/gzip")
 	http.write(contents)
+end
+
+
+function action_audit_log()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local jsonc = require "luci.jsonc"
+	local audit = require "luci.quantumgrid.audit"
+
+	if http.getenv("REQUEST_METHOD") ~= "GET" then
+		http.status(405, "Method Not Allowed")
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "GET is required." })
+		return
+	end
+
+	local path = audit.log_path()
+	local rotated_path = path .. ".1"
+	local rotated = fs.access(rotated_path) == true and (read_file(rotated_path) or "") or ""
+	local current = fs.access(path) == true and (read_file(path) or "") or ""
+	local available = rotated ~= "" or current ~= ""
+	local parsed = audit.parse_log(rotated .. "\n" .. current, function(line)
+		return jsonc.parse(line)
+	end)
+	http.header("Cache-Control", "no-store")
+	http.prepare_content("application/json; charset=UTF-8")
+	http.write_json({
+		ok = true,
+		available = available,
+		events = parsed.events,
+		count = parsed.count,
+		truncated = parsed.truncated,
+		sampled_at = os.time()
+	})
 end
 
 
