@@ -113,23 +113,27 @@ function parse_input_devices(contents)
 	end
 
 	for line in contents:gmatch("[^\\r\\n]+") do
-		local name = line:match('^N:%s+Name="(.-)"')
-		if name then
+		local bus = line:match("^I:%s+Bus=([%x]+)")
+		if bus then
 			finish_device()
-			current.name = safe_text(name, 128)
+			current.bus = bus:upper()
 		else
-			local bus = line:match("^I:%s+Bus=([%x]+)")
-			if bus then current.bus = bus:upper() end
-			local handler_text = line:match("^H:%s+Handlers=(.*)$")
-			if handler_text then
-				current.handlers = {}
-				current.event_nodes = {}
-				for handler in handler_text:gmatch("[%w_.%-]+") do
-					if #current.handlers < 16 then
-						table.insert(current.handlers, handler)
-					end
-					if handler:match("^event%d+$") and #current.event_nodes < 8 then
-						table.insert(current.event_nodes, handler)
+			local name = line:match('^N:%s+Name="(.-)"')
+			if name then
+				if current.name then finish_device() end
+				current.name = safe_text(name, 128)
+			else
+				local handler_text = line:match("^H:%s+Handlers=(.*)$")
+				if handler_text then
+					current.handlers = {}
+					current.event_nodes = {}
+					for handler in handler_text:gmatch("[%w_.%-]+") do
+						if #current.handlers < 16 then
+							table.insert(current.handlers, handler)
+						end
+						if handler:match("^event%d+$") and #current.event_nodes < 8 then
+							table.insert(current.event_nodes, handler)
+						end
 					end
 				end
 			end
