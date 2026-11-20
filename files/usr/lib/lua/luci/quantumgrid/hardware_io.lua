@@ -112,7 +112,7 @@ function parse_input_devices(contents)
 		current = {}
 	end
 
-	for line in contents:gmatch("[^\\r\\n]+") do
+	for line in contents:gmatch("[^\r\n]+") do
 		local bus = line:match("^I:%s+Bus=([%x]+)")
 		if bus then
 			finish_device()
