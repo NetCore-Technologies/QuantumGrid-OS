@@ -317,13 +317,29 @@ a compliance result. Write-capable office provisioning remains gated on transact
 handling, management-plane lockout protection, and device-specific bridge/switch validation.
 The parser and correlation rules, including IP/MAC validation, are covered by `tests/office-networks.lua` in the normal CI gate.
 
+## Configuration backup
+
+The authenticated System page can generate a configuration archive using the router's native
+`sysupgrade -b` operation. It requires a same-origin administrator POST and an explicit
+confirmation checkbox, returns a no-store `.tar.gz` download, and caps the archive at 64 MiB.
+The router-side temporary path is validated under `/tmp` and removed after the response is read.
+The action does not reboot the router or modify its configuration.
+
+**Treat the archive as a secret.** It may contain administrator credentials, Wi-Fi passphrases,
+VPN private keys, certificates and other sensitive settings. Store it encrypted on a trusted device,
+limit access and keep a separate recovery route. The current feature creates backups only; it does
+not provide an automatic restore/import button. Restoring a backup must be done only with a
+compatible device/firmware and the documented recovery process. Validation rules are covered by
+`tests/config-backup.lua` and the normal firmware CI gate.
+
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, and the Office Networks read-only VLAN/bridge/firewall/SSID/DHCP inventory with CSV export.
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory
+  with CSV export, and authenticated explicit-confirmation configuration backup downloads.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
   observability.
