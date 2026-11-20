@@ -138,15 +138,18 @@ briefly and no SIM identifiers or credentials are requested. Security reports fi
 configuration and WireGuard/OpenVPN service state without exposing VPN secrets or changing
 router configuration. WireGuard peer rows also show measured RX/TX Mbps from successive transfer-counter
 samples; first samples, counter resets, stale intervals and ambiguous duplicate interface/AllowedIPs
-tuples remain N/A rather than being guessed. The Security Center adds a read-only firewall posture review: it flags
-ACCEPT input/forward defaults on standard WAN/WWAN zones and also flags enabled ACCEPT rules
-whose source-zone list includes a standard WAN/WWAN name or has no explicit source-zone
-restriction. Restrictive defaults are reported separately; custom external-zone names and
-unavailable telemetry remain unknown. Security Center returns up to 64 firewall rule summaries
-with zone direction, protocol, target, port constraints and presence flags for address matches;
-raw IP and MAC values are omitted. Summaries can be searched, sorted and exported, but rule
-order, NAT, full address matching and actual packet matching are not evaluated. This is not a
-vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, a bounded installed-module inventory parsed from the running kernel's `modules.dep` and compared with live `/proc/modules` state, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
+tuples remain N/A rather than being guessed. The Security Center adds a read-only firewall posture review:
+it flags ACCEPT input/forward defaults on standard WAN/WWAN zones, enabled ACCEPT rules with WAN-like
+or unrestricted sources, and broad external ACCEPT rules with no reported port/address constraints.
+Custom external-zone names and unavailable telemetry remain unknown. Security Center returns up to
+64 firewall rule summaries and 64 NAT redirect summaries, with explicit truncation indicators. The
+redirect inventory includes source/destination zones, protocol, target and external/internal ports;
+internal destination IPs and raw IP/MAC selector values are deliberately omitted. It flags enabled
+external forwards, forwards with no external source-port constraint, and mappings to common
+administrative/data-service ports for manual review. Summaries can be searched and exported. These
+are configuration review signals only: QuantumGrid does not evaluate rule order, fully resolve
+address sets, test public reachability, confirm a service is listening, or inspect live nftables
+packet paths. This is not a vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, a bounded installed-module inventory parsed from the running kernel's `modules.dep` and compared with live `/proc/modules` state, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
 connection-tracking count, configured maximum, free capacity and 75%/90% warning thresholds, plus a
 30-sample session-only occupancy trend and CSV export, MTD partitions,
 block devices and important system mounts, including total/available capacity and usage where
