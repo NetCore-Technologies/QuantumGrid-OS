@@ -1323,6 +1323,18 @@ local function cellular_status(fs)
 end
 
 
+local function conntrack_status(fs)
+	local count_path = "/proc/sys/net/netfilter/nf_conntrack_count"
+	local maximum_path = "/proc/sys/net/netfilter/nf_conntrack_max"
+	if fs.access(count_path) ~= true or fs.access(maximum_path) ~= true then
+		return { available = false }
+	end
+
+	local parser = require "luci.quantumgrid.conntrack"
+	return parser.summarize(read_file(count_path), read_file(maximum_path))
+end
+
+
 local function platform_status(fs)
 	local board = ubus_call("system", "board", {}) or {}
 	local release = type(board.release) == "table" and board.release or {}
@@ -1482,6 +1494,7 @@ function action_api()
 	local mwan3 = mwan3_status(fs)
 	local security = security_status(uci, fs)
 	local platform = platform_status(fs)
+	local conntrack = conntrack_status(fs)
 	local route_inventory = default_route_inventory(fs)
 	local rule_inventory = policy_rule_inventory(fs)
 
@@ -1512,6 +1525,7 @@ function action_api()
 		mwan3 = mwan3,
 		security = security,
 		platform = platform,
+		conntrack = conntrack,
 		cellular = cellular,
 		phone = {
 			service_installed = phone_service,
