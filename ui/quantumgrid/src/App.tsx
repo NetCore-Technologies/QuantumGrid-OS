@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
+import { analyzePolicyRouting } from "./policyRouting";
 import {
   collectWifiClientHistory,
   mergeWifiClientHistory,
@@ -1834,6 +1835,7 @@ function NetworkControlPage({
       (left.metric ?? Number.MAX_SAFE_INTEGER) - (right.metric ?? Number.MAX_SAFE_INTEGER));
 
   const ruleQuery = ruleSearch.trim().toLocaleLowerCase();
+  const policyCoverage = analyzePolicyRouting(policyRules, routes);
   const visiblePolicyRules = policyRules
     .filter((rule) => (ruleFamily === "all" || rule.family === ruleFamily) && [
       rule.family, String(rule.priority), rule.source, rule.destination, rule.fwmark,
@@ -2079,6 +2081,50 @@ function NetworkControlPage({
           </>
         )}
         <div className="module-message">Priority order is reported by the kernel, but a rule listing is not a packet-by-packet route simulation. This view does not verify connection tracking marks, mwan3 health checks, reachability or which interface a live flow ultimately uses.</div>
+      </Panel>
+
+      <Panel title="Policy routing table coverage" eyebrow="RULES ↔ DEFAULT ROUTES · READ-ONLY">
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !routerOverview.policy_rules_available || !routerOverview.routes_available ? (
+          <div className="module-message">Coverage is unknown because the kernel rule or default-route inventory is unavailable.</div>
+        ) : (
+          <>
+            <div className="policy-coverage-grid">
+              <div><small>LOOKUPS WITH DEFAULT ROUTE</small><strong>{fmt(policyCoverage.matchedLookupRules)}</strong></div>
+              <div><small>LOOKUPS WITHOUT DEFAULT</small><strong>{fmt(policyCoverage.missingDefaultRouteRules.length)}</strong></div>
+              <div><small>NON-LOOKUP ACTIONS</small><strong>{fmt(policyCoverage.nonLookupRules.length)}</strong></div>
+              <div><small>UNREFERENCED DEFAULT TABLES</small><strong>{fmt(policyCoverage.unreferencedDefaultTables.length)}</strong></div>
+            </div>
+            {policyCoverage.missingDefaultRouteRules.length > 0 ? (
+              <div className="policy-coverage-findings">
+                <strong>Lookup rules without a reported default route</strong>
+                {policyCoverage.missingDefaultRouteRules.map((rule) => (
+                  <div key={rule.family + "-" + rule.priority + "-" + rule.selectors}>
+                    <span>{rule.family} · priority {fmt(rule.priority)}</span>
+                    <b>Table {rule.table}</b>
+                    <small>{rule.selectors}</small>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="module-message">Every reported lookup rule points to a table with at least one reported default route.</div>
+            )}
+            {policyCoverage.unreferencedDefaultTables.length > 0 ? (
+              <div className="policy-coverage-findings">
+                <strong>Default-route tables not named by a lookup rule</strong>
+                {policyCoverage.unreferencedDefaultTables.map((item) => (
+                  <div key={item.family + "-" + item.table}>
+                    <span>{item.family}</span>
+                    <b>Table {item.table}</b>
+                    <small>{fmt(item.routeCount)} default route(s)</small>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </>
+        )}
+        <div className="module-message">This cross-reference compares address family and table name only. A lookup table with no default route may still contain specific routes or serve non-default traffic; an unreferenced default route is not automatically unused. No rule priority, fwmark, connection-tracking or packet path is simulated.</div>
       </Panel>
 
       <div className="module-grid">
