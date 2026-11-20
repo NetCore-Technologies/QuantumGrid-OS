@@ -289,6 +289,8 @@ function build_inventory(source)
 					device = device,
 					up = item.up == true,
 					ipv4 = values(item.ipv4, 8),
+					netmask = clean(item.netmask, 32),
+					ip6assign = clean(item.ip6assign, 16),
 					ipv6 = values(item.ipv6, 8),
 					vlan_ids = vlan_ids,
 					firewall_zones = attached_zones,
