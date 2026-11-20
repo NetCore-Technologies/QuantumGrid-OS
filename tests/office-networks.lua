@@ -86,11 +86,15 @@ local rollback_snapshot = office.snapshot_dhcp_scope_options({
   start = "100",
   leasetime = "12h",
 })
-assert(rollback_snapshot and #rollback_snapshot == 3)
+assert(rollback_snapshot and #rollback_snapshot == 6)
 assert(rollback_snapshot[1].name == "start" and rollback_snapshot[1].present and rollback_snapshot[1].value == "100")
 assert(rollback_snapshot[2].name == "limit" and not rollback_snapshot[2].present and rollback_snapshot[2].value == nil,
   "rollback snapshots must preserve the absence of optional UCI values")
 assert(rollback_snapshot[3].name == "leasetime" and rollback_snapshot[3].present and rollback_snapshot[3].value == "12h")
+assert(rollback_snapshot[4].name == "dhcpv6" and not rollback_snapshot[4].present)
+assert(rollback_snapshot[5].name == "ra" and not rollback_snapshot[5].present)
+assert(rollback_snapshot[6].name == "ndp" and not rollback_snapshot[6].present,
+  "DHCPv6, RA and NDP rollback snapshots must preserve absent UCI options")
 local invalid_snapshot = office.snapshot_dhcp_scope_options({ [".type"] = "host" })
 assert(invalid_snapshot == nil, "only DHCP server sections may be snapshotted for pool updates")
 
@@ -248,6 +252,25 @@ reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp
 reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp" }, input = "REJECT", forward = "ACCEPT", selected = true } } }, "firewall zone with open forwarding default")
 reject_segment({ vlans = { { name = "vlan20", device = "br-lan", vlan_id = 20, ports = {} } } }, "bridge VLAN without switch-port members")
 reject_segment({ scopes = { { ignore = false, range_valid = false } } }, "unresolved existing DHCP scope")
+
+local valid_ipv6_modes = office.validate_dhcp_scope_ipv6_modes("server", "server", "disabled")
+assert(valid_ipv6_modes and valid_ipv6_modes.dhcpv6 == "server"
+  and valid_ipv6_modes.ra == "server" and valid_ipv6_modes.ndp == "disabled")
+local preserve_ipv6_modes = office.validate_dhcp_scope_ipv6_modes("UNCHANGED", "UNCHANGED", "UNCHANGED")
+assert(preserve_ipv6_modes and preserve_ipv6_modes.dhcpv6 == "UNCHANGED"
+  and preserve_ipv6_modes.ra == "UNCHANGED" and preserve_ipv6_modes.ndp == "UNCHANGED",
+  "existing DHCPv6/RA relay or hybrid values must be retainable without rewriting")
+local function reject_ipv6_mode(dhcpv6, ra, ndp, label)
+  local result, err = office.validate_dhcp_scope_ipv6_modes(dhcpv6, ra, ndp)
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
+end
+reject_ipv6_mode("relay", "server", "disabled", "DHCPv6 relay without an explicit master topology")
+reject_ipv6_mode("server", "hybrid", "disabled", "RA hybrid without an explicit master topology")
+reject_ipv6_mode("server", "server", "relay", "NDP relay without an explicit master topology")
+reject_ipv6_mode("server;uci", "server", "disabled", "injected DHCPv6 mode")
+reject_ipv6_mode("server", "disabled;uci", "disabled", "injected RA mode")
+reject_ipv6_mode("server", "server", "hybrid", "NDP hybrid without a master topology")
 
 local forwarding_zones = {
   { name = "lan", networks = { "lan" } },
