@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { downloadRouterConfigBackup, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -3594,7 +3594,7 @@ function DashboardPage({
   }
 
   if (page === "office") {
-    return <OfficeNetworksPage routerOverview={routerOverview} />;
+    return <OfficeNetworksPage routerOverview={routerOverview} refresh={refresh} />;;
   }
 
   if (page === "audit") {
@@ -5169,10 +5169,56 @@ function AuditLogPage() {
 }
 
 
-function OfficeNetworksPage({ routerOverview }: {
+function OfficeNetworksPage({ routerOverview, refresh }: {
   routerOverview: RouterOverview | null;
+  refresh: () => void;
 }) {
   const inventory = routerOverview?.office_networks;
+  const [reservationName, setReservationName] = useState("");
+  const [reservationMac, setReservationMac] = useState("");
+  const [reservationIp, setReservationIp] = useState("");
+  const [reservationNetwork, setReservationNetwork] = useState("");
+  const [reservationConfirmed, setReservationConfirmed] = useState(false);
+  const [reservationBusy, setReservationBusy] = useState(false);
+  const [reservationNotice, setReservationNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const enabledDhcpScopes = inventory?.dhcp_scopes.filter((scope) => !scope.ignore) ?? [];
+  const reservationNetworks = (inventory?.interfaces ?? []).filter((item) =>
+    item.protocol === "static" && item.ipv4.length > 0 && Boolean(item.netmask) &&
+    enabledDhcpScopes.some((scope) => scope.interface === item.name)
+  );
+  const selectedReservationNetwork = reservationNetworks.some((item) => item.name === reservationNetwork)
+    ? reservationNetwork
+    : reservationNetworks[0]?.name ?? "";
+  const saveReservation = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!reservationConfirmed || reservationBusy || !selectedReservationNetwork) return;
+    setReservationBusy(true);
+    setReservationNotice(null);
+    try {
+      await createRouterDhcpReservation({
+        name: reservationName.trim(),
+        mac: reservationMac.trim(),
+        ipv4: reservationIp.trim(),
+        network: selectedReservationNetwork,
+      });
+      setReservationNotice({
+        success: true,
+        message: "The static reservation was saved and dnsmasq restarted successfully.",
+      });
+      setReservationName("");
+      setReservationMac("");
+      setReservationIp("");
+      setReservationConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setReservationNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The DHCP reservation could not be created.",
+      });
+    } finally {
+      setReservationBusy(false);
+    }
+  };
   const interfaces = inventory?.interfaces ?? [];
   const bridges = inventory?.bridges ?? [];
   const vlans = inventory?.vlans ?? [];
@@ -5328,6 +5374,89 @@ function OfficeNetworksPage({ routerOverview }: {
           <div className="module-message">Only configured UCI host reservations are shown. Dynamic leases are listed separately on the Devices page; a reservation does not prove that the client is currently connected.</div>
         </Panel>
       </div>
+
+      <Panel title="Add a static DHCP reservation" eyebrow="OFFICE DEVICE MANAGEMENT · GUARDED WRITE">
+        {reservationNetworks.length === 0 ? (
+          <div className="module-message">No enabled DHCP scope is attached to a static IPv4 interface with a readable subnet mask. Configure an appropriate LAN interface and DHCP scope before creating reservations.</div>
+        ) : (
+          <form className="office-reservation-form" onSubmit={saveReservation}>
+            <div className="office-reservation-grid">
+              <label>
+                <span>Host name</span>
+                <input
+                  type="text"
+                  value={reservationName}
+                  onChange={(event) => setReservationName(event.target.value)}
+                  placeholder="Office-Printer"
+                  maxLength={63}
+                  pattern="[A-Za-z0-9][A-Za-z0-9-]*"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <label>
+                <span>MAC address</span>
+                <input
+                  type="text"
+                  value={reservationMac}
+                  onChange={(event) => setReservationMac(event.target.value)}
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                  maxLength={17}
+                  pattern="[A-Fa-f0-9]{2}(:[A-Fa-f0-9]{2}){5}"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <label>
+                <span>Reserved IPv4</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={reservationIp}
+                  onChange={(event) => setReservationIp(event.target.value)}
+                  placeholder="192.168.20.30"
+                  maxLength={15}
+                  pattern="[0-9]{1,3}(\.[0-9]{1,3}){3}"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <label>
+                <span>LAN / DHCP scope</span>
+                <select
+                  value={selectedReservationNetwork}
+                  onChange={(event) => setReservationNetwork(event.target.value)}
+                  required
+                >
+                  {reservationNetworks.map((item) => (
+                    <option key={item.name} value={item.name}>{item.name} · {item.ipv4[0]} / {item.netmask}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="office-reservation-confirm">
+              <input
+                type="checkbox"
+                checked={reservationConfirmed}
+                disabled={reservationBusy}
+                onChange={(event) => setReservationConfirmed(event.target.checked)}
+              />
+              <span>I confirm this device and IP assignment, and authorize QuantumGrid to update DHCP configuration and restart dnsmasq.</span>
+            </label>
+            <div className="office-reservation-actions">
+              <button className="hero-button" type="submit" disabled={!reservationConfirmed || reservationBusy || !selectedReservationNetwork}>
+                <Check size={15} /> {reservationBusy ? "Saving reservation…" : "Add reservation"}
+              </button>
+              <span>Only new reservations are supported in this control. Duplicate MAC/IP entries, addresses outside the selected subnet and addresses currently leased to another MAC are rejected.</span>
+            </div>
+            {reservationNotice && (
+              <div className={reservationNotice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={reservationNotice.success ? "status" : "alert"}>
+                {reservationNotice.message}
+              </div>
+            )}
+          </form>
+        )}
+      </Panel>
 
       <Panel title="Bridge VLAN membership" eyebrow="TAGGED / UNTAGGED SWITCH PORT INVENTORY">
         {!inventory?.available ? (
