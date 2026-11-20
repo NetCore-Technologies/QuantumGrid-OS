@@ -29,8 +29,8 @@ not interchangeable merely because it has the same SoC family.
 ## Read-only inspection on the currently installed router
 
 Before preparing a flash, inspect the router while it is still running its current firmware.
-Copy `scripts/inspect-aw1000-install-target.sh` from this repository to the router (for example
-with `scp` to `/tmp`), then run:
+Download `inspect-aw1000-install-target.sh` from the matching QuantumGrid release (or copy
+it from `scripts/` in the repository) to the router, for example with `scp` to `/tmp`, then run:
 
 ```sh
 sh /tmp/inspect-aw1000-install-target.sh
