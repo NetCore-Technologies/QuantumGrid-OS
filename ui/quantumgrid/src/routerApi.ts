@@ -2256,7 +2256,7 @@ export async function createRouterOfficeSegment(input: {
     !("device" in payload) || payload.device !== input.bridge + "." + String(Number(input.vlanId)) ||
     !("address" in payload) || payload.address !== input.address ||
     !("netmask" in payload) || payload.netmask !== input.netmask ||
-    !("zone" in payload) || payload.zone.length === 0 ||
+    !("zone" in payload) || typeof payload.zone !== "string" || payload.zone.length === 0 ||
     !("pool_start_ip" in payload) || typeof payload.pool_start_ip !== "string" ||
     !("pool_end_ip" in payload) || typeof payload.pool_end_ip !== "string" ||
     !("firewall_rules" in payload) || payload.firewall_rules !== 3 ||
