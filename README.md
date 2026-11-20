@@ -112,7 +112,9 @@ and RF measurements where the modem reports them. It retains up to 30 distinct m
 in the current UI session, without assigning a synthetic signal score. QMI values are cached
 briefly and no SIM identifiers or credentials are requested. Security reports firewall zone policies, nftables table presence, Adblock Fast
 configuration and WireGuard/OpenVPN service state without exposing VPN secrets or changing
-router configuration. The Security Center adds a read-only firewall posture review: it flags
+router configuration. WireGuard peer rows also show measured RX/TX Mbps from successive transfer-counter
+samples; first samples, counter resets, stale intervals and ambiguous duplicate interface/AllowedIPs
+tuples remain N/A rather than being guessed. The Security Center adds a read-only firewall posture review: it flags
 ACCEPT input/forward defaults on standard WAN/WWAN zones and also flags enabled ACCEPT rules
 whose source-zone list includes a standard WAN/WWAN name or has no explicit source-zone
 restriction. Restrictive defaults are reported separately; custom external-zone names and
