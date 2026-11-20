@@ -51,6 +51,17 @@ assert(install_driver ~= nil and install_driver.package == "kmod-ath11k",
 local remove_app = package_operations.validate("remove", "luci-app-sqm", "1")
 assert(remove_app ~= nil and remove_app.operation == "remove")
 
+local close_failure_path, close_failure_error = package_operations.create_secure_log_file(function()
+	return "/tmp/qg-package-log-close-failure"
+end, {
+	open_flags = secure_nixio.open_flags,
+	open = function()
+		return { close = function() return nil, "close failed" end }
+	end
+})
+assert(close_failure_path == nil and type(close_failure_error) == "string",
+	"a log descriptor must close successfully before its path is handed to the shell")
+
 local function rejected(operation, name, confirmed, label)
 	local result, err = package_operations.validate(operation, name, confirmed)
 	assert(result == nil, label .. " should be rejected")
