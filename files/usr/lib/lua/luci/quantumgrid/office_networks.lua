@@ -570,6 +570,9 @@ function validate_office_segment(name, bridge_name, vlan_id, address, netmask,
 					return nil, "The new gateway address is already assigned to another interface."
 				end
 				local existing_subnet = ipv4_subnet_bounds(existing_address, iface.netmask)
+				if iface.protocol == "static" and not existing_subnet then
+					return nil, "An existing static IPv4 interface has an address or netmask that cannot be parsed safely. Resolve it before creating another subnet."
+				end
 				if existing_subnet and ipv4_overlaps(subnet, existing_subnet) then
 					return nil, "The new office subnet overlaps an existing static IPv4 interface subnet."
 				end
