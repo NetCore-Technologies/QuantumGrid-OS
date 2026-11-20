@@ -33,6 +33,7 @@ end
 
 function validate(input)
 	if type(input) ~= "table" then return nil, "Remote syslog settings must be provided." end
+	if input.confirmed ~= "1" then return nil, "Explicit confirmation is required before changing remote syslog settings." end
 	local enabled = input.enabled
 	if enabled ~= "1" and enabled ~= "0" then
 		return nil, "Remote syslog enabled state must be 1 or 0."
