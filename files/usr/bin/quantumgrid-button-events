@@ -18,7 +18,8 @@ chmod 700 "$STATE_DIR"
 cleanup() {
   rm -f "$MONITOR_FILE" "$TEMP_FILE"
 }
-trap cleanup 0 HUP INT TERM
+trap cleanup 0
+trap 'exit 0' HUP INT TERM
 
 record_event() {
   raw_event="$1"

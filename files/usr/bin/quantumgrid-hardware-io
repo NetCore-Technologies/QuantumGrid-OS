@@ -71,7 +71,7 @@ show_buttons() {
   fi
   if [ -r /var/run/quantumgrid/button-events.tsv ]; then
     echo "Recent events (timestamp, button, action, SEEN seconds, type, sequence):"
-    tail -n 10 /var/run/quantumgrid/button-events.tsv | awk -F '|' 'NF == 6 { printf "  %s  %s  %s  SEEN=%ss  %s  #%s\\n", $1, $3, $4, $5, $6, $2 }'
+    tail -n 10 /var/run/quantumgrid/button-events.tsv | awk -F '|' 'NF == 6 { printf "  %s  %s  %s  SEEN=%ss  %s  #%s\n", $1, $3, $4, $5, $6, $2 }'
   else
     echo "No button events have been captured since this boot."
   fi
