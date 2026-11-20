@@ -91,3 +91,67 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
         run: bash tests/firmware-smoke.sh
+
+  cleanup-obsolete-branches:
+    name: Delete only verified merged branches
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && github.event.head_commit.message == 'chore: clean up merged branches' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify PR merge state and branch heads before deletion
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          TARGET_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          open_heads="$(gh api --paginate "repos/${REPOSITORY}/pulls?state=open&per_page=100" --jq '.[].head.ref')"
+
+          remove_branch() {
+            local branch="$1"
+            local expected_sha="$2"
+            local merged_pr="$3"
+            local actual_sha
+            actual_sha="$(git ls-remote origin "refs/heads/${branch}" | awk 'NR == 1 { print $1 }')"
+
+            if [[ -z "${actual_sha}" || "${actual_sha}" != "${expected_sha}" ]]; then
+              echo "SKIP ${branch}: branch head changed or no longer exists"
+              return 0
+            fi
+            if grep -Fxq "${branch}" <<< "${open_heads}"; then
+              echo "SKIP ${branch}: an open pull request still references it"
+              return 0
+            fi
+
+            if [[ -n "${merged_pr}" ]]; then
+              local pr_head pr_merged_at
+              pr_head="$(gh api "repos/${REPOSITORY}/pulls/${merged_pr}" --jq '.head.ref')"
+              pr_merged_at="$(gh api "repos/${REPOSITORY}/pulls/${merged_pr}" --jq '.merged_at')"
+              if [[ "${pr_head}" != "${branch}" || "${pr_merged_at}" == "null" || -z "${pr_merged_at}" ]]; then
+                echo "SKIP ${branch}: expected pull request ${merged_pr} is not merged"
+                return 0
+              fi
+            else
+              if ! git merge-base --is-ancestor "${expected_sha}" "${TARGET_SHA}"; then
+                echo "SKIP ${branch}: its head is not contained in main history"
+                return 0
+              fi
+            fi
+
+            gh api --method DELETE "repos/${REPOSITORY}/git/refs/heads/${branch}" >/dev/null
+            echo "DELETED ${branch} (${expected_sha})"
+          }
+
+          remove_branch "ci/aw1000-build-on-main" "32dc09e6562be84737107db1b00334a25c67aeca" "6"
+          remove_branch "copilot/fix-failing-github-actions-job" "b21a8ce93c0cb42757c3b391112e4913615404ae" "10"
+          remove_branch "feat/authenticated-live-telemetry" "17932cc43be565cea7f6f20d015f296f1554796a" "9"
+          remove_branch "feat/live-aw1000-device-inventory" "5a479e3326d0d809166eb00eb844f34bc699f84" ""
+          remove_branch "feat/package-quantumgrid-ui" "cbdbf60ef576abe849fd90e503eb94ff4a7547b2" "8"
+          remove_branch "feat/quantumgrid-site-release-pipeline" "54ef606828d21e71de3fc3c520533e1a0f380b52" "4"
+          remove_branch "fix/openwrt-phone-feed-name" "a629aef659963ca9d1029a99aff0f32eb9796453" "7"
+          remove_branch "fix/pages-enablement-gate" "492679e19829642aed0e42348daef549b8a57f39" "5"
