@@ -5001,7 +5001,7 @@ function OfficeNetworksPage({ routerOverview }: {
       ]),
       ...(inventory.forwardings ?? []).map((item) => [
         exportedAt, "Firewall forwarding", item.name, "", item.source + " → " + item.destination,
-        "CONFIGURED", "", "", "", "", "", 
+        "CONFIGURED", "", "", "", "", "", "",
       ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
