@@ -12,7 +12,7 @@ client inventory also filters and
 sorts by driver-reported TX retries/failures; these are cumulative counters, not packet-loss scores. The Network page also inventories IPv4/IPv6 default routes and policy-routing rules, including lookup tables, priorities, firewall marks and interface selectors. A coverage view cross-references lookup tables with default routes, while keeping missing defaults distinct from invalid or unused policy. It also exposes the mwan3 daemon's interface and per-target health state, separate from netifd link state, with filtered CSV export, active IPv4/IPv6 policy weights and directly connected network sets. Per-WAN RX/TX throughput is measured from successive interface byte counters, and the export records the measured values and sampling interval; first samples, counter resets and stale intervals remain unavailable.
 Policy weights are not traffic-share measurements, and throughput is not a link-speed guarantee or controlled-load benchmark. These are read-only snapshots; they do not
 change failover policy or simulate packet paths. The Advanced page also reports
-firmware/board identity, loaded kernel modules, service-script and diagnostic-tool presence,
+firmware/board identity, a bounded installed `.ko` inventory from the running kernel's `modules.dep` compared with loaded entries from `/proc/modules`, service-script and diagnostic-tool presence,
 MTD partitions, block devices and important system mounts, including filesystem capacity/available
 space when statvfs is supported, through read-only checks. It reports Netfilter connection-tracking
 count, maximum, free capacity and 75%/90% thresholds, plus a 30-sample session-only occupancy trend
