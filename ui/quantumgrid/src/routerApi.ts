@@ -22,7 +22,7 @@ export interface RouterInterface {
   rx_dropped?: number;
   tx_dropped?: number;
   ipv4: string[];
-  ipv6: string[];
+  ipv6?: string[];
 }
 
 export interface RouterWirelessInterface {
@@ -301,7 +301,7 @@ export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
   timestamp: number;
-  routes_available: boolean;
+  routes_available?: boolean;
   routes?: RouterDefaultRoute[];
   system: {
     uptime_seconds: number;
