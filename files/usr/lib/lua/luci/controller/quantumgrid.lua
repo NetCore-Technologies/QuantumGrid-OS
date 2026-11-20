@@ -4480,6 +4480,35 @@ function action_dhcp_scope_update()
 	end
 	local ipv6_changed = ipv6_modes.dhcpv6 ~= "UNCHANGED"
 		or ipv6_modes.ra ~= "UNCHANGED" or ipv6_modes.ndp ~= "UNCHANGED"
+
+	local advanced_ipv6, advanced_error = validator.validate_dhcp_scope_ipv6_advanced(
+		http.formvalue("ra_flags", true) or "UNCHANGED",
+		http.formvalue("ra_slaac", true) or "UNCHANGED",
+		http.formvalue("ra_dns", true) or "UNCHANGED",
+		http.formvalue("ra_preference", true) or "UNCHANGED",
+		http.formvalue("ra_lifetime", true) or "UNCHANGED",
+		http.formvalue("dhcpv6_na", true) or "UNCHANGED",
+		http.formvalue("dhcpv6_pd", true) or "UNCHANGED",
+		http.formvalue("dhcpv6_assignall", true) or "UNCHANGED",
+		http.formvalue("dhcpv6_pd_min_len", true) or "UNCHANGED")
+	if not advanced_ipv6 then
+		respond(400, { ok = false, error = advanced_error })
+		return
+	end
+	local advanced_values = {
+		ra_flags = advanced_ipv6.ra_flags,
+		ra_slaac = advanced_ipv6.ra_slaac,
+		ra_dns = advanced_ipv6.ra_dns,
+		ra_preference = advanced_ipv6.ra_preference,
+		ra_lifetime = advanced_ipv6.ra_lifetime,
+		dhcpv6_na = advanced_ipv6.dhcpv6_na,
+		dhcpv6_pd = advanced_ipv6.dhcpv6_pd,
+		dhcpv6_assignall = advanced_ipv6.dhcpv6_assignall,
+		dhcpv6_pd_min_len = advanced_ipv6.dhcpv6_pd_min_len
+	}
+	for _, value in pairs(advanced_values) do
+		if value ~= "UNCHANGED" then ipv6_changed = true break end
+	end
 	if ipv6_changed and fs.access("/etc/init.d/odhcpd") ~= true then
 		respond(503, { ok = false, error = "The native odhcpd service is unavailable. IPv6 scope settings were not changed." })
 		return
@@ -4498,11 +4527,30 @@ function action_dhcp_scope_update()
 	if ipv6_modes.dhcpv6 ~= "UNCHANGED" then staged_options.dhcpv6 = ipv6_modes.dhcpv6 end
 	if ipv6_modes.ra ~= "UNCHANGED" then staged_options.ra = ipv6_modes.ra end
 	if ipv6_modes.ndp ~= "UNCHANGED" then staged_options.ndp = ipv6_modes.ndp end
+	for option, value in pairs(advanced_values) do
+		if value ~= "UNCHANGED" and option ~= "ra_flags" then staged_options[option] = value end
+	end
 	for option, value in pairs(staged_options) do
 		local set_ok, set_result = pcall(uci.set, uci, "dhcp", section, option, value)
 		if not set_ok or set_result ~= true then
 			pcall(uci.revert, uci, "dhcp")
 			respond(500, { ok = false, error = "The DHCP scope update could not be staged; services were not restarted." })
+			return
+		end
+	end
+	if advanced_ipv6.ra_flags ~= "UNCHANGED" then
+		local flags = {}
+		if advanced_ipv6.ra_flags == "managed-config+other-config" then
+			flags = { "managed-config", "other-config" }
+		elseif advanced_ipv6.ra_flags ~= "none" then
+			flags = { advanced_ipv6.ra_flags }
+		else
+			flags = { "none" }
+		end
+		local flags_ok, flags_result = pcall(uci.set_list, uci, "dhcp", section, "ra_flags", flags)
+		if not flags_ok or flags_result ~= true then
+			pcall(uci.revert, uci, "dhcp")
+			respond(500, { ok = false, error = "RA flags could not be staged; services were not restarted." })
 			return
 		end
 	end
@@ -4524,7 +4572,11 @@ function action_dhcp_scope_update()
 		for _, previous_option in ipairs(previous) do
 			local option_ok, option_result
 			if previous_option.present then
-				option_ok, option_result = pcall(uci.set, uci, "dhcp", section, previous_option.name, previous_option.value)
+				if previous_option.name == "ra_flags" and type(previous_option.value) == "table" then
+					option_ok, option_result = pcall(uci.set_list, uci, "dhcp", section, previous_option.name, previous_option.value)
+				else
+					option_ok, option_result = pcall(uci.set, uci, "dhcp", section, previous_option.name, previous_option.value)
+				end
 			else
 				local current = uci:get("dhcp", section, previous_option.name)
 				if current == nil then
@@ -4573,6 +4625,15 @@ function action_dhcp_scope_update()
 		dhcpv6 = uci:get("dhcp", section, "dhcpv6") or "",
 		ra = uci:get("dhcp", section, "ra") or "",
 		ndp = uci:get("dhcp", section, "ndp") or "",
+		ra_flags = uci:get_list("dhcp", section, "ra_flags") or {},
+		ra_slaac = uci:get("dhcp", section, "ra_slaac") ~= "0",
+		ra_dns = uci:get("dhcp", section, "ra_dns") ~= "0",
+		ra_preference = uci:get("dhcp", section, "ra_preference") or "medium",
+		ra_lifetime = tonumber(uci:get("dhcp", section, "ra_lifetime")) or 2700,
+		dhcpv6_na = uci:get("dhcp", section, "dhcpv6_na") ~= "0",
+		dhcpv6_pd = uci:get("dhcp", section, "dhcpv6_pd") ~= "0",
+		dhcpv6_assignall = uci:get("dhcp", section, "dhcpv6_assignall") ~= "0",
+		dhcpv6_pd_min_len = tonumber(uci:get("dhcp", section, "dhcpv6_pd_min_len")) or 62,
 		restarted = true,
 		dnsmasq_restarted = true,
 		odhcpd_restarted = ipv6_changed,
