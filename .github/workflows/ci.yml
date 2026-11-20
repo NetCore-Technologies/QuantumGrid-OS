@@ -95,11 +95,10 @@ jobs:
           sudo apt-get install -y lua5.1
       - name: Check shell and Lua syntax
         run: |
-          bash -n build.sh quantumgrid-configure.sh scripts/setup-aw1000-phone-feed.sh scripts/verify-aw1000-ubi.sh tests/firmware-smoke.sh
+          bash -n build.sh quantumgrid-configure.sh scripts/setup-aw1000-phone-feed.sh scripts/verify-aw1000-ubi.sh scripts/install-aw1000-ubi.sh scripts/verify-aw1000-release-manifest.sh tests/install-aw1000-ubi-smoke.sh tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/sqm.lua
-          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/mwan3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/mwan3.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
@@ -108,6 +107,5 @@ jobs:
       - name: Test bounded mwan3 tracker telemetry
         run: lua5.1 tests/mwan3-status.lua
       - name: Test Multi-WAN health normalization
-        run: lua5.1 tests/mwan3-status.lua
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
         run: bash tests/firmware-smoke.sh
