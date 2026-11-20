@@ -1668,9 +1668,11 @@ function formatTrafficBytes(bytes: number | undefined): string {
 function NetworkControlPage({
   routerOverview,
   stats,
+  wirelessThroughput,
 }: {
   routerOverview: RouterOverview | null;
   stats: Stats;
+  wirelessThroughput: Record<string, WirelessTrafficSample>;
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
   const radios = routerOverview?.wireless ?? [];
@@ -1742,6 +1744,7 @@ function NetworkControlPage({
           clients={wirelessClients}
           available={Array.isArray(routerOverview?.wireless_clients)}
           leases={routerOverview?.clients ?? []}
+          wirelessThroughput={wirelessThroughput}
         />
       </Panel>
     </div>
@@ -2172,7 +2175,7 @@ function DashboardPage({
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
 
   if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
-  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} />;
+  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} wirelessThroughput={wirelessThroughput} />;
   if (page === "diagnostics") return <DiagnosticsControlPage stats={stats} telemetryError={telemetryError} routerOverview={routerOverview} refresh={refresh} />;
   if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} />;
   if (page === "analytics") return <AnalyticsControlPage stats={stats} trafficHistory={trafficHistory} />;
@@ -2551,6 +2554,12 @@ function WifiControlPage({
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
   const wirelessClients = routerOverview?.wireless_clients ?? [];
   const wirelessInventoryAvailable = Array.isArray(routerOverview?.wireless_clients);
+  const [scan, setScan] = useState<RouterWifiScan | null>(null);
+  const [scanLoading, setScanLoading] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
+  const [scanFilter, setScanFilter] = useState("");
+  const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
   const visibleScanResults = scan
     ? scan.results
       .filter((network) => {
@@ -3173,7 +3182,9 @@ function App() {
   useEffect(() => {
     if (!setupComplete || !loggedIn) return;
 
-    void refresh();
+    const initialRefresh = window.setTimeout(() => {
+      void refresh();
+    }, 0);
     const refreshTimer = window.setInterval(() => {
       void refresh();
     }, 3000);
@@ -3183,6 +3194,7 @@ function App() {
     }, 1000);
 
     return () => {
+      window.clearTimeout(initialRefresh);
       window.clearInterval(refreshTimer);
       window.clearInterval(countdownTimer);
     };
