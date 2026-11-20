@@ -70,6 +70,14 @@ Please allow reasonable time for investigation and remediation before publicly d
 
 We appreciate responsible security research and will make a good-faith effort to work with researchers to understand and resolve reported issues.
 
+## Automated Security Checks
+
+The repository runs GitHub CodeQL analysis for Python and JavaScript/TypeScript. The control-centre
+CI also runs npm audit against the committed lockfile and fails when high- or critical-severity
+dependency advisories are present. A successful CodeQL analysis job means the analysis completed;
+it does not by itself prove that the repository has zero open alerts. Dependency advisories and
+CodeQL findings must be reviewed and remediated independently.
+
 ## Security Updates
 
 Security fixes will be included in supported releases whenever practical.
