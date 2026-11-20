@@ -1872,6 +1872,16 @@ local function platform_status(fs)
 		item.loaded = fs.access(item.path) == true
 		item.path = nil
 	end
+	local kernel_release = read_file("/proc/sys/kernel/osrelease") or ""
+	local kernel_module_path = nil
+	if kernel_release:match("^[%w%.%+_%-]+$") then
+		kernel_module_path = "/lib/modules/" .. kernel_release .. "/modules.dep"
+	end
+	local kernel_module_inventory = require("luci.quantumgrid.kernel_modules").parse(
+		kernel_module_path and read_file(kernel_module_path) or nil,
+		read_file("/proc/modules"),
+		2000
+	)
 	for _, item in ipairs(tools) do
 		item.available = false
 		for _, path in ipairs(item.paths) do
@@ -2055,7 +2065,9 @@ local function platform_status(fs)
 		description = field(release.description, 192),
 		package_manager = package_manager,
 		acceleration = acceleration,
-		modules = modules, tools = tools, services = services, storage = storage,
+		modules = modules,
+		kernel_modules = kernel_module_inventory,
+		tools = tools, services = services, storage = storage,
 		block_devices = block_devices, mounts = mounts
 	}
 end
