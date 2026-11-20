@@ -5,8 +5,9 @@ assert(backup.validate_confirmation("1") == true, "confirmed backup should be ac
 assert(backup.validate_confirmation("0") == nil, "unconfirmed backup must be rejected")
 assert(backup.validate_confirmation(nil) == nil, "missing confirmation must be rejected")
 
-assert(backup.validate_temp_path("/tmp/lua_abc123") == "/tmp/lua_abc123")
-assert(backup.validate_temp_path("/tmp/qg-backup_20261120.tar.gz") == "/tmp/qg-backup_20261120.tar.gz")
+assert(backup.validate_temp_path("/tmp/quantumgrid-config-backup.Abc123") == "/tmp/quantumgrid-config-backup.Abc123")
+assert(backup.validate_temp_path("/tmp/lua_abc123") == nil, "only reserved QuantumGrid mktemp names are allowed")
+assert(backup.validate_temp_path("/tmp/quantumgrid-config-backup.") == nil, "empty mktemp suffix must be rejected")
 assert(backup.validate_temp_path("/etc/config/backup.tar.gz") == nil, "backup path must stay under /tmp")
 assert(backup.validate_temp_path("/tmp/../../etc/shadow") == nil, "path traversal must be rejected")
 assert(backup.validate_temp_path("/tmp/a;touch /tmp/pwned") == nil, "shell punctuation must be rejected")
