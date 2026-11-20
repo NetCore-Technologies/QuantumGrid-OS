@@ -1278,7 +1278,7 @@ export async function updateRouterWirelessConfig(input: {
       !host.includes("..") && labels.every((label) =>
         label.length >= 1 && label.length <= 63 &&
         /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label));
-    const ipv4 = labels.length === 4 && labels.every((label) => /^\\d+$/.test(label));
+    const ipv4 = labels.length === 4 && labels.every((label) => /^\d+$/.test(label));
     const ipv4Valid = !ipv4 || labels.every((label) => Number(label) >= 0 && Number(label) <= 255);
     if (!hostnameValid || !ipv4Valid) {
       throw new Error("RADIUS accounting server must be an IPv4 address or valid DNS hostname.");
