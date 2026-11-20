@@ -59,7 +59,7 @@ function parse_dump(output, now)
 	result.available = true
 	now = bounded_integer(now, MAX_COUNTER) or os.time()
 
-	for line in output:gmatch("[^\\r\\n]+") do
+	for line in output:gmatch("[^\r\n]+") do
 		local fields = split_tabs(line)
 		-- wg(8) emits five fields for an interface header and nine for each peer.
 		-- The private and preshared key columns are intentionally discarded.
