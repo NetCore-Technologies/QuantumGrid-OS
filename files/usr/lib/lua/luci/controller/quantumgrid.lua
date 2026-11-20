@@ -3860,6 +3860,7 @@ function action_office_segment_add()
 			src = update.zone_name,
 			proto = rule.protocol,
 			dest_ip = update.address,
+			src_ip = rule.label ~= "DHCP" and update.subnet_cidr or nil,
 			dest_port = rule.port,
 			family = "ipv4",
 			target = "ACCEPT"
