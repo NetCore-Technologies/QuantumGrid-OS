@@ -944,6 +944,8 @@ function index()
 	entry({"admin", "services", "quantumgrid", "dhcp-scope-remove"}, call("action_dhcp_scope_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "bridge-vlan-update"}, call("action_bridge_vlan_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "bridge-vlan-remove"}, call("action_bridge_vlan_remove")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-forwarding-add"}, call("action_office_forwarding_add")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-forwarding-remove"}, call("action_office_forwarding_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
@@ -2321,12 +2323,14 @@ local function office_network_status(uci, fs)
 		uci:foreach("firewall", "forwarding", function(section)
 			if #source.forwardings >= 64 then source.truncated = true return end
 			local name = tostring(section.name or section[".name"] or "")
+			local section_name = tostring(section[".name"] or "")
 			local source_zone = tostring(section.src or "")
 			local destination_zone = tostring(section.dest or "")
-			if name:match("^[%w_.%-]+$") and source_zone:match("^[%w_.%-]+$")
-				and destination_zone:match("^[%w_.%-]+$") then
+			if name:match("^[%w_.%-]+$") and section_name:match("^[%w_.%-]+$")
+				and source_zone:match("^[%w_.%-]+$") and destination_zone:match("^[%w_.%-]+$") then
 				table.insert(source.forwardings, {
 					name = name,
+					section = section_name,
 					source = source_zone,
 					destination = destination_zone
 				})
@@ -3165,6 +3169,235 @@ function action_bridge_vlan_remove()
 		section = section,
 		device = previous.device,
 		vlan_id = tonumber(previous.vlan),
+		removed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+local function restore_office_forwarding_section(uci, section, snapshot)
+	if type(section) ~= "string" or type(snapshot) ~= "table" then return false end
+	local section_ok, restored = pcall(uci.section, uci, "firewall", "forwarding", section, snapshot)
+	if not section_ok or not restored then return false end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	return commit_ok and committed == true
+end
+
+function action_office_forwarding_add()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before adding firewall forwarding." })
+		return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, { ok = false, error = "Firewall configuration or the native firewall reload service is unavailable." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.firewall_available or inventory.truncated then
+		respond(409, { ok = false, error = "The firewall inventory is unavailable or truncated. Resolve it before changing inter-zone forwarding." })
+		return
+	end
+	local zones = {}
+	for _, zone in ipairs(inventory.zones or {}) do
+		table.insert(zones, { name = zone.name, networks = zone.networks })
+	end
+	local update, validation_error = validator.validate_office_forwarding(
+		http.formvalue("source", true),
+		http.formvalue("destination", true),
+		zones,
+		inventory.forwardings)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local section_ok, section = pcall(uci.section, uci, "firewall", "forwarding", nil, {
+		src = update.source,
+		dest = update.destination
+	})
+	if not section_ok or type(section) ~= "string" or section == "" then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall forwarding could not be staged in UCI." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall forwarding could not be committed; firewall reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local delete_ok, deleted = pcall(uci.delete, uci, "firewall", section)
+		local rollback_commit_ok, rollback_committed = false, false
+		if delete_ok and deleted == true then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "firewall")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local recovered = delete_ok and deleted == true and rollback_commit_ok
+			and rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.forwarding.add", section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "The firewall reload failed. The new forwarding was removed and the previous policy restored."
+				or "The firewall reload failed and rollback could not be confirmed. Inspect firewall configuration and service state locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "office.forwarding.add", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		source = update.source,
+		destination = update.destination,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+function action_office_forwarding_remove()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before removing firewall forwarding." })
+		return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, { ok = false, error = "Firewall configuration or the native firewall reload service is unavailable." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.firewall_available or inventory.truncated then
+		respond(409, { ok = false, error = "The firewall inventory is unavailable or truncated. Resolve it before changing inter-zone forwarding." })
+		return
+	end
+	local section = http.formvalue("section", true)
+	if type(section) ~= "string" or #section > 64
+		or not section:match("^[A-Za-z0-9_.%-]+$") or section == "." or section == ".." then
+		respond(400, { ok = false, error = "The firewall forwarding section identifier is invalid." })
+		return
+	end
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "firewall", section)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "forwarding" then
+		respond(404, { ok = false, error = "The selected firewall forwarding no longer exists." })
+		return
+	end
+	local previous, snapshot_error = validator.snapshot_firewall_forwarding_section(snapshot)
+	if not previous then
+		respond(500, { ok = false, error = snapshot_error or "The original firewall forwarding could not be snapshotted safely." })
+		return
+	end
+
+	local delete_ok, deleted = pcall(uci.delete, uci, "firewall", section)
+	if not delete_ok or deleted ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall forwarding could not be staged for removal." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall forwarding removal could not be committed; firewall reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local restore_ok, restored = pcall(uci.section, uci, "firewall", "forwarding", section, previous.values)
+		local rollback_commit_ok, rollback_committed = false, false
+		if restore_ok and restored then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "firewall")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local recovered = restore_ok and restored and rollback_commit_ok
+			and rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.forwarding.remove", section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "The firewall reload failed. The complete forwarding section was restored."
+				or "The firewall reload failed and the forwarding could not be fully restored. Inspect firewall configuration and service state locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "office.forwarding.remove", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		source = previous.values.src or "",
+		destination = previous.values.dest or "",
 		removed = true,
 		reloaded = true,
 		rolled_back = false
