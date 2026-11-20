@@ -2338,6 +2338,60 @@ function NetworkControlPage({
         <div className="module-message">This inventory is read-only. “Online” requires both mwan3's online state and netifd's up flag; tracker-process state and per-target latency/loss are displayed separately. It does not change failover policy, route metrics, marks or interface configuration.</div>
       </Panel>
 
+      <div className="module-grid mwan3-secondary-grid">
+        <Panel title="Active load-balancing policies" eyebrow="MWAN3 · IPV4 / IPV6 · READ-ONLY">
+          {!routerOverview ? (
+            <div className="module-message">Waiting for authenticated router telemetry.</div>
+          ) : !mwan3 ? (
+            <div className="module-message">This router API does not report Multi-WAN policy data.</div>
+          ) : !mwan3.policies_available ? (
+            <div className="module-message">The active policy inventory is unavailable.</div>
+          ) : mwan3.policies.length === 0 ? (
+            <div className="module-message">mwan3 is available but no active policy weights were reported.</div>
+          ) : (
+            <div className="mwan3-policy-list">
+              {mwan3.policies.map((policy) => (
+                <div className="mwan3-policy-row" key={policy.family + "-" + policy.name}>
+                  <div><small>{policy.family}</small><strong>{policy.name}</strong></div>
+                  <div className="mwan3-policy-members">
+                    {policy.members.length === 0 ? (
+                      <span>No interface weights reported</span>
+                    ) : policy.members.map((member) => (
+                      <div key={member.interface}>
+                        <span>{member.interface}</span>
+                        <b>{fmt(member.percent, 1)}%</b>
+                        <i><span style={{ width: Math.max(0, Math.min(100, member.percent)) + "%" }} /></i>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {mwan3?.truncated ? <div className="module-message">Some Multi-WAN telemetry was capped for response size.</div> : null}
+          <div className="module-message">Percentages are the active mwan3 policy weights reported from firewall policy rules. They are not measured traffic shares or per-flow throughput.</div>
+        </Panel>
+        <Panel title="Connected WAN networks" eyebrow="MWAN3 · IPV4 / IPV6 · READ-ONLY">
+          {!routerOverview ? (
+            <div className="module-message">Waiting for authenticated router telemetry.</div>
+          ) : !mwan3?.connected_available ? (
+            <div className="module-message">The connected-network inventory is unavailable.</div>
+          ) : (
+            <div className="mwan3-connected-grid">
+              <div>
+                <strong>IPv4 networks</strong>
+                {mwan3.connected_ipv4.length === 0 ? <span>None reported</span> : mwan3.connected_ipv4.map((network) => <code key={network}>{network}</code>)}
+              </div>
+              <div>
+                <strong>IPv6 networks</strong>
+                {mwan3.connected_ipv6.length === 0 ? <span>None reported</span> : mwan3.connected_ipv6.map((network) => <code key={network}>{network}</code>)}
+              </div>
+            </div>
+          )}
+          <div className="module-message">These are the networks mwan3 reports as directly connected. Their presence does not prove internet reachability or that a policy currently selects them.</div>
+        </Panel>
+      </div>
+
       <div className="module-grid">
         <Panel title="Wireless radio measurements" eyebrow="IWINFO · LIVE">
           <WirelessRadioInventory radios={radios} available={Boolean(routerOverview)} />
