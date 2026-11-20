@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6631,23 +6631,12 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
             </div>
           )}
         </Panel>
-        <Panel title="Firewall zone policy" eyebrow="UCI INPUT / OUTPUT / FORWARD">
-          {!inventory?.firewall_available ? (
-            <div className="module-message">Firewall zone configuration could not be read.</div>
-          ) : zones.length === 0 ? (
-            <div className="module-message">No firewall zones were returned.</div>
-          ) : (
-            <div className="office-zone-list">
-              {zones.map((zone) => (
-                <div className="office-zone-row" key={zone.name}>
-                  <div><strong>{zone.name}</strong><small>{zone.networks.join(", ") || "No networks listed"}</small></div>
-                  <div><small>INPUT / OUTPUT / FORWARD</small><b>{zone.input} / {zone.output} / {zone.forward}</b></div>
-                  <Status active={zone.forward !== "ACCEPT"}>{zone.masquerade ? "MASQUERADE" : "NO MASQUERADE"}</Status>
-                </div>
-              ))}
-            </div>
-          )}
-        </Panel>
+        <OfficeFirewallZoneManager
+          available={Boolean(inventory?.firewall_available)}
+          truncated={Boolean(inventory?.truncated)}
+          zones={zones}
+          refresh={refresh}
+        />
       </div>
 
       <OfficeForwardingManager
@@ -6671,6 +6660,165 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   );
 }
 
+
+function OfficeFirewallZoneManager({
+  available,
+  truncated,
+  zones,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  zones: RouterOfficeFirewallZone[];
+  refresh: () => void;
+}) {
+  return (
+    <Panel title="Firewall zone policy" eyebrow="UCI OUTPUT / FORWARD / MASQUERADE">
+      {!available ? (
+        <div className="module-message">Firewall configuration is unavailable. Zone policy changes are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The firewall inventory is truncated. Resolve the inventory before changing zone policy.</div>
+      ) : zones.length === 0 ? (
+        <div className="module-message">No firewall zones were returned.</div>
+      ) : (
+        <div className="office-zone-policy-list">
+          {zones.map((zone) => (
+            <OfficeFirewallZoneEditor
+              key={zone.section}
+              zone={zone}
+              disabled={!available || truncated}
+              refresh={refresh}
+            />
+          ))}
+        </div>
+      )}
+      <div className="module-message">Router INPUT policy is deliberately read-only here. Output policy affects traffic generated by the router; forward policy affects routed traffic; masquerading changes source NAT behaviour for this zone. Tightening output on the active administrator route is blocked when the route can be identified. Review existing firewall rules and test actual connectivity before applying changes.</div>
+    </Panel>
+  );
+}
+
+function OfficeFirewallZoneEditor({
+  zone,
+  disabled,
+  refresh,
+}: {
+  zone: RouterOfficeFirewallZone;
+  disabled: boolean;
+  refresh: () => void;
+}) {
+  type PolicyChoice = "UNCHANGED" | "INHERIT" | "ACCEPT" | "REJECT" | "DROP";
+  const initialOutput: PolicyChoice = zone.output === "ACCEPT" || zone.output === "REJECT" || zone.output === "DROP"
+    ? zone.output
+    : "UNCHANGED";
+  const initialForward: PolicyChoice = zone.forward === "ACCEPT" || zone.forward === "REJECT" || zone.forward === "DROP"
+    ? zone.forward
+    : "UNCHANGED";
+  const [output, setOutput] = useState<PolicyChoice>(initialOutput);
+  const [forward, setForward] = useState<PolicyChoice>(initialForward);
+  const [masquerade, setMasquerade] = useState(zone.masquerade);
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  useEffect(() => {
+    setOutput(initialOutput);
+    setForward(initialForward);
+    setMasquerade(zone.masquerade);
+    setConfirmed(false);
+    setNotice(null);
+  }, [zone.section, zone.output, zone.forward, zone.masquerade]);
+
+  const changed = output !== initialOutput || forward !== initialForward || masquerade !== zone.masquerade;
+  const ready = changed && confirmed && !disabled && !saving;
+  const apply = async () => {
+    if (!ready) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterOfficeZonePolicy({
+        section: zone.section,
+        output,
+        forward,
+        masquerade,
+      });
+      setNotice({
+        success: true,
+        message: result.name + " zone policy was saved and the firewall reload completed. INPUT remains " + result.input + ".",
+      });
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The firewall zone policy could not be updated.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="office-zone-policy-card">
+      <div className="office-zone-policy-heading">
+        <div>
+          <strong>{zone.name}</strong>
+          <span>{zone.networks.join(", ") || "No networks mapped"} · {zone.section}</span>
+        </div>
+        <Status active={zone.forward !== "ACCEPT"}>{zone.masquerade ? "MASQUERADE ON" : "MASQUERADE OFF"}</Status>
+      </div>
+      <div className="office-zone-policy-current">
+        <span>ROUTER INPUT · READ ONLY</span>
+        <strong>{zone.input || "INHERITED / DEFAULT"}</strong>
+      </div>
+      <div className="office-zone-policy-fields">
+        <label>
+          <span>ROUTER OUTPUT POLICY</span>
+          <select value={output} onChange={(event) => { setOutput(event.target.value as PolicyChoice); setConfirmed(false); }} disabled={disabled || saving}>
+            <option value="UNCHANGED">Keep current / inherited</option>
+            <option value="INHERIT">Remove override / inherit global default</option>
+            <option value="ACCEPT">ACCEPT</option>
+            <option value="REJECT">REJECT</option>
+            <option value="DROP">DROP</option>
+          </select>
+        </label>
+        <label>
+          <span>FORWARD POLICY</span>
+          <select value={forward} onChange={(event) => { setForward(event.target.value as PolicyChoice); setConfirmed(false); }} disabled={disabled || saving}>
+            <option value="UNCHANGED">Keep current / inherited</option>
+            <option value="INHERIT">Remove override / inherit global default</option>
+            <option value="ACCEPT">ACCEPT</option>
+            <option value="REJECT">REJECT</option>
+            <option value="DROP">DROP</option>
+          </select>
+        </label>
+        <label className="office-zone-masquerade">
+          <input type="checkbox" checked={masquerade} onChange={(event) => { setMasquerade(event.target.checked); setConfirmed(false); }} disabled={disabled || saving} />
+          <span>Enable masquerading (source NAT) for this zone</span>
+        </label>
+      </div>
+      <label className="office-reservation-confirm">
+        <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!changed || disabled || saving} />
+        <span>I authorize this zone policy change and understand it may alter routed traffic or NAT. Router INPUT policy will not be modified.</span>
+      </label>
+      <div className="office-zone-policy-actions">
+        <button className="hero-button" type="button" onClick={() => {
+          setOutput(initialOutput);
+          setForward(initialForward);
+          setMasquerade(zone.masquerade);
+          setConfirmed(false);
+          setNotice(null);
+        }} disabled={!changed || saving}>Discard</button>
+        <button className="hero-button" type="button" onClick={() => void apply()} disabled={!ready}>
+          {saving ? "Applying…" : "Save zone policy"}
+        </button>
+      </div>
+      {notice ? (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function OfficeForwardingManager({
   available,
