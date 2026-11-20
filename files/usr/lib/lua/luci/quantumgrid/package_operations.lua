@@ -91,7 +91,7 @@ function create_secure_log_file(temp_name, nixio_module)
 					return nil, "The temporary log file could not be closed safely."
 				end
 				local close_ok, close_result = pcall(file.close, file)
-				if close_ok and close_result ~= false then
+				if close_ok and close_result == true then
 					return path
 				end
 				os.remove(path)
