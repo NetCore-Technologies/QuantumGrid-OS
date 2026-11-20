@@ -9330,3 +9330,20 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Confirmed removal of a DHCP server scope */
+.office-dhcp-remove {
+  display: grid;
+  gap: 9px;
+  padding: 10px 2px 2px;
+  border-top: 1px solid var(--line);
+}
+.office-dhcp-remove-warning {
+  border-color: rgba(219,40,95,.28);
+  color: var(--muted);
+  line-height: 1.55;
+}
+.office-dhcp-remove .office-reservation-confirm {
+  padding: 2px 0;
+}
