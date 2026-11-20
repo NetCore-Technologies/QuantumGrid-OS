@@ -122,7 +122,7 @@ jobs:
             local expected_sha="$2"
             local merged_pr="$3"
             local actual_sha
-            actual_sha="$(git ls-remote origin "refs/heads/${branch}" | awk 'NR == 1 { print $1 }')"
+            actual_sha="$(git rev-parse --verify "refs/remotes/origin/${branch}^{commit}" 2>/dev/null || true)"
 
             if [[ -z "${actual_sha}" || "${actual_sha}" != "${expected_sha}" ]]; then
               echo "SKIP ${branch}: branch head changed or no longer exists"
