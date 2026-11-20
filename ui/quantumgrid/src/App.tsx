@@ -2125,12 +2125,37 @@ const cellularSignalSeries = [
 
 function CellularSignalHistory({ history }: { history: CellularHistorySample[] }) {
   const latest = history[history.length - 1];
+  const exportHistory = () => {
+    if (history.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Exported at (UTC)", "Sampled at (UTC)", "RSSI dBm", "RSRP dBm", "RSRQ dB", "SNR dB"],
+      ...history.map((sample) => [
+        exportedAt, new Date(sample.sampledAt * 1000).toISOString(),
+        sample.rssi_dbm, sample.rsrp_dbm, sample.rsrq_db, sample.snr_db,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\\\r\\\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-cellular-rf-history-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
 
   return (
     <Panel
       title="5G RF signal history"
       eyebrow="UP TO 30 DISTINCT QMI READINGS"
-      action={<Status active={history.length > 0}>{history.length > 0 ? `${history.length} SAMPLES` : "WAITING"}</Status>}
+      action={
+        <div className="rf-history-actions">
+          <Status active={history.length > 0}>{history.length > 0 ? `${history.length} SAMPLES` : "WAITING"}</Status>
+          <button className="hero-button wifi-export-button" onClick={exportHistory} disabled={history.length === 0}>Export RF history CSV</button>
+        </div>
+      }
     >
       {history.length === 0 ? (
         <div className="module-message">Waiting for the modem to return numeric RF measurements. No sample is generated when the modem does not report a value.</div>
