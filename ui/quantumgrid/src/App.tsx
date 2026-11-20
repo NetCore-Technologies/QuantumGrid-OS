@@ -2252,7 +2252,7 @@ function NetworkControlPage({
                         <b>Score {iface.score === undefined ? "N/A" : fmt(iface.score)}</b>
                         <small>Lost {iface.lost === undefined ? "N/A" : fmt(iface.lost)} · turn {iface.turn === undefined ? "N/A" : fmt(iface.turn)}</small>
                         <small>MEASURED RX / TX</small>
-                        <b>{interfaceCounterDeltas.get(iface.name)?.rxMbps == null || interfaceCounterDeltas.get(iface.name)?.txMbps == null ? "Collecting two samples" : `${fmt(interfaceCounterDeltas.get(iface.name)!.rxMbps!, 2)} / ${fmt(interfaceCounterDeltas.get(iface.name)!.txMbps!, 2)} Mbps`}</b>
+                        <b>{interfaceCounterDeltas.get(iface.name)?.rxMbps == null || interfaceCounterDeltas.get(iface.name)?.txMbps == null ? "N/A · waiting for valid counters" : `${fmt(interfaceCounterDeltas.get(iface.name)!.rxMbps!, 2)} / ${fmt(interfaceCounterDeltas.get(iface.name)!.txMbps!, 2)} Mbps`}</b>
                         <small>{interfaceCounterDeltas.get(iface.name)?.sampleSeconds == null ? "Sample interval N/A" : `Sample ${fmt(interfaceCounterDeltas.get(iface.name)!.sampleSeconds!, 1)} s`}</small>
                       </div>
                       <div className="mwan3-targets">
