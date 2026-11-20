@@ -12,6 +12,7 @@ local ALLOWED_ACTIONS = {
 	["sqm.update"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
+	["package.feed.update"] = true,
 	["hardware.led.update"] = true,
 	["system.config.backup"] = true
 }
