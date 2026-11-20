@@ -128,6 +128,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/hardware_io.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/office_networks.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/config_backup.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/audit.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
@@ -153,6 +154,8 @@ jobs:
         run: lua5.1 tests/office-networks.lua
       - name: Test secure configuration backup validation
         run: lua5.1 tests/config-backup.lua
+      - name: Test redacted and bounded office admin audit events
+        run: lua5.1 tests/audit-log.lua
       - name: Test NSS EDMA and PPE readiness states
         run: lua5.1 tests/acceleration-status.lua
       - name: Test optional AW1000 NSS build profile
