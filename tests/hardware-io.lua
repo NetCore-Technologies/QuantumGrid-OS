@@ -48,6 +48,14 @@ assert(input.devices[2].button_like and input.devices[2].event_nodes[1] == "even
 assert(not input.devices[3].button_like and input.devices[3].handlers[1] == "sysrq")
 assert(not hardware.parse_input_devices(nil).available, "missing input inventory must be unavailable")
 
+local manyInputs = {}
+for index = 1, 40 do
+	table.insert(manyInputs, "I: Bus=0019 Vendor=0001 Product=0001 Version=0001")
+	table.insert(manyInputs, 'N: Name="gpio-button-' .. tostring(index) .. '"')
+end
+local cappedInputs = hardware.parse_input_devices(table.concat(manyInputs, "\\n"))
+assert(cappedInputs.count == 40 and #cappedInputs.devices == 32 and cappedInputs.truncated, "input inventory must be capped")
+
 local trigger = hardware.parse_trigger_text("none timer [heartbeat] default-on")
 assert(trigger.available and trigger.active == "heartbeat", "active LED trigger should be parsed")
 local noTrigger = hardware.parse_trigger_text("trigger data unavailable")
@@ -74,4 +82,4 @@ expect_invalid("status", "1", 0, "zero maximum")
 expect_invalid("status", "1", 65536, "unsupported maximum")
 expect_invalid(string.rep("a", 65), "1", 255, "overlong LED name")
 
-print("hardware-io: GPIO discovery, trigger parsing and LED validation tests passed")
+print("hardware-io: GPIO, input-device, trigger and LED validation tests passed")
