@@ -2307,6 +2307,11 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
   const [firewallRuleSearch, setFirewallRuleSearch] = useState("");
   const [firewallRuleSort, setFirewallRuleSort] = useState<"name" | "source" | "destination" | "target">("source");
   const firewallRules = security?.rules ?? [];
+  const externalAllowRuleNames = new Set(
+    firewallPosture.checks
+      .filter((check) => check.id.startsWith("external-allow-rule:"))
+      .map((check) => check.id.slice("external-allow-rule:".length)),
+  );
   const visibleFirewallRules = firewallRules
     .filter((rule) => [
       rule.name, rule.source_zone, rule.destination_zone, rule.protocol,
@@ -2445,7 +2450,7 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
                   <div className="device-row firewall-rule-row" key={rule.name + "-" + index}>
                     <div className="device-title">
                       <div className="device-icon"><Shield size={17} /></div>
-                      <div><strong>{rule.name}</strong><span>{rule.enabled ? "Enabled" : "Disabled"} · {rule.family || "Any IP family"}</span></div>
+                      <div><strong>{rule.name}</strong><span>{rule.enabled ? "Enabled" : "Disabled"} · {rule.family || "Any IP family"}{externalAllowRuleNames.has(rule.name) ? " · REVIEW EXTERNAL ALLOW" : ""}</span></div>
                     </div>
                     <div><small>SOURCE → DESTINATION</small><b>{rule.source_zone || "Any"} → {rule.destination_zone || "Any"}</b></div>
                     <div><small>PROTOCOL</small><b>{rule.protocol || "Any"}</b></div>
