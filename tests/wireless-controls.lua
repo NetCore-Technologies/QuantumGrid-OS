@@ -28,8 +28,8 @@ assert(open ~= nil and open.allow_open == true, "explicit open-network confirmat
 local enterprise = wireless.validate_update(
 	"radio0", "default_radio0", "Staff", "wpa2", "",
 	"0", "auto", "auto", "auto", "0", "1",
-	"radius.example.com", "1812", "a-strong-radius-shared-secret"
-"", "1813", ""
+	"radius.example.com", "1812", "a-strong-radius-shared-secret",
+	"", "1813", ""
 )
 assert(enterprise ~= nil, "WPA2-Enterprise with an external RADIUS server should pass")
 assert(enterprise.encryption == "wpa2" and enterprise.key_supplied == false)
@@ -39,8 +39,8 @@ assert(enterprise.radius_secret_supplied == true and enterprise.radius_secret ==
 local enterprise_preserve = wireless.validate_update(
 	"radio0", "default_radio0", "Staff", "wpa2", "",
 	"0", "auto", "auto", "auto", "0", "1",
-	"192.0.2.10", "1812", ""
-"", "1813", ""
+	"192.0.2.10", "1812", "",
+	"", "1813", ""
 )
 assert(enterprise_preserve ~= nil and enterprise_preserve.radius_secret_supplied == false,
 	"blank RADIUS secret must be representable so an existing secret can be preserved")
@@ -48,7 +48,7 @@ assert(enterprise_preserve ~= nil and enterprise_preserve.radius_secret_supplied
 local function rejected_enterprise(server, port, secret, label)
 	local result, err = wireless.validate_update(
 		"radio0", "default_radio0", "Staff", "wpa2", "",
-		"0", "auto", "auto", "auto", "0", "1", server, port, secret
+		"0", "auto", "auto", "auto", "0", "1", server, port, secret, "", "1813", ""
 	)
 	assert(result == nil, label .. " should be rejected")
 	assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
@@ -114,8 +114,8 @@ rejected_accounting("accounting.example.com", "1813", "secret-with-control\n", "
 local enterprise_with_psk = wireless.validate_update(
 	"radio0", "default_radio0", "Staff", "wpa2", "personal-password-123",
 	"0", "auto", "auto", "auto", "0", "1",
-	"radius.example.com", "1812", "a-strong-radius-shared-secret"
-"", "1813", ""
+	"radius.example.com", "1812", "a-strong-radius-shared-secret",
+	"", "1813", ""
 )
 assert(enterprise_with_psk == nil, "WPA2-Enterprise must not accept a personal passphrase as a RADIUS secret")
 
