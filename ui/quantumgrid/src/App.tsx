@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5169,6 +5169,108 @@ function AuditLogPage() {
 }
 
 
+function DhcpScopeEditor({ scope, refresh }: {
+  scope: RouterOfficeDhcpScope;
+  refresh: () => void;
+}) {
+  const [start, setStart] = useState(scope.start);
+  const [limit, setLimit] = useState(String(scope.limit ?? ""));
+  const [leaseTime, setLeaseTime] = useState(scope.lease_time || "12h");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    setStart(scope.start);
+    setLimit(String(scope.limit ?? ""));
+    setLeaseTime(scope.lease_time || "12h");
+    setConfirmed(false);
+  }, [scope.start, scope.limit, scope.lease_time]);
+
+  const changed = start !== scope.start || limit !== String(scope.limit ?? "") || leaseTime !== (scope.lease_time || "12h");
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || !changed || busy || scope.ignore) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterDhcpScope({
+        section: scope.section,
+        start: start.trim(),
+        limit: limit.trim(),
+        lease_time: leaseTime.trim(),
+      });
+      setNotice({
+        success: true,
+        message: "DHCP pool updated: " + result.pool_start_ip + " – " + result.pool_end_ip + ". dnsmasq restarted.",
+      });
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The DHCP scope could not be updated.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="office-dhcp-editor" onSubmit={save}>
+      {scope.ignore ? (
+        <div className="module-message">This DHCP scope is disabled. Enable it in native DHCP configuration before editing the pool.</div>
+      ) : (
+        <>
+          <div className="office-dhcp-editor-fields">
+            <label>
+              <span>Start offset</span>
+              <input type="number" min={1} step={1} value={start} onChange={(event) => setStart(event.target.value)} required />
+            </label>
+            <label>
+              <span>Pool size (addresses)</span>
+              <input type="number" min={1} step={1} value={limit} onChange={(event) => setLimit(event.target.value)} required />
+            </label>
+            <label>
+              <span>Lease time</span>
+              <input
+                type="text"
+                value={leaseTime}
+                onChange={(event) => setLeaseTime(event.target.value)}
+                placeholder="12h"
+                maxLength={16}
+                pattern="[1-9][0-9]{0,8}[smhdw]?"
+                required
+              />
+            </label>
+          </div>
+          <label className="office-reservation-confirm">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={busy || !changed}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            <span>I confirm this DHCP pool change and authorize QuantumGrid to update the existing scope and restart dnsmasq.</span>
+          </label>
+          <div className="office-dhcp-editor-actions">
+            <button className="hero-button" type="submit" disabled={!confirmed || !changed || busy}>
+              <Check size={14} /> {busy ? "Applying scope…" : "Apply DHCP scope"}
+            </button>
+            <span>Only start offset, pool size and lease duration change. Existing DNS, DHCPv6, RA and interface settings are preserved.</span>
+          </div>
+        </>
+      )}
+      {notice && (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      )}
+    </form>
+  );
+}
+
+
 function OfficeNetworksPage({ routerOverview, refresh }: {
   routerOverview: RouterOverview | null;
   refresh: () => void;
@@ -5366,19 +5468,22 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           ) : inventory.dhcp_scopes.length === 0 ? (
             <div className="module-message">No DHCP scope sections were returned.</div>
           ) : (
-            <div className="office-bridge-list">
+            <div className="office-dhcp-scope-list">
               {inventory.dhcp_scopes.map((scope) => (
-                <div className="office-bridge-row" key={scope.name}>
-                  <div><strong>{scope.name}</strong><span>{scope.interface}</span></div>
-                  <div>
-                    <small>START OFFSET / LIMIT / LEASE</small>
-                    <b>{scope.start || "?"} / {scope.limit ?? "?"} / {scope.lease_time || "unspecified"}</b>
-                    <small>CALCULATED POOL RANGE</small>
-                    <b>{scope.range_valid ? scope.pool_start_ip + " – " + scope.pool_end_ip : scope.range_error || "Not calculated"}</b>
-                    <small>DHCPv6 {scope.dhcpv6 || "unspecified"} · RA {scope.ra || "unspecified"}</small>
-                    {scope.overlap ? <span className="office-chip warning">OVERLAPS ANOTHER DHCP POOL</span> : null}
+                <div className="office-dhcp-scope-card" key={scope.section}>
+                  <div className="office-bridge-row">
+                    <div><strong>{scope.name}</strong><span>{scope.interface}</span></div>
+                    <div>
+                      <small>START OFFSET / LIMIT / LEASE</small>
+                      <b>{scope.start || "?"} / {scope.limit ?? "?"} / {scope.lease_time || "unspecified"}</b>
+                      <small>CALCULATED POOL RANGE</small>
+                      <b>{scope.range_valid ? scope.pool_start_ip + " – " + scope.pool_end_ip : scope.range_error || "Not calculated"}</b>
+                      <small>DHCPv6 {scope.dhcpv6 || "unspecified"} · RA {scope.ra || "unspecified"}</small>
+                      {scope.overlap ? <span className="office-chip warning">OVERLAPS ANOTHER DHCP POOL</span> : null}
+                    </div>
+                    <Status active={scope.range_valid && !scope.overlap}>{scope.ignore ? "DISABLED" : scope.overlap ? "OVERLAP" : scope.range_valid ? "RANGE VALID" : "RANGE INVALID"}</Status>
                   </div>
-                  <Status active={scope.range_valid && !scope.overlap}>{scope.ignore ? "DISABLED" : scope.overlap ? "OVERLAP" : scope.range_valid ? "RANGE VALID" : "RANGE INVALID"}</Status>
+                  <DhcpScopeEditor scope={scope} refresh={refresh} />
                 </div>
               ))}
             </div>
