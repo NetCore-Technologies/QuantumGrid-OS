@@ -204,6 +204,22 @@ export interface RouterWifiScan {
   results: RouterWifiScanResult[];
 }
 
+export interface RouterLatencyTest {
+  ok: true;
+  target: string;
+  packets_sent: number;
+  packets_received: number;
+  packet_loss_percent: number;
+  min_ms?: number;
+  average_ms?: number;
+  max_ms?: number;
+  jitter_ms?: number;
+  jitter_method: string;
+  sampled_at: number;
+  cached: boolean;
+  retry_after_seconds?: number;
+}
+
 export interface RouterCellularStatus {
   modem_present: boolean;
   qmi_available: boolean;
@@ -287,6 +303,7 @@ export interface RouterOverview {
 const API_URL = "/cgi-bin/luci/admin/services/quantumgrid/api";
 const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
+const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -416,4 +433,33 @@ export async function scanRouterWifi(): Promise<RouterWifiScan> {
     throw new Error("The router returned an invalid Wi-Fi scan response.");
   }
   return payload as RouterWifiScan;
+}
+
+export async function runRouterLatencyTest(): Promise<RouterLatencyTest> {
+  const response = await fetch(LATENCY_TEST_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    if (response.status === 403) {
+      throw new Error("Latency testing requires an active router administrator session.");
+    }
+    throw new Error("The router could not complete the latency test.");
+  }
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== "object" || payload === null ||
+    !("ok" in payload) || payload.ok !== true ||
+    !("target" in payload) || payload.target !== "1.1.1.1" ||
+    !("packets_sent" in payload) || payload.packets_sent !== 5 ||
+    !("packets_received" in payload) || typeof payload.packets_received !== "number" ||
+    !("packet_loss_percent" in payload) || typeof payload.packet_loss_percent !== "number" ||
+    !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
+  ) {
+    throw new Error("The router returned an invalid latency-test response.");
+  }
+  return payload as RouterLatencyTest;
 }
