@@ -6627,6 +6627,14 @@ input::placeholder {
   font-size: 8px;
 }
 .security-export-button { margin-top: 10px; }
+.qdisc-export-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.qdisc-export-actions .hero-button { padding: 8px 10px; font-size: 8px; }
 .rf-history-actions {
   display: flex;
   flex-wrap: wrap;
