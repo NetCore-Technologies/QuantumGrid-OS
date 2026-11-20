@@ -35,19 +35,43 @@ the resulting userspace reports the expected AW1000 board identity before doing 
 A successful initramfs boot does not install QuantumGrid to persistent storage. It is a
 diagnostic/recovery environment only.
 
-## Persistent UBI installation
+## Persistent UBI installation — standard AW1000 layout only
 
-The factory `.ubi` file is the persistent AW1000 firmware artifact, but a correct UBI write
-requires a confirmed device-specific target partition, erase geometry, image layout and
-bootloader/recovery procedure.
+The release includes `install-aw1000-ubi.sh`. It is deliberately limited to the original
+standard AW1000 MTD layout documented by the OpenWrt AW1000 device instructions. It does not
+repartition flash, change MIBIB, write bootloader data or attempt to support expanded layouts.
 
-**This repository does not currently document a fully hardware-validated, one-command persistent
-flash procedure.** Until that procedure is documented and tested against a recoverable AW1000,
-stop after verifying the image and do not guess a partition name or write command.
+1. Connect the UART console and boot the matching AW1000 initramfs temporarily using the
+   device's U-Boot/TFTP procedure above. Do not run the installer from an installed NoobWRT or
+   OpenWrt root filesystem.
+2. Verify the exact release file with `sha256sum -c SHA256SUMS`.
+3. Copy both the factory UBI image and `install-aw1000-ubi.sh` to `/tmp`.
+4. Run the read-only preflight first:
 
-Do not substitute generic `sysupgrade`, `mtd write`, `nand write`, arbitrary USB imaging,
-or an unverified vendor web-upload flow. A wrong target or erase operation can permanently
+   ```sh
+   sh /tmp/install-aw1000-ubi.sh /tmp/QuantumGrid-OS-<version>-AW1000-squashfs-factory.ubi
+   ```
+
+5. Proceed only when the script confirms the correct board, a RAM initramfs root, and the
+   expected `mtd18`/`mtd20` standard 100 MiB rootfs partitions. Expanded or unknown layouts
+   are refused.
+6. To write, run the same command with `--write`. At the UART console, type exactly
+   `ERASE rootfs` when prompted. The script invokes `ubiformat` only for `/dev/mtd18`;
+   `rootfs_1` (`/dev/mtd20`) and bootloader/calibration partitions are not written.
+
+The default invocation is read-only. The write path requires root, a valid UBI# image header,
+the exact standard partition sizes/erase geometry, the initramfs root check and interactive
+confirmation. A failed check stops before `ubiformat`.
+
+**Do not use this installer for an expanded/merged MTD layout, a different AW1000 partition
+map, or any other device.** Those layouts need a separately built and independently validated
+image and installation procedure. Do not substitute a guessed `mtd write`, `nand write`,
+generic sysupgrade or vendor web-upload flow. A wrong target or erase operation can permanently
 brick the router.
+
+The initial installation route follows the documented AW1000 initramfs plus UBI procedure. It has
+not been hardware-validated by QuantumGrid maintainers on every MTD variant. Keep UART connected
+and retain a known-good recovery image throughout.
 
 ## UART reference
 
