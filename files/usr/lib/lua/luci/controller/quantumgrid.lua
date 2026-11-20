@@ -1032,7 +1032,8 @@ function action_wireless_update()
 		return
 	end
 
-	if not wireless_channel_allowed(update.radio, update.channel) then
+	local current_channel = uci:get("wireless", update.radio, "channel") or "auto"
+	if update.channel ~= current_channel and not wireless_channel_allowed(update.radio, update.channel) then
 		respond(400, { ok = false, error = "That channel is not reported as available and unrestricted by the radio driver." })
 		return
 	end
