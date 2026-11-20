@@ -100,8 +100,12 @@ local function network_interfaces()
 	for _, item in ipairs(source) do
 		local device = item.l3_device or item.device or ""
 		local safe_device = type(device) == "string" and device:match("^[%w_.%-]+$") ~= nil
-		local rx = safe_device and read_number("/sys/class/net/" .. device .. "/statistics/rx_bytes") or nil
-		local tx = safe_device and read_number("/sys/class/net/" .. device .. "/statistics/tx_bytes") or nil
+		local statistics_path = safe_device and ("/sys/class/net/" .. device .. "/statistics/") or nil
+		local read_stat = function(name)
+			return statistics_path and read_number(statistics_path .. name) or nil
+		end
+		local rx = read_stat("rx_bytes")
+		local tx = read_stat("tx_bytes")
 		local addresses = {}
 
 		for _, address in ipairs(item["ipv4-address"] or {}) do
@@ -117,6 +121,12 @@ local function network_interfaces()
 			is_wan = item.interface == "wan" or item.interface == "wan6",
 			rx_bytes = rx or 0,
 			tx_bytes = tx or 0,
+			rx_packets = read_stat("rx_packets"),
+			tx_packets = read_stat("tx_packets"),
+			rx_errors = read_stat("rx_errors"),
+			tx_errors = read_stat("tx_errors"),
+			rx_dropped = read_stat("rx_dropped"),
+			tx_dropped = read_stat("tx_dropped"),
 			ipv4 = addresses
 		})
 	end
