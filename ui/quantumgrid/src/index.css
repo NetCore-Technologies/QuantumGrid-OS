@@ -10128,3 +10128,57 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+.office-wifi-binding-list {
+  display: grid;
+  gap: 10px;
+}
+.office-wifi-binding-row {
+  display: grid;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+.office-wifi-binding-identity {
+  display: grid;
+  gap: 4px;
+}
+.office-wifi-binding-identity strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.office-wifi-binding-identity span,
+.office-wifi-binding-identity small {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.office-wifi-binding-row > label:not(.office-reservation-confirm) {
+  display: grid;
+  gap: 6px;
+}
+.office-wifi-binding-row > label:not(.office-reservation-confirm) > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.office-wifi-binding-row select {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 10px;
+}
+.office-wifi-binding-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
