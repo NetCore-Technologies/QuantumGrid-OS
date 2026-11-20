@@ -9304,3 +9304,29 @@ input::placeholder {
     padding-left: 0;
   }
 }
+
+
+/* Create a DHCP scope on an existing static LAN */
+.office-dhcp-create-form {
+  display: grid;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255,255,255,.018);
+}
+.office-dhcp-create-form .office-reservation-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.office-dhcp-create-form .office-reservation-grid input,
+.office-dhcp-create-form .office-reservation-grid select {
+  min-height: 38px;
+}
+.office-dhcp-create-form .office-reservation-edit-actions {
+  align-items: flex-start;
+}
+@media (max-width: 650px) {
+  .office-dhcp-create-form .office-reservation-grid {
+    grid-template-columns: 1fr;
+  }
+}
