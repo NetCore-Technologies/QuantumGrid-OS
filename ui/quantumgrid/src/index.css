@@ -8089,3 +8089,191 @@ input::placeholder {
 @media (max-width: 760px) {
   .acceleration-summary { grid-template-columns: 1fr; }
 }
+
+
+/* Hardware I/O — live kernel inventory and guarded LED controls */
+.hardware-io-page .hardware-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+.hardware-chip {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.025);
+}
+.hardware-chip strong,
+.hardware-led-heading strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.hardware-chip span,
+.hardware-led-heading span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.hardware-io-table {
+  width: 100%;
+  overflow-x: auto;
+}
+.hardware-io-row {
+  min-width: 760px;
+  display: grid;
+  grid-template-columns: 105px minmax(190px, 1.5fr) 105px 90px minmax(130px, .9fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+}
+.hardware-io-row.header {
+  color: var(--muted2);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .11em;
+}
+.hardware-io-row > strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.hardware-io-row > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.hardware-io-row > span:nth-child(2) b {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: 11px;
+}
+.hardware-io-row > span:nth-child(2) small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 9px;
+}
+.hardware-led-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.hardware-led-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(255,255,255,.022);
+}
+.hardware-led-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.hardware-led-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.hardware-led-heading strong {
+  overflow-wrap: anywhere;
+}
+.hardware-led-values {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 22px 0 12px;
+}
+.hardware-led-values strong {
+  color: var(--text);
+  font-size: 27px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.hardware-led-values span {
+  color: var(--muted);
+  font-size: 10px;
+}
+.hardware-led-slider {
+  display: grid;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.hardware-led-slider input {
+  width: 100%;
+  accent-color: var(--blue);
+}
+.hardware-led-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 15px;
+}
+.hardware-led-actions small {
+  max-width: 210px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.hardware-led-actions button {
+  flex: 0 0 auto;
+}
+.hardware-io-notice.success {
+  border-color: rgba(66,223,157,.25);
+  color: #9cecc9;
+}
+.hardware-io-notice.error {
+  border-color: rgba(219,40,95,.3);
+  color: #ff9ab3;
+}
+.hardware-safety-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.hardware-safety-grid > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px 12px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255,255,255,.018);
+}
+.hardware-safety-grid > div > strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.hardware-safety-grid > div > span:last-child {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.55;
+}
+@media (max-width: 900px) {
+  .hardware-led-grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .hardware-safety-grid {
+    grid-template-columns: 1fr;
+  }
+  .hardware-led-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .hardware-led-actions small {
+    max-width: none;
+  }
+}
