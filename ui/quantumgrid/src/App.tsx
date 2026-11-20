@@ -1736,6 +1736,44 @@ function NetworkControlPage({
   stats: Stats;
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
+  const previousInterfaceCounters = useRef(new Map<string, {
+    rx_errors?: number; tx_errors?: number; rx_dropped?: number; tx_dropped?: number;
+  }>());
+  const [interfaceCounterDeltas, setInterfaceCounterDeltas] = useState(new Map<string, {
+    rxErrors: number | null; txErrors: number | null; rxDropped: number | null; txDropped: number | null;
+  }>());
+  useEffect(() => {
+    if (!routerOverview) {
+      previousInterfaceCounters.current.clear();
+      setInterfaceCounterDeltas(new Map());
+      return;
+    }
+    const nextCounters = new Map<string, {
+      rx_errors?: number; tx_errors?: number; rx_dropped?: number; tx_dropped?: number;
+    }>();
+    const deltas = new Map<string, {
+      rxErrors: number | null; txErrors: number | null; rxDropped: number | null; txDropped: number | null;
+    }>();
+    const delta = (current: number | undefined, previous: number | undefined) =>
+      current === undefined || previous === undefined || current < previous ? null : current - previous;
+    for (const item of routerOverview.interfaces) {
+      const previous = previousInterfaceCounters.current.get(item.name);
+      if (previous) {
+        deltas.set(item.name, {
+          rxErrors: delta(item.rx_errors, previous.rx_errors),
+          txErrors: delta(item.tx_errors, previous.tx_errors),
+          rxDropped: delta(item.rx_dropped, previous.rx_dropped),
+          txDropped: delta(item.tx_dropped, previous.tx_dropped),
+        });
+      }
+      nextCounters.set(item.name, {
+        rx_errors: item.rx_errors, tx_errors: item.tx_errors,
+        rx_dropped: item.rx_dropped, tx_dropped: item.tx_dropped,
+      });
+    }
+    previousInterfaceCounters.current = nextCounters;
+    setInterfaceCounterDeltas(deltas);
+  }, [routerOverview]);
   const [interfaceScope, setInterfaceScope] = useState<"all" | "wan" | "lan">("all");
   const [interfaceSort, setInterfaceSort] = useState<"name" | "rx" | "tx" | "errors">("name");
   const visibleInterfaces = interfaces.filter((item) =>
@@ -1840,11 +1878,13 @@ function NetworkControlPage({
                   <small>RX TOTAL</small>
                   <b>{formatTrafficBytes(item.rx_bytes)}</b>
                   <small>Packets {item.rx_packets === undefined ? "N/A" : fmt(item.rx_packets)} · errors {item.rx_errors === undefined ? "N/A" : fmt(item.rx_errors)} · dropped {item.rx_dropped === undefined ? "N/A" : fmt(item.rx_dropped)}</small>
+                  <small>Since previous sample · errors {interfaceCounterDeltas.get(item.name)?.rxErrors == null ? "N/A" : "+" + fmt(interfaceCounterDeltas.get(item.name)!.rxErrors!)} · drops {interfaceCounterDeltas.get(item.name)?.rxDropped == null ? "N/A" : "+" + fmt(interfaceCounterDeltas.get(item.name)!.rxDropped!)}</small>
                 </div>
                 <div>
                   <small>TX TOTAL</small>
                   <b>{formatTrafficBytes(item.tx_bytes)}</b>
                   <small>Packets {item.tx_packets === undefined ? "N/A" : fmt(item.tx_packets)} · errors {item.tx_errors === undefined ? "N/A" : fmt(item.tx_errors)} · dropped {item.tx_dropped === undefined ? "N/A" : fmt(item.tx_dropped)}</small>
+                  <small>Since previous sample · errors {interfaceCounterDeltas.get(item.name)?.txErrors == null ? "N/A" : "+" + fmt(interfaceCounterDeltas.get(item.name)!.txErrors!)} · drops {interfaceCounterDeltas.get(item.name)?.txDropped == null ? "N/A" : "+" + fmt(interfaceCounterDeltas.get(item.name)!.txDropped!)}</small>
                 </div>
               </div>
             ))}
@@ -1852,7 +1892,7 @@ function NetworkControlPage({
           )}
           </>
         )}
-        <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Counters the driver does not expose remain N/A. CSV export includes the active scope and sort filters.</div>
+        <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Short-interval error/drop deltas compare successive API samples, remain N/A on the first sample or after a counter reset, and do not estimate packet loss. Counters the driver does not expose remain N/A. CSV export includes the active scope and sort filters.</div>
       </Panel>
 
       <div className="module-grid">
