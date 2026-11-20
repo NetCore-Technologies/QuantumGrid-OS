@@ -1240,7 +1240,7 @@ export async function updateRouterWirelessConfig(input: {
   radio: string;
   section: string;
   ssid: string;
-  encryption: "psk2" | "sae" | "sae-mixed" | "wpa2" | "none";
+  encryption: "psk2" | "sae" | "sae-mixed" | "wpa2" | "wpa3" | "none";
   key: string;
   radiusServer: string;
   radiusPort: string;
@@ -1270,7 +1270,8 @@ export async function updateRouterWirelessConfig(input: {
   if (input.encryption === "none" && (!input.allowOpen || input.key !== "")) {
     throw new Error("An open wireless network requires explicit confirmation and no passphrase.");
   }
-  if (input.encryption === "wpa2" && input.accountingServer !== "") {
+  const enterpriseMode = input.encryption === "wpa2" || input.encryption === "wpa3";
+  if (enterpriseMode && input.accountingServer !== "") {
     const host = input.accountingServer;
     const labels = host.split(".");
     const hostnameValid = host.length >= 1 && host.length <= 253 &&
@@ -1293,7 +1294,7 @@ export async function updateRouterWirelessConfig(input: {
       throw new Error("RADIUS accounting shared secret must be 16–128 bytes and contain no control characters.");
     }
   }
-  if (input.encryption === "wpa2") {
+  if (enterpriseMode) {
     const host = input.radiusServer;
     const labels = host.split(".");
     const hostnameValid = host.length >= 1 && host.length <= 253 &&
@@ -1316,7 +1317,7 @@ export async function updateRouterWirelessConfig(input: {
       throw new Error("RADIUS shared secret must be 16–128 bytes and contain no control characters.");
     }
     if (input.key !== "") {
-      throw new Error("WPA2-Enterprise uses the RADIUS shared secret, not a personal Wi-Fi passphrase.");
+      throw new Error("Enterprise security uses the RADIUS shared secret, not a personal Wi-Fi passphrase.");
     }
   }
   if (input.channel !== "auto" && !/^[0-9]{1,3}$/.test(input.channel)) {
@@ -1384,7 +1385,10 @@ export async function updateRouterWirelessConfig(input: {
     !("htmode" in payload) || payload.htmode !== input.htmode ||
     !("txpower" in payload) || payload.txpower !== input.txpower ||
     !("reloaded" in payload) || payload.reloaded !== true ||
-    !("rolled_back" in payload) || payload.rolled_back !== false
+    !("rolled_back" in payload) || payload.rolled_back !== false ||
+    !("radius_secret_set" in payload) || payload.radius_secret_set !== enterpriseMode ||
+    !("accounting_secret_set" in payload) ||
+      payload.accounting_secret_set !== (enterpriseMode && input.accountingServer !== "")
   ) {
     throw new Error("The router did not confirm the wireless configuration and Wi-Fi reload.");
   }
