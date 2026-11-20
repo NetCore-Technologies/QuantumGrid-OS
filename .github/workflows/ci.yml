@@ -31,6 +31,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Test Wi-Fi channel planner
+        run: node --experimental-strip-types --test ../../tests/wifi-channel-planner.test.mjs
       - name: Audit npm dependency advisories
         shell: bash
         run: |
