@@ -5059,7 +5059,7 @@ function OfficeNetworksPage({ routerOverview }: {
         </Panel>
       )}
 
-      <Panel title="Network interface map" eyebrow="NETWORK UCI · UBUs LIVE LINK STATE">
+      <Panel title="Network interface map" eyebrow="NETWORK UCI · UBUS LIVE LINK STATE">
         {!inventory?.available ? (
           <div className="module-message">No network interface inventory is available yet.</div>
         ) : interfaces.length === 0 ? (
