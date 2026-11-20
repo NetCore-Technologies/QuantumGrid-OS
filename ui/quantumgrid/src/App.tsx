@@ -5349,6 +5349,17 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   const memory = system?.memory;
   const load = system?.load_avg ?? [];
   const modules = platform?.modules ?? [];
+  const kernelModuleInventory = platform?.kernel_modules;
+  const [kernelModuleQuery, setKernelModuleQuery] = useState("");
+  const [kernelModuleState, setKernelModuleState] = useState<"all" | "loaded" | "installed">("all");
+  const visibleKernelModules = (kernelModuleInventory?.modules ?? []).filter((item) => {
+    const query = kernelModuleQuery.trim().toLocaleLowerCase();
+    const matchesQuery = !query || item.name.toLocaleLowerCase().includes(query) ||
+      item.path.toLocaleLowerCase().includes(query);
+    const matchesState = kernelModuleState === "all" ||
+      (kernelModuleState === "loaded" ? item.loaded : !item.loaded);
+    return matchesQuery && matchesState;
+  });
   const tools = platform?.tools ?? [];
   const services = platform?.services ?? [];
   const acceleration = platform?.acceleration;
@@ -5413,6 +5424,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
       ...runtimeRows,
       [generatedAt, platform.hostname, "Kernel networking", "Connection tracking", conntrack?.available ? (conntrack.status?.toUpperCase() ?? "UNKNOWN") : "UNAVAILABLE", "Read-only nf_conntrack_count / nf_conntrack_max; warning at 75%, critical at 90%", "", "", conntrack?.used_percent ?? "", conntrack?.available ? `${conntrack.count?.toLocaleString() ?? "N/A"} / ${conntrack.maximum?.toLocaleString() ?? "N/A"} entries; ${conntrack.free?.toLocaleString() ?? "N/A"} free` : ""],
       ...modules.map((item) => [generatedAt, platform.hostname, "Kernel module", item.name, item.loaded ? "LOADED" : "NOT LOADED", "", "", "", "", ""]),
+      ...(kernelModuleInventory?.modules ?? []).map((item) => [generatedAt, platform.hostname, "Installed kernel module", item.name, item.loaded ? "LOADED" : "INSTALLED / NOT LOADED", item.path, "", "", "", ""]),
       ...(acceleration?.components ?? []).map((item) => [generatedAt, platform.hostname, "Acceleration component", item.name, item.present ? "PRESENT" : "MISSING", item.kind + " · " + item.detail, "", "", "", ""]),
       ...(acceleration ? [[generatedAt, platform.hostname, "Acceleration summary", "NSS / EDMA / PPE", acceleration.status.toUpperCase(), acceleration.note, "", "", "", acceleration.offload_verified ? "VERIFIED" : "UNVERIFIED"]] : []),
       ...tools.map((item) => [generatedAt, platform.hostname, "Diagnostic tool", item.name, item.available ? "AVAILABLE" : "MISSING", "", "", "", "", ""]),
@@ -5562,8 +5574,50 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               </>
             )}
           </Panel>
+          <Panel title="Installed kernel modules (kmods)" eyebrow={kernelModuleInventory?.available ? `MODULES.DEP · ${kernelModuleInventory.count.toLocaleString()} INSTALLED · ${kernelModuleInventory.loaded_count.toLocaleString()} LOADED` : "MODULES.DEP UNAVAILABLE · /PROC/MODULES FALLBACK"}>
+            <div className="kernel-module-toolbar">
+              <input
+                type="search"
+                value={kernelModuleQuery}
+                onChange={(event) => setKernelModuleQuery(event.target.value)}
+                placeholder="Search module name or .ko path"
+                aria-label="Search installed kernel modules"
+              />
+              <div className="kernel-module-filter">
+                {(["all", "loaded", "installed"] as const).map((state) => (
+                  <button
+                    key={state}
+                    className={kernelModuleState === state ? "active" : ""}
+                    onClick={() => setKernelModuleState(state)}
+                  >
+                    {state === "all" ? "All" : state === "loaded" ? "Loaded" : "Not loaded"}
+                  </button>
+                ))}
+              </div>
+              <span>{visibleKernelModules.length.toLocaleString()} shown</span>
+            </div>
+            {!kernelModuleInventory ? (
+              <div className="module-message">Waiting for the running kernel module inventory.</div>
+            ) : visibleKernelModules.length === 0 ? (
+              <div className="module-message">No kernel modules match this filter.</div>
+            ) : (
+              <div className="kernel-module-list">
+                {visibleKernelModules.slice(0, 400).map((item) => (
+                  <div className="kernel-module-row" key={item.name}>
+                    <div>
+                      <strong>{item.name}</strong>
+                      <small>{item.path || "Runtime-loaded module not found in modules.dep"}</small>
+                    </div>
+                    <Status active={item.loaded}>{item.loaded ? "LOADED" : "ON DISK"}</Status>
+                  </div>
+                ))}
+              </div>
+            )}
+            {kernelModuleInventory?.truncated ? <div className="module-message">The inventory contains {kernelModuleInventory.count.toLocaleString()} module entries; the API result is capped at 2,000. The browser displays at most 400 rows at once.</div> : null}
+            <div className="module-message">Installed module paths come from the running kernel's modules.dep; loaded state comes from /proc/modules. Out-of-tree modules can appear as runtime-only entries. This is an inventory, not a safe live module-load/unload interface.</div>
+          </Panel>
           <div className="module-grid">
-            <Panel title="Loaded kernel modules" eyebrow="SYSFS · /SYS/MODULE">
+            <Panel title="Key platform drivers" eyebrow="SYSFS · SELECTED /SYS/MODULE CHECKS">
               {modules.length === 0 ? <div className="module-message">No module inventory was returned.</div> : (
                 <div className="platform-check-list">
                   {modules.map((module) => <div className="platform-check-row" key={module.name}><span>{module.name}</span><Status active={module.loaded}>{module.loaded ? "LOADED" : "NOT LOADED"}</Status></div>)}
