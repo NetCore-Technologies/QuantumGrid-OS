@@ -49,10 +49,6 @@ local function policy_inventory(response)
 			table.sort(names)
 			for _, name in ipairs(names) do
 				result.count = result.count + 1
-				if #result.policies >= MAX_POLICIES then
-					result.truncated = true
-					break
-				end
 				local members = {}
 				for _, member in ipairs(source[name]) do
 					if #members >= MAX_POLICY_MEMBERS then
@@ -71,7 +67,11 @@ local function policy_inventory(response)
 					if left.percent ~= right.percent then return left.percent > right.percent end
 					return left.interface < right.interface
 				end)
-				table.insert(result.policies, { family = family.name, name = name, members = members })
+				if #result.policies < MAX_POLICIES then
+					table.insert(result.policies, { family = family.name, name = name, members = members })
+				else
+					result.truncated = true
+				end
 			end
 		end
 	end
