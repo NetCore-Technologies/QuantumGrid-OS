@@ -174,10 +174,11 @@ controls remain unconnected and read-only.
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.
 
-## WPA2-Enterprise Wi-Fi
+## Enterprise Wi-Fi (WPA2/WPA3 RADIUS)
 
-The existing Wi-Fi AP editor supports **WPA2-Enterprise with an external RADIUS authentication
-server**. The AW1000 firmware selects OpenWrt's full-featured wpad-openssl variant because the
+The existing Wi-Fi AP editor supports **WPA2-Enterprise and WPA3-Enterprise with an external RADIUS authentication
+server**. WPA3-Enterprise forces 802.11w Protected Management Frames to required and repairs an
+existing AP whose PMF setting is missing when saved. The AW1000 firmware selects OpenWrt's full-featured wpad-openssl variant because the
 basic WPA-PSK/SAE variant does not include the full EAP/RADIUS authenticator. Configure an IPv4
 RADIUS address or DNS hostname, a UDP authentication port (default 1812) and a shared secret of
 16–128 bytes. The server must be reachable from the router on the configured port.
