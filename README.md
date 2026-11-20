@@ -418,6 +418,27 @@ and can alter connectivity; review the zone's networks and test real client traf
 applying changes. The UI and API do not edit individual firewall rules, NAT redirects, address
 sets or policy-routing entries through this zone editor.
 
+## DHCPv6, router advertisements and NDP
+
+Each eligible DHCP scope now exposes per-scope **DHCPv6**, **Router Advertisement (RA)** and
+**Neighbor Discovery Proxy (NDP)** controls alongside the IPv4 pool editor. DHCPv6 and RA can be
+set to `server` or `disabled`; NDP can be disabled. An explicit **Keep current** choice preserves
+the exact existing UCI value, including an existing relay or hybrid mode. The scope inventory
+reports the current DHCPv6, RA and NDP values.
+
+Changing any IPv6 mode writes the native `dhcp.dhcpv6`, `dhcp.ra` and/or `dhcp.ndp` options,
+restarts dnsmasq and odhcpd, and verifies both restart results. If either service restart fails,
+QuantumGrid restores the complete prior IPv4 pool, lease and IPv6 mode snapshot, commits it, and
+attempts to restart both affected services again. A failed recovery is reported as unconfirmed.
+
+Relay and hybrid operation is intentionally retained but not created by this editor: odhcpd relay
+depends on correctly configured master/upstream interface topology. Establish and validate that
+topology in native LuCI before using relay/hybrid modes. DHCPv6 does not itself provide an IPv6
+default route; review RA/SLAAC and prefix delegation for each LAN, and validate client addressing,
+DNS and routed reachability before a corporate rollout. These settings do not configure an ISP
+delegated prefix, DHCPv6 prefix delegation, DNS RA options, static IPv6 addresses or firewall IPv6
+rules.
+
 ## Office network inventory
 
 The authenticated **Office Networks** page provides a read-only correlation of configured
