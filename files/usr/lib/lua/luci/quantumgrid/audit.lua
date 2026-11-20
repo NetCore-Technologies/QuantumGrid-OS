@@ -11,6 +11,7 @@ local ALLOWED_ACTIONS = {
 	["wireless.update"] = true,
 	["sqm.update"] = true,
 	["dhcp.reservation.add"] = true,
+	["dhcp.reservation.remove"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
 	["package.feed.update"] = true,
