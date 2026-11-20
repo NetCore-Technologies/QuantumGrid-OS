@@ -8703,3 +8703,48 @@ input::placeholder {
 @media (max-width: 760px) {
   .kernel-module-toolbar { grid-template-columns: 1fr; }
 }
+
+
+.office-forwarding-list {
+  display: grid;
+  gap: 8px;
+}
+.office-forwarding-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) auto minmax(100px, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+.office-forwarding-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.office-forwarding-row strong {
+  color: var(--text);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.office-forwarding-row span:not(.office-forwarding-arrow) {
+  color: var(--muted);
+  font-size: 9px;
+}
+.office-forwarding-arrow {
+  color: var(--blue);
+  font-size: 17px;
+  font-weight: 800;
+}
+@media (max-width: 600px) {
+  .office-forwarding-row {
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 8px;
+  }
+  .office-forwarding-row > .status {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
