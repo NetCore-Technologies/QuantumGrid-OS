@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -65,6 +65,7 @@ type Page =
   | "analytics"
   | "system"
   | "advanced"
+  | "hardware"
   | "apps";
 
 type SetupStep = "welcome" | "account" | "wifi" | "wan";
@@ -102,6 +103,7 @@ const nav = [
   ["analytics", "Analytics", Database],
   ["system", "System", Cpu],
   ["advanced", "Advanced", Settings],
+  ["hardware", "Hardware I/O", Cpu],
   ["apps", "OpenWrt Apps", Monitor],
 ] as const;
 
@@ -3371,6 +3373,7 @@ function DashboardPage({
     analytics: ["Analytics", "Network Analytics", Database],
     system: ["System", "System Control", Cpu],
     advanced: ["Advanced", "Advanced Control", Settings],
+    hardware: ["Hardware I/O", "GPIO, Buttons & LEDs", Cpu],
     apps: ["OpenWrt Apps", "Native LuCI & APK", Monitor],
   };
 
@@ -3392,6 +3395,10 @@ function DashboardPage({
 
   if (page === "advanced") {
     return <AdvancedControlPage routerOverview={routerOverview} refresh={refresh} />;
+  }
+
+  if (page === "hardware") {
+    return <HardwareIoControlPage routerOverview={routerOverview} refresh={refresh} />;
   }
 
   if (page === "apps") {
@@ -4808,6 +4815,162 @@ function GamingControlPage({ routerOverview, refresh }: {
           <div className="module-message">This first write-capable SQM control changes only existing queue enable state and rate limits. CAKE tuning, firewall marks, per-client priority and traffic classification remain locked until their packet-path and rollback behaviour can be tested.</div>
         </Panel>
       </div>
+    </div>
+  );
+}
+
+
+function HardwareIoControlPage({ routerOverview, refresh }: {
+  routerOverview: RouterOverview | null;
+  refresh: () => void;
+}) {
+  const hardware = routerOverview?.hardware_io;
+  const gpio = hardware?.gpio;
+  const lines = gpio?.lines ?? [];
+  const buttonLines = lines.filter((line) => line.is_button);
+  const leds = hardware?.leds ?? [];
+  const [brightnessValues, setBrightnessValues] = useState<Record<string, number>>({});
+  const [savingLed, setSavingLed] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const getBrightness = (name: string, current: number | undefined) =>
+    brightnessValues[name] ?? current ?? 0;
+
+  const applyLed = async (led: (typeof leds)[number]) => {
+    if (!led.controllable || led.max_brightness === undefined) return;
+    const brightness = getBrightness(led.name, led.brightness);
+    setSavingLed(led.name);
+    setNotice(null);
+    try {
+      await updateRouterLedBrightness(led.name, brightness);
+      setNotice({ success: true, message: `Applied ${brightness} brightness to ${led.name}. The setting is runtime-only.` });
+      setBrightnessValues((previous) => ({ ...previous, [led.name]: brightness }));
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The LED brightness update failed.",
+      });
+    } finally {
+      setSavingLed(null);
+    }
+  };
+
+  return (
+    <div className="module-page hardware-io-page">
+      <section className="module-hero">
+        <div className="module-icon"><Cpu size={25} /></div>
+        <div>
+          <div className="setup-kicker">AW1000 HARDWARE · KERNEL I/O</div>
+          <h1>Hardware I/O</h1>
+          <p>Inspect GPIO lines and physical button consumers reported by the running kernel, then adjust supported LED-class devices. GPIO lines stay read-only until the AW1000 pin mapping and safe ownership rules are validated.</p>
+        </div>
+      </section>
+
+      <div className="metrics">
+        <Metric title="GPIO Debugfs" value={gpio?.available ? "AVAILABLE" : "UNAVAILABLE"} unit="" detail="Kernel-owned line inventory" icon={Cpu} />
+        <Metric title="GPIO Chips" value={gpio?.available ? fmt(gpio.chip_count) : "N/A"} unit="" detail={gpio?.truncated ? "Inventory is capped" : "Reported by debugfs"} icon={Database} />
+        <Metric title="Button-like Lines" value={gpio?.available ? fmt(buttonLines.length) : "N/A"} unit="" detail="Label/consumer name matches only" icon={Settings} />
+        <Metric title="LED Devices" value={hardware?.leds_available ? fmt(leds.length) : "N/A"} unit="" detail={leds.filter((led) => led.controllable).length + " with safe manual control"} icon={Zap} />
+      </div>
+
+      {notice && (
+        <div className={notice.success ? "module-message hardware-io-notice success" : "module-message hardware-io-notice error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      )}
+
+      <Panel title="GPIO chips and line inventory" eyebrow="READ-ONLY · /SYS/KERNEL/DEBUG/GPIO" action={<button className="hero-button" onClick={refresh}><RefreshCw size={14} /> Refresh hardware</button>}>
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !gpio?.available ? (
+          <div className="module-message">GPIO debugfs is not readable on this firmware. Enable the kernel debugfs GPIO view locally to inspect line ownership; QuantumGrid will not guess pin numbers or export arbitrary GPIO controls.</div>
+        ) : (
+          <>
+            <div className="hardware-chip-list">
+              {gpio.chips.map((chip) => (
+                <div className="hardware-chip" key={chip.name}>
+                  <strong>{chip.name}</strong>
+                  <span>GPIO {chip.first_gpio ?? "?"}–{chip.last_gpio ?? "?"}</span>
+                </div>
+              ))}
+              {gpio.chips.length === 0 && <div className="module-message">The kernel exposed the GPIO debugfs file but did not report a parseable chip header.</div>}
+            </div>
+            <div className="hardware-io-table">
+              <div className="hardware-io-row header"><span>LINE</span><span>LABEL / CONSUMER</span><span>DIRECTION</span><span>LEVEL</span><span>CLASSIFICATION</span></div>
+              {lines.map((line) => (
+                <div className="hardware-io-row" key={line.number}>
+                  <strong>GPIO {line.number}</strong>
+                  <span><b>{line.label || "Unnamed line"}</b><small>{line.consumer || "No consumer reported"}</small></span>
+                  <span>{line.direction.toUpperCase()}</span>
+                  <span>{line.state.toUpperCase()}</span>
+                  <span><Status active={line.is_button}>{line.is_button ? "BUTTON-LIKE" : "GENERAL I/O"}</Status></span>
+                </div>
+              ))}
+              {lines.length === 0 && <div className="module-message">No GPIO line entries were exposed by the running kernel.</div>}
+            </div>
+            {gpio.truncated && <div className="module-message">The raw GPIO inventory exceeded the 128-line display cap. The chip and line counts above indicate the full reported count where available.</div>}
+            <div className="module-message">Button-like is a label/consumer-name hint, not a verified physical pin map. The page does not read button event state, change pin direction, drive output lines, or alter GPIO ownership.</div>
+          </>
+        )}
+      </Panel>
+
+      <Panel title="LED class devices" eyebrow="KERNEL LED CLASS · BOUNDED RUNTIME CONTROL">
+        {!hardware?.leds_available ? (
+          <div className="module-message">The kernel LED class directory is unavailable. No LED controls are exposed.</div>
+        ) : leds.length === 0 ? (
+          <div className="module-message">No LED class devices were found under /sys/class/leds.</div>
+        ) : (
+          <div className="hardware-led-grid">
+            {leds.map((led) => {
+              const value = getBrightness(led.name, led.brightness);
+              const max = led.max_brightness ?? 0;
+              const changed = led.brightness !== undefined && value !== led.brightness;
+              return (
+                <section className="hardware-led-card" key={led.name}>
+                  <div className="hardware-led-heading">
+                    <div><strong>{led.name}</strong><span>{led.trigger_available ? `Trigger: ${led.trigger}` : "Trigger state unavailable"}</span></div>
+                    <Status active={led.controllable}>{led.controllable ? "MANUAL" : "LOCKED"}</Status>
+                  </div>
+                  <div className="hardware-led-values">
+                    <strong>{led.brightness === undefined ? "N/A" : fmt(led.brightness)}</strong>
+                    <span>/ {max > 0 ? fmt(max) : "N/A"} max</span>
+                  </div>
+                  <label className="hardware-led-slider">
+                    <span>Brightness</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(1, max)}
+                      step={1}
+                      value={Math.max(0, Math.min(value, Math.max(1, max)))}
+                      disabled={!led.controllable || savingLed !== null}
+                      onChange={(event) => setBrightnessValues((previous) => ({ ...previous, [led.name]: Number(event.target.value) }))}
+                      aria-label={`Brightness for ${led.name}`}
+                    />
+                  </label>
+                  <div className="hardware-led-actions">
+                    <small>{led.controllable ? "Manual control available while trigger is none." : led.trigger_available ? "Kernel trigger owns this LED, or brightness metadata is unavailable." : "Manual control is disabled until trigger state is readable."}</small>
+                    <button className="hero-button" onClick={() => { void applyLed(led); }} disabled={!led.controllable || !changed || savingLed !== null}>
+                      {savingLed === led.name ? "Applying…" : "Apply brightness"}
+                    </button>
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
+        <div className="module-message">LED brightness writes are authenticated, limited to discovered LED-class devices and verified after writing. Devices with an active kernel trigger are locked to avoid fighting the trigger owner. Changes are runtime-only and may reset after reboot or when a trigger is re-enabled.</div>
+      </Panel>
+
+      <Panel title="Hardware safety boundary" eyebrow="AW1000 PIN-MAP VALIDATION">
+        <div className="hardware-safety-grid">
+          <div><strong>GPIO input</strong><Status active={gpio?.available === true}>READ-ONLY</Status><span>GPIO line ownership, direction and level are reported only when the kernel debugfs interface exposes them.</span></div>
+          <div><strong>Button events</strong><Status active={false}>NOT YET WIRED</Status><span>Raw hotplug events and press/hold actions are not surfaced as live event streams yet.</span></div>
+          <div><strong>GPIO outputs</strong><Status active={false}>LOCKED</Status><span>No direct pin writes without a verified AW1000 pin map, ownership checks and recovery-safe policy.</span></div>
+          <div><strong>LED class</strong><Status active={leds.some((led) => led.controllable)}>BOUNDED CONTROL</Status><span>Only kernel-exported LED devices with a confirmed none trigger can be adjusted.</span></div>
+        </div>
+      </Panel>
     </div>
   );
 }
