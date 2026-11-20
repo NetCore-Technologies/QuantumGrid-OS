@@ -73,7 +73,7 @@ fi
 [ -r /proc/mtd ] || die "Cannot read /proc/mtd."
 mtd_entry() {
   wanted=$1
-  awk -F '[:, ]+' -v name="\\"$wanted\\"" '$4 == name { count++; print $1, $2, $3 } END { if (count != 1) exit 1 }' /proc/mtd
+  awk -F '[:, ]+' -v wanted="$wanted" '$4 == "\"" wanted "\"" { count++; print $1, $2, $3 } END { if (count != 1) exit 1 }' /proc/mtd
 }
 ROOTFS_ENTRY=$(mtd_entry rootfs) || die "Could not identify exactly one rootfs partition."
 ROOTFS1_ENTRY=$(mtd_entry rootfs_1) || die "Could not identify exactly one rootfs_1 partition."
