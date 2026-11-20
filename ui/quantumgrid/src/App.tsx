@@ -1736,6 +1736,45 @@ function NetworkControlPage({
   stats: Stats;
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
+  const [interfaceScope, setInterfaceScope] = useState<"all" | "wan" | "lan">("all");
+  const [interfaceSort, setInterfaceSort] = useState<"name" | "rx" | "tx" | "errors">("name");
+  const visibleInterfaces = interfaces.filter((item) =>
+    interfaceScope === "all" ||
+    (interfaceScope === "wan" && item.is_wan) ||
+    (interfaceScope === "lan" && !item.is_wan)
+  ).slice().sort((left, right) => {
+    if (interfaceSort === "rx") return right.rx_bytes - left.rx_bytes;
+    if (interfaceSort === "tx") return right.tx_bytes - left.tx_bytes;
+    if (interfaceSort === "errors") {
+      const leftCount = left.rx_errors === undefined && left.tx_errors === undefined && left.rx_dropped === undefined && left.tx_dropped === undefined
+        ? -1 : (left.rx_errors ?? 0) + (left.tx_errors ?? 0) + (left.rx_dropped ?? 0) + (left.tx_dropped ?? 0);
+      const rightCount = right.rx_errors === undefined && right.tx_errors === undefined && right.rx_dropped === undefined && right.tx_dropped === undefined
+        ? -1 : (right.rx_errors ?? 0) + (right.tx_errors ?? 0) + (right.rx_dropped ?? 0) + (right.tx_dropped ?? 0);
+      return rightCount - leftCount;
+    }
+    return left.name.localeCompare(right.name);
+  });
+  const exportInterfaces = () => {
+    if (visibleInterfaces.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Exported at (UTC)", "Scope filter", "Sort order", "Interface", "Device", "Class", "State", "IPv4 addresses", "RX bytes", "RX packets", "RX errors", "RX dropped", "TX bytes", "TX packets", "TX errors", "TX dropped"],
+      ...visibleInterfaces.map((item) => [
+        exportedAt, interfaceScope, interfaceSort, item.name, item.device, item.is_wan ? "WAN" : "LAN / other",
+        item.up ? "UP" : "DOWN", item.ipv4.join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
+        item.rx_dropped, item.tx_bytes, item.tx_packets, item.tx_errors, item.tx_dropped,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-interface-inventory-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
   const radios = routerOverview?.wireless ?? [];
   const wirelessClients = routerOverview?.wireless_clients ?? [];
   const wanCount = interfaces.filter((item) => item.is_wan).length;
@@ -1769,8 +1808,27 @@ function NetworkControlPage({
         ) : interfaces.length === 0 ? (
           <div className="module-message">The router did not report any network interfaces.</div>
         ) : (
+          <>
+          <div className="network-interface-tools">
+            <select aria-label="Filter network interface scope" value={interfaceScope} onChange={(event) => setInterfaceScope(event.target.value as "all" | "wan" | "lan")}>
+              <option value="all">All interfaces</option>
+              <option value="wan">WAN only</option>
+              <option value="lan">LAN / other only</option>
+            </select>
+            <select aria-label="Sort network interfaces" value={interfaceSort} onChange={(event) => setInterfaceSort(event.target.value as "name" | "rx" | "tx" | "errors")}>
+              <option value="name">Name A–Z</option>
+              <option value="rx">Highest RX bytes</option>
+              <option value="tx">Highest TX bytes</option>
+              <option value="errors">Most errors / drops</option>
+            </select>
+            <span>{visibleInterfaces.length} of {interfaces.length} interfaces</span>
+            <button className="hero-button wifi-export-button" onClick={exportInterfaces} disabled={visibleInterfaces.length === 0}>Export interface CSV</button>
+          </div>
+          {visibleInterfaces.length === 0 ? (
+            <div className="module-message">No interfaces match the selected scope.</div>
+          ) : (
           <div className="device-list">
-            {interfaces.map((item) => (
+            {visibleInterfaces.map((item) => (
               <div className="device-row" key={item.name}>
                 <div className="device-title">
                   <div className="device-icon"><Network size={17} /></div>
@@ -1791,8 +1849,10 @@ function NetworkControlPage({
               </div>
             ))}
           </div>
+          )}
+          </>
         )}
-        <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Counters the driver does not expose remain N/A.</div>
+        <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Counters the driver does not expose remain N/A. CSV export includes the active scope and sort filters.</div>
       </Panel>
 
       <div className="module-grid">
