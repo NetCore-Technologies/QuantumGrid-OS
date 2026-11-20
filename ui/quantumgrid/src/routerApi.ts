@@ -171,6 +171,38 @@ export interface RouterSqmStatus {
   qdiscs: RouterQdiscState[];
 }
 
+export interface RouterMwan3TrackTarget {
+  ip: string;
+  status: string;
+  latency_ms?: number;
+  packet_loss_percent?: number;
+}
+
+export interface RouterMwan3Interface {
+  name: string;
+  enabled: boolean;
+  running: boolean;
+  up: boolean;
+  status: string;
+  tracking: string;
+  age_seconds?: number;
+  online_seconds?: number;
+  offline_seconds?: number;
+  interface_uptime_seconds?: number;
+  score?: number;
+  lost?: number;
+  turn?: number;
+  track_targets: RouterMwan3TrackTarget[];
+}
+
+export interface RouterMwan3Status {
+  installed: boolean;
+  available: boolean;
+  count: number;
+  truncated: boolean;
+  interfaces: RouterMwan3Interface[];
+}
+
 export interface RouterSqmQueueUpdateResult {
   ok: true;
   section: string;
@@ -351,6 +383,7 @@ export interface RouterOverview {
   wireless: RouterWirelessRadio[];
   wireless_clients?: RouterWirelessClient[];
   sqm?: RouterSqmStatus;
+  mwan3?: RouterMwan3Status;
   security?: RouterSecurityStatus;
   cellular: RouterCellularStatus;
   phone: {
