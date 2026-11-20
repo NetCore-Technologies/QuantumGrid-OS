@@ -60,15 +60,17 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 		sae = true,
 		["sae-mixed"] = true,
 		wpa2 = true,
+		wpa3 = true,
 		none = true
 	}
 	if type(encryption) ~= "string" or not supported_encryption[encryption] then
-		return nil, "Choose WPA2-Personal, WPA3-Personal, WPA2/WPA3 mixed, WPA2-Enterprise or explicitly open security."
+		return nil, "Choose WPA2-Personal, WPA3-Personal, WPA2/WPA3 mixed, WPA2-Enterprise, WPA3-Enterprise or explicitly open security."
 	end
+	local enterprise_mode = encryption == "wpa2" or encryption == "wpa3"
 
 	local valid_radius_server, valid_radius_port, valid_radius_secret = "", "1812", ""
 	local radius_secret_supplied = false
-	if encryption == "wpa2" then
+	if enterprise_mode then
 		if not valid_radius_host(radius_server) then
 			return nil, "RADIUS server must be an IPv4 address or valid DNS hostname."
 		end
@@ -94,7 +96,7 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 
 	local valid_accounting_server, valid_accounting_port, valid_accounting_secret = "", "1813", ""
 	local accounting_secret_supplied = false
-	if encryption == "wpa2" then
+	if enterprise_mode then
 		if type(accounting_server) ~= "string" then
 			return nil, "RADIUS accounting server must be supplied as a string; use an empty value to disable accounting."
 		end
@@ -126,7 +128,7 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 	if type(key) ~= "string" then
 		return nil, "Wireless passphrase must be text."
 	end
-	if encryption == "wpa2" and key ~= "" then
+	if enterprise_mode and key ~= "" then
 		return nil, "WPA2-Enterprise uses the RADIUS shared secret, not a personal Wi-Fi passphrase."
 	elseif key ~= "" then
 		local valid_key, key_error = valid_text(key, 8, 63, "Wireless passphrase")
