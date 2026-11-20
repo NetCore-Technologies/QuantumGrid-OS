@@ -9229,3 +9229,58 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Static DHCP reservation editor */
+.office-reservation-entry {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.012);
+}
+.office-reservation-entry > .office-zone-row {
+  border-bottom: 0;
+  padding: 4px;
+}
+.office-reservation-edit-form {
+  display: grid;
+  gap: 12px;
+  padding: 13px;
+  border-top: 1px solid var(--line);
+  background: rgba(255,255,255,.018);
+}
+.office-reservation-edit-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.office-reservation-edit-heading strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.office-reservation-edit-heading span {
+  color: var(--muted);
+  font-size: 9px;
+}
+.office-reservation-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+.office-reservation-edit-actions > span {
+  flex: 1 1 260px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+@media (max-width: 650px) {
+  .office-reservation-edit-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
