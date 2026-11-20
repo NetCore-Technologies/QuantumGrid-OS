@@ -16,7 +16,7 @@ local function valid_text(value, minimum, maximum, label)
 	return value
 end
 
-function validate_update(radio, section, ssid, encryption, key, hidden, channel, allow_open, confirmed)
+function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed)
 	if not valid_section(radio) then
 		return nil, "Invalid radio section name."
 	end
@@ -62,6 +62,23 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 		end
 	end
 
+	if type(htmode) ~= "string" or #htmode > 16 or
+		(htmode ~= "auto" and not htmode:match("^[A-Z0-9+]+$")) then
+		return nil, "Wireless width/PHY mode must be Auto or a driver-reported mode."
+	end
+	if type(txpower) ~= "string" then
+		return nil, "Transmit power must be Auto or a driver-reported dBm value."
+	end
+	if txpower ~= "auto" then
+		if not txpower:match("^%d+$") then
+			return nil, "Transmit power must be Auto or a whole-number dBm value."
+		end
+		local dbm = tonumber(txpower)
+		if not dbm or dbm < 0 or dbm > 100 then
+			return nil, "Transmit power must be between 0 and 100 dBm."
+		end
+	end
+
 	if confirmed ~= "1" then
 		return nil, "Confirm that applying Wi-Fi settings may disconnect wireless clients."
 	end
@@ -83,6 +100,8 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 			key_supplied = false,
 			hidden = hidden,
 			channel = channel,
+			htmode = htmode,
+			txpower = txpower,
 			allow_open = false
 		}
 	end
@@ -96,6 +115,8 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 		key_supplied = key ~= "",
 		hidden = hidden,
 		channel = channel,
+		htmode = htmode,
+		txpower = txpower,
 		allow_open = encryption == "none"
 	}
 end
