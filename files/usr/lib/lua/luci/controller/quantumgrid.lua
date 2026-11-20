@@ -2662,7 +2662,7 @@ function action_dhcp_reservation()
 		name = reservation.name,
 		mac = reservation.mac,
 		ip = reservation.ipv4,
-		network = network
+		dns = "1"
 	})
 	if not section_ok or type(section) ~= "string" or section == "" then
 		pcall(uci.revert, uci, "dhcp")
