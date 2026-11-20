@@ -2730,17 +2730,38 @@ end
 
 
 local function restore_bridge_vlan_section(uci, section, snapshot)
-	if type(snapshot) ~= "table" or type(section) ~= "string" then return false end
-	local section_ok, restored = pcall(uci.section, uci, "network", "bridge-vlan", section, {
-		device = snapshot.device,
-		vlan = snapshot.vlan
-	})
-	if not section_ok or not restored then return false end
+	if type(snapshot) ~= "table" or type(section) ~= "string"
+		or type(snapshot.device) ~= "string" or type(snapshot.vlan) ~= "string" then
+		return false
+	end
+	local type_ok, current_type = pcall(uci.get, uci, "network", section, ".type")
+	if not type_ok then return false end
+	local restore_ok, restored
+	if current_type == "bridge-vlan" then
+		local device_ok, device_set = pcall(uci.set, uci, "network", section, "device", snapshot.device)
+		local vlan_ok, vlan_set = pcall(uci.set, uci, "network", section, "vlan", snapshot.vlan)
+		restore_ok = device_ok and device_set == true and vlan_ok and vlan_set == true
+		restored = restore_ok
+	elseif current_type == nil then
+		restore_ok, restored = pcall(uci.section, uci, "network", "bridge-vlan", section, {
+			device = snapshot.device,
+			vlan = snapshot.vlan
+		})
+		restore_ok = restore_ok and restored ~= nil and restored ~= false
+	else
+		return false
+	end
+	if not restore_ok or not restored then return false end
 	local ports_ok, ports_result
 	if type(snapshot.ports) == "table" then
 		ports_ok, ports_result = pcall(uci.set_list, uci, "network", section, "ports", snapshot.ports)
 	elseif snapshot.ports == false then
-		ports_ok, ports_result = pcall(uci.delete, uci, "network", section, "ports")
+		local current_ports = uci:get("network", section, "ports")
+		if current_ports == nil then
+			ports_ok, ports_result = true, true
+		else
+			ports_ok, ports_result = pcall(uci.delete, uci, "network", section, "ports")
+		end
 	else
 		return false
 	end
