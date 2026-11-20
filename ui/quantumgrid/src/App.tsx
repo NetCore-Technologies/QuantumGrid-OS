@@ -4417,6 +4417,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   refresh: () => void;
 }) {
   const platform = routerOverview?.platform;
+  const conntrack = routerOverview?.conntrack;
   const system = routerOverview?.system;
   const memory = system?.memory;
   const load = system?.load_avg ?? [];
@@ -4443,6 +4444,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
           platform.target, platform.kernel, platform.description].filter(Boolean).join(" | "), "", "", "", ""],
       [generatedAt, platform.hostname, "Package manager", platform.package_manager, "DETECTED", "", "", "", "", ""],
       ...runtimeRows,
+      [generatedAt, platform.hostname, "Kernel networking", "Connection tracking", conntrack?.available ? (conntrack.status?.toUpperCase() ?? "UNKNOWN") : "UNAVAILABLE", "Read-only nf_conntrack_count / nf_conntrack_max; warning at 75%, critical at 90%", "", "", conntrack?.used_percent ?? "", conntrack?.available ? `${conntrack.count?.toLocaleString() ?? "N/A"} / ${conntrack.maximum?.toLocaleString() ?? "N/A"} entries; ${conntrack.free?.toLocaleString() ?? "N/A"} free` : ""],
       ...modules.map((item) => [generatedAt, platform.hostname, "Kernel module", item.name, item.loaded ? "LOADED" : "NOT LOADED", "", "", "", "", ""]),
       ...tools.map((item) => [generatedAt, platform.hostname, "Diagnostic tool", item.name, item.available ? "AVAILABLE" : "MISSING", "", "", "", "", ""]),
       ...services.map((item) => [generatedAt, platform.hostname, "Init script", item.name, item.installed ? "PRESENT" : "MISSING", "Presence is not runtime health", "", "", "", ""]),
@@ -4504,6 +4506,22 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               <div className="platform-detail-wide"><small>LOAD AVERAGE · 1 / 5 / 15 MIN</small><strong>{load.length === 0 ? "N/A" : load.slice(0, 3).map((value) => fmt(value, 2)).join(" / ")}</strong></div>
             </div>
             <div className="module-message">Values come from the authenticated router telemetry sample. Unavailable CPU or thermal readings stay marked N/A; this panel does not estimate missing values.</div>
+          </Panel>
+          <Panel title="Connection tracking capacity" eyebrow="READ-ONLY · NETFILTER KERNEL COUNTERS">
+            {conntrack?.available ? (
+              <>
+                <InfoRows rows={[
+                  ["CURRENT ENTRIES", conntrack.count?.toLocaleString() ?? "N/A"],
+                  ["CONFIGURED MAXIMUM", conntrack.maximum?.toLocaleString() ?? "N/A"],
+                  ["FREE ENTRIES", conntrack.free?.toLocaleString() ?? "N/A"],
+                  ["TABLE UTILIZATION", conntrack.used_percent == null ? "N/A" : fmt(conntrack.used_percent, 1) + "%"],
+                  ["CAPACITY STATE", conntrack.status?.toUpperCase() ?? "UNKNOWN"],
+                ]} />
+                <div className="module-message">Warning begins at 75% and critical at 90% of the configured table maximum. This is a capacity indicator, not proof of dropped traffic; the view is read-only and does not change kernel limits.</div>
+              </>
+            ) : (
+              <div className="module-message">Kernel connection-tracking counters are unavailable on this build or are not exposed by the running kernel. QuantumGrid leaves the reading unavailable instead of assuming the table is empty.</div>
+            )}
           </Panel>
           <div className="module-grid">
             <Panel title="Loaded kernel modules" eyebrow="SYSFS · /SYS/MODULE">
