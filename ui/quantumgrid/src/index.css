@@ -2224,6 +2224,9 @@ button:disabled {
   .wifi-channel-plan-heading { align-items: flex-start; flex-direction: column; }
   .firewall-posture-summary { grid-template-columns: 1fr; }
   .firewall-posture-heading { align-items: flex-start; flex-direction: column; }
+  .firewall-rule-toolbar { grid-template-columns: 1fr; }
+  .firewall-rule-toolbar span { white-space: normal; }
+  .firewall-rule-row { grid-template-columns: 1fr 1fr; }
   .wifi-station-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wifi-station-tools { grid-template-columns: 1fr 1fr; }
   .wifi-station-tools span { white-space: normal; }
@@ -6746,6 +6749,11 @@ input::placeholder {
 .firewall-posture-heading strong { font-size: 9px; }
 .firewall-posture-heading span { color: var(--muted2); font-size: 8px; }
 .firewall-posture-item p { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.65; }
+.firewall-rule-toolbar { display: grid; grid-template-columns: minmax(160px, 1fr) minmax(120px, .55fr) auto; align-items: center; gap: 8px; margin-bottom: 12px; }
+.firewall-rule-toolbar span { color: var(--muted2); font-size: 8px; white-space: nowrap; }
+.firewall-rule-row { grid-template-columns: minmax(150px, 1.5fr) repeat(5, minmax(95px, 1fr)); }
+.firewall-rule-row > div:not(.device-title) { min-width: 0; }
+.firewall-rule-row b { overflow-wrap: anywhere; }
 .qdisc-tools {
   display: grid;
   grid-template-columns: minmax(180px, 1.3fr) minmax(170px, 1fr) auto;
