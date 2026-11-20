@@ -1742,19 +1742,27 @@ local function security_status(uci, fs)
 	for _, table_name in ipairs(result.nft_tables) do
 		if table_name == "inet/fw4" then fw4_present = true break end
 	end
-	if nft_binary and fw4_present then
-		local runtime_ok, runtime_output = pcall(util.exec,
-			nft_binary .. " -j list table inet fw4 2>/dev/null")
-		if runtime_ok and type(runtime_output) == "string" then
-			if #runtime_output > 512 * 1024 then
-				result.nft_runtime = firewall_runtime.unavailable(os.time(), true)
-			else
-				local jsonc = require "luci.jsonc"
-				local decoded_ok, decoded = pcall(jsonc.parse, runtime_output)
-				if decoded_ok then
-					result.nft_runtime = firewall_runtime.parse(decoded, os.time())
+	if fw4_present then
+		if nft_binary then
+			local runtime_ok, runtime_output = pcall(util.exec,
+				nft_binary .. " -j list table inet fw4 2>/dev/null")
+			if runtime_ok and type(runtime_output) == "string" then
+				if #runtime_output > 512 * 1024 then
+					result.nft_runtime = firewall_runtime.unavailable(os.time(), true, true)
+				else
+					local jsonc = require "luci.jsonc"
+					local decoded_ok, decoded = pcall(jsonc.parse, runtime_output)
+					if decoded_ok and type(decoded) == "table" then
+						result.nft_runtime = firewall_runtime.parse(decoded, os.time())
+					else
+						result.nft_runtime = firewall_runtime.unavailable(os.time(), false, true)
+					end
 				end
+			else
+				result.nft_runtime = firewall_runtime.unavailable(os.time(), false, true)
 			end
+		else
+			result.nft_runtime = firewall_runtime.unavailable(os.time(), false, true)
 		end
 	end
 	return result
