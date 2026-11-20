@@ -6597,9 +6597,27 @@ input::placeholder {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-bottom: 12px;
 }
+.wifi-station-diagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 18px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+  margin: 10px 0;
+}
+.wifi-station-diagnostics span {
+  color: var(--muted2);
+  font-size: 8px;
+}
+.wifi-station-diagnostics strong {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
 .wifi-station-tools {
   display: grid;
-  grid-template-columns: minmax(150px, 1.1fr) repeat(3, minmax(125px, .8fr)) auto auto;
+  grid-template-columns: minmax(140px, 1.1fr) repeat(4, minmax(112px, .8fr)) auto auto;
   align-items: center;
   gap: 8px;
   margin: 10px 0 13px;
