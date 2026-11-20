@@ -496,7 +496,7 @@ if bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$WRONG_EXTENSION"; then
 fi
 
 grep -Fq 'install-aw1000-ubi.sh' "$ROOT/.github/workflows/firmware-release.yml"
-grep -Fq 'UBI installer preflight' "$ROOT/README.md"
+grep -Fq 'preflight/installer' "$ROOT/README.md"
 grep -Fq 'standard 100 MiB / 256 KiB AW1000 partition' "$ROOT/scripts/install-aw1000-ubi.sh"
 grep -Fq 'rootfs_1' "$ROOT/scripts/install-aw1000-ubi.sh"
 bash "$ROOT/tests/install-aw1000-ubi-smoke.sh"
