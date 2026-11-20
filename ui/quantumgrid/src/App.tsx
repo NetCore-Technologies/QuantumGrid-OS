@@ -2917,6 +2917,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const security = routerOverview?.security;
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
+  const nftRuntime = security?.nft_runtime;
   const activeWireGuard = security?.vpn.wireguard_interfaces.filter((item) => item.up) ?? [];
   const wireGuardPeers = security?.vpn.wireguard_peers ?? [];
   const wireGuardPeersAvailable = security?.vpn.wireguard_peers_available === true;
@@ -2973,6 +2974,11 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Firewall", "Redirects", "REPORTED", security.redirects_count],
       [exportedAt, "Firewall", "Redirect sample coverage", security.redirects_truncated ? "TRUNCATED" : "COMPLETE", "Returned " + firewallRedirects.length + " of " + security.redirects_count + " configured redirects"],
       [exportedAt, "Firewall", "fw4 table", fw4Present ? "PRESENT" : "NOT FOUND", "inet/fw4"],
+      [exportedAt, "Firewall runtime", "fw4 chain snapshot", nftRuntime?.available ? "PARSED" : nftRuntime?.table_present ? "UNAVAILABLE" : "NOT PRESENT", "chains=" + (nftRuntime?.chain_count ?? 0) + "; rules=" + (nftRuntime?.rule_count ?? 0) + "; truncated=" + (nftRuntime?.truncated ?? false)],
+      ...(nftRuntime?.chains ?? []).map((chain) => [
+        exportedAt, "Firewall runtime chain", chain.name, chain.policy.toUpperCase(),
+        "hook=" + (chain.hook || "base chain") + "; type=" + chain.type + "; priority=" + (chain.priority ?? "unknown") + "; device=" + (chain.device || "any") + "; rules=" + chain.rule_count,
+      ]),
       ...zones.map((zone) => [
         exportedAt, "Firewall zone", zone.name, "REPORTED",
         "networks=" + zone.networks.join(" ") + "; input=" + zone.input + "; output=" + zone.output +
@@ -3193,6 +3199,33 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
         )}
         {security?.redirects_truncated && <div className="module-message">The API returned the first 64 redirects only. The configured count is higher; review the full native firewall configuration before making exposure decisions.</div>}
         <div className="module-message">OpenWrt redirect sections define NAT/port-forward behaviour. External forwards, missing source-port constraints and mappings to common administrative/data-service ports are flagged for manual review. Private destination IP addresses are redacted. These are configuration findings only: QuantumGrid does not test public reachability, confirm that a service is listening, or evaluate live nftables rule order.</div>
+      </Panel>
+
+      <Panel title="Live fw4 chain inventory" eyebrow="NFTABLES JSON · RUNNING KERNEL STATE" action={<Status active={nftRuntime?.available === true}>{nftRuntime?.available ? "SNAPSHOT PARSED" : nftRuntime?.table_present ? "TABLE PRESENT" : "NOT AVAILABLE"}</Status>}>
+        {!security ? (
+          <div className="module-message">Waiting for authenticated firewall telemetry.</div>
+        ) : !fw4Present ? (
+          <div className="module-message">The running nftables inventory does not report inet/fw4. The active firewall backend may differ; this page does not assume fw4 is in use.</div>
+        ) : !nftRuntime?.available ? (
+          <div className="module-message">{nftRuntime?.truncated ? "The native fw4 JSON snapshot exceeded the 512 KiB safety limit. No partial chain inventory is shown." : "The inet/fw4 table is present, but its JSON chain inventory could not be parsed. The table-presence signal is kept separate from detailed runtime availability."}</div>
+        ) : nftRuntime.chains.length === 0 ? (
+          <div className="module-message">The fw4 table was parsed, but no supported chain summaries were returned.</div>
+        ) : (
+          <div className="firewall-runtime-list">
+            <div className="firewall-runtime-row header"><span>CHAIN</span><span>HOOK / DEVICE</span><span>TYPE / PRIORITY</span><span>POLICY</span><span>RULES</span></div>
+            {nftRuntime.chains.map((chain) => (
+              <div className="firewall-runtime-row" key={chain.name}>
+                <strong>{chain.name}</strong>
+                <div><b>{chain.hook || "Base chain"}</b><small>{chain.device || "No device restriction"}</small></div>
+                <div><b>{chain.type}</b><small>Priority {chain.priority ?? "not reported"}</small></div>
+                <span className="firewall-runtime-policy">{chain.policy.toUpperCase()}</span>
+                <strong className="firewall-runtime-count">{fmt(chain.rule_count)}</strong>
+              </div>
+            ))}
+          </div>
+        )}
+        {nftRuntime?.truncated && <div className="module-message">The runtime inventory exceeded the 64-chain display limit. Additional chains were not included.</div>}
+        <div className="module-message">This is a read-only snapshot of the inet/fw4 table only. It reports chain metadata and rule counts, not raw rule expressions, addresses, counters, execution order, verdict correctness or packet reachability. Other nftables tables and non-fw4 firewall backends are not included.</div>
       </Panel>
 
       <Panel title="Firewall zones" eyebrow="UCI · /ETC/CONFIG/FIREWALL" action={<Status active={Boolean(security?.firewall_config_readable)}>{security?.firewall_config_readable ? "CONFIG READ" : "WAITING"}</Status>}>
