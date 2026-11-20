@@ -94,7 +94,9 @@ export interface RouterWirelessConfig {
   radio_disabled: boolean;
   channel: string;
   htmode: string;
+  htmodes: string[];
   txpower?: number;
+  txpower_levels: RouterWirelessTxPower[];
 }
 
 export interface RouterWirelessConfigInventory {
@@ -110,6 +112,8 @@ export interface RouterWirelessUpdateResult {
   encryption: string;
   hidden: boolean;
   channel: string;
+  htmode: string;
+  txpower: string;
   key_set: boolean;
   reloaded: true;
   rolled_back: false;
@@ -686,6 +690,8 @@ export async function updateRouterWirelessConfig(input: {
   key: string;
   hidden: boolean;
   channel: string;
+  htmode: string;
+  txpower: string;
   allowOpen: boolean;
 }): Promise<RouterWirelessUpdateResult> {
   const validSection = (value: string) => /^[A-Za-z0-9_-]{1,32}$/.test(value);
@@ -708,6 +714,13 @@ export async function updateRouterWirelessConfig(input: {
     throw new Error("Choose Auto or a supported numeric channel.");
   }
 
+  if (input.htmode !== "auto" && !/^[A-Z0-9+]{1,16}$/.test(input.htmode)) {
+    throw new Error("Choose Auto or a driver-reported wireless width/PHY mode.");
+  }
+  if (input.txpower !== "auto" && !/^(?:[0-9]|[1-9][0-9]|100)$/.test(input.txpower)) {
+    throw new Error("Choose Auto or a driver-reported whole-number transmit power.");
+  }
+
   const form = new URLSearchParams();
   form.set("radio", input.radio);
   form.set("section", input.section);
@@ -716,6 +729,8 @@ export async function updateRouterWirelessConfig(input: {
   form.set("key", input.key);
   form.set("hidden", input.hidden ? "1" : "0");
   form.set("channel", input.channel);
+  form.set("htmode", input.htmode);
+  form.set("txpower", input.txpower);
   form.set("allow_open", input.allowOpen ? "1" : "0");
   form.set("confirmed", "1");
 
@@ -751,6 +766,8 @@ export async function updateRouterWirelessConfig(input: {
     !("encryption" in payload) || payload.encryption !== input.encryption ||
     !("hidden" in payload) || payload.hidden !== input.hidden ||
     !("channel" in payload) || payload.channel !== input.channel ||
+    !("htmode" in payload) || payload.htmode !== input.htmode ||
+    !("txpower" in payload) || payload.txpower !== input.txpower ||
     !("reloaded" in payload) || payload.reloaded !== true ||
     !("rolled_back" in payload) || payload.rolled_back !== false
   ) {
