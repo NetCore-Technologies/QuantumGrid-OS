@@ -947,6 +947,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "office-forwarding-add"}, call("action_office_forwarding_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-forwarding-remove"}, call("action_office_forwarding_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-zone-update"}, call("action_office_zone_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-segment-add"}, call("action_office_segment_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
@@ -3614,6 +3615,312 @@ function action_office_zone_update()
 		masquerade = update.masquerade,
 		input_unchanged = true,
 		reloaded = true,
+		rolled_back = false
+	})
+end
+
+local function office_segment_reload(sys)
+	local network_ok, network_status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
+	local firewall_ok, firewall_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	local dhcp_ok, dhcp_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+	return network_ok and network_status == 0
+		and firewall_ok and firewall_status == 0
+		and dhcp_ok and dhcp_status == 0
+end
+
+local function restore_office_segment(uci, sys, network_section, dhcp_section,
+	zone_section, zone_networks_present, previous_zone_networks, rule_sections)
+	local writes_ok = true
+	local function delete_if_present(config, section)
+		if type(section) ~= "string" or section == "" then return end
+		local type_ok, section_type = pcall(uci.get, uci, config, section, ".type")
+		if not type_ok then writes_ok = false return end
+		if section_type ~= nil then
+			local delete_ok, deleted = pcall(uci.delete, uci, config, section)
+			if not delete_ok or deleted ~= true then writes_ok = false end
+		end
+	end
+	delete_if_present("network", network_section)
+	delete_if_present("dhcp", dhcp_section)
+	for _, section in ipairs(type(rule_sections) == "table" and rule_sections or {}) do
+		delete_if_present("firewall", section)
+	end
+
+	if type(zone_section) == "string" and zone_section ~= "" then
+		local zone_type_ok, zone_type = pcall(uci.get, uci, "firewall", zone_section, ".type")
+		if not zone_type_ok or zone_type ~= "zone" then
+			writes_ok = false
+		elseif zone_networks_present then
+			local networks = type(previous_zone_networks) == "table" and previous_zone_networks or
+				type(previous_zone_networks) == "string" and { previous_zone_networks } or {}
+			local set_ok, set_result = pcall(uci.set_list, uci, "firewall", zone_section, "network", networks)
+			if not set_ok or set_result ~= true then writes_ok = false end
+		else
+			local current = uci:get("firewall", zone_section, "network")
+			if current ~= nil then
+				local delete_ok, deleted = pcall(uci.delete, uci, "firewall", zone_section, "network")
+				if not delete_ok or deleted ~= true then writes_ok = false end
+			end
+		end
+	end
+
+	for _, config in ipairs({ "network", "firewall", "dhcp" }) do
+		local commit_ok, committed = pcall(uci.commit, uci, config)
+		if not commit_ok or committed ~= true then writes_ok = false end
+	end
+	if not writes_ok then return false end
+	return office_segment_reload(sys)
+end
+
+function action_office_segment_add()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before provisioning an office network." })
+		return
+	end
+	if fs.access("/etc/config/network") ~= true or fs.access("/etc/config/firewall") ~= true
+		or fs.access("/etc/config/dhcp") ~= true
+		or fs.access("/etc/init.d/network") ~= true or fs.access("/etc/init.d/firewall") ~= true
+		or fs.access("/etc/init.d/dnsmasq") ~= true then
+		respond(503, { ok = false, error = "Network, firewall, DHCP configuration or a required service is unavailable." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.available or not inventory.firewall_available or not inventory.dhcp_available
+		or inventory.truncated then
+		respond(409, { ok = false, error = "The network, firewall or DHCP inventory is unavailable or truncated. Resolve it before provisioning a new segment." })
+		return
+	end
+
+	local requested_zone = http.formvalue("zone", true)
+	if type(requested_zone) ~= "string" or #requested_zone > 64
+		or not requested_zone:match("^[A-Za-z0-9_.%-]+$") then
+		respond(400, { ok = false, error = "Select an existing firewall zone." })
+		return
+	end
+	local zones = {}
+	local zone_found = false
+	for _, zone in ipairs(inventory.zones or {}) do
+		local selected = zone.section == requested_zone
+		if selected then zone_found = true end
+		table.insert(zones, {
+			section = zone.section,
+			name = zone.name,
+			networks = zone.networks,
+			input = zone.input,
+			forward = zone.forward,
+			selected = selected
+		})
+	end
+	if not zone_found then
+		respond(409, { ok = false, error = "The selected firewall zone no longer exists." })
+		return
+	end
+
+	local update, validation_error = validator.validate_office_segment(
+		http.formvalue("name", true),
+		http.formvalue("bridge", true),
+		http.formvalue("vlan", true),
+		http.formvalue("address", true),
+		http.formvalue("netmask", true),
+		http.formvalue("start", true),
+		http.formvalue("limit", true),
+		http.formvalue("leasetime", true),
+		inventory.interfaces,
+		inventory.bridges,
+		inventory.vlans,
+		zones,
+		inventory.dhcp_scopes)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local network_section = update.name
+	local dhcp_section = "dhcp_" .. update.name
+	local rule_sections = {
+		"qgrid_" .. update.name .. "_dhcp",
+		"qgrid_" .. update.name .. "_dnsudp",
+		"qgrid_" .. update.name .. "_dnstcp"
+	}
+	if #dhcp_section > 64 then
+		respond(400, { ok = false, error = "The generated DHCP section identifier is too long." })
+		return
+	end
+	if uci:get("network", network_section, ".type") ~= nil or
+		uci:get("dhcp", dhcp_section, ".type") ~= nil then
+		respond(409, { ok = false, error = "A network or DHCP section with the generated identifier already exists." })
+		return
+	end
+	for _, rule_section in ipairs(rule_sections) do
+		if uci:get("firewall", rule_section, ".type") ~= nil then
+			respond(409, { ok = false, error = "A firewall rule with a generated identifier already exists. Choose a different network name." })
+			return
+		end
+	end
+
+	local zone_snapshot_ok, zone_snapshot = pcall(uci.get_all, uci, "firewall", update.zone_section)
+	if not zone_snapshot_ok or type(zone_snapshot) ~= "table" or zone_snapshot[".type"] ~= "zone" then
+		respond(409, { ok = false, error = "The selected firewall zone could not be snapshotted safely." })
+		return
+	end
+	local previous_zone_networks_present = zone_snapshot.network ~= nil
+	local previous_zone_networks = zone_snapshot.network
+	local zone_networks = {}
+	if type(previous_zone_networks) == "string" then
+		for value in previous_zone_networks:gmatch("%S+") do table.insert(zone_networks, value) end
+	elseif type(previous_zone_networks) == "table" then
+		for _, value in ipairs(previous_zone_networks) do
+			if type(value) == "string" then table.insert(zone_networks, value) end
+		end
+	end
+	for _, network in ipairs(zone_networks) do
+		if network == update.name then
+			respond(409, { ok = false, error = "The selected firewall zone already contains this network name." })
+			return
+		end
+	end
+	table.insert(zone_networks, update.name)
+
+	local network_ok, network_created = pcall(uci.section, uci, "network", "interface", network_section, {
+		proto = "static",
+		device = update.device,
+		ipaddr = update.address,
+		netmask = update.netmask,
+		defaultroute = "0",
+		peerdns = "0",
+		delegate = "0"
+	})
+	if not network_ok or network_created ~= network_section then
+		pcall(uci.revert, uci, "network")
+		respond(500, { ok = false, error = "The new static IPv4 network interface could not be staged." })
+		return
+	end
+
+	local dhcp_ok, dhcp_created = pcall(uci.section, uci, "dhcp", "dhcp", dhcp_section, {
+		interface = update.name,
+		start = update.dhcp_start,
+		limit = update.dhcp_limit,
+		leasetime = update.lease_time
+	})
+	if not dhcp_ok or dhcp_created ~= dhcp_section then
+		pcall(uci.revert, uci, "network")
+		pcall(uci.revert, uci, "dhcp")
+		respond(500, { ok = false, error = "The DHCP scope could not be staged. No service was reloaded." })
+		return
+	end
+
+	local zone_set_ok, zone_set = pcall(uci.set_list, uci, "firewall", update.zone_section, "network", zone_networks)
+	if not zone_set_ok or zone_set ~= true then
+		pcall(uci.revert, uci, "network")
+		pcall(uci.revert, uci, "dhcp")
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall zone attachment could not be staged. No service was reloaded." })
+		return
+	end
+
+	local rule_definitions = {
+		{ section = rule_sections[1], protocol = "udp", port = "67", label = "DHCP" },
+		{ section = rule_sections[2], protocol = "udp", port = "53", label = "DNS UDP" },
+		{ section = rule_sections[3], protocol = "tcp", port = "53", label = "DNS TCP" }
+	}
+	for _, rule in ipairs(rule_definitions) do
+		local create_ok, created = pcall(uci.section, uci, "firewall", "rule", rule.section, {
+			name = "QuantumGrid " .. update.name .. " " .. rule.label,
+			src = update.zone_name,
+			proto = rule.protocol,
+			dest_ip = update.address,
+			dest_port = rule.port,
+			family = "ipv4",
+			target = "ACCEPT"
+		})
+		if not create_ok or created ~= rule.section then
+			local recovered = restore_office_segment(uci, sys, network_section, dhcp_section,
+				update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections)
+			record_audit(http, "office.segment.add", update.name, "failed")
+			respond(500, {
+				error = recovered and "A narrowly scoped DHCP/DNS firewall rule could not be staged. The partial configuration was removed."
+					or "A DHCP/DNS firewall rule could not be staged and the previous configuration could not be fully restored.",
+					rolled_back = recovered
+			})
+			return
+		end
+	end
+
+	local commits_ok = true
+	for _, config in ipairs({ "network", "dhcp", "firewall" }) do
+		local commit_ok, committed = pcall(uci.commit, uci, config)
+		if not commit_ok or committed ~= true then commits_ok = false end
+	end
+	if not commits_ok then
+		local recovered = restore_office_segment(uci, sys, network_section, dhcp_section,
+			update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections)
+		record_audit(http, "office.segment.add", update.name, "failed")
+		respond(500, {
+			error = recovered and "One or more configuration commits failed. The partial segment was removed and previous services reloaded."
+				or "One or more configuration commits failed and rollback could not be confirmed. Inspect network, firewall and DHCP configuration locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	local applied = office_segment_reload(sys)
+	if not applied then
+		local recovered = restore_office_segment(uci, sys, network_section, dhcp_section,
+			update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections)
+		record_audit(http, "office.segment.add", update.name, "failed")
+		respond(502, {
+			error = recovered and "A network, firewall or DHCP service reload failed. The new segment was removed and the previous configuration restored."
+				or "A service reload failed and cross-package rollback could not be confirmed. Inspect network, firewall and DHCP configuration locally; management connectivity may be affected.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "office.segment.add", update.name, "success")
+	respond(nil, {
+		ok = true,
+		name = update.name,
+		device = update.device,
+		address = update.address,
+		netmask = update.netmask,
+		zone = update.zone_name,
+		pool_start_ip = update.pool_start_ip,
+		pool_end_ip = update.pool_end_ip,
+		firewall_rules = 3,
+		network_reloaded = true,
+		firewall_reloaded = true,
+		dhcp_restarted = true,
 		rolled_back = false
 	})
 end
