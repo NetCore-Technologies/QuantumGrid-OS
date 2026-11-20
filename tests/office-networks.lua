@@ -162,4 +162,4 @@ end
 local capped = office.build_inventory(oversized)
 assert(capped.interface_count == 64 and capped.vlan_count == 64 and capped.truncated)
 
-print("office-networks: VLANs, bridges, firewall forwarding, DHCP and SSID correlation tests passed")
+print("office-networks: VLANs, bridges, DHCP reservation validation, firewall forwarding and SSID tests passed")
