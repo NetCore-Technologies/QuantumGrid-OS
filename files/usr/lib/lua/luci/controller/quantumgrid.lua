@@ -142,8 +142,8 @@ local function default_route_inventory(fs)
 
 	local util = require "luci.util"
 	local families = {
-		{ option = "-4", name = "IPv4" },
-		{ option = "-6", name = "IPv6" }
+		{ command = "/sbin/ip -4 route show table all", name = "IPv4" },
+		{ command = "/sbin/ip -6 route show table all", name = "IPv6" }
 	}
 	local route_types = {
 		blackhole = true, unreachable = true, prohibit = true, throw = true,
@@ -151,10 +151,10 @@ local function default_route_inventory(fs)
 	}
 
 	for _, family in ipairs(families) do
-		local ok, output = pcall(util.exec, "/sbin/ip " .. family.option .. " route show table all")
+		local ok, output = pcall(util.exec, family.command)
 		if ok and type(output) == "string" then
 			result.available = true
-			for line in output:gmatch("[^\\r\\n]+") do
+			for line in output:gmatch("[^\r\n]+") do
 				local route_type = "unicast"
 				local route = line
 				local first, rest = line:match("^(%S+)%s+(.*)$")
