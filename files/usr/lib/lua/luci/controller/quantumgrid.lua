@@ -1921,24 +1921,7 @@ local function platform_status(fs)
 			detail = "ath11k loaded; this alone does not prove NSS Wi-Fi hooks are compiled or active"
 		}
 	}
-	local acceleration_present = 0
-	for _, component in ipairs(acceleration_components) do
-		if component.present then acceleration_present = acceleration_present + 1 end
-	end
-	local acceleration_required = 11
-	local acceleration_status = "not-detected"
-	if acceleration_present > 0 then acceleration_status = "partial" end
-	if acceleration_present >= acceleration_required then
-		acceleration_status = "components-present-unverified"
-	end
-	local acceleration = {
-		status = acceleration_status,
-		present_components = acceleration_present,
-		required_components = acceleration_required,
-		offload_verified = false,
-		components = acceleration_components,
-		note = "Component and device-tree presence only. This inventory does not verify NSS firmware boot, ath11k NSS integration, PPE flow programming, active EDMA queues, ECM offload state or packet counters. End-to-end offload remains unverified until traffic-path counters and controlled benchmarks pass on the device."
-	}
+	local acceleration = require("luci.quantumgrid.acceleration").summarize(acceleration_components)
 	return {
 		available = next(board) ~= nil,
 		hostname = field(board.hostname, 64),
