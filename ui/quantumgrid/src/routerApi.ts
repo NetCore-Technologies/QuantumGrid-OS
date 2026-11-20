@@ -323,6 +323,26 @@ export interface RouterFirewallRedirect {
   source_destination_ip_match: boolean;
 }
 
+export interface RouterFirewallRuntimeChain {
+  name: string;
+  hook: string;
+  policy: string;
+  type: string;
+  priority?: number;
+  device: string;
+  rule_count: number;
+}
+
+export interface RouterFirewallRuntimeStatus {
+  available: boolean;
+  table_present: boolean;
+  chains: RouterFirewallRuntimeChain[];
+  chain_count: number;
+  rule_count: number;
+  truncated: boolean;
+  sampled_at: number;
+}
+
 export interface RouterSecurityStatus {
   firewall_installed: boolean;
   firewall_config_available: boolean;
@@ -335,6 +355,7 @@ export interface RouterSecurityStatus {
   redirects_truncated: boolean;
   nft_available: boolean;
   nft_tables: string[];
+  nft_runtime: RouterFirewallRuntimeStatus;
   adblock_fast: {
     installed: boolean;
     config_available: boolean;
