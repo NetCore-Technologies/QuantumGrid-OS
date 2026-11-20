@@ -321,6 +321,30 @@ test("unconstrained WAN ACCEPT rules are separately highlighted", () => {
   assert.equal(result.checks.find((item) => item.id === "unconstrained-external-allow:wide-wan-accept")?.status, "review");
 });
 
+test("truncated NAT redirect inventories remain unknown and cannot imply complete review", () => {
+  const result = auditFirewallPosture(security({
+    redirects_truncated: true,
+    redirects: [{
+      name: "first-page-forward",
+      source_zone: "wan",
+      destination_zone: "lan",
+      protocol: "tcp",
+      target: "DNAT",
+      family: "ipv4",
+      external_port: "80",
+      internal_port: "8080",
+      enabled: true,
+      source_ip_match: false,
+      source_mac_match: false,
+      destination_ip_match: true,
+      source_destination_ip_match: false,
+    }],
+  }));
+  const incomplete = result.checks.find((item) => item.id === "redirect-inventory-truncated");
+  assert.equal(incomplete?.status, "unknown");
+  assert.match(incomplete?.detail ?? "", /first 64|additional configured forwards/i);
+});
+
 test("port-range analysis ignores malformed port expressions", () => {
   const result = auditFirewallPosture(security({
     redirects: [{
