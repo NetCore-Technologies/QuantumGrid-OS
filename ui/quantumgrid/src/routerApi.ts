@@ -82,6 +82,39 @@ export interface RouterWirelessTxPower {
   active: boolean;
 }
 
+export interface RouterWirelessConfig {
+  section: string;
+  radio: string;
+  mode: "ap";
+  ssid: string;
+  encryption: string;
+  hidden: boolean;
+  key_set: boolean;
+  interface_disabled: boolean;
+  radio_disabled: boolean;
+  channel: string;
+  htmode: string;
+  txpower?: number;
+}
+
+export interface RouterWirelessConfigInventory {
+  available: boolean;
+  sections: RouterWirelessConfig[];
+}
+
+export interface RouterWirelessUpdateResult {
+  ok: true;
+  radio: string;
+  section: string;
+  ssid: string;
+  encryption: string;
+  hidden: boolean;
+  channel: string;
+  key_set: boolean;
+  reloaded: true;
+  rolled_back: false;
+}
+
 export interface RouterWirelessRadio {
   name: string;
   up: boolean;
@@ -421,6 +454,7 @@ export interface RouterOverview {
   interfaces: RouterInterface[];
   clients?: RouterClient[];
   wireless: RouterWirelessRadio[];
+  wireless_configs?: RouterWirelessConfigInventory;
   wireless_clients?: RouterWirelessClient[];
   sqm?: RouterSqmStatus;
   mwan3?: RouterMwan3Status;
@@ -438,6 +472,7 @@ const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
+const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -598,6 +633,87 @@ export async function runRouterLatencyTest(): Promise<RouterLatencyTest> {
   return payload as RouterLatencyTest;
 }
 
+
+export async function updateRouterWirelessConfig(input: {
+  radio: string;
+  section: string;
+  ssid: string;
+  encryption: "psk2" | "sae" | "sae-mixed" | "none";
+  key: string;
+  hidden: boolean;
+  channel: string;
+  allowOpen: boolean;
+}): Promise<RouterWirelessUpdateResult> {
+  const validSection = (value: string) => /^[A-Za-z0-9_-]{1,32}$/.test(value);
+  if (!validSection(input.radio) || !validSection(input.section)) {
+    throw new Error("Invalid wireless radio or interface section.");
+  }
+  if (input.ssid.length < 1 || new TextEncoder().encode(input.ssid).length > 32 ||
+      /[\\u0000-\\u001f\\u007f]/.test(input.ssid)) {
+    throw new Error("SSID must be 1–32 bytes and cannot contain control characters.");
+  }
+  if (input.encryption !== "none" &&
+      (input.key.length < 8 || new TextEncoder().encode(input.key).length > 63 ||
+       /[\\u0000-\\u001f\\u007f]/.test(input.key))) {
+    throw new Error("The wireless passphrase must be 8–63 bytes and cannot contain control characters.");
+  }
+  if (input.encryption === "none" && (!input.allowOpen || input.key !== "")) {
+    throw new Error("An open wireless network requires explicit confirmation and no passphrase.");
+  }
+  if (input.channel !== "auto" && !/^[0-9]{1,3}$/.test(input.channel)) {
+    throw new Error("Choose Auto or a supported numeric channel.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("radio", input.radio);
+  form.set("section", input.section);
+  form.set("ssid", input.ssid);
+  form.set("encryption", input.encryption);
+  form.set("key", input.key);
+  form.set("hidden", input.hidden ? "1" : "0");
+  form.set("channel", input.channel);
+  form.set("allow_open", input.allowOpen ? "1" : "0");
+  form.set("confirmed", "1");
+
+  const response = await fetch(WIRELESS_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Wi-Fi changes require an active router administrator session."
+      : "The router returned an invalid wireless update response.");
+  }
+
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid wireless update response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("radio" in payload) || payload.radio !== input.radio ||
+    !("section" in payload) || payload.section !== input.section ||
+    !("ssid" in payload) || payload.ssid !== input.ssid ||
+    !("encryption" in payload) || payload.encryption !== input.encryption ||
+    !("hidden" in payload) || payload.hidden !== input.hidden ||
+    !("channel" in payload) || payload.channel !== input.channel ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the wireless configuration and Wi-Fi reload.");
+  }
+  return payload as RouterWirelessUpdateResult;
+}
 
 export async function updateRouterSqmQueue(
   section: string,
