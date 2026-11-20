@@ -2079,11 +2079,14 @@ local function office_network_status(uci, fs)
 		truncated = false,
 		firewall_available = false,
 		wireless_available = false,
+		dhcp_available = false,
 		interfaces = {},
 		bridges = {},
 		vlans = {},
 		zones = {},
 		wifi_aps = {},
+		dhcp_scopes = {},
+		static_leases = {},
 		sampled_at = os.time()
 	}
 	local network_ok = pcall(function()
@@ -2172,6 +2175,35 @@ local function office_network_status(uci, fs)
 		end)
 	end)
 	source.wireless_available = wireless_ok and fs.access("/etc/config/wireless") == true
+
+	local dhcp_ok = pcall(function()
+		uci:foreach("dhcp", "dhcp", function(section)
+			if #source.dhcp_scopes >= 64 then source.truncated = true return end
+			local name = tostring(section[".name"] or "")
+			local interface = tostring(section.interface or "")
+			if name:match("^[%w_.%-]+$") and interface:match("^[%w_.%-]+$") then
+				table.insert(source.dhcp_scopes, {
+					name = name,
+					interface = interface,
+					start = section.start,
+					limit = section.limit,
+					lease_time = section.leasetime,
+					ignore = section.ignore == "1",
+					dhcpv6 = section.dhcpv6,
+					ra = section.ra
+				})
+			end
+		end)
+		uci:foreach("dhcp", "host", function(section)
+			if #source.static_leases >= 256 then source.truncated = true return end
+			table.insert(source.static_leases, {
+				name = section.name or section[".name"],
+				mac = section.mac,
+				ipv4 = section.ip
+			})
+		end)
+	end)
+	source.dhcp_available = dhcp_ok and fs.access("/etc/config/dhcp") == true
 
 	local parser = require "luci.quantumgrid.office_networks"
 	return parser.build_inventory(source)
