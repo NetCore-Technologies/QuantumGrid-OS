@@ -1490,12 +1490,11 @@ function action_package_operation()
 		else command = binary .. " remove " .. package end
 	end
 
-	local log_path = os.tmpname()
-	if type(log_path) ~= "string" or not log_path:match("^/tmp/[A-Za-z0-9_.%-]+$") then
-		respond(500, { ok = false, error = "A private package-operation log path could not be created." })
+	local log_path = validator.create_secure_log_file(os.tmpname, require "nixio")
+	if not log_path then
+		respond(500, { ok = false, error = "A private package-operation log file could not be reserved." })
 		return
 	end
-	os.remove(log_path)
 	local call_ok, exit_code = pcall(sys.call, command .. " > " .. log_path .. " 2>&1")
 	local output = ""
 	local file = io.open(log_path, "r")
