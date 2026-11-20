@@ -13,6 +13,11 @@ on:
         required: true
         default: "v25.12.6"
         type: string
+      enable_nss:
+        description: "Build experimental Qualcomm NSS/EDMA profile (qosmio 25.12-nss fork)"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -27,6 +32,8 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       QG_OPENWRT_REF: ${{ inputs.openwrt_ref || 'v25.12.6' }}
+      QG_ENABLE_NSS: ${{ inputs.enable_nss && '1' || '0' }}
+      QG_NSS_OPENWRT_REF: "d6848fa2ea00193b5b7d3973e3990da7f608027c"
       QG_BUILD_JOBS: "2"
     steps:
       - name: Checkout QuantumGrid source
@@ -128,6 +135,8 @@ jobs:
             echo "QuantumGrid OS — Arcadyan AW1000 firmware"
             echo "Release: $VERSION"
             echo "QuantumGrid source commit: $SOURCE_SHA"
+            echo "Build profile: ${QG_ENABLE_NSS:+${QG_ENABLE_NSS}}"
+            echo "NSS enabled: $QG_ENABLE_NSS"
             echo "OpenWrt requested ref: $QG_OPENWRT_REF"
             echo "OpenWrt resolved commit: $OPENWRT_SHA"
             echo "AW1000 phone source commit: $PHONE_SHA"
