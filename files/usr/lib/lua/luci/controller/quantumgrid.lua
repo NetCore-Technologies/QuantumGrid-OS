@@ -319,7 +319,7 @@ local function wireless_survey(ifname, frequency)
 	return { supported = false }
 end
 
-local function wireless_config_inventory(uci)
+local function wireless_config_inventory(uci, radios)
 	local result = {}
 	local ok = pcall(function()
 		uci:foreach("wireless", "wifi-iface", function(section)
@@ -330,6 +330,23 @@ local function wireless_config_inventory(uci)
 			if mode == "ap" and name:match("^[%w_%-]+$") and radio:match("^[%w_%-]+$") then
 				local radio_type = uci:get("wireless", radio, ".type")
 				if radio_type == "wifi-device" then
+					local radio_status = nil
+					for _, candidate in ipairs(radios or {}) do
+						if candidate.name == radio then
+							radio_status = candidate
+							break
+						end
+					end
+					local supported_htmodes, seen_htmodes = {}, {}
+					for _, iface in ipairs(radio_status and radio_status.interfaces or {}) do
+						for _, htmode in ipairs(iface.ht_modes or {}) do
+							if type(htmode) == "string" and #htmode <= 16 and not seen_htmodes[htmode] then
+								seen_htmodes[htmode] = true
+								table.insert(supported_htmodes, htmode)
+							end
+						end
+					end
+					table.sort(supported_htmodes)
 					local channel = uci:get("wireless", radio, "channel")
 					table.insert(result, {
 						section = name,
@@ -340,11 +357,13 @@ local function wireless_config_inventory(uci)
 						hidden = section.hidden == "1",
 						key_set = type(section.key) == "string" and section.key ~= "",
 						interface_disabled = section.disabled == "1",
-					radio_disabled = uci:get("wireless", radio, "disabled") == "1",
-					channel = type(channel) == "string" and channel ~= "" and channel or "auto",
-					htmode = tostring(uci:get("wireless", radio, "htmode") or ""),
-					txpower = tonumber(uci:get("wireless", radio, "txpower"))
-				})
+						radio_disabled = uci:get("wireless", radio, "disabled") == "1",
+						channel = type(channel) == "string" and channel ~= "" and channel or "auto",
+						htmode = tostring(uci:get("wireless", radio, "htmode") or ""),
+						htmodes = supported_htmodes,
+						txpower = tonumber(uci:get("wireless", radio, "txpower")),
+						txpower_levels = radio_status and radio_status.txpower_levels or {}
+					})
 				end
 			end
 		end)
@@ -1829,7 +1848,7 @@ function action_api()
 		policy_rules = rule_inventory.rules,
 		clients = dhcp_clients(),
 		wireless = wireless,
-		wireless_configs = wireless_config_inventory(uci),
+		wireless_configs = wireless_config_inventory(uci, wireless),
 		wireless_clients = wireless_clients(wireless),
 		sqm = sqm,
 		mwan3 = mwan3,
