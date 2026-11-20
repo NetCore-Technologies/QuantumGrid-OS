@@ -37,7 +37,7 @@ function summarize(source)
 		required_components = #REQUIRED_COMPONENTS,
 		offload_verified = false,
 		components = {},
-		note = "Component and device-tree presence only. This inventory does not verify NSS firmware boot, ath11k NSS integration, PPE flow programming, active EDMA queues, ECM offload state or packet counters. End-to-end offload remains unverified until traffic-path counters and controlled benchmarks pass on the device."
+		note = "Component and device-tree presence only. This inventory does not verify NSS firmware boot, ath11k NSS integration, PPE flow programming, active EDMA queues, ECM offload state or packet counters. The experimental 25.12-nss profile disables generic packet steering/software and hardware flow offloading; do not re-enable those paths alongside NSS. DSA bridge-vlan filtering is not compatible with NSS Wi-Fi offload. End-to-end offload remains unverified until traffic-path counters and controlled benchmarks pass on the AW1000."
 	}
 	if type(source) ~= "table" then return result end
 
