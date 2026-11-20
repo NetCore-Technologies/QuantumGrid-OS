@@ -2470,7 +2470,7 @@ function summarizeWifiChannels(results: RouterWifiScan["results"]): WifiChannelG
 }
 
 
-function csvCell(value: string | number | null | undefined): string {
+function csvCell(value: string | number | boolean | null | undefined): string {
   let text = value === null || value === undefined ? "" : String(value);
   // Treat network-controlled SSIDs and other fields as text in spreadsheet applications.
   if (/^[\t\r\n ]*[=+\-@]/.test(text)) text = "'" + text;
