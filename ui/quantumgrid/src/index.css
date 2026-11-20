@@ -8366,3 +8366,38 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Authenticated APK / OPKG package operations */
+.openwrt-package-actions {
+  display: grid;
+  gap: 10px;
+}
+.openwrt-package-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.openwrt-package-action-buttons button:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+.openwrt-package-output {
+  max-height: 220px;
+  margin: 0;
+  padding: 10px 11px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  background: rgba(0,0,0,.22);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 8px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 600px) {
+  .openwrt-package-action-buttons button { flex: 1 1 100%; }
+}
