@@ -8028,3 +8028,64 @@ input::placeholder {
   .openwrt-package-row > :last-child { display: none; }
   .openwrt-app-actions a, .openwrt-app-actions button { flex: 1 1 100%; }
 }
+
+
+/* NSS / EDMA / PPE component readiness inventory */
+.acceleration-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.acceleration-summary > div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+}
+.acceleration-summary small {
+  display: block;
+  color: var(--muted2);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.acceleration-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.acceleration-components {
+  display: grid;
+  gap: 0;
+}
+.acceleration-components .platform-check-row {
+  min-height: 49px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.acceleration-components .platform-check-row:last-child { border-bottom: 0; }
+.acceleration-component-copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.acceleration-component-copy > span {
+  color: var(--text);
+  font-size: 9px;
+  font-weight: 700;
+}
+.acceleration-component-copy > small {
+  color: var(--muted2);
+  font-size: 7px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .acceleration-summary { grid-template-columns: 1fr; }
+}
