@@ -658,6 +658,17 @@ export interface RouterOfficeNetworks {
   sampled_at: number;
 }
 
+export interface RouterDhcpReservationRemoveResult {
+  ok: true;
+  section: string;
+  name: string;
+  mac: string;
+  ipv4: string;
+  removed: true;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterDhcpReservationResult {
   ok: true;
   section: string;
@@ -740,6 +751,7 @@ const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backup";
 const AUDIT_URL = "/cgi-bin/luci/admin/services/quantumgrid/audit";
 const DHCP_RESERVATION_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation";
+const DHCP_RESERVATION_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-remove";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -1327,4 +1339,45 @@ export async function createRouterDhcpReservation(input: {
     throw new Error("The router did not confirm the DHCP reservation and dnsmasq restart.");
   }
   return payload as RouterDhcpReservationResult;
+}
+export async function removeRouterDhcpReservation(section: string): Promise<RouterDhcpReservationRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid DHCP reservation section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(DHCP_RESERVATION_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Removing a DHCP reservation requires an active router administrator session."
+      : "The router returned an invalid DHCP reservation removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid DHCP reservation removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm reservation removal and dnsmasq restart.");
+  }
+  return payload as RouterDhcpReservationRemoveResult;
 }
