@@ -163,6 +163,75 @@ function validate_reservation(name, mac, ipv4)
 	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
 end
 
+function validate_dhcp_scope_update(start_value, limit_value, lease_time, interface_address, netmask, other_ranges)
+	if type(start_value) ~= "string" or #start_value > 10
+		or not start_value:match("^[1-9]%d*$") then
+		return nil, "DHCP start must be a positive whole-number offset."
+	end
+	if type(limit_value) ~= "string" or #limit_value > 10
+		or not limit_value:match("^[1-9]%d*$") then
+		return nil, "DHCP limit must be a positive whole-number pool size."
+	end
+	local start = tonumber(start_value)
+	local limit = tonumber(limit_value)
+	if not start or not limit or start > 4294967294 or limit > 4294967294 then
+		return nil, "DHCP offset or pool size exceeds the supported IPv4 range."
+	end
+	if type(lease_time) ~= "string" or #lease_time > 16 then
+		return nil, "DHCP lease time must be between 60 seconds and 365 days."
+	end
+	local amount, unit = lease_time:match("^([1-9]%d*)([smhdw]?)$")
+	amount = tonumber(amount)
+	local multiplier = ({ [""] = 1, s = 1, m = 60, h = 3600, d = 86400, w = 604800 })[unit or ""]
+	if not amount or not multiplier then
+		return nil, "Lease time must use seconds, minutes, hours, days or weeks (for example 12h)."
+	end
+	local seconds = amount * multiplier
+	if seconds < 60 or seconds > 31536000 then
+		return nil, "DHCP lease time must be between 60 seconds and 365 days."
+	end
+
+	local router = ipv4_number(interface_address)
+	local prefix = ipv4_prefix(netmask)
+	if not router or not prefix then
+		return nil, "A valid static IPv4 address and contiguous subnet mask are required."
+	end
+	local size = 2 ^ (32 - prefix)
+	local network = math.floor(router / size) * size
+	local broadcast = network + size - 1
+	local first = network + start
+	local last = first + limit - 1
+	if first <= network or last >= broadcast then
+		return nil, "The new DHCP pool would extend outside usable host addresses in the subnet."
+	end
+	if router >= first and router <= last then
+		return nil, "The new DHCP pool would include the router interface address."
+	end
+
+	if type(other_ranges) == "table" then
+		for _, range in ipairs(other_ranges) do
+			if type(range) == "table" then
+				local other_first = ipv4_number(range.start)
+				local other_last = ipv4_number(range.finish)
+				if other_first and other_last and first <= other_last and other_first <= last then
+					return nil, "The new DHCP pool overlaps another enabled DHCP scope."
+				end
+			end
+		end
+	end
+
+	return {
+		start = tostring(start),
+		limit = tostring(limit),
+		lease_time = lease_time,
+		pool_start_ip = ipv4_text(first),
+		pool_end_ip = ipv4_text(last),
+		first = first,
+		last = last,
+		lease_seconds = seconds
+	}
+end
+
 function live_lease_conflict(contents, address, mac)
 	if type(contents) ~= "string" or type(address) ~= "string" or type(mac) ~= "string" then
 		return false
