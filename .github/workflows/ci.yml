@@ -120,6 +120,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/conntrack.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireless.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/packages.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
       - name: Test bounded SQM queue update validation
@@ -134,6 +135,8 @@ jobs:
         run: lua5.1 tests/wireless-controls.lua
       - name: Test installed APK and OPKG package inventory
         run: lua5.1 tests/packages-inventory.lua
+      - name: Test NSS EDMA and PPE readiness states
+        run: lua5.1 tests/acceleration-status.lua
       - name: Test read-only AW1000 install-target inspection
         run: bash tests/install-aw1000-target-inspector-smoke.sh
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
