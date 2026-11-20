@@ -116,6 +116,19 @@ local function network_interfaces()
 			end
 		end
 
+		local ipv6_addresses = {}
+		for _, address in ipairs(item["ipv6-address"] or {}) do
+			local value = type(address.address) == "string" and address.address or ""
+			if value ~= "" and value:match("^[%x:%.]+$") then
+				local prefix = tonumber(address.mask)
+				if prefix and prefix >= 0 and prefix <= 128 then
+					table.insert(ipv6_addresses, value .. "/" .. tostring(prefix))
+				else
+					table.insert(ipv6_addresses, value)
+				end
+			end
+		end
+
 		table.insert(result, {
 			name = item.interface or item.name or "",
 			device = device,
@@ -129,7 +142,8 @@ local function network_interfaces()
 			tx_errors = read_stat("tx_errors"),
 			rx_dropped = read_stat("rx_dropped"),
 			tx_dropped = read_stat("tx_dropped"),
-			ipv4 = addresses
+			ipv4 = addresses,
+			ipv6 = ipv6_addresses
 		})
 	end
 	return result
