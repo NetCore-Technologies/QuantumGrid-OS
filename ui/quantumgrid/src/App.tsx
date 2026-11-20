@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -3069,6 +3069,12 @@ function OpenWrtAppsPage() {
   const [error, setError] = useState("");
   const [packageSearch, setPackageSearch] = useState("");
   const [appSection, setAppSection] = useState<"All" | NativeOpenWrtApp["section"]>("All");
+  const [packageName, setPackageName] = useState("");
+  const [confirmPackageAction, setConfirmPackageAction] = useState(false);
+  const [packageBusy, setPackageBusy] = useState(false);
+  const [packageActionMessage, setPackageActionMessage] = useState("");
+  const [packageActionOutput, setPackageActionOutput] = useState("");
+  const [packageActionError, setPackageActionError] = useState(false);
 
   const loadPackages = useCallback(async () => {
     setLoading(true);
@@ -3095,6 +3101,50 @@ function OpenWrtAppsPage() {
       active = false;
     };
   }, []);
+
+  const runPackageAction = async (operation: "update" | "install" | "remove") => {
+    const name = packageName.trim();
+    if (operation !== "update" && !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(name)) {
+      setPackageActionError(true);
+      setPackageActionMessage("Enter a valid package name before installing or removing a package.");
+      return;
+    }
+    if (operation === "remove" &&
+        (/^kmod-/.test(name) || /^wpad/.test(name) || /^qca-nss/.test(name))) {
+      setPackageActionError(true);
+      setPackageActionMessage("Kernel, wireless and NSS packages must be changed through an offline firmware build.");
+      return;
+    }
+    if (!confirmPackageAction) {
+      setPackageActionError(true);
+      setPackageActionMessage("Confirm the package operation before continuing.");
+      return;
+    }
+    setPackageBusy(true);
+    setPackageActionError(false);
+    setPackageActionMessage(
+      operation === "update" ? "Refreshing package feeds…" :
+      operation === "install" ? "Installing " + name + "…" :
+      "Removing " + name + "…",
+    );
+    setPackageActionOutput("");
+    try {
+      const result = await runRouterPackageOperation(operation, name, true);
+      setPackageActionMessage(
+        operation === "update" ? "Package feeds refreshed successfully." :
+        operation === "install" ? name + " installed successfully." :
+        name + " removed successfully.",
+      );
+      setPackageActionOutput(result.output);
+      setConfirmPackageAction(false);
+      await loadPackages();
+    } catch (cause) {
+      setPackageActionError(true);
+      setPackageActionMessage(cause instanceof Error ? cause.message : "Package operation failed.");
+    } finally {
+      setPackageBusy(false);
+    }
+  };
 
   const installed = new Set(inventory?.packages.map((item) => item.name) ?? []);
   const visiblePackages = (inventory?.packages ?? []).filter((item) =>
@@ -3162,6 +3212,50 @@ function OpenWrtAppsPage() {
           })}
         </div>
         <div className="module-message">App links open the router’s native LuCI pages in this browser session. “Not found” means the package inventory did not contain the expected package name; a menu entry may still be provided by a related LuCI module. The Backup & Flash link opens standard LuCI only—never upload QuantumGrid’s factory UBI image through a generic sysupgrade form.</div>
+      </Panel>
+
+      <Panel title="Package manager" eyebrow="APK / OPKG · AUTHENTICATED ROUTER OPERATIONS">
+        <div className="openwrt-package-actions">
+          <label className="wireless-config-field">
+            <span>PACKAGE NAME</span>
+            <input
+              value={packageName}
+              onChange={(event) => setPackageName(event.target.value)}
+              placeholder="e.g. luci-app-sqm or kmod-…"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="wireless-config-confirm">
+            <input
+              type="checkbox"
+              checked={confirmPackageAction}
+              onChange={(event) => setConfirmPackageAction(event.target.checked)}
+              disabled={packageBusy}
+            />
+            <span>I understand that installation runs package scripts and may change router services; removal may remove dependent applications. Core system, wireless, NSS and kernel-module removals are blocked.</span>
+          </label>
+        </div>
+        <div className="openwrt-package-action-buttons">
+          <button className="hero-button" onClick={() => void runPackageAction("update")} disabled={packageBusy || !confirmPackageAction}>
+            {packageBusy ? "Working…" : "Refresh feeds"}
+          </button>
+          <button className="hero-button" onClick={() => void runPackageAction("install")} disabled={packageBusy || !confirmPackageAction || !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(packageName.trim())}>
+            Install package
+          </button>
+          <button className="hero-button" onClick={() => void runPackageAction("remove")} disabled={packageBusy || !confirmPackageAction || !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(packageName.trim()) || /^(kmod-|wpad|qca-nss)/.test(packageName.trim())}>
+            Remove package
+          </button>
+        </div>
+        {packageActionMessage ? (
+          <div className={packageActionError ? "wireless-config-result error" : "wireless-config-result success"} role="status">
+            {packageActionMessage}
+          </div>
+        ) : null}
+        {packageActionOutput ? <pre className="openwrt-package-output">{packageActionOutput}</pre> : null}
+        <div className="module-message">
+          Package actions use the router's configured APK/OPKG feeds and run one package operation at a time. The in-app remover blocks base services, all kernel modules, wireless supplicants and NSS components; driver and firmware changes must be made in a matching offline image build. A successful package install may still require a service restart or router reboot, as reported by the package manager.
+        </div>
       </Panel>
 
       <Panel title="Installed package inventory" eyebrow={inventory ? inventory.manager.toUpperCase() + " · " + new Date(inventory.sampled_at * 1000).toLocaleString() : "READ-ONLY LOCAL DATABASE"}>
