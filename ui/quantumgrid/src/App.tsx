@@ -2304,6 +2304,21 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const activeWireGuard = security?.vpn.wireguard_interfaces.filter((item) => item.up) ?? [];
   const firewallPosture = auditFirewallPosture(security);
+  const [firewallRuleSearch, setFirewallRuleSearch] = useState("");
+  const [firewallRuleSort, setFirewallRuleSort] = useState<"name" | "source" | "destination" | "target">("source");
+  const firewallRules = security?.rules ?? [];
+  const visibleFirewallRules = firewallRules
+    .filter((rule) => [
+      rule.name, rule.source_zone, rule.destination_zone, rule.protocol,
+      rule.target, rule.family, rule.source_port, rule.destination_port,
+    ].some((value) => value.toLocaleLowerCase().includes(firewallRuleSearch.trim().toLocaleLowerCase())))
+    .slice()
+    .sort((left, right) => {
+      if (firewallRuleSort === "name") return left.name.localeCompare(right.name);
+      if (firewallRuleSort === "destination") return left.destination_zone.localeCompare(right.destination_zone);
+      if (firewallRuleSort === "target") return left.target.localeCompare(right.target);
+      return left.source_zone.localeCompare(right.source_zone) || left.name.localeCompare(right.name);
+    });
   const exportSecurityInventory = () => {
     if (!security) return;
     const exportedAt = new Date().toISOString();
@@ -2318,6 +2333,16 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
         exportedAt, "Firewall zone", zone.name, "REPORTED",
         "networks=" + zone.networks.join(" ") + "; input=" + zone.input + "; output=" + zone.output +
           "; forward=" + zone.forward + "; masquerade=" + (zone.masquerade ? "on" : "off"),
+      ]),
+      ...firewallRules.map((rule) => [
+        exportedAt, "Firewall rule", rule.name, rule.enabled ? "ENABLED" : "DISABLED",
+        "source=" + (rule.source_zone || "any") + "; destination=" + (rule.destination_zone || "any") +
+          "; protocol=" + (rule.protocol || "any") + "; target=" + rule.target +
+          "; family=" + (rule.family || "any") + "; source_port=" + (rule.source_port || "any") +
+          "; destination_port=" + (rule.destination_port || "any") +
+          "; source_ip_match=" + rule.source_ip_match +
+          "; destination_ip_match=" + rule.destination_ip_match +
+          "; source_mac_match=" + rule.source_mac_match,
       ]),
       ...firewallPosture.checks.map((check) => [
         exportedAt, "Firewall posture review", check.title, check.status.toUpperCase(),
@@ -2382,6 +2407,58 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
           ))}
         </div>
         <div className="module-message">This is a narrow configuration review, not a vulnerability scan. External zones are identified only by standard WAN/WWAN naming. Individual rules, rule order, port exposure, IPv6 policy and actual packet paths are not evaluated. A REVIEW item needs manual confirmation; UNKNOWN never means secure.</div>
+      </Panel>
+      <Panel title="Firewall rule inventory" eyebrow="UCI RULE SUMMARIES · ADDRESSES REDACTED">
+        {!security ? (
+          <div className="module-message">Waiting for authenticated firewall telemetry.</div>
+        ) : firewallRules.length === 0 ? (
+          <div className="module-message">No rule summaries were returned. The config may be unavailable or there may be no UCI firewall rules.</div>
+        ) : (
+          <>
+            <div className="firewall-rule-toolbar">
+              <input
+                className="wifi-scan-filter"
+                type="search"
+                aria-label="Search firewall rule summaries"
+                placeholder="Search name, zone, protocol, target or port"
+                value={firewallRuleSearch}
+                onChange={(event) => setFirewallRuleSearch(event.target.value)}
+              />
+              <select
+                className="wifi-scan-sort"
+                aria-label="Sort firewall rules"
+                value={firewallRuleSort}
+                onChange={(event) => setFirewallRuleSort(event.target.value as "name" | "source" | "destination" | "target")}
+              >
+                <option value="source">Source zone</option>
+                <option value="destination">Destination zone</option>
+                <option value="target">Target</option>
+                <option value="name">Name A–Z</option>
+              </select>
+              <span>{visibleFirewallRules.length} shown · {firewallRules.length} returned · {security.rules_count} configured</span>
+            </div>
+            {visibleFirewallRules.length === 0 ? (
+              <div className="module-message">No firewall rules match this search.</div>
+            ) : (
+              <div className="device-list">
+                {visibleFirewallRules.map((rule, index) => (
+                  <div className="device-row firewall-rule-row" key={rule.name + "-" + index}>
+                    <div className="device-title">
+                      <div className="device-icon"><Shield size={17} /></div>
+                      <div><strong>{rule.name}</strong><span>{rule.enabled ? "Enabled" : "Disabled"} · {rule.family || "Any IP family"}</span></div>
+                    </div>
+                    <div><small>SOURCE → DESTINATION</small><b>{rule.source_zone || "Any"} → {rule.destination_zone || "Any"}</b></div>
+                    <div><small>PROTOCOL</small><b>{rule.protocol || "Any"}</b></div>
+                    <div><small>TARGET</small><b>{rule.target || "N/A"}</b></div>
+                    <div><small>PORTS</small><b>{rule.source_port || "Any"} → {rule.destination_port || "Any"}</b></div>
+                    <div><small>MATCH FIELDS</small><b>{[rule.source_ip_match && "Source IP", rule.destination_ip_match && "Destination IP", rule.source_mac_match && "Source MAC"].filter(Boolean).join(" · ") || "No address match"}</b></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        <div className="module-message">The API returns at most 64 rule summaries. IP and MAC values are deliberately omitted; only the presence of those match fields is shown. Search and sorting run locally in this page. This inventory does not evaluate rule order, address ranges, connection state, NAT, IPv6 path behaviour or runtime packet matching.</div>
       </Panel>
       <Panel title="Firewall zones" eyebrow="UCI · /ETC/CONFIG/FIREWALL" action={<Status active={Boolean(security?.firewall_config_readable)}>{security?.firewall_config_readable ? "CONFIG READ" : "WAITING"}</Status>}>
         {!security ? (
