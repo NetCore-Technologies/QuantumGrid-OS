@@ -52,6 +52,22 @@ show_gpio() {
 }
 
 show_buttons() {
+show_aw1000_reference() {
+  if [ ! -r /proc/device-tree/compatible ] ||
+    ! tr '\\000' '\\n' < /proc/device-tree/compatible | grep -Fxq 'arcadyan,aw1000'; then
+    return 0
+  fi
+  cat <<'MAP'
+=== Arcadyan AW1000 device-tree reference (no pin writes) ===
+Buttons: Wi-Fi TLMM 2 active-low; WPS TLMM 62 active-low; Reset TLMM 67 active-low
+Modem/USB: LTE power-key TLMM 54; LTE power TLMM 30; LTE reset TLMM 63; USB VBUS regulator TLMM 9 active-low
+SPI LED expander: SCK TLMM 18; MOSI TLMM 19; enable TLMM 20; Fairchild 74HC595, two registers
+Ethernet: MDIO controller reset TLMM 37 active-low; QCA8081 PHY reset TLMM 64 active-low
+LED outputs are shift-register indexes, not TLMM offsets. See the Hardware I/O page for the full colour/output map.
+This is an upstream DTS reference only; QuantumGrid does not drive these pins.
+MAP
+}
+
   echo "=== Native GPIO button event support (read-only) ==="
   if [ -d /sys/module/gpio_button_hotplug ]; then
     echo "gpio-button-hotplug driver: present"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6346,6 +6346,35 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
 }
 
 
+function HardwareBoardPinList({ title, entries }: {
+  title: string;
+  entries: RouterBoardGpioLineReference[];
+}) {
+  return (
+    <section className="hardware-board-pin-group">
+      <div className="hardware-board-pin-group-title">{title}</div>
+      <div className="hardware-board-pin-list">
+        {entries.map((entry) => (
+          <div className="hardware-board-pin-row" key={entry.name}>
+            <div>
+              <strong>{entry.name}</strong>
+              <span>{entry.purpose}</span>
+              <small>{entry.owner}{entry.linux_key ? " · " + entry.linux_key : ""}{entry.initial_level ? " · DTS initial " + entry.initial_level : ""}</small>
+              {entry.note ? <small>{entry.note}</small> : null}
+            </div>
+            <div className="hardware-board-pin-meta">
+              <b>TLMM GPIO {entry.tlmm_offset}</b>
+              <span>{entry.direction.toUpperCase()} · ACTIVE {entry.active_level.toUpperCase()}</span>
+            </div>
+            <Status active={false}>REFERENCE ONLY</Status>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+
 function HardwareIoControlPage({ routerOverview, refresh }: {
   routerOverview: RouterOverview | null;
   refresh: () => void;
@@ -6357,6 +6386,7 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
   const sysfsGpioChips = gpio?.sysfs?.chips ?? [];
   const leds = hardware?.leds ?? [];
   const inputDevices = hardware?.input_devices?.devices ?? [];
+  const boardReference = hardware?.board_reference;
   const [brightnessValues, setBrightnessValues] = useState<Record<string, number>>({});
   const [savingLed, setSavingLed] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
@@ -6453,6 +6483,55 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
             </div>
             {gpio.truncated && <div className="module-message">The raw GPIO inventory exceeded the 128-line display cap. The chip and line counts above indicate the full reported count where available.</div>}
             <div className="module-message">Button-like is a label/consumer-name hint, not a verified physical pin map. GPIO line state remains read-only: the page does not change pin direction, drive output lines, export GPIOs, or alter kernel ownership.</div>
+          </>
+        )}
+      </Panel>
+
+      <Panel title="AW1000 board pin reference" eyebrow="UPSTREAM DEVICE TREE · READ-ONLY MAP" action={<Status active={boardReference?.available === true}>{boardReference?.available ? "BOARD MATCHED" : "NOT MATCHED"}</Status>}>
+        {!boardReference?.available ? (
+          <div className="module-message">The running device tree does not identify this router as Arcadyan AW1000. The AW1000-specific pin map is intentionally hidden rather than applied to an unknown board.</div>
+        ) : (
+          <>
+            <div className="hardware-board-profile-head">
+              <div>
+                <strong>{boardReference.model}</strong>
+                <span>{boardReference.compatible} · {boardReference.offset_namespace}</span>
+              </div>
+              <a href={boardReference.source_url} target="_blank" rel="noreferrer">Open upstream DTS source</a>
+            </div>
+            <HardwareBoardPinList title="Physical buttons · active-low inputs" entries={boardReference.buttons} />
+            <HardwareBoardPinList title="Modem and USB control · kernel-owned outputs/regulator" entries={boardReference.auxiliary} />
+            <HardwareBoardPinList title="SPI and management bus signals" entries={boardReference.bus_signals} />
+            <HardwareBoardPinList title="Ethernet PHY resets" entries={boardReference.phy_resets} />
+            {boardReference.led_expander && (
+              <section className="hardware-board-pin-group">
+                <div className="hardware-board-pin-group-title">
+                  {boardReference.led_expander.part} · {boardReference.led_expander.register_count} registers · outputs are not TLMM GPIO offsets
+                </div>
+                <div className="hardware-board-expander-summary">
+                  <span>SCK TLMM {boardReference.led_expander.clock_tlmm_offset}</span>
+                  <span>MOSI TLMM {boardReference.led_expander.data_tlmm_offset}</span>
+                  <span>Enable TLMM {boardReference.led_expander.enable_tlmm_offset}</span>
+                </div>
+                <div className="hardware-board-pin-list">
+                  {boardReference.led_expander.outputs.map((output) => (
+                    <div className="hardware-board-pin-row" key={output.output_index}>
+                      <div>
+                        <strong>{output.name}</strong>
+                        <span>{output.label}</span>
+                      </div>
+                      <div className="hardware-board-pin-meta">
+                        <b>74HC595 output {output.output_index}</b>
+                        <span>ACTIVE {output.active_level.toUpperCase()}</span>
+                      </div>
+                      <Status active={false}>KERNEL LED CLASS</Status>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+            <div className="module-message hardware-board-warning">{boardReference.warning} The panel is a reference only: QuantumGrid does not export or drive these pins, change pinmux, reset the modem, toggle USB power or bit-bang the LED shift register.</div>
+            <div className="hardware-board-source-hash">DTS blob {boardReference.source_blob_sha}</div>
           </>
         )}
       </Panel>

@@ -1,6 +1,25 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local hardware = require "luci.quantumgrid.hardware_io"
 
+local unknown_board = hardware.parse_board_gpio_reference("qcom,ipq8074" .. string.char(0) .. "other,board")
+assert(not unknown_board.available, "unknown boards must not receive the AW1000 pin reference")
+local aw1000_reference = hardware.parse_board_gpio_reference(
+	"qcom,ipq8074" .. string.char(0) .. "arcadyan,aw1000" .. string.char(0))
+assert(aw1000_reference.available and aw1000_reference.compatible == "arcadyan,aw1000")
+assert(aw1000_reference.model == "Arcadyan AW1000")
+assert(aw1000_reference.buttons[1].name == "Wi-Fi / WLAN" and aw1000_reference.buttons[1].tlmm_offset == 2)
+assert(aw1000_reference.buttons[2].tlmm_offset == 62 and aw1000_reference.buttons[2].active_level == "low")
+assert(aw1000_reference.buttons[3].tlmm_offset == 67 and aw1000_reference.buttons[3].linux_key == "KEY_RESTART")
+assert(aw1000_reference.auxiliary[1].tlmm_offset == 54 and aw1000_reference.auxiliary[3].tlmm_offset == 63)
+assert(aw1000_reference.auxiliary[4].tlmm_offset == 9 and aw1000_reference.auxiliary[4].direction == "regulator")
+assert(aw1000_reference.bus_signals[1].tlmm_offset == 18 and aw1000_reference.bus_signals[2].tlmm_offset == 19)
+assert(aw1000_reference.phy_resets[1].tlmm_offset == 37 and aw1000_reference.phy_resets[2].tlmm_offset == 64)
+assert(aw1000_reference.led_expander.register_count == 2 and #aw1000_reference.led_expander.outputs == 10)
+assert(aw1000_reference.led_expander.outputs[10].output_index == 11)
+assert(aw1000_reference.source_blob_sha == "42ad979f2997c6dbae8f3ae2d944e3f654efc81b")
+assert(aw1000_reference.warning:find("not necessarily the global GPIO numbers", 1, true))
+assert(not hardware.parse_board_gpio_reference(nil).available, "missing compatible data must not infer the router board")
+
 local gpio = hardware.parse_gpio_debugfs([[
 gpiochip0: GPIOs 0-31, parent: platform/1000000.pinctrl, pinctrl-msm
  gpio-3   (                    |reset               ) in  hi IRQ
@@ -119,4 +138,4 @@ expect_invalid("status", "1", 0, "zero maximum")
 expect_invalid("status", "1", 65536, "unsupported maximum")
 expect_invalid(string.rep("a", 65), "1", 255, "overlong LED name")
 
-print("hardware-io: GPIO debugfs/sysfs, input-device, button-event, trigger and LED validation tests passed")
+print("hardware-io: AW1000 board reference, GPIO debugfs/sysfs, input-device, button-event, trigger and LED validation tests passed")

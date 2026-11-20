@@ -296,6 +296,16 @@ kernel input-device names, handler names and `eventN` nodes, but it never opens 
 or consumes input events. GPIO sysfs fallback likewise reads metadata only; it never exports or drives lines. Button telemetry comes only from procd's ubus notifications; it does not
 read from input event nodes or modify native hotplug scripts.
 
+When `/proc/device-tree/compatible` identifies `arcadyan,aw1000`, the page also shows the
+upstream AW1000 board reference: Wi-Fi/WPS/reset buttons at TLMM offsets 2/62/67 (active-low),
+LTE power-key/power/reset at 54/30/63, USB VBUS regulator at 9, SPI LED-expander signals at
+18/19/20, and Ethernet resets at 37/64. The 74HC595 LED output indexes are displayed separately
+from TLMM offsets. These values come from the upstream
+[AW1000 device tree](https://github.com/openwrt/openwrt/blob/master/target/linux/qualcommax/dts/ipq8072-aw1000.dts).
+TLMM offsets are local to the Qualcomm pin controller and must not be confused with the global
+GPIO numbers printed by debugfs. The map is reference-only; no GPIO, regulator, SPI or PHY-reset
+writes are exposed.
+
 The same page enumerates Linux LED-class devices under `/sys/class/leds`. An administrator can
 change brightness only for a discovered device whose kernel trigger is explicitly reported as
 `none`, with an integer value bounded by that device's reported maximum. The authenticated

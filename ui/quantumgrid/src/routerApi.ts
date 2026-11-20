@@ -568,6 +568,47 @@ export interface RouterButtonEventInventory {
   sampled_at: number;
 }
 
+export interface RouterBoardGpioLineReference {
+  name: string;
+  purpose: string;
+  tlmm_offset: number;
+  direction: string;
+  active_level: string;
+  owner: string;
+  linux_key?: string;
+  initial_level?: string;
+  note?: string;
+}
+
+export interface RouterBoardLedOutputReference {
+  name: string;
+  label: string;
+  output_index: number;
+  active_level: string;
+}
+
+export interface RouterBoardGpioReference {
+  available: boolean;
+  model?: string;
+  compatible?: string;
+  source_url?: string;
+  source_blob_sha?: string;
+  offset_namespace?: string;
+  warning?: string;
+  buttons: RouterBoardGpioLineReference[];
+  auxiliary: RouterBoardGpioLineReference[];
+  bus_signals: RouterBoardGpioLineReference[];
+  phy_resets: RouterBoardGpioLineReference[];
+  led_expander?: {
+    part: string;
+    register_count: number;
+    clock_tlmm_offset: number;
+    data_tlmm_offset: number;
+    enable_tlmm_offset: number;
+    outputs: RouterBoardLedOutputReference[];
+  };
+}
+
 export interface RouterHardwareIoStatus {
   available: boolean;
   gpio: RouterGpioInventory;
@@ -578,6 +619,7 @@ export interface RouterHardwareIoStatus {
   button_hooks_available: boolean;
   button_handlers: string[];
   button_events: RouterButtonEventInventory;
+	board_reference: RouterBoardGpioReference;
   sampled_at: number;
 }
 

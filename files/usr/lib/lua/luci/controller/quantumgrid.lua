@@ -2300,6 +2300,9 @@ end
 
 local function hardware_io_status(fs)
 	local hardware = require "luci.quantumgrid.hardware_io"
+	local board_compatible = read_file("/proc/device-tree/compatible") or
+		read_file("/sys/firmware/devicetree/base/compatible")
+	local board_reference = hardware.parse_board_gpio_reference(board_compatible)
 	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
 	local gpio_sysfs_entries = {}
 	local gpio_sysfs_ok, gpio_sysfs_iter = pcall(fs.dir, "/sys/bus/gpio/devices")
@@ -2375,6 +2378,7 @@ local function hardware_io_status(fs)
 		button_hooks_available = button_hooks_available,
 		button_handlers = button_handlers,
 		button_events = button_events,
+		board_reference = board_reference,
 		sampled_at = os.time()
 	}
 end

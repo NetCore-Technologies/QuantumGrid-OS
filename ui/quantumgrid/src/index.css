@@ -9457,3 +9457,124 @@ input::placeholder {
     text-align: left;
   }
 }
+
+/* Authoritative AW1000 device-tree GPIO reference */
+.hardware-board-profile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+.hardware-board-profile-head > div {
+  display: grid;
+  gap: 5px;
+}
+.hardware-board-profile-head strong {
+  color: var(--text);
+  font-size: 12px;
+}
+.hardware-board-profile-head span {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.hardware-board-profile-head a {
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.hardware-board-pin-group {
+  display: grid;
+  gap: 7px;
+  padding-top: 13px;
+}
+.hardware-board-pin-group-title {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.hardware-board-pin-list {
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--line);
+}
+.hardware-board-pin-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(130px, .8fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.hardware-board-pin-row > div:first-child {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.hardware-board-pin-row strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.hardware-board-pin-row span,
+.hardware-board-pin-row small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.hardware-board-pin-meta {
+  display: grid;
+  gap: 4px;
+}
+.hardware-board-pin-meta b {
+  color: var(--text);
+  font-size: 10px;
+}
+.hardware-board-expander-summary {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+.hardware-board-expander-summary span {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.hardware-board-warning {
+  margin-top: 12px;
+  line-height: 1.6;
+}
+.hardware-board-source-hash {
+  color: var(--muted);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .hardware-board-profile-head {
+    flex-direction: column;
+  }
+  .hardware-board-pin-row {
+    grid-template-columns: minmax(0, 1fr) minmax(120px, .8fr);
+  }
+  .hardware-board-pin-row > .status {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+@media (max-width: 520px) {
+  .hardware-board-pin-row {
+    grid-template-columns: 1fr;
+  }
+  .hardware-board-pin-row > .status {
+    grid-column: auto;
+  }
+}

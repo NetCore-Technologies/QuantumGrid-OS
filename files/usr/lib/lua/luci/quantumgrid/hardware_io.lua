@@ -178,6 +178,70 @@ function parse_input_devices(contents)
 	return result
 end
 
+local function aw1000_gpio_reference()
+	return {
+		available = true,
+		model = "Arcadyan AW1000",
+		compatible = "arcadyan,aw1000",
+		source_url = "https://github.com/openwrt/openwrt/blob/master/target/linux/qualcommax/dts/ipq8072-aw1000.dts",
+		source_blob_sha = "42ad979f2997c6dbae8f3ae2d944e3f654efc81b",
+		offset_namespace = "Qualcomm TLMM local GPIO offsets",
+		warning = "This is the upstream AW1000 device-tree reference, not a runtime ownership probe. TLMM offsets are not necessarily the global GPIO numbers shown by debugfs/sysfs. All output-capable lines remain locked; no GPIO writes are exposed.",
+		buttons = {
+			{ name = "Wi-Fi / WLAN", purpose = "Physical Wi-Fi button", tlmm_offset = 2, direction = "input", active_level = "low", owner = "gpio-keys", linux_key = "KEY_WLAN" },
+			{ name = "WPS", purpose = "Physical WPS button", tlmm_offset = 62, direction = "input", active_level = "low", owner = "gpio-keys", linux_key = "KEY_WPS_BUTTON" },
+			{ name = "Reset", purpose = "Physical reset button", tlmm_offset = 67, direction = "input", active_level = "low", owner = "gpio-keys", linux_key = "KEY_RESTART", note = "Native reset/failsafe handler may perform recovery or factory-reset actions." }
+		},
+		auxiliary = {
+			{ name = "LTE power key", purpose = "Modem power-key control", tlmm_offset = 54, direction = "output", active_level = "high", owner = "gpio-export", initial_level = "high" },
+			{ name = "LTE power", purpose = "Modem power rail control", tlmm_offset = 30, direction = "output", active_level = "high", owner = "gpio-export", initial_level = "high" },
+			{ name = "LTE reset", purpose = "Modem reset control", tlmm_offset = 63, direction = "output", active_level = "high", owner = "gpio-export", initial_level = "high" },
+			{ name = "USB VBUS", purpose = "USB VBUS regulator enable", tlmm_offset = 9, direction = "regulator", active_level = "low", owner = "fixed regulator usb_vbus", note = "The DTS marks the regulator boot-on; do not treat this as an arbitrary GPIO output." }
+		},
+		bus_signals = {
+			{ name = "LED expander SPI clock", purpose = "74HC595 serial clock", tlmm_offset = 18, direction = "signal", active_level = "high", owner = "spi-gpio" },
+			{ name = "LED expander SPI data", purpose = "74HC595 MOSI", tlmm_offset = 19, direction = "signal", active_level = "high", owner = "spi-gpio" },
+			{ name = "LED expander enable", purpose = "74HC595 output enable", tlmm_offset = 20, direction = "signal", active_level = "high", owner = "spi-gpio" },
+			{ name = "MDIO clock", purpose = "Ethernet management clock (MDC)", tlmm_offset = 68, direction = "signal", active_level = "n/a", owner = "MDIO pinctrl" },
+			{ name = "MDIO data", purpose = "Ethernet management data (MDIO)", tlmm_offset = 69, direction = "signal", active_level = "n/a", owner = "MDIO pinctrl" }
+		},
+		phy_resets = {
+			{ name = "MDIO bus reset", purpose = "Ethernet PHY bus reset", tlmm_offset = 37, direction = "reset", active_level = "low", owner = "MDIO controller" },
+			{ name = "QCA8081 WAN PHY reset", purpose = "2.5GbE WAN PHY reset", tlmm_offset = 64, direction = "reset", active_level = "low", owner = "QCA8081 PHY" }
+		},
+		led_expander = {
+			part = "Fairchild 74HC595",
+			register_count = 2,
+			clock_tlmm_offset = 18,
+			data_tlmm_offset = 19,
+			enable_tlmm_offset = 20,
+			outputs = {
+				{ name = "Power", label = "green:power", output_index = 0, active_level = "high" },
+				{ name = "Wi-Fi", label = "green:wifi", output_index = 1, active_level = "high" },
+				{ name = "Internet", label = "green:internet", output_index = 2, active_level = "high" },
+				{ name = "5G red", label = "red:5g", output_index = 3, active_level = "low" },
+				{ name = "5G green", label = "green:5g", output_index = 4, active_level = "low" },
+				{ name = "5G blue", label = "blue:5g", output_index = 5, active_level = "low" },
+				{ name = "Signal red", label = "red:signal", output_index = 6, active_level = "low" },
+				{ name = "Signal green", label = "green:signal", output_index = 8, active_level = "low" },
+				{ name = "Signal blue", label = "blue:signal", output_index = 9, active_level = "low" },
+				{ name = "Phone", label = "green:phone", output_index = 11, active_level = "high" }
+			}
+		}
+	}
+end
+
+function parse_board_gpio_reference(compatible_contents)
+	local result = { available = false }
+	if type(compatible_contents) ~= "string" then return result end
+	for item in compatible_contents:gmatch("[^%z]+") do
+		if item == "arcadyan,aw1000" then
+			return aw1000_gpio_reference()
+		end
+	end
+	return result
+end
+
 local MAX_BUTTON_EVENTS = 64
 
 function parse_button_events(contents, sampled_at)
