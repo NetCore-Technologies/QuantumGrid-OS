@@ -1445,7 +1445,11 @@ function action_package_operation()
 		else command = binary .. " remove " .. package end
 	end
 
-	local log_path = "/tmp/quantumgrid-package-operation.log"
+	local log_path = os.tmpname()
+	if type(log_path) ~= "string" or not log_path:match("^/tmp/[A-Za-z0-9_.%-]+$") then
+		respond(500, { ok = false, error = "A private package-operation log path could not be created." })
+		return
+	end
 	os.remove(log_path)
 	local call_ok, exit_code = pcall(sys.call, command .. " > " .. log_path .. " 2>&1")
 	local output = ""
