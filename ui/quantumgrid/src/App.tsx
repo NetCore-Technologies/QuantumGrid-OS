@@ -1316,6 +1316,7 @@ function Dashboard({
             routerOverview={routerOverview}
             trafficHistory={trafficHistory}
             cellularHistory={cellularHistory}
+            wirelessThroughput={wirelessThroughput}
           />
         </section>
       </main>
@@ -1495,10 +1496,12 @@ function WirelessClientList({
   clients,
   available,
   leases,
+  wirelessThroughput,
 }: {
   clients: RouterWirelessClient[];
   available: boolean;
   leases: RouterClient[];
+  wirelessThroughput: Record<string, WirelessTrafficSample>;
 }) {
   const [filter, setFilter] = useState("");
   const [sort, setSort] = useState<"signal" | "rx" | "tx" | "mac">("signal");
@@ -1613,7 +1616,13 @@ function WirelessClientList({
   );
 }
 
-function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+function DevicesControlPage({
+  routerOverview,
+  wirelessThroughput,
+}: {
+  routerOverview: RouterOverview | null;
+  wirelessThroughput: Record<string, WirelessTrafficSample>;
+}) {
   const clients = routerOverview?.clients ?? [];
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
   const wirelessClients = routerOverview?.wireless_clients ?? [];
@@ -1633,7 +1642,7 @@ function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview
           <ClientLeaseList clients={clients} available={inventoryAvailable} />
         </Panel>
         <Panel title="Associated Wi-Fi clients" eyebrow="LIVE HOSTAPD ASSOCIATIONS" action={<Status active={wirelessInventoryAvailable}>{wirelessInventoryAvailable ? "LIVE" : "WAITING"}</Status>}>
-          <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
+          <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} wirelessThroughput={wirelessThroughput} />
         </Panel>
       </div>
       <Panel title="Data provenance" eyebrow="HOW TO READ THIS LIST">
@@ -2145,6 +2154,7 @@ function DashboardPage({
   routerOverview,
   trafficHistory,
   cellularHistory,
+  wirelessThroughput,
 }: {
   stats: Stats;
   refresh: () => void;
@@ -2153,6 +2163,7 @@ function DashboardPage({
   routerOverview: RouterOverview | null;
   trafficHistory: number[];
   cellularHistory: CellularHistorySample[];
+  wirelessThroughput: Record<string, WirelessTrafficSample>;
 }) {
   const wanOnline = routerOverview?.interfaces.some((item) => item.is_wan && item.up) ?? false;
   const wifiOnline = routerOverview?.wireless.some((radio) => radio.up) ?? false;
@@ -2318,11 +2329,11 @@ function DashboardPage({
   }
 
   if (page === "wifi") {
-    return <WifiControlPage routerOverview={routerOverview} />;
+    return <WifiControlPage routerOverview={routerOverview} wirelessThroughput={wirelessThroughput} />;
   }
 
   if (page === "devices") {
-    return <DevicesControlPage routerOverview={routerOverview} />;
+    return <DevicesControlPage routerOverview={routerOverview} wirelessThroughput={wirelessThroughput} />;
   }
 
   const [title, eyebrow, Icon] =
@@ -2528,43 +2539,18 @@ type WirelessTrafficSample = {
   tx_mbps: number;
 };
 
-function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+function WifiControlPage({
+  routerOverview,
+  wirelessThroughput,
+}: {
+  routerOverview: RouterOverview | null;
+  wirelessThroughput: Record<string, WirelessTrafficSample>;
+}) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
   const wirelessClients = routerOverview?.wireless_clients ?? [];
   const wirelessInventoryAvailable = Array.isArray(routerOverview?.wireless_clients);
-  const previousWirelessCounters = useRef(new Map<string, { rx: number; tx: number; sampledAt: number }>());
-  const [wirelessThroughput, setWirelessThroughput] = useState<Record<string, WirelessTrafficSample>>({});
-  const [scan, setScan] = useState<RouterWifiScan | null>(null);
-  const [scanLoading, setScanLoading] = useState(false);
-  const [scanError, setScanError] = useState("");
-  const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
-  const [scanFilter, setScanFilter] = useState("");
-  const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
-  useEffect(() => {
-    const sampledAt = Date.now();
-    const previous = previousWirelessCounters.current;
-    const next = new Map<string, { rx: number; tx: number; sampledAt: number }>();
-    const rates: Record<string, WirelessTrafficSample> = {};
-    for (const client of wirelessClients) {
-      const key = client.ifname + "-" + client.mac.toLowerCase();
-      const rx = client.rx_bytes;
-      const tx = client.tx_bytes;
-      if (rx === undefined || tx === undefined || !Number.isFinite(rx) || !Number.isFinite(tx) || rx < 0 || tx < 0) continue;
-      const prior = previous.get(key);
-      if (prior && sampledAt > prior.sampledAt && rx >= prior.rx && tx >= prior.tx) {
-        const seconds = (sampledAt - prior.sampledAt) / 1000;
-        rates[key] = {
-          rx_mbps: ((rx - prior.rx) * 8) / seconds / 1_000_000,
-          tx_mbps: ((tx - prior.tx) * 8) / seconds / 1_000_000,
-        };
-      }
-      next.set(key, { rx, tx, sampledAt });
-    }
-    previousWirelessCounters.current = next;
-    setWirelessThroughput(rates);
-  }, [routerOverview?.wireless_clients]);
   const visibleScanResults = scan
     ? scan.results
       .filter((network) => {
@@ -2689,7 +2675,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         </Panel>
       </div>
       <Panel title="Associated Wi-Fi clients" eyebrow="IWINFO ASSOCIATION DATA">
-        <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
+        <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} wirelessThroughput={wirelessThroughput} />
         <div className="module-message">AP signal/noise and link bitrate are radio-interface measurements. Per-station signal, noise, rates, counters, connected time and retries are shown separately from iwinfo association data; drivers may omit fields.</div>
       </Panel>
       <Panel
@@ -3079,6 +3065,8 @@ function App() {
   });
   const [telemetryError, setTelemetryError] = useState("");
   const [routerOverview, setRouterOverview] = useState<RouterOverview | null>(null);
+  const [wirelessThroughput, setWirelessThroughput] = useState<Record<string, WirelessTrafficSample>>({});
+  const previousWirelessCounters = useRef(new Map<string, { rx: number; tx: number; sampledAt: number }>());
   const [trafficHistory, setTrafficHistory] = useState<number[]>(() => Array(30).fill(0));
   const [cellularHistory, setCellularHistory] = useState<CellularHistorySample[]>([]);
   const previousNetworkSample = useRef<{
@@ -3098,6 +3086,26 @@ function App() {
         overview.interfaces.find((item) => item.up);
       const now = Date.now();
       const previous = previousNetworkSample.current;
+      const previousWireless = previousWirelessCounters.current;
+      const nextWireless = new Map<string, { rx: number; tx: number; sampledAt: number }>();
+      const wirelessRates: Record<string, WirelessTrafficSample> = {};
+      for (const client of overview.wireless_clients ?? []) {
+        const key = client.ifname + "-" + client.mac.toLowerCase();
+        const rx = client.rx_bytes;
+        const tx = client.tx_bytes;
+        if (rx === undefined || tx === undefined || !Number.isFinite(rx) || !Number.isFinite(tx) || rx < 0 || tx < 0) continue;
+        const prior = previousWireless.get(key);
+        if (prior && now > prior.sampledAt && rx >= prior.rx && tx >= prior.tx) {
+          const seconds = (now - prior.sampledAt) / 1000;
+          wirelessRates[key] = {
+            rx_mbps: ((rx - prior.rx) * 8) / seconds / 1_000_000,
+            tx_mbps: ((tx - prior.tx) * 8) / seconds / 1_000_000,
+          };
+        }
+        nextWireless.set(key, { rx, tx, sampledAt: now });
+      }
+      previousWirelessCounters.current = nextWireless;
+      setWirelessThroughput(wirelessRates);
       let download = 0;
       let upload = 0;
       let probeDelta: number | null = null;
@@ -3198,6 +3206,8 @@ function App() {
     }).finally(() => {
       setLoggedIn(false);
       setCellularHistory([]);
+      previousWirelessCounters.current.clear();
+      setWirelessThroughput({});
       setLoginPassword("");
       setLoginError("");
       setPage("dashboard");

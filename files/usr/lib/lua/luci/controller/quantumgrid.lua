@@ -6,6 +6,7 @@ module("luci.controller.quantumgrid", package.seeall)
 
 local previous_cpu = nil
 local previous_survey = {}
+local wireless_capability_cache = {}
 local wifi_scan_cache = nil
 local wifi_scan_cache_at = 0
 local cellular_cache = nil
@@ -176,6 +177,11 @@ local function wireless_status()
 			local channels = {}
 			local txpower_levels = {}
 			if channel_device then
+				local cached_capabilities = wireless_capability_cache[channel_device]
+				if cached_capabilities and os.time() - cached_capabilities.sampled_at < 60 then
+					channels = cached_capabilities.channels
+					txpower_levels = cached_capabilities.txpower_levels
+				else
 				local power_list = ubus_call("iwinfo", "txpowerlist", { device = channel_device }) or {}
 				for _, entry in ipairs(power_list.results or {}) do
 					if #txpower_levels < 64 then
@@ -214,6 +220,12 @@ local function wireless_status()
 							})
 						end
 					end
+				end
+				wireless_capability_cache[channel_device] = {
+					sampled_at = os.time(),
+					channels = channels,
+					txpower_levels = txpower_levels
+				}
 				end
 			end
 			local item = {
@@ -348,9 +360,8 @@ local function wireless_clients(radios)
 			if valid_ifname then
 				-- rpcd-mod-iwinfo is included in the AW1000 image and exposes
 				-- station signal, bitrate, counters, connection and auth state.
-				local info = ubus_call("iwinfo", "info", { device = ifname }) or {}
 				local associations = ubus_call("iwinfo", "assoclist", { device = ifname }) or {}
-				local frequency = tonumber(info.frequency)
+				local frequency = tonumber(iface.frequency_mhz)
 				local band = "Unknown"
 				if frequency then
 					if frequency >= 5925 then band = "6 GHz"
