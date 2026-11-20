@@ -234,7 +234,6 @@ for p in \
     luci-app-package-manager \
     luci-app-sqm \
     luci-app-mwan3 \
-    luci-app-attendedsysupgrade \
     luci-app-statistics \
     luci-app-upnp \
     luci-app-ddns \
