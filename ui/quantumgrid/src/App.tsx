@@ -3063,7 +3063,7 @@ const nativeOpenWrtApps: NativeOpenWrtApp[] = [
 
 function OpenWrtAppsPage() {
   const [inventory, setInventory] = useState<RouterPackageInventory | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [packageSearch, setPackageSearch] = useState("");
   const [appSection, setAppSection] = useState<"All" | NativeOpenWrtApp["section"]>("All");
@@ -3081,8 +3081,18 @@ function OpenWrtAppsPage() {
   }, []);
 
   useEffect(() => {
-    void loadPackages();
-  }, [loadPackages]);
+    let active = true;
+    fetchRouterPackages().then((result) => {
+      if (active) setInventory(result);
+    }).catch((cause) => {
+      if (active) setError(cause instanceof Error ? cause.message : "The installed package inventory is unavailable.");
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const installed = new Set(inventory?.packages.map((item) => item.name) ?? []);
   const visiblePackages = (inventory?.packages ?? []).filter((item) =>
@@ -3696,21 +3706,6 @@ function WirelessConfigEditor({
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
-  const encryptionForConfig = (value: string): "psk2" | "sae" | "sae-mixed" | "none" =>
-    value === "sae" || value === "sae-mixed" || value === "none" ? value : "psk2";
-  useEffect(() => {
-    setSsid(config.ssid);
-    setEncryption(encryptionForConfig(config.encryption));
-    setPassphrase("");
-    setHidden(config.hidden);
-    setChannel(config.channel || "auto");
-    setHtmode(config.htmode || "auto");
-    setTxpower(config.txpower === undefined ? "auto" : String(config.txpower));
-    setAllowOpen(false);
-    setConfirmDisconnect(false);
-    setNotice(null);
-  }, [config.section, config.ssid, config.encryption, config.hidden, config.channel, config.htmode, config.txpower, config.key_set]);
-
   const supportedChannels = [...new Set(
     (radio?.channels ?? []).filter((item) => !item.restricted).map((item) => item.channel),
   )].sort((left, right) => left - right);
@@ -4216,7 +4211,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
               <div className="wireless-config-list">
                 {wirelessConfigs.sections.map((config) => (
                   <WirelessConfigEditor
-                    key={config.section}
+                    key={[config.section, config.ssid, config.encryption, config.hidden, config.channel, config.htmode, config.txpower, config.key_set].join(":")}
                     config={config}
                     radio={radios.find((item) => item.name === config.radio)}
                     refresh={refresh}
@@ -4834,10 +4829,17 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   const [conntrackHistory, setConntrackHistory] = useState<ConntrackHistorySample[]>([]);
   useEffect(() => {
     if (!routerOverview) return;
-    setConntrackHistory((previous) =>
-      appendConntrackSample(previous, routerOverview.conntrack, routerOverview.timestamp),
-    );
-  }, [routerOverview?.timestamp, routerOverview?.conntrack?.available, routerOverview?.conntrack?.count, routerOverview?.conntrack?.maximum]);
+    let active = true;
+    const sample = routerOverview.conntrack;
+    const sampledAt = routerOverview.timestamp;
+    queueMicrotask(() => {
+      if (!active) return;
+      setConntrackHistory((previous) => appendConntrackSample(previous, sample, sampledAt));
+    });
+    return () => {
+      active = false;
+    };
+  }, [routerOverview]);
   const conntrackSummary = summarizeConntrackHistory(conntrackHistory);
   const exportConntrackHistory = () => {
     if (conntrackHistory.length === 0) return;
