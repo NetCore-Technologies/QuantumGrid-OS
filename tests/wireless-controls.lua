@@ -72,6 +72,25 @@ assert(enterprise_missing_accounting_field == nil and
 	accounting_field_error:find("empty value to disable accounting", 1, true),
 	"a missing accounting field must not silently disable existing accounting")
 
+local wpa3_enterprise = wireless.validate_update(
+	"radio0", "default_radio0", "Secure Staff", "wpa3", "",
+	"0", "auto", "auto", "auto", "0", "1",
+	"radius.example.com", "1812", "a-strong-radius-shared-secret",
+	"", "1813", ""
+)
+assert(wpa3_enterprise ~= nil, "WPA3-Enterprise with RADIUS authentication should pass")
+assert(wpa3_enterprise.encryption == "wpa3" and wpa3_enterprise.key_supplied == false)
+assert(wpa3_enterprise.radius_server == "radius.example.com")
+assert(wpa3_enterprise.accounting_server == "")
+
+local wpa3_personal_key = wireless.validate_update(
+	"radio0", "default_radio0", "Secure Staff", "wpa3", "personal-password-123",
+	"0", "auto", "auto", "auto", "0", "1",
+	"radius.example.com", "1812", "a-strong-radius-shared-secret",
+	"", "1813", ""
+)
+assert(wpa3_personal_key == nil, "WPA3-Enterprise must not accept a personal passphrase")
+
 local enterprise_accounting = wireless.validate_update(
 	"radio0", "default_radio0", "Staff", "wpa2", "",
 	"0", "auto", "auto", "auto", "0", "1",
@@ -132,7 +151,7 @@ rejected("radio0", "wireless;uci", "Test", "psk2", "password123", "0", "auto", "
 rejected("radio0", "default_radio0", "", "psk2", "password123", "0", "auto", "auto", "auto", "0", "1", "empty SSID")
 rejected("radio0", "default_radio0", string.rep("x", 33), "psk2", "password123", "0", "auto", "auto", "auto", "0", "1", "oversized SSID")
 rejected("radio0", "default_radio0", "Bad\nSSID", "psk2", "password123", "0", "auto", "auto", "auto", "0", "1", "control character in SSID")
-rejected("radio0", "default_radio0", "Test", "wpa3", "password123", "0", "auto", "auto", "auto", "0", "1", "unsupported encryption string")
+rejected("radio0", "default_radio0", "Test", "wpa3-mixed", "password123", "0", "auto", "auto", "auto", "0", "1", "unsupported enterprise transition mode")
 rejected("radio0", "default_radio0", "Test", "sae", "short", "0", "auto", "auto", "auto", "0", "1", "short passphrase")
 rejected("radio0", "default_radio0", "Test", "psk2", "password123", "yes", "auto", "auto", "auto", "0", "1", "non-canonical hidden flag")
 rejected("radio0", "default_radio0", "Test", "psk2", "password123", "0", "1.5", "auto", "auto", "0", "1", "fractional channel")
