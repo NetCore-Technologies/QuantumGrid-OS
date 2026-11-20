@@ -8804,3 +8804,112 @@ input::placeholder {
   border-color: rgba(219,40,95,.3);
   color: #ff9ab3;
 }
+
+
+/* Office admin audit trail */
+.audit-log-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.audit-log-toolbar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 170px auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.audit-log-toolbar input,
+.audit-log-toolbar select {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: none;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font-size: 10px;
+}
+.audit-log-toolbar select option {
+  color: #111;
+}
+.audit-log-toolbar > span {
+  color: var(--muted);
+  font-size: 9px;
+  white-space: nowrap;
+}
+.audit-event-list {
+  display: grid;
+  gap: 0;
+  overflow-x: auto;
+}
+.audit-event-row {
+  min-width: 750px;
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(120px, .8fr) minmax(180px, 1.2fr) 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.audit-event-row.header {
+  color: var(--muted2);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .11em;
+}
+.audit-event-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.audit-event-row strong,
+.audit-event-row b {
+  color: var(--text);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.audit-event-row small {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.audit-coverage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.audit-coverage-grid > div {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.audit-coverage-grid strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.audit-coverage-grid span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+@media (max-width: 760px) {
+  .audit-log-toolbar {
+    grid-template-columns: 1fr;
+  }
+  .audit-log-toolbar > span {
+    white-space: normal;
+  }
+  .audit-coverage-grid {
+    grid-template-columns: 1fr;
+  }
+  .audit-log-actions {
+    align-items: stretch;
+  }
+}
