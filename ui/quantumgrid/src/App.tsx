@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { createRouterDhcpReservation, downloadRouterConfigBackup, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
@@ -5189,7 +5189,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   const selectedReservationNetwork = reservationNetworks.some((item) => item.name === reservationNetwork)
     ? reservationNetwork
     : reservationNetworks[0]?.name ?? "";
-  const saveReservation = async (event: React.FormEvent<HTMLFormElement>) => {
+  const saveReservation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!reservationConfirmed || reservationBusy || !selectedReservationNetwork) return;
     setReservationBusy(true);
