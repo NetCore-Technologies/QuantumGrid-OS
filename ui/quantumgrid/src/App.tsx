@@ -2924,6 +2924,27 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const [firewallRuleSearch, setFirewallRuleSearch] = useState("");
   const [firewallRuleSort, setFirewallRuleSort] = useState<"name" | "source" | "destination" | "target">("source");
   const firewallRules = security?.rules ?? [];
+  const firewallRedirects = security?.redirects ?? [];
+  const [firewallRedirectSearch, setFirewallRedirectSearch] = useState("");
+  const visibleFirewallRedirects = firewallRedirects.filter((redirect) => [
+    redirect.name, redirect.source_zone, redirect.destination_zone, redirect.protocol,
+    redirect.target, redirect.family, redirect.external_port, redirect.internal_port,
+  ].some((value) => value.toLocaleLowerCase().includes(firewallRedirectSearch.trim().toLocaleLowerCase())));
+  const reviewedRedirectNames = new Set(
+    firewallPosture.checks
+      .filter((check) => check.id.startsWith("external-redirect:"))
+      .map((check) => check.id.slice("external-redirect:".length)),
+  );
+  const wideRedirectNames = new Set(
+    firewallPosture.checks
+      .filter((check) => check.id.startsWith("external-redirect-any-port:"))
+      .map((check) => check.id.slice("external-redirect-any-port:".length)),
+  );
+  const adminRedirectNames = new Set(
+    firewallPosture.checks
+      .filter((check) => check.id.startsWith("external-redirect-admin-service:"))
+      .map((check) => check.id.slice("external-redirect-admin-service:".length)),
+  );
   const externalAllowRuleNames = new Set(
     firewallPosture.checks
       .filter((check) => check.id.startsWith("external-allow-rule:"))
@@ -2965,6 +2986,19 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
           "; source_ip_match=" + rule.source_ip_match +
           "; destination_ip_match=" + rule.destination_ip_match +
           "; source_mac_match=" + rule.source_mac_match,
+      ]),
+      ...firewallRedirects.map((redirect) => [
+        exportedAt, "Firewall NAT redirect", redirect.name,
+        redirect.enabled ? "ENABLED" : "DISABLED",
+        "source=" + (redirect.source_zone || "any") +
+          "; destination=" + (redirect.destination_zone || "any") +
+          "; protocol=" + (redirect.protocol || "any") +
+          "; target=" + (redirect.target || "unspecified") +
+          "; external_port=" + (redirect.external_port || "any") +
+          "; internal_port=" + (redirect.internal_port || "same/unspecified") +
+          "; destination_host_configured=" + redirect.destination_ip_match +
+          "; source_ip_restricted=" + redirect.source_ip_match +
+          "; source_mac_restricted=" + redirect.source_mac_match,
       ]),
       ...firewallPosture.checks.map((check) => [
         exportedAt, "Firewall posture review", check.title, check.status.toUpperCase(),
@@ -3097,6 +3131,68 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
         )}
         <div className="module-message">The API returns at most 64 rule summaries. IP and MAC values are deliberately omitted; only the presence of those match fields is shown. Search and sorting run locally in this page. This inventory does not evaluate rule order, address ranges, connection state, NAT, IPv6 path behaviour or runtime packet matching.</div>
       </Panel>
+      <Panel title="NAT port-forward inventory" eyebrow="UCI REDIRECT SECTIONS · INTERNAL IP ADDRESSES REDACTED">
+        {!security ? (
+          <div className="module-message">Waiting for authenticated NAT redirect telemetry.</div>
+        ) : firewallRedirects.length === 0 ? (
+          <div className="module-message">No NAT redirect summaries were returned. The firewall configuration may be unavailable or contain no port-forward sections.</div>
+        ) : (
+          <>
+            <div className="firewall-rule-toolbar">
+              <input
+                className="wifi-scan-filter"
+                type="search"
+                aria-label="Search NAT redirect summaries"
+                placeholder="Search name, source zone, protocol or port"
+                value={firewallRedirectSearch}
+                onChange={(event) => setFirewallRedirectSearch(event.target.value)}
+              />
+              <span>{visibleFirewallRedirects.length} shown · {firewallRedirects.length} returned · {security.redirects_count} configured</span>
+            </div>
+            {visibleFirewallRedirects.length === 0 ? (
+              <div className="module-message">No NAT redirects match this search.</div>
+            ) : (
+              <div className="firewall-redirect-list">
+                {visibleFirewallRedirects.map((redirect, index) => (
+                  <div className="firewall-redirect-row" key={redirect.name + "-" + index}>
+                    <div className="firewall-redirect-heading">
+                      <strong>{redirect.name}</strong>
+                      <span>{redirect.enabled ? "Enabled" : "Disabled"} · {redirect.family || "Any IP family"} · {redirect.target || "Target unspecified"}</span>
+                    </div>
+                    <div>
+                      <small>SOURCE → DESTINATION ZONE</small>
+                      <b>{redirect.source_zone || "Any"} → {redirect.destination_zone || "Any"}</b>
+                    </div>
+                    <div>
+                      <small>PORT / PROTOCOL</small>
+                      <b>{redirect.external_port || "Any external port"} → {redirect.internal_port || "Same / unspecified"} · {redirect.protocol || "Any"}</b>
+                    </div>
+                    <div>
+                      <small>ADDRESS SELECTORS</small>
+                      <b>{[
+                        redirect.source_ip_match && "Source IP restricted",
+                        redirect.source_mac_match && "Source MAC restricted",
+                        redirect.destination_ip_match && "Internal host configured",
+                        redirect.source_destination_ip_match && "External destination IP matched",
+                      ].filter(Boolean).join(" · ") || "No address selectors reported"}</b>
+                      <small>Internal IP values are deliberately not returned.</small>
+                    </div>
+                    <div className="firewall-redirect-flags">
+                      <Status active={redirect.enabled}>{redirect.enabled ? "ENABLED" : "DISABLED"}</Status>
+                      {reviewedRedirectNames.has(redirect.name) ? <span className="office-chip warning">EXTERNAL REVIEW</span> : null}
+                      {wideRedirectNames.has(redirect.name) ? <span className="office-chip warning">NO EXTERNAL PORT LIMIT</span> : null}
+                      {adminRedirectNames.has(redirect.name) ? <span className="office-chip warning">ADMIN / DATA PORT</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {security?.redirects_truncated && <div className="module-message">The API returned the first 64 redirects only. The configured count is higher; review the full native firewall configuration before making exposure decisions.</div>}
+        <div className="module-message">OpenWrt redirect sections define NAT/port-forward behaviour. External forwards, missing source-port constraints and mappings to common administrative/data-service ports are flagged for manual review. Private destination IP addresses are redacted. These are configuration findings only: QuantumGrid does not test public reachability, confirm that a service is listening, or evaluate live nftables rule order.</div>
+      </Panel>
+
       <Panel title="Firewall zones" eyebrow="UCI · /ETC/CONFIG/FIREWALL" action={<Status active={Boolean(security?.firewall_config_readable)}>{security?.firewall_config_readable ? "CONFIG READ" : "WAITING"}</Status>}>
         {!security ? (
           <div className="module-message">Waiting for authenticated router security telemetry.</div>
