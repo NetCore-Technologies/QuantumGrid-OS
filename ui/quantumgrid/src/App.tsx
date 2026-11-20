@@ -2505,7 +2505,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     }
     previousWirelessCounters.current = next;
     setWirelessThroughput(rates);
-  }, [wirelessClients]);
+  }, [routerOverview?.wireless_clients]);
   const visibleScanResults = scan
     ? scan.results
       .filter((network) => {
