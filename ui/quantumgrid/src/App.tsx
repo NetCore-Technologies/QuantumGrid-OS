@@ -6690,24 +6690,29 @@ function OfficeForwardingManager({
     zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
   const sourceZones = zones.filter((zone) => !externalZone(zone));
   const [source, setSource] = useState(sourceZones[0]?.name ?? "");
-  const destinationOptions = zones.filter((zone) => zone.name !== source);
-  const [destination, setDestination] = useState(
-    destinationOptions.find((zone) => ["wan", "wan6", "wwan"].includes(zone.name.toLowerCase()))?.name ??
-      destinationOptions[0]?.name ?? "",
-  );
+  const activeSource = sourceZones.some((zone) => zone.name === source)
+    ? source
+    : sourceZones[0]?.name ?? "";
+  const destinationOptions = zones.filter((zone) => zone.name !== activeSource);
+  const [destination, setDestination] = useState("");
+  const activeDestination = destinationOptions.some((zone) => zone.name === destination)
+    ? destination
+    : destinationOptions.find((zone) => ["wan", "wan6", "wwan"].includes(zone.name.toLowerCase()))?.name ??
+      destinationOptions[0]?.name ?? "";
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState("");
   const [removalBusy, setRemovalBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
   const canCreate = available && !truncated && sourceZones.length > 0 &&
-    Boolean(destination) && destination !== source && confirmed && !saving;
+    Boolean(activeSource) && Boolean(activeDestination) && activeDestination !== activeSource &&
+    confirmed && !saving;
   const create = async () => {
     if (!canCreate) return;
     setSaving(true);
     setNotice(null);
     try {
-      const result = await createRouterOfficeForwarding({ source, destination });
+      const result = await createRouterOfficeForwarding({ source: activeSource, destination: activeDestination });
       setNotice({
         success: true,
         message: "Forwarding " + result.source + " → " + result.destination +
@@ -6791,10 +6796,10 @@ function OfficeForwardingManager({
           <div className="office-forwarding-fields">
             <label>
               <span>SOURCE ZONE</span>
-              <select value={source} onChange={(event) => {
+              <select value={activeSource} onChange={(event) => {
                 setSource(event.target.value);
                 setConfirmed(false);
-                if (event.target.value === destination) {
+                if (event.target.value === activeDestination) {
                   setDestination(zones.find((zone) => zone.name !== event.target.value)?.name ?? "");
                 }
               }} disabled={!available || truncated || saving || sourceZones.length === 0}>
@@ -6805,7 +6810,7 @@ function OfficeForwardingManager({
             </label>
             <label>
               <span>DESTINATION ZONE</span>
-              <select value={destination} onChange={(event) => {
+              <select value={activeDestination} onChange={(event) => {
                 setDestination(event.target.value);
                 setConfirmed(false);
               }} disabled={!available || truncated || saving || destinationOptions.length === 0}>
@@ -6816,7 +6821,7 @@ function OfficeForwardingManager({
             </label>
           </div>
           <label className="office-reservation-confirm">
-            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !source || !destination || source === destination} />
+            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !activeSource || !activeDestination || activeSource === activeDestination} />
             <span>I explicitly permit sessions initiated in {source || "the source zone"} to reach {destination || "the destination zone"} and authorize a firewall reload.</span>
           </label>
           <button className="hero-button" type="button" onClick={() => void create()} disabled={!canCreate}>
