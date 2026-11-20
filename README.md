@@ -316,15 +316,14 @@ canonical IPv4 address, subnet membership, existing reservations and current DHC
 targets a validated UCI host-section ID and snapshots the original section before changing it. Both
 operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
 Existing DHCP scope edits are limited to start offset, pool size and lease duration. The server
-checks address boundaries and collisions against other calculable active pools, snapshots the three
-changed UCI options, restarts dnsmasq and attempts rollback on failure. It does not create new scopes
-or change DNS, DHCPv6, RA or network interface settings.
-The selected LAN is used for subnet validation only: a standard dnsmasq host section is global to
-that dnsmasq instance, not a per-VLAN reservation binding. An existing enabled DHCP scope can also
-be edited in the UI, but only for its start offset, pool size and lease duration. The server recalculates
-subnet boundaries, rejects overlaps with other enabled scopes, commits the existing UCI section and
-restarts dnsmasq with a rollback attempt on failure. It cannot create new scopes, alter DHCPv6/RA/DNS
-settings, change network interfaces or migrate active clients.
+checks address boundaries and collisions against other enabled scopes, and fails closed if a sibling
+scope on the same interface has an uncalculable range. It snapshots the three changed UCI options,
+restarts dnsmasq and attempts rollback on failure. It does not create new scopes or change DNS,
+DHCPv6, RA or network interface settings.
+
+The selected LAN is used for reservation subnet validation only: a standard dnsmasq host section is
+global to that dnsmasq instance, not a per-VLAN reservation binding. Editing reservations in place,
+creating DHCP pools, and migrating live clients are not exposed yet.
 
 This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
 switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
