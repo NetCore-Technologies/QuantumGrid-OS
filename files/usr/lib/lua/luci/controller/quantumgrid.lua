@@ -3417,10 +3417,13 @@ local function restore_office_zone_policy_options(uci, section, snapshot)
 				return false
 			end
 		else
-			local ok, result = pcall(uci.delete, uci, "firewall", section, option)
-			if not ok or result ~= true then
-				pcall(uci.revert, uci, "firewall")
-				return false
+			local current = uci:get("firewall", section, option)
+			if current ~= nil then
+				local ok, result = pcall(uci.delete, uci, "firewall", section, option)
+				if not ok or result ~= true then
+					pcall(uci.revert, uci, "firewall")
+					return false
+				end
 			end
 		end
 	end
@@ -3601,7 +3604,7 @@ function action_office_zone_update()
 		ok = true,
 		section = update.section,
 		name = snapshot.name or update.section,
-		input = snapshot.input or "ACCEPT",
+		input = snapshot.input or "",
 		output = applied_output,
 		forward = applied_forward,
 		masquerade = update.masquerade,
