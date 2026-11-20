@@ -1951,9 +1951,8 @@ local function hardware_io_status(fs)
 	local leds_available = iterator_ok and type(iterator) == "function"
 	if leds_available then
 		for name in iterator do
-			if name ~= "." and name ~= ".." and #leds < 32
-				and type(name) == "string" and #name <= 64
-				and name:match("^[%w_.:%-]+$") then
+			if type(name) == "string" and name ~= "." and name ~= ".."
+				and #leds < 32 and #name <= 64 and name:match("^[%w_.:%-]+$") then
 				local base = "/sys/class/leds/" .. name
 				local brightness = read_number(base .. "/brightness")
 				local maximum = read_number(base .. "/max_brightness")
@@ -1972,11 +1971,30 @@ local function hardware_io_status(fs)
 		end
 	end
 	table.sort(leds, function(left, right) return left.name < right.name end)
+
+	local button_handlers = {}
+	local button_iter_ok, button_iter = pcall(fs.dir, "/etc/rc.button")
+	local button_hooks_available = button_iter_ok and type(button_iter) == "function"
+	if button_hooks_available then
+		for name in button_iter do
+			if type(name) == "string" and name ~= "." and name ~= ".."
+				and #button_handlers < 32 and #name <= 64
+				and name:match("^[%w_.%-]+$") then
+				table.insert(button_handlers, name)
+			end
+		end
+	end
+	table.sort(button_handlers)
+	local button_driver_loaded = fs.access("/sys/module/gpio_button_hotplug") == true
+
 	return {
-		available = gpio.available or leds_available,
+		available = gpio.available or leds_available or button_hooks_available,
 		gpio = gpio,
 		leds_available = leds_available,
 		leds = leds,
+		button_driver_loaded = button_driver_loaded,
+		button_hooks_available = button_hooks_available,
+		button_handlers = button_handlers,
 		sampled_at = os.time()
 	}
 end
@@ -2040,6 +2058,16 @@ function action_led_update()
 	local previous = read_number(base .. "/brightness")
 	if previous == nil or previous < 0 or previous > update.max_brightness then
 		respond(503, { ok = false, error = "The current LED brightness could not be read safely." })
+		return
+	end
+
+	local current_trigger = hardware.parse_trigger_text(read_file(base .. "/trigger"))
+	if not current_trigger.available then
+		respond(503, { ok = false, error = "The LED trigger state became unavailable; no change was made." })
+		return
+	end
+	if current_trigger.active ~= "none" then
+		respond(409, { ok = false, error = "The LED trigger changed while preparing the update; no change was made." })
 		return
 	end
 
