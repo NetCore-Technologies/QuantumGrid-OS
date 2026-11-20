@@ -4,6 +4,12 @@ local office = require "luci.quantumgrid.office_networks"
 assert(office.validate_reservation_confirmation("1") == true)
 assert(office.validate_reservation_confirmation("0") == nil)
 assert(office.validate_reservation_confirmation(nil) == nil)
+assert(office.validate_reservation_section("cfg0123ab") == "cfg0123ab")
+assert(office.validate_reservation_section("office_printer-1") == "office_printer-1")
+assert(office.validate_reservation_section("@host[0]") == nil)
+assert(office.validate_reservation_section("../dhcp") == nil)
+assert(office.validate_reservation_section("..") == nil)
+
 
 local reservation, reservation_error = office.validate_reservation(
   "Office-Printer", "AA:BB:CC:DD:EE:01", "192.168.20.30")
@@ -65,7 +71,7 @@ local result = office.build_inventory({
     { name = "invalid_scope", interface = "../lan", start = "1", limit = "999999" },
   },
   static_leases = {
-    { name = "Office-Printer", mac = "AA:BB:CC:DD:EE:01", ipv4 = "192.168.20.30" },
+    { section = "cfg0001", name = "Office-Printer", mac = "AA:BB:CC:DD:EE:01", ipv4 = "192.168.20.30" },
     { name = "Meeting-Room", mac = "aa:bb:cc:dd:ee:02", ipv4 = "192.168.20.31" },
     { name = "Bad-MAC", mac = "aa:bb:cc:dd:ee:gg", ipv4 = "192.168.20.32" },
     { name = "Bad-IP", mac = "aa:bb:cc:dd:ee:03", ipv4 = "300.1.2.3" },
@@ -99,6 +105,7 @@ assert(result.wifi_ap_count == 3, "only AP sections belong in the SSID inventory
 assert(result.dhcp_available and result.dhcp_scope_count == 2, "DHCP scope inventory should reject invalid interface names")
 assert(result.static_lease_count == 2, "invalid MAC and IPv4 static leases must be dropped")
 assert(result.static_leases[1].mac == "aa:bb:cc:dd:ee:01", "MAC addresses should be normalized")
+assert(result.static_leases[1].section == "cfg0001", "static lease UCI section should be preserved for safe removal")
 assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" and result.forwardings[1].destination == "printers", "explicit firewall zone forwarding should be inventoried")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
