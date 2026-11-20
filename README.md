@@ -267,14 +267,17 @@ to restore the prior brightness if verification fails. This is a runtime-only ch
 persisted across reboot. LEDs with active or unknown trigger ownership remain locked. The Lua
 parser and validation rules are covered by `tests/hardware-io.lua` and the normal firmware CI gate.
 No physical button presses, LED wiring, or AW1000 pin-level behaviour are claimed as hardware-tested
-by the software tests.
+by the software tests. The firmware also includes a read-only command-line inspector:
+run `sh /usr/bin/quantumgrid-hardware-io` on the router, or pass `gpio`, `buttons` or `leds`
+to focus the inventory.
 
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
-  IPv4/IPv6 route and policy-rule inventory, and bounded edits to existing SQM queue enable/rate
-  settings with restart and rollback handling.
+  IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
+  settings with restart and rollback handling, plus the Hardware I/O page, read-only GPIO/button
+  inventory, and authenticated runtime LED brightness control with trigger checks and verification.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
   observability.
