@@ -170,7 +170,7 @@ firmware packaging. CI checks that both website trees stay byte-for-byte identic
 The QuantumGrid control centre authenticates with the existing LuCI/OpenWrt administrator
 session. It does not create a second Linux user or store the router password in browser storage.
 The read-only LuCI API reports system load, CPU/memory/temperature where available, WAN/LAN
-interface byte, packet, error and drop counters with scope filtering, spreadsheet-safe CSV export including successive-sample error/drop deltas, plus searchable/sortable DHCPv4 leases with filtered CSV export, wireless radio state, live iwinfo-associated
+interface IPv4/IPv6 addresses and byte, packet, error and drop counters with scope filtering, spreadsheet-safe CSV export including successive-sample error/drop deltas, plus searchable/sortable DHCPv4 leases with filtered CSV export, wireless radio state, live iwinfo-associated
 Wi-Fi stations, modem device presence, QMI registration/data-session status and cellular RF
 measurements where returned, plus RJ11 service/patch state. Signal strength and RX/TX rates
 are included only when the relevant wireless or modem interface reports them. DHCP leases show address
