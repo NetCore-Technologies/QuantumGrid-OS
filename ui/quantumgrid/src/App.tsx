@@ -4175,12 +4175,16 @@ function WirelessConfigEditor({
   refresh: () => void;
 }) {
   const [ssid, setSsid] = useState(config.ssid);
-  const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed" | "none">(
-    config.encryption === "sae" || config.encryption === "sae-mixed" || config.encryption === "none"
+  const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed" | "wpa2" | "none">(
+    config.encryption === "sae" || config.encryption === "sae-mixed" ||
+    config.encryption === "wpa2" || config.encryption === "none"
       ? config.encryption
       : "psk2",
   );
   const [passphrase, setPassphrase] = useState("");
+  const [radiusServer, setRadiusServer] = useState(config.radius_auth_server || "");
+  const [radiusPort, setRadiusPort] = useState(String(config.radius_auth_port || 1812));
+  const [radiusSecret, setRadiusSecret] = useState("");
   const [hidden, setHidden] = useState(config.hidden);
   const [channel, setChannel] = useState(config.channel || "auto");
   const [htmode, setHtmode] = useState(config.htmode || "auto");
@@ -4203,12 +4207,33 @@ function WirelessConfigEditor({
   const supportedTxPower = [...new Set((config.txpower_levels ?? []).map((item) => item.dbm))].sort((left, right) => left - right);
   const txpowerSupported = txpower === "auto" || supportedTxPower.includes(Number(txpower)) || txpower === currentTxpower;
   const encryptionChanged = encryption !== config.encryption;
-  const passphraseRequired = encryption !== "none" &&
+  const passphraseRequired = encryption !== "none" && encryption !== "wpa2" &&
     (encryptionChanged || !config.key_set) && passphrase.length === 0;
+  const radiusLabels = radiusServer.split(".");
+  const radiusServerValid = radiusServer.length >= 1 && radiusServer.length <= 253 &&
+    /^[A-Za-z0-9.-]+$/.test(radiusServer) && !radiusServer.startsWith(".") &&
+    !radiusServer.endsWith(".") && !radiusServer.includes("..") &&
+    radiusLabels.every((label) => label.length >= 1 && label.length <= 63 &&
+      /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label)) &&
+    !(radiusLabels.length === 4 && radiusLabels.every((label) => /^\d+$/.test(label)) &&
+      !radiusLabels.every((label) => Number(label) >= 0 && Number(label) <= 255));
+  const radiusPortValid = /^[0-9]{1,5}$/.test(radiusPort) &&
+    Number(radiusPort) >= 1 && Number(radiusPort) <= 65535;
+  const radiusSecretBytes = new TextEncoder().encode(radiusSecret).length;
+  const radiusSecretRequired = encryption === "wpa2" &&
+    (encryptionChanged || radiusServer !== config.radius_auth_server ||
+      !config.radius_secret_set) && radiusSecret.length === 0;
+  const radiusReady = encryption !== "wpa2" ||
+    (radiusServerValid && radiusPortValid && !radiusSecretRequired &&
+      (radiusSecret.length === 0 || (radiusSecretBytes >= 16 && radiusSecretBytes <= 128 &&
+        !/[\u0000-\u001f\u007f]/.test(radiusSecret))));
   const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
+    (encryption === "wpa2" && (radiusServer !== config.radius_auth_server ||
+      radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0)) ||
     hidden !== config.hidden || channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
-  const ready = changed && channelSupported && htmodeSupported && txpowerSupported && !passphraseRequired &&
-    (encryption !== "none" || allowOpen) && confirmDisconnect && !saving;
+  const ready = changed && channelSupported && htmodeSupported && txpowerSupported &&
+    !passphraseRequired && radiusReady && (encryption !== "none" || allowOpen) &&
+    confirmDisconnect && !saving;
 
   const apply = async () => {
     if (!ready) return;
@@ -4221,6 +4246,9 @@ function WirelessConfigEditor({
         ssid,
         encryption,
         key: passphrase,
+        radiusServer,
+        radiusPort,
+        radiusSecret,
         hidden,
         channel,
         htmode,
@@ -4228,6 +4256,7 @@ function WirelessConfigEditor({
         allowOpen,
       });
       setPassphrase("");
+      setRadiusSecret("");
       setAllowOpen(false);
       setConfirmDisconnect(false);
       setNotice({
@@ -4250,7 +4279,9 @@ function WirelessConfigEditor({
       <div className="wireless-config-heading">
         <div>
           <strong>{config.ssid || "Hidden / unnamed network"}</strong>
-          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {config.key_set ? "PASSPHRASE SET" : "NO PASSPHRASE"}</span>
+          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {config.encryption === "wpa2"
+            ? (config.radius_secret_set ? "RADIUS SECRET SET" : "RADIUS NOT CONFIGURED")
+            : (config.key_set ? "PASSPHRASE SET" : "NO PASSPHRASE")}</span>
         </div>
         <Status active={!config.interface_disabled && !config.radio_disabled}>
           {config.interface_disabled || config.radio_disabled ? "DISABLED" : "CONFIGURED"}
@@ -4264,13 +4295,15 @@ function WirelessConfigEditor({
         <label className="wireless-config-field">
           <span>SECURITY</span>
           <select value={encryption} onChange={(event) => {
-            setEncryption(event.target.value as "psk2" | "sae" | "sae-mixed" | "none");
+            setEncryption(event.target.value as "psk2" | "sae" | "sae-mixed" | "wpa2" | "none");
             setPassphrase("");
+            setRadiusSecret("");
             setAllowOpen(false);
           }}>
             <option value="psk2">WPA2-Personal (AES)</option>
             <option value="sae">WPA3-Personal (SAE)</option>
             <option value="sae-mixed">WPA2 / WPA3 transition</option>
+            <option value="wpa2">WPA2-Enterprise (RADIUS)</option>
             <option value="none">Open (no encryption)</option>
           </select>
         </label>
@@ -4280,11 +4313,53 @@ function WirelessConfigEditor({
             type="password"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
-            placeholder={config.key_set && !encryptionChanged ? "Leave blank to keep the current key" : "Enter 8–63 characters"}
+            placeholder={encryption === "wpa2" ? "Not used with WPA2-Enterprise" :
+              config.key_set && !encryptionChanged ? "Leave blank to keep the current key" : "Enter 8–63 characters"}
             autoComplete="new-password"
-            disabled={encryption === "none"}
+            disabled={encryption === "none" || encryption === "wpa2"}
           />
         </label>
+        {encryption === "wpa2" ? (
+          <>
+            <label className="wireless-config-field">
+              <span>RADIUS AUTHENTICATION SERVER</span>
+              <input
+                value={radiusServer}
+                onChange={(event) => setRadiusServer(event.target.value)}
+                placeholder="radius.example.com or 192.0.2.10"
+                autoComplete="off"
+              />
+              <small>Use an IPv4 address or DNS hostname reachable from this router.</small>
+            </label>
+            <label className="wireless-config-field">
+              <span>RADIUS AUTHENTICATION PORT</span>
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                step={1}
+                value={radiusPort}
+                onChange={(event) => setRadiusPort(event.target.value)}
+                inputMode="numeric"
+              />
+              <small>UDP authentication port; the standard default is 1812.</small>
+            </label>
+            <label className="wireless-config-field">
+              <span>RADIUS SHARED SECRET</span>
+              <input
+                type="password"
+                value={radiusSecret}
+                onChange={(event) => setRadiusSecret(event.target.value)}
+                placeholder={config.radius_secret_set && !encryptionChanged &&
+                  radiusServer === config.radius_auth_server
+                    ? "Leave blank to retain the existing secret"
+                    : "Enter 16–128 characters"}
+                autoComplete="new-password"
+              />
+              <small>The secret is stored only in router configuration and is never returned by the API.</small>
+            </label>
+          </>
+        ) : null}
         <label className="wireless-config-field">
           <span>RADIO CHANNEL</span>
           <select value={channel} onChange={(event) => setChannel(event.target.value)}>
@@ -4338,7 +4413,7 @@ function WirelessConfigEditor({
         ) : null}
       </div>
       <div className="module-message wireless-config-note">
-        The existing AP is edited in place; no new SSID or radio is created. The passphrase is never returned by the router API. Leave it blank to retain the existing key. Channel, width and transmit power are radio-wide and may affect every SSID on this radio. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
+        The existing AP is edited in place; no new SSID or radio is created. Personal passphrases and RADIUS shared secrets are never returned by the router API. A blank existing secret is preserved only when its RADIUS server is unchanged. Enterprise mode uses the router’s current AP network; RADIUS dynamic VLAN assignment and accounting are not configured here. Channel, width and transmit power are radio-wide and may affect every SSID on this radio. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
       </div>
       <label className="wireless-config-confirm">
         <input type="checkbox" checked={confirmDisconnect} onChange={(event) => setConfirmDisconnect(event.target.checked)} />
@@ -4348,8 +4423,12 @@ function WirelessConfigEditor({
       <div className="wireless-config-actions">
         <button className="hero-button" onClick={() => {
           setSsid(config.ssid);
-          setEncryption(config.encryption === "sae" || config.encryption === "sae-mixed" || config.encryption === "none" ? config.encryption : "psk2");
+          setEncryption(config.encryption === "sae" || config.encryption === "sae-mixed" ||
+            config.encryption === "wpa2" || config.encryption === "none" ? config.encryption : "psk2");
           setPassphrase("");
+          setRadiusServer(config.radius_auth_server || "");
+          setRadiusPort(String(config.radius_auth_port || 1812));
+          setRadiusSecret("");
           setHidden(config.hidden);
           setChannel(currentChannel);
           setHtmode(currentHtmode);
@@ -4365,7 +4444,13 @@ function WirelessConfigEditor({
       {!channelSupported ? <div className="module-message">Choose Auto or a non-restricted channel reported by the radio driver.</div> : null}
       {!htmodeSupported ? <div className="module-message">Choose Auto or a width/PHY mode reported by the radio driver.</div> : null}
       {!txpowerSupported ? <div className="module-message">Choose Auto or a transmit-power level reported by the radio driver.</div> : null}
-      {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling protected security or changing the security mode.</div> : null}
+      {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling personal security or changing the personal security mode.</div> : null}
+      {encryption === "wpa2" && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
+      {encryption === "wpa2" && !radiusPortValid ? <div className="module-message">Enter a RADIUS authentication port from 1 to 65535.</div> : null}
+      {radiusSecretRequired ? <div className="module-message">A new RADIUS shared secret is required when enabling enterprise security or changing its server.</div> : null}
+      {encryption === "wpa2" && radiusSecret.length > 0 &&
+        (radiusSecretBytes < 16 || radiusSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(radiusSecret))
+        ? <div className="module-message">RADIUS shared secret must be 16–128 bytes and contain no control characters.</div> : null}
     </div>
   );
 }
