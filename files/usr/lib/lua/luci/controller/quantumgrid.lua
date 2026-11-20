@@ -942,6 +942,8 @@ function index()
 	entry({"admin", "services", "quantumgrid", "dhcp-scope-toggle"}, call("action_dhcp_scope_toggle")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-scope-add"}, call("action_dhcp_scope_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-scope-remove"}, call("action_dhcp_scope_remove")).leaf = true
+	entry({"admin", "services", "quantumgrid", "bridge-vlan-update"}, call("action_bridge_vlan_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "bridge-vlan-remove"}, call("action_bridge_vlan_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
@@ -2726,6 +2728,334 @@ function action_config_backup()
 	http.write(contents)
 end
 
+
+local function restore_bridge_vlan_section(uci, section, snapshot)
+	if type(snapshot) ~= "table" or type(section) ~= "string" then return false end
+	local section_ok, restored = pcall(uci.section, uci, "network", "bridge-vlan", section, {
+		device = snapshot.device,
+		vlan = snapshot.vlan
+	})
+	if not section_ok or not restored then return false end
+	local ports_ok, ports_result
+	if type(snapshot.ports) == "table" then
+		ports_ok, ports_result = pcall(uci.set_list, uci, "network", section, "ports", snapshot.ports)
+	elseif snapshot.ports == false then
+		ports_ok, ports_result = pcall(uci.delete, uci, "network", section, "ports")
+	else
+		return false
+	end
+	if not ports_ok or ports_result ~= true then return false end
+	local commit_ok, committed = pcall(uci.commit, uci, "network")
+	return commit_ok and committed == true
+end
+
+function action_bridge_vlan_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing bridge VLAN membership." })
+		return
+	end
+	if fs.access("/etc/config/network") ~= true or fs.access("/etc/init.d/network") ~= true then
+		respond(503, { ok = false, error = "Network configuration or the native network reload service is unavailable." })
+		return
+	end
+
+	local device = http.formvalue("device", true)
+	local vlan_id = http.formvalue("vlan", true)
+	local requested_section = http.formvalue("section", true) or ""
+	if requested_section ~= "" and (not requested_section:match("^[A-Za-z0-9_.%-]+$")
+		or requested_section == "." or requested_section == ".." or #requested_section > 64) then
+		respond(400, { ok = false, error = "The selected bridge VLAN section identifier is invalid." })
+		return
+	end
+
+	local bridge = nil
+	local bridge_ok = pcall(function()
+		uci:foreach("network", "device", function(section)
+			if section.type == "bridge" and section.name == device then bridge = section end
+		end)
+	end)
+	if not bridge_ok then
+		respond(500, { ok = false, error = "Bridge device configuration could not be inspected safely." })
+		return
+	end
+	if type(bridge) ~= "table" or bridge.vlan_filtering ~= "1" then
+		respond(409, { ok = false, error = "Only an existing bridge with VLAN filtering enabled can be managed here. Enable and verify filtering through native LuCI first." })
+		return
+	end
+
+	local existing = {}
+	local existing_ok = pcall(function()
+		uci:foreach("network", "bridge-vlan", function(section)
+			table.insert(existing, {
+				section = tostring(section[".name"] or ""),
+				device = tostring(section.device or ""),
+				vlan = tostring(section.vlan or ""),
+				ports = section.ports
+			})
+		end)
+	end)
+	if not existing_ok then
+		respond(500, { ok = false, error = "Existing VLAN membership could not be inspected safely." })
+		return
+	end
+	local inventory = office_network_status(uci, fs)
+	if inventory.truncated then
+		respond(409, { ok = false, error = "The network inventory is truncated. Reduce the inventory before changing VLAN membership so duplicate VLAN IDs and PVID assignments can be checked completely." })
+		return
+	end
+
+	local snapshot = nil
+	if requested_section ~= "" then
+		local snapshot_ok, current = pcall(uci.get_all, uci, "network", requested_section)
+		if not snapshot_ok or type(current) ~= "table" or current[".type"] ~= "bridge-vlan" then
+			respond(404, { ok = false, error = "The selected bridge VLAN no longer exists." })
+			return
+		end
+		if current.device ~= device then
+			respond(409, { ok = false, error = "A bridge VLAN can only be edited on its existing bridge. Remove and recreate it to move it to another bridge." })
+			return
+		end
+		snapshot = {
+			device = current.device or false,
+			vlan = current.vlan or false,
+			ports = type(current.ports) == "table" and current.ports or false
+		}
+	end
+
+	local update, validation_error = validator.validate_bridge_vlan(
+		device, vlan_id, http.formvalue("ports", true), bridge.ports, existing,
+		requested_section ~= "" and requested_section or nil)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local section = requested_section
+	if section == "" then
+		local create_ok, created = pcall(uci.section, uci, "network", "bridge-vlan", nil, {
+			device = update.device,
+			vlan = tostring(update.vlan_id)
+		})
+		if not create_ok or type(created) ~= "string" or created == "" then
+			pcall(uci.revert, uci, "network")
+			respond(500, { ok = false, error = "The new bridge VLAN section could not be staged in UCI." })
+			return
+		end
+		section = created
+	else
+		local device_ok, device_set = pcall(uci.set, uci, "network", section, "device", update.device)
+		local vlan_ok, vlan_set = pcall(uci.set, uci, "network", section, "vlan", tostring(update.vlan_id))
+		if not device_ok or device_set ~= true or not vlan_ok or vlan_set ~= true then
+			pcall(uci.revert, uci, "network")
+			respond(500, { ok = false, error = "The bridge VLAN change could not be staged safely." })
+			return
+		end
+	end
+
+	local ports_ok, ports_set = pcall(uci.set_list, uci, "network", section, "ports", update.ports)
+	if not ports_ok or ports_set ~= true then
+		pcall(uci.revert, uci, "network")
+		respond(500, { ok = false, error = "The bridge VLAN port membership could not be staged safely." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "network")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "network")
+		respond(500, { ok = false, error = "The bridge VLAN configuration could not be committed; network reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local rollback_ok, rolled_back = false, false
+		if snapshot then
+			rollback_ok, rolled_back = pcall(restore_bridge_vlan_section, uci, section, snapshot)
+		else
+			local delete_ok, deleted = pcall(uci.delete, uci, "network", section)
+			local rollback_commit_ok, rollback_committed = false, false
+			if delete_ok and deleted == true then
+				rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "network")
+			end
+			rollback_ok = rollback_commit_ok and rollback_committed == true
+			rolled_back = rollback_ok
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_ok and rolled_back then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
+		end
+		local recovered = rollback_ok and rolled_back and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.vlan.update", section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "The network reload failed. The previous bridge VLAN configuration was restored."
+				or "The network reload failed and bridge VLAN rollback could not be confirmed. Inspect network configuration and management connectivity locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "office.vlan.update", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		device = update.device,
+		vlan_id = update.vlan_id,
+		ports = update.ports,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+function action_bridge_vlan_remove()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 502 and "Bad Gateway" or
+				status == 503 and "Service Unavailable" or "Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before removing a bridge VLAN." })
+		return
+	end
+	if fs.access("/etc/config/network") ~= true or fs.access("/etc/init.d/network") ~= true then
+		respond(503, { ok = false, error = "Network configuration or the native network reload service is unavailable." })
+		return
+	end
+
+	local section = http.formvalue("section", true)
+	if type(section) ~= "string" or #section > 64
+		or not section:match("^[A-Za-z0-9_.%-]+$") or section == "." or section == ".." then
+		respond(400, { ok = false, error = "The bridge VLAN section identifier is invalid." })
+		return
+	end
+	local snapshot_ok, current = pcall(uci.get_all, uci, "network", section)
+	if not snapshot_ok or type(current) ~= "table" or current[".type"] ~= "bridge-vlan" then
+		respond(404, { ok = false, error = "The selected bridge VLAN no longer exists." })
+		return
+	end
+	local inventory = office_network_status(uci, fs)
+	if inventory.truncated then
+		respond(409, { ok = false, error = "The network inventory is truncated. Resolve the inventory before removing VLAN membership." })
+		return
+	end
+	local previous = {
+		device = current.device,
+		vlan = current.vlan,
+		ports = type(current.ports) == "table" and current.ports or false
+	}
+	if type(previous.device) ~= "string" or previous.device == ""
+		or type(previous.vlan) ~= "string" or previous.vlan == "" then
+		respond(409, { ok = false, error = "The current bridge VLAN is incomplete and cannot be removed safely." })
+		return
+	end
+	local bridge_found = false
+	local bridge_ok = pcall(function()
+		uci:foreach("network", "device", function(section_config)
+			if section_config.type == "bridge" and section_config.name == previous.device
+				and section_config.vlan_filtering == "1" then bridge_found = true end
+		end)
+	end)
+	if not bridge_ok or not bridge_found then
+		respond(409, { ok = false, error = "The original VLAN-filtering bridge could not be confirmed; no change was made." })
+		return
+	end
+
+	local delete_ok, deleted = pcall(uci.delete, uci, "network", section)
+	if not delete_ok or deleted ~= true then
+		pcall(uci.revert, uci, "network")
+		respond(500, { ok = false, error = "The bridge VLAN could not be staged for removal." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "network")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "network")
+		respond(500, { ok = false, error = "The bridge VLAN removal could not be committed; network reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local restore_ok, restored = pcall(restore_bridge_vlan_section, uci, section, previous)
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if restore_ok and restored then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
+		end
+		local recovered = restore_ok and restored and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.vlan.remove", section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "The network reload failed. The bridge VLAN section was restored."
+				or "The network reload failed and the bridge VLAN could not be fully restored. Inspect network configuration and management connectivity locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "office.vlan.remove", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		device = previous.device,
+		vlan_id = tonumber(previous.vlan),
+		removed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
 
 function action_dhcp_scope_add()
 	local http = require "luci.http"
