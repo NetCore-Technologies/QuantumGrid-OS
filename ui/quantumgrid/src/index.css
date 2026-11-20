@@ -7479,3 +7479,63 @@ input::placeholder {
   .sqm-policy-fields { grid-template-columns: 1fr; }
   .sqm-policy-fields .sqm-policy-enabled { grid-column: auto; }
 }
+
+
+/* Read-only Multi-WAN health and tracking inventory */
+.network-interface-tools.mwan3-tools {
+  grid-template-columns: minmax(160px, .95fr) minmax(200px, 1.2fr) minmax(120px, .7fr) auto auto;
+}
+.mwan3-interface-row {
+  grid-template-columns:
+    minmax(125px, 1.2fr)
+    minmax(100px, .8fr)
+    minmax(100px, .8fr)
+    minmax(120px, 1fr)
+    minmax(115px, .9fr)
+    minmax(180px, 1.5fr);
+  min-height: 112px;
+  gap: 12px;
+  padding: 12px 0;
+}
+.mwan3-interface-row > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.mwan3-interface-row > div > small {
+  display: block;
+  color: var(--muted2);
+  font-size: 7px;
+  line-height: 1.5;
+}
+.mwan3-interface-row > div > b {
+  display: block;
+  color: var(--text);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.mwan3-targets {
+  display: grid;
+  gap: 5px;
+}
+.mwan3-targets > div {
+  display: grid;
+  gap: 2px;
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(255,255,255,.02);
+}
+.mwan3-targets > div > b { font-size: 8px; }
+.mwan3-targets > div > small { color: var(--muted2); font-size: 7px; }
+@media (max-width: 1100px) {
+  .network-interface-tools.mwan3-tools {
+    grid-template-columns: 1fr 1.2fr;
+  }
+  .mwan3-interface-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .network-interface-tools.mwan3-tools { grid-template-columns: 1fr; }
+  .mwan3-interface-row { grid-template-columns: 1fr; }
+}
