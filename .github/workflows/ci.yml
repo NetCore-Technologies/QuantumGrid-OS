@@ -33,6 +33,8 @@ jobs:
       - run: npm run build
       - name: Test Wi-Fi channel planner
         run: node --experimental-strip-types --test ../../tests/wifi-channel-planner.test.mjs
+      - name: Test local Wi-Fi client history
+        run: node --experimental-strip-types --test ../../tests/wifi-client-history.test.mjs
       - name: Audit npm dependency advisories
         shell: bash
         run: |
