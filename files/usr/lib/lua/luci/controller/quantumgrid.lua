@@ -910,6 +910,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
+	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
 
 local function sqm_restart(sys)
@@ -1941,6 +1942,142 @@ local function platform_status(fs)
 	}
 end
 
+
+local function hardware_io_status(fs)
+	local hardware = require "luci.quantumgrid.hardware_io"
+	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
+	local leds = {}
+	local iterator_ok, iterator = pcall(fs.dir, "/sys/class/leds")
+	local leds_available = iterator_ok and type(iterator) == "function"
+	if leds_available then
+		for name in iterator do
+			if name ~= "." and name ~= ".." and #leds < 32
+				and type(name) == "string" and #name <= 64
+				and name:match("^[%w_.:%-]+$") then
+				local base = "/sys/class/leds/" .. name
+				local brightness = read_number(base .. "/brightness")
+				local maximum = read_number(base .. "/max_brightness")
+				local trigger = hardware.parse_trigger_text(read_file(base .. "/trigger"))
+				table.insert(leds, {
+					name = name,
+					brightness = brightness,
+					max_brightness = maximum,
+					trigger = trigger.active,
+					trigger_available = trigger.available,
+					controllable = trigger.available and trigger.active == "none"
+						and brightness ~= nil and maximum ~= nil
+						and maximum >= 1 and maximum <= 65535
+				})
+			end
+		end
+	end
+	table.sort(leds, function(left, right) return left.name < right.name end)
+	return {
+		available = gpio.available or leds_available,
+		gpio = gpio,
+		leds_available = leds_available,
+		leds = leds,
+		sampled_at = os.time()
+	}
+end
+
+function action_led_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local hardware = require "luci.quantumgrid.hardware_io"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+
+	local name = http.formvalue("name", true)
+	local base = type(name) == "string" and name:match("^[%w_.:%-]+$") and
+		#name > 0 and #name <= 64 and name ~= "." and name ~= ".." and
+		("/sys/class/leds/" .. name) or nil
+	if not base or fs.access(base) ~= true or fs.access(base .. "/brightness") ~= true then
+		respond(404, { ok = false, error = "The requested LED class device was not found." })
+		return
+	end
+
+	local trigger = hardware.parse_trigger_text(read_file(base .. "/trigger"))
+	if not trigger.available then
+		respond(503, { ok = false, error = "The LED trigger state is unavailable; no change was made." })
+		return
+	end
+	if trigger.active ~= "none" then
+		respond(409, { ok = false, error = "This LED is controlled by a kernel trigger. Select the none trigger in native system settings before changing brightness." })
+		return
+	end
+
+	local maximum = read_number(base .. "/max_brightness")
+	local update, validation_error = hardware.validate_led_update(
+		name, http.formvalue("brightness", true), maximum)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+	local previous = read_number(base .. "/brightness")
+	if previous == nil or previous < 0 or previous > update.max_brightness then
+		respond(503, { ok = false, error = "The current LED brightness could not be read safely." })
+		return
+	end
+
+	local function write_brightness(value)
+		local handle = io.open(base .. "/brightness", "w")
+		if not handle then return false end
+		local write_ok, written = pcall(handle.write, handle, tostring(value))
+		local close_ok, closed = pcall(handle.close, handle)
+		return write_ok and written ~= nil and close_ok and closed ~= nil
+	end
+
+	if not write_brightness(update.brightness) then
+		respond(503, { ok = false, error = "The kernel LED brightness attribute rejected the write." })
+		return
+	end
+	local confirmed = read_number(base .. "/brightness")
+	if confirmed ~= update.brightness then
+		local rollback = write_brightness(previous)
+		local restored = rollback and read_number(base .. "/brightness") == previous
+		respond(502, {
+			ok = false,
+			error = restored and "The LED did not retain the requested brightness; the previous value was restored."
+				or "The LED brightness could not be verified or rolled back. Inspect the physical LED state locally.",
+			rolled_back = restored
+		})
+		return
+	end
+
+	respond(nil, {
+		ok = true,
+		name = update.name,
+		brightness = update.brightness,
+		max_brightness = update.max_brightness,
+		applied = true,
+		persistent = false
+	})
+end
+
 function action_api()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
@@ -1962,6 +2099,7 @@ function action_api()
 	local conntrack = conntrack_status(fs)
 	local route_inventory = default_route_inventory(fs)
 	local rule_inventory = policy_rule_inventory(fs)
+	local hardware_io = hardware_io_status(fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -1991,6 +2129,7 @@ function action_api()
 		mwan3 = mwan3,
 		security = security,
 		platform = platform,
+		hardware_io = hardware_io,
 		conntrack = conntrack,
 		cellular = cellular,
 		phone = {
