@@ -58,6 +58,24 @@ local function parse_port(value)
 	}
 end
 
+local function valid_ipv4(value)
+	if type(value) ~= "string" then return false end
+	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then return false end
+	for _, part in ipairs({ a, b, c, d }) do
+		local octet = tonumber(part)
+		if not octet or octet < 0 or octet > 255 or octet ~= math.floor(octet) then
+			return false
+		end
+	end
+	return true
+end
+
+local function valid_mac(value)
+	return type(value) == "string"
+		and value:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
+end
+
 local function parse_vlan_id(value)
 	local id = tonumber(value)
 	if not id or id ~= math.floor(id) or id < 1 or id > 4094 then return nil end
@@ -83,6 +101,11 @@ function build_inventory(source)
 		bridges = {},
 		vlans = {},
 		zones = {},
+		dhcp_available = source.dhcp_available == true,
+		dhcp_scopes = {},
+		static_leases = {},
+		dhcp_scope_count = 0,
+		static_lease_count = 0,
 		interface_count = 0,
 		bridge_count = 0,
 		vlan_count = 0,
@@ -121,6 +144,48 @@ function build_inventory(source)
 		end
 	end
 	result.zone_count = #result.zones
+
+	local source_scopes = type(source.dhcp_scopes) == "table" and source.dhcp_scopes or {}
+	for _, item in ipairs(source_scopes) do
+		if type(item) == "table" and #result.dhcp_scopes < 64 then
+			local name = token(item.name, 64)
+			local interface = token(item.interface, 64)
+			if name and interface then
+				local limit = tonumber(item.limit)
+				if limit and (limit ~= math.floor(limit) or limit < 1 or limit > 65535) then limit = nil end
+				table.insert(result.dhcp_scopes, {
+					name = name,
+					interface = interface,
+					start = clean(item.start, 32),
+					limit = limit,
+					lease_time = clean(item.lease_time, 32),
+					ignore = item.ignore == true,
+					dhcpv6 = clean(item.dhcpv6, 16),
+					ra = clean(item.ra, 16)
+				})
+			end
+		end
+	end
+	result.dhcp_scope_count = #result.dhcp_scopes
+	if #source_scopes > #result.dhcp_scopes then result.truncated = true end
+
+	local source_leases = type(source.static_leases) == "table" and source.static_leases or {}
+	for _, item in ipairs(source_leases) do
+		if type(item) == "table" and #result.static_leases < 256 then
+			local name = clean(item.name, 64)
+			local mac = type(item.mac) == "string" and item.mac:lower() or ""
+			local address = type(item.ipv4) == "string" and item.ipv4 or ""
+			if valid_mac(mac) and valid_ipv4(address) then
+				table.insert(result.static_leases, {
+					name = name ~= "" and name or "Unnamed host",
+					mac = mac,
+					ipv4 = address
+				})
+			end
+		end
+	end
+	result.static_lease_count = #result.static_leases
+	if #source_leases > 256 then result.truncated = true end
 	if #source_zones > #result.zones then result.truncated = true end
 
 	local bridge_names = {}
