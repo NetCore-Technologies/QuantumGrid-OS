@@ -315,7 +315,9 @@ enabled DHCP scopes on static IPv4 LAN interfaces. Creation validates the hostna
 canonical IPv4 address, subnet membership, existing reservations and current DHCP leases. Removal
 targets a validated UCI host-section ID and snapshots the original section before changing it. Both
 operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
-Editing reservations in place, creating DHCP pools, and migrating live clients are not exposed yet.
+The selected LAN is used for subnet validation only: a standard dnsmasq host section is global to
+that dnsmasq instance, not a per-VLAN reservation binding. Editing reservations in place, creating
+DHCP pools, and migrating live clients are not exposed yet.
 
 This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
 switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
