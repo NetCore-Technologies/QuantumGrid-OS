@@ -2106,6 +2106,8 @@ local function office_network_status(uci, fs)
 				device = device,
 				up = status.up == true,
 				ipv4 = section.ipaddr,
+				netmask = section.netmask,
+				ip6assign = section.ip6assign,
 				ipv6 = section.ip6addr
 			})
 		end)
