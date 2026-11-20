@@ -838,15 +838,25 @@ local function restore_sqm_queue(uci, section, snapshot)
 	for _, option in ipairs({ "enabled", "download", "upload" }) do
 		local previous = snapshot[option]
 		if previous == false then
-			local ok = pcall(uci.delete, uci, "sqm", section, option)
-			if not ok then return false end
+			local ok, result = pcall(uci.delete, uci, "sqm", section, option)
+			if not ok or result ~= true then
+				pcall(uci.revert, uci, "sqm")
+				return false
+			end
 		else
 			local ok, result = pcall(uci.set, uci, "sqm", section, option, previous)
-			if not ok or result ~= true then return false end
+			if not ok or result ~= true then
+				pcall(uci.revert, uci, "sqm")
+				return false
+			end
 		end
 	end
 	local ok, committed = pcall(uci.commit, uci, "sqm")
-	return ok and committed == true
+	if not ok or committed ~= true then
+		pcall(uci.revert, uci, "sqm")
+		return false
+	end
+	return true
 end
 
 function action_sqm_update()
@@ -902,11 +912,15 @@ function action_sqm_update()
 		return
 	end
 
-	local snapshot = {
-		enabled = uci:get("sqm", update.section, "enabled") or false,
-		download = uci:get("sqm", update.section, "download") or false,
-		upload = uci:get("sqm", update.section, "upload") or false
-	}
+	local snapshot = {}
+	for _, option in ipairs({ "enabled", "download", "upload" }) do
+		local ok, value = pcall(uci.get, uci, "sqm", update.section, option)
+		if not ok then
+			respond(500, { ok = false, error = "Could not snapshot the existing SQM queue settings." })
+			return
+		end
+		snapshot[option] = value or false
+	end
 	local options = {
 		enabled = update.enabled,
 		download = update.download,
