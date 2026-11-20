@@ -76,6 +76,69 @@ function parse_gpio_debugfs(contents)
 	return result
 end
 
+function parse_input_devices(contents)
+	local result = {
+		available = type(contents) == "string",
+		devices = {},
+		count = 0,
+		truncated = false
+	}
+	if type(contents) ~= "string" then return result end
+
+	local current = {}
+	local function finish_device()
+		if type(current.name) == "string" and current.name ~= "" then
+			result.count = result.count + 1
+			if #result.devices < 32 then
+				local lower_name = current.name:lower()
+				local button_like = false
+				for _, token in ipairs({ "button", "gpio", "reset", "wps", "power" }) do
+					if lower_name:find(token, 1, true) then
+						button_like = true
+						break
+					end
+				end
+				table.insert(result.devices, {
+					name = current.name,
+					bus = current.bus,
+					handlers = current.handlers or {},
+					event_nodes = current.event_nodes or {},
+					button_like = button_like
+				})
+			else
+				result.truncated = true
+			end
+		end
+		current = {}
+	end
+
+	for line in contents:gmatch("[^\\r\\n]+") do
+		local name = line:match('^N:%s+Name="(.-)"')
+		if name then
+			finish_device()
+			current.name = safe_text(name, 128)
+		else
+			local bus = line:match("^I:%s+Bus=([%x]+)")
+			if bus then current.bus = bus:upper() end
+			local handler_text = line:match("^H:%s+Handlers=(.*)$")
+			if handler_text then
+				current.handlers = {}
+				current.event_nodes = {}
+				for handler in handler_text:gmatch("[%w_.%-]+") do
+					if #current.handlers < 16 then
+						table.insert(current.handlers, handler)
+					end
+					if handler:match("^event%d+$") and #current.event_nodes < 8 then
+						table.insert(current.event_nodes, handler)
+					end
+				end
+			end
+		end
+	end
+	finish_device()
+	return result
+end
+
 function parse_trigger_text(contents)
 	if type(contents) ~= "string" then
 		return { available = false, active = nil }
