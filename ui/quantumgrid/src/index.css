@@ -9640,3 +9640,56 @@ input::placeholder {
     grid-column: auto;
   }
 }
+
+
+/* Live fw4 runtime chain inventory */
+.firewall-runtime-list {
+  display: grid;
+  gap: 0;
+  overflow-x: auto;
+}
+.firewall-runtime-row {
+  min-width: 690px;
+  display: grid;
+  grid-template-columns: minmax(130px, 1.1fr) minmax(110px, .9fr) minmax(110px, .8fr) 100px 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.firewall-runtime-row.header {
+  color: var(--muted2);
+  font-size: 8px;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+.firewall-runtime-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.firewall-runtime-row strong,
+.firewall-runtime-row b {
+  color: var(--text);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.firewall-runtime-row small {
+  color: var(--muted);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+.firewall-runtime-policy {
+  justify-self: start;
+  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(255,255,255,.025);
+  font-size: 8px;
+  font-weight: 850;
+}
+.firewall-runtime-count {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
