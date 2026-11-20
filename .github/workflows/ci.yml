@@ -108,6 +108,8 @@ jobs:
           bash -n scripts/install-aw1000-ubi.sh
           sh -n scripts/inspect-aw1000-install-target.sh
           sh -n files/etc/uci-defaults/91-quantumgrid-usteer-safe
+          sh -n files/etc/uci-defaults/92-quantumgrid-nss-safe
+          bash -n tests/nss-build-profile-smoke.sh
           bash -n tests/install-aw1000-target-inspector-smoke.sh
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
@@ -141,6 +143,8 @@ jobs:
         run: lua5.1 tests/hardware-io.lua
       - name: Test NSS EDMA and PPE readiness states
         run: lua5.1 tests/acceleration-status.lua
+      - name: Test optional AW1000 NSS build profile
+        run: bash tests/nss-build-profile-smoke.sh
       - name: Test read-only AW1000 install-target inspection
         run: bash tests/install-aw1000-target-inspector-smoke.sh
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
