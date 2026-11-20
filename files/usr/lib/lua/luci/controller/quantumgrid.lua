@@ -129,6 +129,13 @@ local function network_interfaces()
 			end
 		end
 
+		local dns_servers = {}
+		for _, server in ipairs(item["dns-server"] or {}) do
+			if type(server) == "string" and #server <= 64 and server:match("^[%x:%.]+$") then
+				table.insert(dns_servers, server)
+			end
+		end
+
 		table.insert(result, {
 			name = item.interface or item.name or "",
 			device = device,
@@ -143,7 +150,8 @@ local function network_interfaces()
 			rx_dropped = read_stat("rx_dropped"),
 			tx_dropped = read_stat("tx_dropped"),
 			ipv4 = addresses,
-			ipv6 = ipv6_addresses
+			ipv6 = ipv6_addresses,
+			dns_servers = dns_servers
 		})
 	end
 	return result
