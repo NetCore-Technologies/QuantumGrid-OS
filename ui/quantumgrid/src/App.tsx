@@ -3163,6 +3163,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       })
     : [];
   const channelGroups = scan ? summarizeWifiChannels(scan.results) : [];
+  const channelPlans = scan ? planWifiChannels(scan.results, radios) : [];
   const latestScanHistory = scanHistory[scanHistory.length - 1] ?? null;
   const previousScanHistory = scanHistory.length > 1 ? scanHistory[scanHistory.length - 2] : null;
   const scanComparison = latestScanHistory && previousScanHistory
@@ -3419,6 +3420,58 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           </>
         )}
         <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Security labels come from iwinfo encryption metadata; missing metadata is marked Unknown rather than treated as an open network. Take repeat scans from the router’s actual installation location before comparing environments.</div>
+      </Panel>
+      <Panel title="Channel shortlist" eyebrow="SUPPORTED CHANNELS · OBSERVED OVERLAP">
+        {!scan ? (
+          <div className="module-message">Run a manual scan first. The shortlist compares only the current scan with channels reported by the radio driver.</div>
+        ) : channelPlans.length === 0 ? (
+          <div className="module-message">The driver did not provide any unrestricted channel frequencies for an active radio. No channel shortlist can be calculated.</div>
+        ) : (
+          <div className="wifi-channel-plans">
+            {channelPlans.map((plan) => (
+              <section className="wifi-channel-plan" key={plan.radio + "-" + plan.band}>
+                <div className="wifi-channel-plan-heading">
+                  <div>
+                    <strong>{plan.radio} · {plan.band}</strong>
+                    <span>Compared at {plan.widthMhz} MHz {plan.widthAssumed ? "planning baseline (radio width unavailable or non-contiguous)" : "reported radio width"}</span>
+                  </div>
+                  <Status active={plan.options.length > 0}>{fmt(plan.options.length)} unrestricted channels</Status>
+                </div>
+                {plan.options.length === 0 ? (
+                  <div className="module-message">No unrestricted channels were returned for this band.</div>
+                ) : (
+                  <div className="wifi-channel-plan-list">
+                    {plan.options.slice(0, 5).map((option, index) => (
+                      <div className="wifi-channel-plan-row" key={plan.radio + "-" + plan.band + "-" + option.channel}>
+                        <div>
+                          <small>{option.relativeScore !== null && index === 0 ? "LOWEST OBSERVED OVERLAP" : option.current ? "CURRENT CHANNEL" : "CANDIDATE"}</small>
+                          <strong>Channel {option.channel}{option.current ? " · CURRENT" : ""}</strong>
+                          <span>{fmt(option.frequencyMhz)} MHz{option.flags.length ? " · " + option.flags.join(", ") : ""}</span>
+                        </div>
+                        <div>
+                          <small>RELATIVE SCORE</small>
+                          <strong>{option.relativeScore === null ? "N/A" : fmt(option.relativeScore, 0) + " / 100"}</strong>
+                          <span>{option.relativeScore === null ? "No neighbouring APs observed" : "Lower is less observed overlap"}</span>
+                        </div>
+                        <div>
+                          <small>OVERLAPPING APs</small>
+                          <strong>{fmt(option.observedAccessPoints)}</strong>
+                          <span>{option.knownSignalAccessPoints} with signal · {option.unknownSignalAccessPoints} without</span>
+                        </div>
+                        <div>
+                          <small>WIDTH COVERAGE</small>
+                          <strong>{option.unknownWidthAccessPoints === 0 ? "Known" : "Partial"}</strong>
+                          <span>{option.unknownWidthAccessPoints} AP width(s) used 20 MHz fallback</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+        )}
+        <div className="module-message">Candidates come only from the radio driver's frequency list and exclude channels marked restricted. The router's own BSSID is excluded when iwinfo identifies it. The relative score is normalised within each radio/band shortlist: 0 is the lowest estimated overlap and 100 the highest. The estimate uses scanned signal strength, advertised width and channel geometry; it is not airtime, CCA busy time, noise, regulatory approval or a guarantee of better performance. Unknown widths use an explicitly marked 20 MHz fallback. DFS/no-IR and other driver flags still need to be respected. This page does not change any radio setting.</div>
       </Panel>
       <Panel
         title="Scan-to-scan changes"
