@@ -762,9 +762,29 @@ export interface RouterOfficeFirewallZone {
 }
 
 export interface RouterOfficeForwarding {
+  section: string;
   name: string;
   source: string;
   destination: string;
+}
+
+export interface RouterOfficeForwardingCreateResult {
+  ok: true;
+  section: string;
+  source: string;
+  destination: string;
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficeForwardingRemoveResult {
+  ok: true;
+  section: string;
+  source: string;
+  destination: string;
+  removed: true;
+  reloaded: true;
+  rolled_back: false;
 }
 
 export interface RouterOfficeDhcpScope {
@@ -998,6 +1018,8 @@ const DHCP_SCOPE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-
 const DHCP_SCOPE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-remove";
 const BRIDGE_VLAN_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-update";
 const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-remove";
+const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-add";
+const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -2078,6 +2100,98 @@ export async function updateRouterOfficeVlan(input: {
     throw new Error("The router did not confirm the bridge VLAN configuration and network reload.");
   }
   return payload as RouterOfficeVlanUpdateResult;
+}
+
+export async function createRouterOfficeForwarding(input: {
+  source: string;
+  destination: string;
+}): Promise<RouterOfficeForwardingCreateResult> {
+  const validName = (value: string) => /^[A-Za-z0-9_.-]{1,64}$/.test(value) &&
+    value !== "." && value !== "..";
+  if (!validName(input.source) || !validName(input.destination)) {
+    throw new Error("Select valid existing firewall zones.");
+  }
+  if (input.source === input.destination) {
+    throw new Error("Source and destination firewall zones must be different.");
+  }
+  const form = new URLSearchParams();
+  form.set("source", input.source);
+  form.set("destination", input.destination);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_FORWARDING_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Firewall forwarding changes require an active router administrator session."
+      : "The router returned an invalid firewall forwarding response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid firewall forwarding response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || typeof payload.section !== "string" || payload.section.length === 0 ||
+    !("source" in payload) || payload.source !== input.source ||
+    !("destination" in payload) || payload.destination !== input.destination ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the firewall forwarding and reload.");
+  }
+  return payload as RouterOfficeForwardingCreateResult;
+}
+
+export async function removeRouterOfficeForwarding(section: string): Promise<RouterOfficeForwardingRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid firewall forwarding section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_FORWARDING_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Firewall forwarding removal requires an active router administrator session."
+      : "The router returned an invalid firewall forwarding removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid firewall forwarding removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("source" in payload) || typeof payload.source !== "string" ||
+    !("destination" in payload) || typeof payload.destination !== "string" ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm firewall forwarding removal and reload.");
+  }
+  return payload as RouterOfficeForwardingRemoveResult;
 }
 
 export async function removeRouterOfficeVlan(section: string): Promise<RouterOfficeVlanRemoveResult> {
