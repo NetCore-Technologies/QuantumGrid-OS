@@ -1407,58 +1407,18 @@ function action_package_operation()
 		return
 	end
 
-	local operation = http.formvalue("operation", true)
-	local package = http.formvalue("package", true) or ""
-	local confirmed = http.formvalue("confirmed", true)
-	if operation ~= "update" and operation ~= "install" and operation ~= "remove" then
-		respond(400, { ok = false, error = "Choose update, install or remove." })
+	local validator = require "luci.quantumgrid.package_operations"
+	local request, validation_error = validator.validate(
+		http.formvalue("operation", true),
+		http.formvalue("package", true) or "",
+		http.formvalue("confirmed", true)
+	)
+	if not request then
+		respond(400, { ok = false, error = validation_error })
 		return
 	end
-	if operation ~= "update" and
-		(type(package) ~= "string" or #package < 1 or #package > 128 or
-		 not package:match("^[%w][%w%+_.%-]*$")) then
-		respond(400, { ok = false, error = "Package names may contain only letters, numbers, plus, underscore, dot and hyphen." })
-		return
-	end
-	if confirmed ~= "1" then
-		respond(400, { ok = false, error = "Explicit confirmation is required for package operations." })
-		return
-	end
-
-	if operation == "remove" then
-		local protected = {
-			["base-files"] = true,
-			["busybox"] = true,
-			["kernel"] = true,
-			["libc"] = true,
-			["libgcc"] = true,
-			["procd"] = true,
-			["netifd"] = true,
-			["firewall4"] = true,
-			["dnsmasq"] = true,
-			["dropbear"] = true,
-			["uhttpd"] = true,
-			["rpcd"] = true,
-			["luci-base"] = true,
-			["luci-mod-network"] = true,
-			["luci-mod-status"] = true,
-			["luci-mod-system"] = true,
-			["luci-app-package-manager"] = true,
-			["apk"] = true,
-			["opkg"] = true,
-			["uci"] = true,
-			["ubus"] = true,
-			["kmod-aw1000-fxs"] = true,
-			["luci-app-fxs"] = true
-		}
-		if protected[package] or package:match("^kmod%-") or package:match("^wpad") or package:match("^qca%-nss") then
-			respond(400, {
-				ok = false,
-				error = "Removal is blocked for core router, wireless, NSS and kernel-module packages. Use an offline firmware build for driver changes."
-			})
-			return
-		end
-	end
+	local operation = request.operation
+	local package = request.package
 
 	local manager, binary = nil, nil
 	for _, candidate in ipairs({ "/sbin/apk", "/usr/bin/apk" }) do
