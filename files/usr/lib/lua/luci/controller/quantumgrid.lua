@@ -1586,6 +1586,7 @@ end
 
 local function security_status(uci, fs)
 	local firewall_inventory = require "luci.quantumgrid.firewall_inventory"
+	local firewall_runtime = require "luci.quantumgrid.firewall_runtime"
 	local result = {
 		firewall_installed = fs.access("/etc/init.d/firewall") == true,
 		firewall_config_available = fs.access("/etc/config/firewall") == true,
@@ -1598,6 +1599,7 @@ local function security_status(uci, fs)
 		redirects_truncated = false,
 		nft_available = false,
 		nft_tables = {},
+		nft_runtime = firewall_runtime.unavailable(os.time(), false),
 		adblock_fast = {
 			installed = fs.access("/etc/init.d/adblock-fast") == true,
 			config_available = fs.access("/etc/config/adblock-fast") == true,
@@ -1730,6 +1732,28 @@ local function security_status(uci, fs)
 			local family, name = line:match("^table%s+(%S+)%s+(%S+)")
 			if family and name and #result.nft_tables < 32 then
 				table.insert(result.nft_tables, family .. "/" .. name)
+			end
+		end
+	end
+
+	local nft_binary = fs.access("/usr/sbin/nft") == true and "/usr/sbin/nft" or
+		fs.access("/usr/bin/nft") == true and "/usr/bin/nft" or nil
+	local fw4_present = false
+	for _, table_name in ipairs(result.nft_tables) do
+		if table_name == "inet/fw4" then fw4_present = true break end
+	end
+	if nft_binary and fw4_present then
+		local runtime_ok, runtime_output = pcall(util.exec,
+			nft_binary .. " -j list table inet fw4 2>/dev/null")
+		if runtime_ok and type(runtime_output) == "string" then
+			if #runtime_output > 512 * 1024 then
+				result.nft_runtime = firewall_runtime.unavailable(os.time(), true)
+			else
+				local jsonc = require "luci.jsonc"
+				local decoded_ok, decoded = pcall(jsonc.parse, runtime_output)
+				if decoded_ok then
+					result.nft_runtime = firewall_runtime.parse(decoded, os.time())
+				end
 			end
 		end
 	end
