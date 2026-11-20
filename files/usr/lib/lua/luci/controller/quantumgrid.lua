@@ -1077,10 +1077,10 @@ end
 
 
 local function wireless_network_inventory(uci)
-	local result = { interfaces = {}, zones = {}, available = false }
+	local result = { interfaces = {}, zones = {}, available = false, truncated = false }
 	local network_ok = pcall(function()
 		uci:foreach("network", "interface", function(section)
-			if #result.interfaces >= 64 then return end
+			if #result.interfaces >= 64 then result.truncated = true return end
 			local name = tostring(section[".name"] or "")
 			local device = type(section.device) == "string" and section.device or
 				type(section.ifname) == "string" and section.ifname or ""
@@ -1095,7 +1095,7 @@ local function wireless_network_inventory(uci)
 	end)
 	local firewall_ok = pcall(function()
 		uci:foreach("firewall", "zone", function(section)
-			if #result.zones >= 32 then return end
+			if #result.zones >= 32 then result.truncated = true return end
 			local name = tostring(section.name or section[".name"] or "")
 			local section_name = tostring(section[".name"] or "")
 			local networks = {}
@@ -1115,7 +1115,7 @@ local function wireless_network_inventory(uci)
 			end
 		end)
 	end)
-	result.available = network_ok and firewall_ok
+	result.available = network_ok and firewall_ok and not result.truncated
 	return result
 end
 
@@ -1200,10 +1200,14 @@ function action_wireless_update()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
+	if fs.access("/etc/config/network") ~= true or fs.access("/etc/config/firewall") ~= true then
+		respond(503, { ok = false, error = "Network or firewall configuration is unavailable; SSID network binding cannot be verified." })
+		return
+	end
 	local requested_network = http.formvalue("network", true)
 	local network_inventory = wireless_network_inventory(uci)
-	if not network_inventory.available then
-		respond(503, { ok = false, error = "Network and firewall interface inventories are unavailable; SSID network binding cannot be verified." })
+	if not network_inventory.available or network_inventory.truncated then
+		respond(503, { ok = false, error = "Network or firewall interface inventories are unavailable or truncated; SSID network binding cannot be verified." })
 		return
 	end
 	local office_validator = require "luci.quantumgrid.office_networks"
