@@ -6626,6 +6626,7 @@ input::placeholder {
   padding: 8px 10px;
   font-size: 8px;
 }
+.security-export-button { margin-top: 10px; }
 .network-interface-tools {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.2fr) auto auto;
