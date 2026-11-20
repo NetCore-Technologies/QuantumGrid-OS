@@ -57,8 +57,8 @@ const SENSITIVE_SERVICE_PORTS = new Map<number, string>([
 ]);
 
 function containsPort(value: string, wanted: number): boolean {
-  for (const raw of value.trim().split(/[\\s,]+/).filter(Boolean)) {
-    const match = /^(\\d+)(?:-(\\d+))?$/.exec(raw);
+  for (const raw of value.trim().split(/[\s,]+/).filter(Boolean)) {
+    const match = /^(\d+)(?:-(\d+))?$/.exec(raw);
     if (!match) continue;
     const start = Number(match[1]);
     const end = match[2] === undefined ? start : Number(match[2]);
