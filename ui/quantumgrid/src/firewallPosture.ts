@@ -278,6 +278,15 @@ export function auditFirewallPosture(
   for (const redirect of security.redirects ?? []) {
     checks.push(...redirectReviewChecks(redirect));
   }
+  if (security.redirects_truncated) {
+    checks.push({
+      id: "redirect-inventory-truncated",
+      title: "NAT redirect inventory is incomplete",
+      scope: "Firewall redirects",
+      status: "unknown",
+      detail: "The API returned only the first 64 redirects. Additional configured forwards were not reviewed and may contain further exposure paths; inspect the full native firewall configuration.",
+    });
+  }
 
   if (!security.firewall_config_readable) {
     checks.push({
