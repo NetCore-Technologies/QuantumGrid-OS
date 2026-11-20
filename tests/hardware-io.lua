@@ -53,7 +53,7 @@ for index = 1, 40 do
 	table.insert(manyInputs, "I: Bus=0019 Vendor=0001 Product=0001 Version=0001")
 	table.insert(manyInputs, 'N: Name="gpio-button-' .. tostring(index) .. '"')
 end
-local cappedInputs = hardware.parse_input_devices(table.concat(manyInputs, "\\n"))
+local cappedInputs = hardware.parse_input_devices(table.concat(manyInputs, "\n"))
 assert(cappedInputs.count == 40 and #cappedInputs.devices == 32 and cappedInputs.truncated, "input inventory must be capped")
 
 local trigger = hardware.parse_trigger_text("none timer [heartbeat] default-on")
