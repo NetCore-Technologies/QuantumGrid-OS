@@ -9695,3 +9695,121 @@ input::placeholder {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.office-vlan-manager {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr);
+  gap: 14px;
+}
+.office-vlan-manager-list,
+.office-vlan-editor {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 10px;
+}
+.office-vlan-actions,
+.office-vlan-editor-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.office-vlan-remove-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.office-vlan-editor {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255,255,255,.018);
+}
+.office-vlan-editor-heading,
+.office-vlan-port-editor-heading {
+  display: grid;
+  gap: 4px;
+}
+.office-vlan-editor-heading strong,
+.office-vlan-port-editor-heading strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.office-vlan-editor-heading span,
+.office-vlan-port-editor-heading span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.office-vlan-editor-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(100px, .6fr);
+  gap: 10px;
+}
+.office-vlan-editor-fields label,
+.office-vlan-port-edit-row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.office-vlan-editor-fields label > span,
+.office-vlan-port-edit-row > strong {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.office-vlan-editor-fields select,
+.office-vlan-editor-fields input,
+.office-vlan-port-edit-row select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 10px;
+}
+.office-vlan-port-editor {
+  display: grid;
+  gap: 8px;
+}
+.office-vlan-port-edit-row {
+  grid-template-columns: minmax(60px, .8fr) minmax(140px, 1.2fr);
+  align-items: center;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255,255,255,.018);
+}
+.office-vlan-membership-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+.office-vlan-membership-summary span {
+  padding: 5px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 8px;
+}
+@media (max-width: 900px) {
+  .office-vlan-manager {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .office-vlan-editor-fields,
+  .office-vlan-port-edit-row {
+    grid-template-columns: 1fr;
+  }
+}
