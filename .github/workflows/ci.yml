@@ -104,6 +104,7 @@ jobs:
           bash -n scripts/setup-aw1000-phone-feed.sh
           bash -n scripts/verify-aw1000-ubi.sh
           bash -n scripts/install-aw1000-ubi.sh
+          sh -n scripts/inspect-aw1000-install-target.sh
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
           bash -n tests/firmware-smoke.sh
@@ -123,5 +124,7 @@ jobs:
         run: lua5.1 tests/wireguard-status.lua
       - name: Test read-only conntrack capacity telemetry
         run: lua5.1 tests/conntrack-status.lua
+      - name: Test read-only AW1000 install-target inspection
+        run: bash tests/install-aw1000-target-inspector-smoke.sh
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
         run: bash tests/firmware-smoke.sh
