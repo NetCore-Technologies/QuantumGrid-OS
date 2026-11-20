@@ -5,6 +5,12 @@ export interface RouterInterface {
   is_wan: boolean;
   rx_bytes: number;
   tx_bytes: number;
+  rx_packets?: number;
+  tx_packets?: number;
+  rx_errors?: number;
+  tx_errors?: number;
+  rx_dropped?: number;
+  tx_dropped?: number;
   ipv4: string[];
 }
 
