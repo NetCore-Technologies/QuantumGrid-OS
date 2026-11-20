@@ -708,6 +708,7 @@ const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-u
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
+const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backup";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -1172,4 +1173,51 @@ export async function updateRouterLedBrightness(
     throw new Error("The router did not confirm the requested LED brightness.");
   }
   return payload as RouterLedUpdateResult;
+}
+
+
+export async function downloadRouterConfigBackup(): Promise<void> {
+  const form = new URLSearchParams();
+  form.set("confirmed", "1");
+  const response = await fetch(CONFIG_BACKUP_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/gzip, application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok) {
+    if (contentType.includes("application/json")) {
+      const payload: unknown = await response.json();
+      if (typeof payload === "object" && payload !== null &&
+          "error" in payload && typeof payload.error === "string") {
+        throw new Error(payload.error);
+      }
+    }
+    throw new Error(response.status === 403
+      ? "Configuration backups require an active router administrator session."
+      : "The router could not create the configuration backup.");
+  }
+  if (!contentType.includes("application/gzip")) {
+    throw new Error("The router returned an unexpected configuration backup format.");
+  }
+
+  const archive = await response.blob();
+  if (archive.size < 1 || archive.size > 64 * 1024 * 1024) {
+    throw new Error("The downloaded configuration archive is empty or larger than 64 MiB.");
+  }
+
+  const exportedAt = new Date().toISOString();
+  const objectUrl = URL.createObjectURL(archive);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = "quantumgrid-config-backup-" + exportedAt.replace(/[:.]/g, "-") + ".tar.gz";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
