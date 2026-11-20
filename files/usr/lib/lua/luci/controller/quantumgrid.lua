@@ -826,6 +826,129 @@ function index()
 	entry({"admin", "services", "quantumgrid", "wifi-scan"}, call("action_wifi_scan")).leaf = true
 	entry({"admin", "services", "quantumgrid", "latency-test"}, call("action_latency_test")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
+	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
+end
+
+local function sqm_restart(sys)
+	local ok, status = pcall(sys.call, "/etc/init.d/sqm restart >/dev/null 2>&1")
+	return ok and status == 0
+end
+
+local function restore_sqm_queue(uci, section, snapshot)
+	for option, value in pairs(snapshot) do
+		if value == nil then
+			local ok = pcall(uci.delete, uci, "sqm", section, option)
+			if not ok then return false end
+		else
+			local ok, result = pcall(uci.set, uci, "sqm", section, option, value)
+			if not ok or result ~= true then return false end
+		end
+	end
+	local ok, committed = pcall(uci.commit, uci, "sqm")
+	return ok and committed == true
+end
+
+function action_sqm_update()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then http.status(status, status == 400 and "Bad Request" or
+			status == 403 and "Forbidden" or status == 404 and "Not Found" or
+			status == 405 and "Method Not Allowed" or status == 503 and "Service Unavailable" or
+			status == 502 and "Bad Gateway" or "Internal Server Error") end
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/etc/init.d/sqm") ~= true or fs.access("/etc/config/sqm") ~= true then
+		respond(503, { ok = false, error = "SQM service or configuration is not installed." })
+		return
+	end
+
+	local validator = require "luci.quantumgrid.sqm"
+	local update, validation_error = validator.validate_queue_update(
+		http.formvalue("section", true),
+		http.formvalue("enabled", true),
+		http.formvalue("download", true),
+		http.formvalue("upload", true)
+	)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local section_type_ok, section_type = pcall(uci.get, uci, "sqm", update.section, ".type")
+	if not section_type_ok then
+		respond(500, { ok = false, error = "Could not read SQM queue configuration." })
+		return
+	end
+	if section_type ~= "queue" then
+		respond(404, { ok = false, error = "Only an existing SQM queue section can be edited." })
+		return
+	end
+
+	local snapshot = {
+		enabled = uci:get("sqm", update.section, "enabled"),
+		download = uci:get("sqm", update.section, "download"),
+		upload = uci:get("sqm", update.section, "upload")
+	}
+	local options = {
+		enabled = update.enabled,
+		download = update.download,
+		upload = update.upload
+	}
+	for option, value in pairs(options) do
+		local ok, result = pcall(uci.set, uci, "sqm", update.section, option, value)
+		if not ok or result ~= true then
+			pcall(uci.revert, uci, "sqm")
+			respond(500, { ok = false, error = "SQM configuration could not be updated; no restart was attempted." })
+			return
+		end
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "sqm")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "sqm")
+		respond(500, { ok = false, error = "SQM configuration could not be committed; no restart was attempted." })
+		return
+	end
+
+	if not sqm_restart(sys) then
+		local rollback_saved = restore_sqm_queue(uci, update.section, snapshot)
+		local rollback_restarted = rollback_saved and sqm_restart(sys)
+		respond(502, {
+			ok = false,
+			error = rollback_restarted
+				and "SQM restart failed. The previous queue settings were restored."
+				or "SQM restart failed and rollback could not be confirmed. Inspect SQM configuration and service state before further changes.",
+			rolled_back = rollback_restarted
+		})
+		return
+	end
+
+	respond(nil, {
+		ok = true,
+		section = update.section,
+		enabled = update.enabled == "1",
+		download_kbps = tonumber(update.download),
+		upload_kbps = tonumber(update.upload),
+		restarted = true,
+		rolled_back = false
+	})
 end
 
 function action_set_password()
