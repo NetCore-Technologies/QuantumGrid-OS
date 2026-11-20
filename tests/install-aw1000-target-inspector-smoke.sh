@@ -80,7 +80,7 @@ mtd18: 06400000 00040000 "rootfs"
 mtd20: 06400000 00040000 "rootfs_1"
 MTD
 cp "$TEST_ROOT/proc/mtd" "$TEST_ROOT/proc/mtd.duplicate"
-printf 'mtd21: 06400000 00040000 "rootfs"\\n' >> "$TEST_ROOT/proc/mtd.duplicate"
+printf '%s\n' 'mtd21: 06400000 00040000 "rootfs"' >> "$TEST_ROOT/proc/mtd.duplicate"
 cp "$TEST_ROOT/proc/mtd.duplicate" "$TEST_ROOT/proc/mtd"
 OUTPUT="$(QG_INSPECT_ROOT="$TEST_ROOT" sh "$INSPECTOR")"
 contains "$OUTPUT" "rootfs: missing or ambiguous" "duplicate rootfs"
