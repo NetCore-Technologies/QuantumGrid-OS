@@ -17,6 +17,7 @@ export interface RouterInterface {
 export interface RouterWirelessInterface {
   ifname: string;
   ssid: string;
+  bssid?: string;
   mode: string;
   up: boolean;
   channel?: number;
