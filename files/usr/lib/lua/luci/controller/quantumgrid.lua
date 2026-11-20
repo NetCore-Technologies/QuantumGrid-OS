@@ -835,12 +835,13 @@ local function sqm_restart(sys)
 end
 
 local function restore_sqm_queue(uci, section, snapshot)
-	for option, value in pairs(snapshot) do
-		if value == nil then
+	for _, option in ipairs({ "enabled", "download", "upload" }) do
+		local previous = snapshot[option]
+		if previous == false then
 			local ok = pcall(uci.delete, uci, "sqm", section, option)
 			if not ok then return false end
 		else
-			local ok, result = pcall(uci.set, uci, "sqm", section, option, value)
+			local ok, result = pcall(uci.set, uci, "sqm", section, option, previous)
 			if not ok or result ~= true then return false end
 		end
 	end
@@ -902,9 +903,9 @@ function action_sqm_update()
 	end
 
 	local snapshot = {
-		enabled = uci:get("sqm", update.section, "enabled"),
-		download = uci:get("sqm", update.section, "download"),
-		upload = uci:get("sqm", update.section, "upload")
+		enabled = uci:get("sqm", update.section, "enabled") or false,
+		download = uci:get("sqm", update.section, "download") or false,
+		upload = uci:get("sqm", update.section, "upload") or false
 	}
 	local options = {
 		enabled = update.enabled,
