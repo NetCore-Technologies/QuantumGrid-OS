@@ -44,7 +44,7 @@ local function valid_radius_host(value)
 	return #labels > 0
 end
 
-function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, radius_server, radius_port, radius_secret)
+function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, radius_server, radius_port, radius_secret, accounting_server, accounting_port, accounting_secret)
 	if not valid_section(radio) then
 		return nil, "Invalid radio section name."
 	end
@@ -90,6 +90,34 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 		end
 		valid_radius_server = radius_server
 		valid_radius_port = tostring(port_number)
+	end
+
+	local valid_accounting_server, valid_accounting_port, valid_accounting_secret = "", "1813", ""
+	local accounting_secret_supplied = false
+	if encryption == "wpa2" and type(accounting_server) == "string" and accounting_server ~= "" then
+		if not valid_radius_host(accounting_server) then
+			return nil, "RADIUS accounting server must be an IPv4 address or valid DNS hostname."
+		end
+		if type(accounting_port) ~= "string" or not accounting_port:match("^%d+$") then
+			return nil, "RADIUS accounting port must be a whole number from 1 to 65535."
+		end
+		local port_number = tonumber(accounting_port)
+		if not port_number or port_number < 1 or port_number > 65535 then
+			return nil, "RADIUS accounting port must be a whole number from 1 to 65535."
+		end
+		if type(accounting_secret) ~= "string" then
+			return nil, "RADIUS accounting shared secret must be text."
+		end
+		if accounting_secret ~= "" then
+			local secret, secret_error = valid_text(accounting_secret, 16, 128, "RADIUS accounting shared secret")
+			if not secret then return nil, secret_error end
+			valid_accounting_secret = secret
+			accounting_secret_supplied = true
+		end
+		valid_accounting_server = accounting_server
+		valid_accounting_port = tostring(port_number)
+	elseif encryption == "wpa2" and accounting_server ~= nil and type(accounting_server) ~= "string" then
+		return nil, "RADIUS accounting server must be text."
 	end
 
 	if type(key) ~= "string" then
@@ -159,6 +187,10 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 			radius_port = valid_radius_port,
 			radius_secret = valid_radius_secret,
 			radius_secret_supplied = radius_secret_supplied,
+			accounting_server = valid_accounting_server,
+			accounting_port = valid_accounting_port,
+			accounting_secret = valid_accounting_secret,
+			accounting_secret_supplied = accounting_secret_supplied,
 			hidden = hidden,
 			channel = channel,
 			htmode = htmode,
@@ -178,6 +210,10 @@ function validate_update(radio, section, ssid, encryption, key, hidden, channel,
 			radius_port = valid_radius_port,
 			radius_secret = valid_radius_secret,
 			radius_secret_supplied = radius_secret_supplied,
+		accounting_server = valid_accounting_server,
+		accounting_port = valid_accounting_port,
+		accounting_secret = valid_accounting_secret,
+		accounting_secret_supplied = accounting_secret_supplied,
 		hidden = hidden,
 		channel = channel,
 		htmode = htmode,
