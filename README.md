@@ -118,18 +118,23 @@ requires substantial disk space, RAM and time; use a Linux build host with suffi
 
 ## Firmware images
 
+The Arcadyan AW1000 release has one persistent firmware format: the device-specific
+squashfs factory UBI image. The initramfs image is a temporary RAM-boot recovery/development
+artifact; it is not a persistent firmware installer.
+
 | Artifact | Intended use |
 |---|---|
-| `*-squashfs-sysupgrade.bin` | Upgrade an existing compatible OpenWrt installation |
-| `*-squashfs-factory.ubi` | Supported factory/recovery installation route |
-| `*-initramfs-uImage.itb` | Temporary RAM boot / recovery workflows |
+| `*-arcadyan_aw1000-squashfs-factory.ubi` | AW1000 persistent firmware image; use only with the verified AW1000-specific installation route |
+| `*-arcadyan_aw1000-initramfs-uImage.itb` | Temporary RAM boot for supported recovery and development workflows |
 | `*-packages.tar.zst` | Package output from the same firmware build |
 | `SHA256SUMS` | Verify the published release assets |
 | `BUILDINFO.txt` | Source commits, configuration hash and build metadata |
 
-The factory image is **not** a universal stock-firmware installer. Follow
-[Docs/RECOVERY.md](Docs/RECOVERY.md), back up first and verify the exact image and checksum.
-Do not flash an image whose installation route you have not confirmed.
+QuantumGrid does **not** produce or publish a `sysupgrade.bin` image for the AW1000 profile.
+Do not upload the `.ubi` file to a generic LuCI sysupgrade form or assume a stock-firmware
+web installer accepts it. The factory UBI image is **not** a universal stock-firmware installer.
+Follow [Docs/RECOVERY.md](Docs/RECOVERY.md), back up first and verify the exact image and checksum.
+Do not flash an image until its AW1000-specific installation route is confirmed.
 
 ## Publish the website
 
@@ -174,7 +179,7 @@ A wrong password on an already-secured router is never overwritten.
 ## Releases
 
 Release tags use the `qg-v*` pattern, for example `qg-v0.1.0-alpha.1`. A tagged release
-builds three AW1000 image formats, packages, the pinned RJ11 feed source, recovery/phone guides,
+builds the AW1000 factory UBI and temporary initramfs images, packages, the pinned RJ11 feed source, recovery/phone guides,
 a build provenance file and `SHA256SUMS`.
 
 The release workflow can also be run manually to produce a downloadable CI artifact without
