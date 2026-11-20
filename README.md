@@ -488,6 +488,26 @@ DNS and routed reachability before a corporate rollout. These settings do not co
 delegated prefix, DHCPv6 prefix delegation, DNS RA options, static IPv6 addresses or firewall IPv6
 rules.
 
+## SSID-to-LAN/VLAN binding
+
+Office Networks can bind an existing wireless AP section to one existing LAN or VLAN network
+interface. The AP must already exist and the destination must be present in the live interface
+inventory; interfaces attached to WAN/WWAN firewall zones are rejected. The operation changes
+only the selected `wireless.<section>.network` list, commits it and reloads Wi-Fi. The complete
+prior list, including whether it was absent, is snapshotted and restored if the Wi-Fi reload
+fails. The change is recorded in the redacted office audit log.
+
+QuantumGrid checks the current administrator's IPv4 return network before moving an AP. If the AP
+currently carries that management network, the move is refused from that session. If the current
+management route cannot be proven, changes to an existing AP binding fail closed. Use a separate
+management AP or out-of-band access to change a management SSID.
+
+This does not create the destination L3 interface, bridge VLAN, switch tagging, DHCP pool, firewall
+zone or IPv6 prefix plan. It also does not add per-client VLAN assignment, RADIUS dynamic VLANs,
+multiple simultaneous network bindings, mesh topology or downstream managed-switch configuration.
+Validate the switch port membership, firewall segmentation and DHCP/IPv6 client operation after
+moving a corporate, guest or IoT SSID.
+
 ## Office network inventory
 
 The authenticated **Office Networks** page provides a correlated inventory and guarded configuration tools for
