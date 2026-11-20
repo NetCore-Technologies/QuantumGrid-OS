@@ -4991,7 +4991,7 @@ function OfficeNetworksPage({ routerOverview }: {
       ]),
       ...vlans.map((item) => [
         exportedAt, "Bridge VLAN", item.name, item.device, item.vlan_id,
-        item.ports.map((port) => port.name + ":" + (port.mode === "tagged" ? "t" : port.mode === "untagged" ? "u" : "") + (port.pvid ? "*" : "")).join(" "),
+        item.ports.map((port) => port.name + (port.mode === "tagged" ? ":t" : port.mode === "untagged" ? ":u" + (port.pvid ? "*" : "") : "")).join(" "),
         "", "", "", "", "", "",
       ]),
       ...zones.map((item) => [
