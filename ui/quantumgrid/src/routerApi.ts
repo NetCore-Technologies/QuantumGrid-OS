@@ -1,3 +1,13 @@
+export interface RouterDefaultRoute {
+  family: "IPv4" | "IPv6";
+  route_type: string;
+  table: string;
+  device: string;
+  gateway: string;
+  metric?: number;
+  protocol: string;
+}
+
 export interface RouterInterface {
   name: string;
   device: string;
@@ -290,6 +300,8 @@ export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
   timestamp: number;
+  routes_available: boolean;
+  routes?: RouterDefaultRoute[];
   system: {
     uptime_seconds: number;
     load_avg: number[];
