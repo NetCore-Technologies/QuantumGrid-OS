@@ -3137,6 +3137,17 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
   const queues = sqm?.queues ?? [];
   const enabledQueues = queues.filter((queue) => queue.enabled);
   const qdiscs = sqm?.qdiscs ?? [];
+  const [qdiscSearch, setQdiscSearch] = useState("");
+  const [qdiscSort, setQdiscSort] = useState<"kind" | "bytes" | "drops" | "backlog">("kind");
+  const visibleQdiscs = qdiscs.filter((qdisc) =>
+    [qdisc.kind, qdisc.handle, qdisc.device ?? "", qdisc.parent ?? ""]
+      .some((value) => value.toLocaleLowerCase().includes(qdiscSearch.trim().toLocaleLowerCase()))
+  ).slice().sort((left, right) => {
+    if (qdiscSort === "bytes") return (right.bytes ?? -1) - (left.bytes ?? -1);
+    if (qdiscSort === "drops") return (right.dropped ?? -1) - (left.dropped ?? -1);
+    if (qdiscSort === "backlog") return (right.backlog_bytes ?? -1) - (left.backlog_bytes ?? -1);
+    return left.kind.localeCompare(right.kind) || left.handle.localeCompare(right.handle);
+  });
   const cakeCount = qdiscs.filter((qdisc) => qdisc.kind.toLowerCase() === "cake").length;
   const queueConfigAvailable = sqm?.config_available === true && sqm.config_readable;
   const runtimeAvailable = sqm?.runtime_available === true;
@@ -3144,9 +3155,9 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
     if (qdiscs.length === 0) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Qdisc", "Handle", "Device", "Parent", "Root", "Bytes", "Packets", "Dropped", "Overlimits", "Requeues", "Backlog bytes", "Backlog packets"],
-      ...qdiscs.map((qdisc) => [
-        exportedAt, qdisc.kind, qdisc.handle, qdisc.device, qdisc.parent,
+      ["Exported at (UTC)", "Search filter", "Sort order", "Qdisc", "Handle", "Device", "Parent", "Root", "Bytes", "Packets", "Dropped", "Overlimits", "Requeues", "Backlog bytes", "Backlog packets"],
+      ...visibleQdiscs.map((qdisc) => [
+        exportedAt, qdiscSearch, qdiscSort, qdisc.kind, qdisc.handle, qdisc.device, qdisc.parent,
         qdisc.root, qdisc.bytes, qdisc.packets, qdisc.dropped, qdisc.overlimits,
         qdisc.requeues, qdisc.backlog_bytes, qdisc.backlog_packets,
       ]),
@@ -3211,7 +3222,7 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
       <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={
         <div className="qdisc-export-actions">
           <Status active={runtimeAvailable}>{runtimeAvailable ? "RUNTIME READ" : "NOT AVAILABLE"}</Status>
-          <button className="hero-button wifi-export-button" onClick={exportQdiscs} disabled={qdiscs.length === 0}>Export qdisc CSV</button>
+          <button className="hero-button wifi-export-button" onClick={exportQdiscs} disabled={visibleQdiscs.length === 0}>Export qdisc CSV</button>
         </div>
       }>
         {!sqm ? (
@@ -3221,8 +3232,22 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
         ) : qdiscs.length === 0 ? (
           <div className="module-message">No qdisc entries were returned by the kernel.</div>
         ) : (
+          <>
+          <div className="qdisc-tools">
+            <input type="search" aria-label="Search kernel qdiscs" placeholder="Search qdisc, handle or device" value={qdiscSearch} onChange={(event) => setQdiscSearch(event.target.value)} />
+            <select aria-label="Sort kernel qdiscs" value={qdiscSort} onChange={(event) => setQdiscSort(event.target.value as "kind" | "bytes" | "drops" | "backlog")}>
+              <option value="kind">Qdisc name</option>
+              <option value="bytes">Highest bytes</option>
+              <option value="drops">Most dropped packets</option>
+              <option value="backlog">Highest backlog</option>
+            </select>
+            <span>{visibleQdiscs.length} of {qdiscs.length} qdiscs</span>
+          </div>
+          {visibleQdiscs.length === 0 ? (
+            <div className="module-message">No kernel qdiscs match the current search.</div>
+          ) : (
           <div className="device-list">
-            {qdiscs.map((qdisc, index) => (
+            {visibleQdiscs.map((qdisc, index) => (
               <div className="device-row" key={`${qdisc.device ?? "unknown"}-${qdisc.handle}-${index}`}>
                 <div className="device-title">
                   <div className="device-icon"><Activity size={17} /></div>
@@ -3235,8 +3260,10 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
               </div>
             ))}
           </div>
+          )}
+          </>
         )}
-        <div className="module-message">This inventory covers kernel qdiscs across interfaces; entries are not automatically attributed to a particular SQM queue. Compare the configured interface and runtime device before concluding that SQM is shaping the WAN.</div>
+        <div className="module-message">This inventory covers kernel qdiscs across interfaces; entries are not automatically attributed to a particular SQM queue. Compare the configured interface and runtime device before concluding that SQM is shaping the WAN. CSV export follows the visible search result and sort order.</div>
       </Panel>
 
       <div className="module-grid">
