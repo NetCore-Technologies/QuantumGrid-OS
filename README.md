@@ -93,6 +93,8 @@ To use a different OpenWrt revision deliberately:
 QG_OPENWRT_REF=v25.12.6 ./build.sh
 ```
 
+The OpenWrt Apps page includes a 48-entry native LuCI launcher, a bounded APK/OPKG inventory and authenticated package controls for refreshing configured feeds and installing/removing named packages. Removal is blocked for core services, LuCI base/modules, kernel modules, Wi-Fi firmware/supplicants and NSS packages; full catalog search and dependency planning still use native LuCI Software.
+
 The build also compiles the existing React control centre with Node.js 22/npm and copies
 its Vite output into the firmware root filesystem at `/www/quantumgrid`. After boot it is served
 at `http://<router-address>/quantumgrid/`. The dashboard, Network, Diagnostics, System and Analytics views use live router API data for
