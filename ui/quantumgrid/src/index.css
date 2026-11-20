@@ -1839,6 +1839,83 @@ button:disabled {
 .wifi-history-row {
   grid-template-columns: minmax(180px, 1.5fr) repeat(3, minmax(110px, 1fr));
 }
+.wifi-scan-comparison-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.wifi-scan-comparison-metrics > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.025);
+}
+.wifi-scan-comparison-metrics small,
+.wifi-scan-change-heading span {
+  color: var(--muted2);
+  font-size: 8px;
+  letter-spacing: .08em;
+}
+.wifi-scan-comparison-metrics strong {
+  font-size: 21px;
+  line-height: 1;
+}
+.wifi-scan-change-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.wifi-scan-change-columns > section,
+.wifi-scan-signal-changes {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.wifi-scan-change-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.wifi-scan-change-heading strong { font-size: 10px; }
+.wifi-scan-change-list { display: grid; gap: 7px; }
+.wifi-scan-change-row {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(255,255,255,.045);
+  border-radius: 8px;
+  background: rgba(255,255,255,.018);
+}
+.wifi-scan-change-row strong {
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.wifi-scan-change-row span {
+  color: var(--muted);
+  font-size: 9px;
+}
+.wifi-scan-change-row small,
+.wifi-scan-change-overflow {
+  color: var(--muted2);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+.wifi-scan-signal-changes { margin-top: 12px; }
+.wifi-scan-signal-row span { color: #90b2ff; }
+@media (max-width: 760px) {
+  .wifi-scan-comparison-metrics { grid-template-columns: 1fr; }
+  .wifi-scan-change-columns { grid-template-columns: 1fr; }
+}
 
 .device-title {
   display: flex;
