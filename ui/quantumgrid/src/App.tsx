@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, scanRouterWifi, type RouterClient, type RouterOverview, type RouterWifiScan, type RouterWirelessClient } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, scanRouterWifi, type RouterClient, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
 import {
   Activity,
   ArrowLeft,
@@ -1479,6 +1479,18 @@ function ClientLeaseList({ clients, available, maxRows }: { clients: RouterClien
   );
 }
 
+function formatWifiRateDetails(details: RouterWifiRateDetails | undefined): string {
+  if (!details) return "PHY details N/A";
+  const parts = [details.phy];
+  if (details.mcs !== undefined) parts.push("MCS " + details.mcs);
+  if (details.nss !== undefined && details.nss > 0) parts.push(details.nss + "SS");
+  if (details.width_mhz !== undefined && details.width_mhz > 0) parts.push(details.width_mhz + " MHz");
+  if (details.short_gi) parts.push("Short GI");
+  if (details.he_gi !== undefined) parts.push("HE GI " + details.he_gi);
+  if (details.eht_gi !== undefined) parts.push("EHT GI " + details.eht_gi);
+  return parts.join(" · ");
+}
+
 function WirelessClientList({
   clients,
   available,
@@ -1515,9 +1527,13 @@ function WirelessClientList({
           </div>
           <b>{client.band}</b>
           <b>{client.signal_dbm === undefined ? "N/A" : `${fmt(client.signal_dbm)} dBm`}</b>
-          <b>{client.rx_rate_mbps === undefined || client.tx_rate_mbps === undefined
-            ? "N/A"
-            : `${fmt(client.rx_rate_mbps, 1)} / ${fmt(client.tx_rate_mbps, 1)} Mbps`}</b>
+          <div className="wifi-client-rate-cell">
+            <b>{client.rx_rate_mbps === undefined || client.tx_rate_mbps === undefined
+              ? "N/A"
+              : `${fmt(client.rx_rate_mbps, 1)} / ${fmt(client.tx_rate_mbps, 1)} Mbps`}</b>
+            <small>RX {formatWifiRateDetails(client.rx_details)}</small>
+            <small>TX {formatWifiRateDetails(client.tx_details)}</small>
+          </div>
           <span className={client.authorized ? "priority-pill high" : "priority-pill normal"}>
             {client.authorized ? "AUTHORIZED" : "ASSOCIATED"}
           </span>

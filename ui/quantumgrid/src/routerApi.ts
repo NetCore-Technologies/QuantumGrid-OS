@@ -63,6 +63,16 @@ export interface RouterClient {
   lease_remaining_seconds: number | null;
 }
 
+export interface RouterWifiRateDetails {
+  phy: string;
+  mcs?: number;
+  nss?: number;
+  width_mhz?: number;
+  short_gi?: boolean;
+  he_gi?: number;
+  eht_gi?: number;
+}
+
 export interface RouterWirelessClient {
   ifname: string;
   radio: string;
@@ -73,6 +83,8 @@ export interface RouterWirelessClient {
   signal_dbm?: number;
   rx_rate_mbps?: number;
   tx_rate_mbps?: number;
+  rx_details?: RouterWifiRateDetails;
+  tx_details?: RouterWifiRateDetails;
   frequency_mhz?: number;
   band: string;
   noise_dbm?: number;

@@ -317,6 +317,28 @@ end
 
 -- Read associated Wi-Fi stations from hostapd's read-only ubus API.
 -- RSSI and rates are optional because some drivers do not expose every field.
+local function wireless_rate_details(rate)
+	if type(rate) ~= "table" then return nil end
+	local is_eht = rate.eht == true or rate.eht == 1
+	local is_he = rate.he == true or rate.he == 1
+	local is_vht = rate.vht == true or rate.vht == 1
+	local is_ht = rate.ht == true or rate.ht == 1
+	local phy = "Legacy"
+	if is_eht then phy = "EHT"
+	elseif is_he then phy = "HE"
+	elseif is_vht then phy = "VHT"
+	elseif is_ht then phy = "HT" end
+	return {
+		phy = phy,
+		mcs = tonumber(rate.mcs),
+		nss = tonumber(rate.nss),
+		width_mhz = tonumber(rate.mhz),
+		short_gi = rate.short_gi == true or rate.short_gi == 1,
+		he_gi = tonumber(rate.he_gi),
+		eht_gi = tonumber(rate.eht_gi)
+	}
+end
+
 local function wireless_clients(radios)
 	local result = {}
 	for _, radio in ipairs(radios or {}) do
@@ -344,6 +366,8 @@ local function wireless_clients(radios)
 						local tx = type(station.tx) == "table" and station.tx or {}
 						local rx_rate = tonumber(rx.rate)
 						local tx_rate = tonumber(tx.rate)
+						local rx_details = wireless_rate_details(rx)
+						local tx_details = wireless_rate_details(tx)
 						table.insert(result, {
 							ifname = ifname,
 							radio = tostring(radio.name or ""),
@@ -355,6 +379,8 @@ local function wireless_clients(radios)
 							noise_dbm = tonumber(station.noise),
 							rx_rate_mbps = rx_rate and rx_rate > 0 and rx_rate / 1000 or nil,
 							tx_rate_mbps = tx_rate and tx_rate > 0 and tx_rate / 1000 or nil,
+							rx_details = rx_details,
+							tx_details = tx_details,
 							frequency_mhz = frequency,
 							band = band,
 							connected_seconds = tonumber(station.connected_time),

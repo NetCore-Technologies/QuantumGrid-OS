@@ -6635,6 +6635,18 @@ input::placeholder {
   transform: scale(.995);
 }
 
+.wifi-client-rate-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.wifi-client-rate-cell small {
+  color: var(--muted2);
+  font-size: 7px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .wifi-client-name {
   display: flex;
   align-items: center;
