@@ -960,6 +960,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "office-forwarding-add"}, call("action_office_forwarding_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-forwarding-remove"}, call("action_office_forwarding_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-zone-update"}, call("action_office_zone_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-wifi-network-update"}, call("action_office_wifi_network_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-segment-add"}, call("action_office_segment_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
@@ -4071,6 +4072,177 @@ function action_office_segment_add()
 		network_reloaded = true,
 		firewall_reloaded = true,
 		dhcp_restarted = true,
+		rolled_back = false
+	})
+end
+
+local function office_management_network(inventory, remote_ip)
+	if type(remote_ip) ~= "string" then return nil end
+	local a, b, c, d = remote_ip:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then return nil end
+	for _, part in ipairs({ a, b, c, d }) do
+		local octet = tonumber(part)
+		if not octet or octet < 0 or octet > 255 or tostring(octet) ~= part then return nil end
+	end
+	local util = require "luci.util"
+	local ok, output = pcall(util.exec, "/sbin/ip -4 route get " .. remote_ip .. " 2>/dev/null")
+	if not ok or type(output) ~= "string" then return nil end
+	local device = output:match("%sdev%s+([%w_.%-]+)")
+	if not device then return nil end
+	for _, iface in ipairs(inventory.interfaces or {}) do
+		if iface.device == device then return iface.name end
+	end
+	return nil
+end
+
+function action_office_wifi_network_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing an AP network binding." })
+		return
+	end
+	if fs.access("/etc/config/wireless") ~= true or fs.access("/sbin/wifi") ~= true then
+		respond(503, { ok = false, error = "Wireless configuration or the native Wi-Fi reload command is unavailable." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.available or inventory.truncated then
+		respond(409, { ok = false, error = "The office network inventory is unavailable or truncated. Resolve it before changing an AP network binding." })
+		return
+	end
+	local section = http.formvalue("section", true)
+	local target = http.formvalue("network", true)
+	local update, validation_error = validator.validate_office_wifi_ap_network(
+		section, target, inventory.wifi_aps, inventory.interfaces, inventory.zones)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "wireless", update.section)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "wifi-iface"
+		or snapshot.mode ~= "ap" then
+		respond(404, { ok = false, error = "The selected wireless AP no longer exists." })
+		return
+	end
+	local previous, snapshot_error = validator.snapshot_wifi_ap_network(snapshot)
+	if not previous then
+		respond(500, { ok = false, error = snapshot_error or "The current AP network binding could not be snapshotted." })
+		return
+	end
+	local unchanged = previous.present and #previous.value == 1 and previous.value[1] == update.network
+	if unchanged then
+		respond(nil, {
+			ok = true,
+			section = update.section,
+			ssid = snapshot.ssid or "",
+			network = update.network,
+			networks = { update.network },
+			reloaded = false,
+			rolled_back = false
+		})
+		return
+	end
+
+	local management_network = office_management_network(inventory, http.getenv("REMOTE_ADDR"))
+	if type(previous.value) == "table" and #previous.value > 0 then
+		if not management_network then
+			respond(409, { ok = false, error = "QuantumGrid cannot prove the current administrator's IPv4 return network. Use an out-of-band session before moving an existing SSID to another network." })
+			return
+		end
+		for _, current_network in ipairs(previous.value) do
+			if current_network == management_network then
+				respond(409, { ok = false, error = "This AP currently carries the administrator's management network. Its network binding cannot be moved from that session; use a separate AP or out-of-band access." })
+				return
+			end
+		end
+	end
+
+	local set_ok, set_result = pcall(uci.set_list, uci, "wireless", update.section, "network", { update.network })
+	if not set_ok or set_result ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "The AP network binding could not be staged safely." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "wireless")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "The AP network binding could not be committed; Wi-Fi reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local restore_ok, restored = false, false
+		if previous.present then
+			restore_ok, restored = pcall(uci.set_list, uci, "wireless", update.section, "network", previous.value)
+		else
+			local current = uci:get("wireless", update.section, "network")
+			if current == nil then
+				restore_ok, restored = true, true
+			else
+				restore_ok, restored = pcall(uci.delete, uci, "wireless", update.section, "network")
+			end
+		end
+		local rollback_commit_ok, rollback_committed = false, false
+		if restore_ok and restored == true then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "wireless")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+		end
+		local rolled_back = restore_ok and restored == true and rollback_commit_ok
+			and rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.wifi.network.update", update.section, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "The Wi-Fi reload failed. The previous AP network binding was restored."
+				or "The Wi-Fi reload failed and AP network-binding rollback could not be confirmed. Inspect wireless configuration and client connectivity locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "office.wifi.network.update", update.section, "success")
+	respond(nil, {
+		ok = true,
+		section = update.section,
+		ssid = snapshot.ssid or "",
+		network = update.network,
+		networks = { update.network },
+		reloaded = true,
 		rolled_back = false
 	})
 end
