@@ -9347,3 +9347,62 @@ input::placeholder {
 .office-dhcp-remove .office-reservation-confirm {
   padding: 2px 0;
 }
+
+
+/* Live DHCP lease quick-reserve picker */
+.office-live-lease-list {
+  display: grid;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.office-live-lease-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 3px;
+}
+.office-live-lease-heading strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.office-live-lease-heading span {
+  color: var(--muted);
+  font-size: 9px;
+}
+.office-live-lease-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.office-live-lease-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.office-live-lease-row strong {
+  color: var(--text);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.office-live-lease-row span {
+  color: var(--muted);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .office-live-lease-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .office-live-lease-row {
+    align-items: flex-start;
+  }
+}
