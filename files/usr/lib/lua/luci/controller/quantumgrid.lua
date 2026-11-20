@@ -1667,6 +1667,7 @@ local function platform_status(fs)
 		{ name = "Firewall", path = "/etc/init.d/firewall" },
 		{ name = "DNS and DHCP", path = "/etc/init.d/dnsmasq" },
 		{ name = "Smart Queue Management", path = "/etc/init.d/sqm" },
+		{ name = "Wi-Fi roaming assist (usteer)", path = "/etc/init.d/usteer" },
 		{ name = "Adblock Fast", path = "/etc/init.d/adblock-fast" },
 		{ name = "FXS voice daemon", path = "/etc/init.d/fxsd" }
 	}
