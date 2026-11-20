@@ -9,6 +9,8 @@ local previous_survey = {}
 local wireless_capability_cache = {}
 local wifi_scan_cache = nil
 local wifi_scan_cache_at = 0
+local latency_test_cache = nil
+local latency_test_cache_at = 0
 local cellular_cache = nil
 local cellular_cache_at = 0
 
@@ -436,6 +438,51 @@ local function ping_probe()
 end
 
 
+
+local function build_latency_test()
+	local util = require "luci.util"
+	-- Five bounded ICMP requests to a fixed address. Never accept shell args or a host from the browser.
+	local exec_ok, output = pcall(util.exec, "/bin/ping -c 5 -W 1 -i 0.2 1.1.1.1 2>/dev/null")
+	if not exec_ok or type(output) ~= "string" then
+		return { ok = false, error = "The router could not execute its ICMP diagnostic." }
+	end
+
+	local samples = {}
+	for value in output:gmatch("time[=<]([%d%.]+)%s*ms") do
+		local sample = tonumber(value)
+		if sample and sample >= 0 and sample <= 60000 and #samples < 5 then
+			table.insert(samples, sample)
+		end
+	end
+
+	local minimum, maximum, total = nil, nil, 0
+	local jitter_total = 0
+	for index, sample in ipairs(samples) do
+		minimum = minimum and math.min(minimum, sample) or sample
+		maximum = maximum and math.max(maximum, sample) or sample
+		total = total + sample
+		if index > 1 then
+			jitter_total = jitter_total + math.abs(sample - samples[index - 1])
+		end
+	end
+
+	local received = #samples
+	return {
+		ok = true,
+		target = "1.1.1.1",
+		packets_sent = 5,
+		packets_received = received,
+		packet_loss_percent = (5 - received) * 20,
+		min_ms = minimum,
+		average_ms = received > 0 and total / received or nil,
+		max_ms = maximum,
+		jitter_ms = received > 1 and jitter_total / (received - 1) or nil,
+		jitter_method = "mean absolute difference between consecutive successful RTT samples",
+		sampled_at = os.time(),
+		cached = false
+	}
+end
+
 local function build_wifi_scan()
 	local radios = wireless_status()
 	local results = {}
@@ -605,11 +652,57 @@ function action_wifi_scan()
 	http.write_json(payload)
 end
 
+
+function action_latency_test()
+	local http = require "luci.http"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		http.status(405, "Method Not Allowed")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		http.status(403, "Forbidden")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json({ ok = false, error = "A same-origin request is required." })
+		return
+	end
+
+	local now = os.time()
+	local payload = latency_test_cache
+	if payload and now - latency_test_cache_at < 30 then
+		local cached = {}
+		for key, value in pairs(payload) do cached[key] = value end
+		cached.cached = true
+		cached.retry_after_seconds = math.max(0, 30 - (now - latency_test_cache_at))
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(cached)
+		return
+	end
+
+	payload = build_latency_test()
+	if not payload.ok then
+		http.status(503, "Service Unavailable")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+		return
+	end
+	latency_test_cache = payload
+	latency_test_cache_at = now
+	http.prepare_content("application/json; charset=UTF-8")
+	http.write_json(payload)
+end
+
 function index()
 	local page = entry({"admin", "services", "quantumgrid"}, call("action_index"), _("QuantumGrid"), 10)
 	page.dependent = false
 	entry({"admin", "services", "quantumgrid", "api"}, call("action_api")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wifi-scan"}, call("action_wifi_scan")).leaf = true
+	entry({"admin", "services", "quantumgrid", "latency-test"}, call("action_latency_test")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 end
 
