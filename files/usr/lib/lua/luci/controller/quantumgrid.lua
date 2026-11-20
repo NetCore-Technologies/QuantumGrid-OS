@@ -946,6 +946,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "bridge-vlan-remove"}, call("action_bridge_vlan_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-forwarding-add"}, call("action_office_forwarding_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-forwarding-remove"}, call("action_office_forwarding_remove")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-zone-update"}, call("action_office_zone_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
@@ -2309,8 +2310,10 @@ local function office_network_status(uci, fs)
 		uci:foreach("firewall", "zone", function(section)
 			if #source.zones >= 32 then source.truncated = true return end
 			local name = tostring(section.name or section[".name"] or "")
-			if name:match("^[%w_.%-]+$") then
+			local section_name = tostring(section[".name"] or "")
+			if name:match("^[%w_.%-]+$") and section_name:match("^[%w_.%-]+$") then
 				table.insert(source.zones, {
+					section = section_name,
 					name = name,
 					networks = section.network,
 					input = section.input,
@@ -3399,6 +3402,192 @@ function action_office_forwarding_remove()
 		source = previous.values.src or "",
 		destination = previous.values.dest or "",
 		removed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+local function restore_office_zone_policy_options(uci, section, snapshot)
+	if type(section) ~= "string" or type(snapshot) ~= "table" then return false end
+	for option, previous in pairs(snapshot) do
+		if previous.present then
+			local ok, result = pcall(uci.set, uci, "firewall", section, option, previous.value)
+			if not ok or result ~= true then
+				pcall(uci.revert, uci, "firewall")
+				return false
+			end
+		else
+			local ok, result = pcall(uci.delete, uci, "firewall", section, option)
+			if not ok or result ~= true then
+				pcall(uci.revert, uci, "firewall")
+				return false
+			end
+		end
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	return commit_ok and committed == true
+end
+
+local function office_zone_contains_network(zone, network)
+	for _, item in ipairs(type(zone.networks) == "table" and zone.networks or {}) do
+		if item == network then return true end
+	end
+	return false
+end
+
+local function office_zone_matches_management_route(zone, inventory, remote_ip)
+	if type(remote_ip) ~= "string" then return nil end
+	local a, b, c, d = remote_ip:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then return nil end
+	for _, part in ipairs({ a, b, c, d }) do
+		local octet = tonumber(part)
+		if not octet or octet < 0 or octet > 255 or tostring(octet) ~= part then return nil end
+	end
+	local util = require "luci.util"
+	local ok, output = pcall(util.exec, "/sbin/ip -4 route get " .. remote_ip .. " 2>/dev/null")
+	if not ok or type(output) ~= "string" then return nil end
+	local device = output:match("%sdev%s+([%w_.%-]+)")
+	if not device then return nil end
+	local matched_interface = false
+	for _, iface in ipairs(inventory.interfaces or {}) do
+		if iface.device == device then
+			matched_interface = true
+			if office_zone_contains_network(zone, iface.name) then return true end
+		end
+	end
+	if matched_interface then return false end
+	return nil
+end
+
+function action_office_zone_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing firewall zone policy." })
+		return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, { ok = false, error = "Firewall configuration or the native firewall reload service is unavailable." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.firewall_available or inventory.truncated then
+		respond(409, { ok = false, error = "The firewall inventory is unavailable or truncated. Resolve it before changing zone policy." })
+		return
+	end
+	local section = http.formvalue("section", true)
+	local output_policy = http.formvalue("output", true)
+	local forward_policy = http.formvalue("forward", true)
+	local masquerade = http.formvalue("masquerade", true)
+	local update, validation_error = validator.validate_office_zone_policy(
+		section, output_policy, forward_policy, masquerade, inventory.zones)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "firewall", update.section)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "zone" then
+		respond(404, { ok = false, error = "The selected firewall zone no longer exists." })
+		return
+	end
+	local previous, snapshot_error = validator.snapshot_firewall_zone_policy_options(snapshot)
+	if not previous then
+		respond(500, { ok = false, error = snapshot_error or "The current firewall zone policy could not be snapshotted." })
+		return
+	end
+	local current_output = type(snapshot.output) == "string" and snapshot.output or "ACCEPT"
+	if update.output ~= "ACCEPT" and update.output ~= current_output then
+		local target_zone = nil
+		for _, zone in ipairs(inventory.zones or {}) do
+			if zone.section == update.section then target_zone = zone break end
+		end
+		local management_match = target_zone and office_zone_matches_management_route(
+			target_zone, inventory, http.getenv("REMOTE_ADDR")) or nil
+		if management_match == nil then
+			respond(409, { ok = false, error = "QuantumGrid cannot prove that a restrictive output policy will preserve the current administrator's return route. Use a verified out-of-band session or retain ACCEPT." })
+			return
+		elseif management_match then
+			respond(409, { ok = false, error = "The selected zone carries the current administrator's IPv4 session. Its output policy cannot be tightened from that session." })
+			return
+		end
+	end
+
+	local output_ok, output_set = pcall(uci.set, uci, "firewall", update.section, "output", update.output)
+	local forward_ok, forward_set = pcall(uci.set, uci, "firewall", update.section, "forward", update.forward)
+	local masq_ok, masq_set = pcall(uci.set, uci, "firewall", update.section, "masq", update.masquerade and "1" or "0")
+	if not output_ok or output_set ~= true or not forward_ok or forward_set ~= true or not masq_ok or masq_set ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall zone policy could not be staged safely." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The firewall zone policy could not be committed; firewall reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local rollback_ok, rollback_restored = pcall(
+			restore_office_zone_policy_options, uci, update.section, previous.options)
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_ok and rollback_restored then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local recovered = rollback_ok and rollback_restored
+			and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.zone.update", update.section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "The firewall reload failed. The previous output, forward and masquerade options were restored."
+				or "The firewall reload failed and zone-policy rollback could not be confirmed. Inspect firewall configuration and service state locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "office.zone.update", update.section, "success")
+	respond(nil, {
+		ok = true,
+		section = update.section,
+		name = snapshot.name or update.section,
+		input = snapshot.input or "ACCEPT",
+		output = update.output,
+		forward = update.forward,
+		masquerade = update.masquerade,
+		input_unchanged = true,
 		reloaded = true,
 		rolled_back = false
 	})
