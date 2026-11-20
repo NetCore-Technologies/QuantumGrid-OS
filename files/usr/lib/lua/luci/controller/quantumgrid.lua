@@ -2676,11 +2676,11 @@ function action_dhcp_scope_update()
 		return
 	end
 
-	local previous = {
-		start = snapshot.start,
-		limit = snapshot.limit,
-		leasetime = snapshot.leasetime
-	}
+	local previous, snapshot_error = validator.snapshot_dhcp_scope_options(snapshot)
+	if not previous then
+		respond(500, { ok = false, error = snapshot_error or "The DHCP scope options could not be snapshotted safely." })
+		return
+	end
 	for option, value in pairs({
 		start = update.start,
 		limit = update.limit,
@@ -2703,12 +2703,12 @@ function action_dhcp_scope_update()
 	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
 	if not reload_ok or reload_status ~= 0 then
 		local restored = true
-		for option, value in pairs(previous) do
+		for _, previous_option in ipairs(previous) do
 			local option_ok, option_result
-			if value == nil then
-				option_ok, option_result = pcall(uci.delete, uci, "dhcp", section, option)
+			if previous_option.present then
+				option_ok, option_result = pcall(uci.set, uci, "dhcp", section, previous_option.name, previous_option.value)
 			else
-				option_ok, option_result = pcall(uci.set, uci, "dhcp", section, option, value)
+				option_ok, option_result = pcall(uci.delete, uci, "dhcp", section, previous_option.name)
 			end
 			if not option_ok or option_result ~= true then restored = false break end
 		end
