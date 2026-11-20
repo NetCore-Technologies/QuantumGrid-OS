@@ -5158,7 +5158,7 @@ function AuditLogPage() {
 
       <Panel title="Audit coverage and retention" eyebrow="LOCAL OPERATIONAL HISTORY">
         <div className="audit-coverage-grid">
-          <div><strong>Recorded actions</strong><span>First-boot administrator password setup, Wi-Fi changes, SQM changes, package install/remove/feed updates, LED brightness changes and configuration backup downloads.</span></div>
+          <div><strong>Recorded actions</strong><span>First-boot administrator password setup, Wi-Fi/SQM changes, static DHCP reservations, package install/remove/feed updates, LED brightness changes and configuration backup downloads.</span></div>
           <div><strong>Secret handling</strong><span>Only allowlisted action names, outcome, target label, actor and source IP are stored. Submitted passwords, keys, SSIDs, package output and configuration values are excluded.</span></div>
           <div><strong>Storage</strong><span>Stored under /etc/quantumgrid with restrictive directory/file permissions and one rotated log file. The read API returns at most 200 valid events.</span></div>
           <div><strong>Limitations</strong><span>This is a local operational log, not tamper-proof accounting or a compliance certification. Root access can alter it, and some rejected or pre-validation requests are not recorded.</span></div>
