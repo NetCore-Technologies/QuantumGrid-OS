@@ -613,6 +613,8 @@ grep -Fq 'local function wireless_config_inventory(uci)' "$ROOT/files/usr/lib/lu
 grep -Fq 'action_wireless_update' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'wireless_configs = wireless_config_inventory(uci, wireless)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'NSS core 0 device-tree node' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'ath11k NSS offload parameter' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'ath11k NSS offload parameter' "$ROOT/files/usr/lib/lua/luci/quantumgrid/acceleration.lua"
 grep -Fq 'qca-nss0-retail.bin' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'qca-nss1-retail.bin' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'offload_verified = false' "$ROOT/files/usr/lib/lua/luci/quantumgrid/acceleration.lua"
