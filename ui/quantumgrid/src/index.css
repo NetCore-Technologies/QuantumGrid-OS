@@ -2117,6 +2117,7 @@ button:disabled {
   .wifi-scan-row,
   .wifi-channel-row,
   .wifi-history-row { grid-template-columns: 1fr 1fr; }
+  .wifi-station-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wifi-station-tools { grid-template-columns: 1fr 1fr; }
   .wifi-station-tools span { white-space: normal; }
   .wifi-scan-tools { grid-template-columns: 1fr; }
@@ -6590,6 +6591,10 @@ input::placeholder {
 
 /* ---------- WIFI CLIENT TABLE ---------- */
 
+.wifi-station-summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 12px;
+}
 .wifi-station-tools {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(140px, .65fr) minmax(140px, .7fr) auto auto;

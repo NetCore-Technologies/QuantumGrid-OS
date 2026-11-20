@@ -1504,6 +1504,19 @@ function WirelessClientList({
   const [authorizationFilter, setAuthorizationFilter] = useState<"all" | "authorized" | "associated">("all");
   const [sort, setSort] = useState<"signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "mac">("signal");
   const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
+  const authorizedCount = clients.filter((client) => client.authorized).length;
+  const associatedOnlyCount = clients.length - authorizedCount;
+  const measuredStations = clients.filter((client) =>
+    typeof client.measured_rx_mbps === "number" &&
+    typeof client.measured_tx_mbps === "number" &&
+    Number.isFinite(client.measured_rx_mbps) &&
+    Number.isFinite(client.measured_tx_mbps)
+  );
+  const totalMeasuredRx = measuredStations.reduce((total, client) => total + (client.measured_rx_mbps ?? 0), 0);
+  const totalMeasuredTx = measuredStations.reduce((total, client) => total + (client.measured_tx_mbps ?? 0), 0);
+  const measuredCoverage = measuredStations.length > 0
+    ? `${measuredStations.length}/${clients.length} stations sampled`
+    : "Awaiting two valid counter samples";
   const visibleClients = clients
     .filter((client) => {
       const query = filter.trim().toLocaleLowerCase();
@@ -1555,6 +1568,13 @@ function WirelessClientList({
 
   return (
     <div className="wifi-client-table">
+      <div className="metrics wifi-station-summary">
+        <Metric title="Associated stations" value={fmt(clients.length)} unit="" detail="Current iwinfo associations" icon={Users} />
+        <Metric title="Authorized" value={fmt(authorizedCount)} unit="" detail="Stations reported authorized by the driver" icon={Shield} />
+        <Metric title="Associated only" value={fmt(associatedOnlyCount)} unit="" detail="Associated but not authorized" icon={Wifi} />
+        <Metric title="Measured RX" value={measuredStations.length ? `${fmt(totalMeasuredRx, 2)} Mbps` : "N/A"} unit="" detail={measuredCoverage} icon={Download} />
+        <Metric title="Measured TX" value={measuredStations.length ? `${fmt(totalMeasuredTx, 2)} Mbps` : "N/A"} unit="" detail={measuredCoverage} icon={Upload} />
+      </div>
       <div className="wifi-station-tools">
         <input
           type="search"
