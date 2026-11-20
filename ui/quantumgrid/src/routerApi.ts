@@ -677,6 +677,15 @@ export interface RouterDhcpScopeCreateResult {
   rolled_back: false;
 }
 
+export interface RouterDhcpScopeRemoveResult {
+  ok: true;
+  section: string;
+  interface: string;
+  removed: true;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterDhcpScopeToggleResult {
   ok: true;
   section: string;
@@ -833,6 +842,7 @@ const DHCP_RESERVATION_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dh
 const DHCP_SCOPE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-update";
 const DHCP_SCOPE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-toggle";
 const DHCP_SCOPE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-add";
+const DHCP_SCOPE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-remove";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -1759,4 +1769,46 @@ export async function createRouterDhcpScope(input: {
     throw new Error("The router did not confirm the new DHCP scope and dnsmasq restart.");
   }
   return payload as RouterDhcpScopeCreateResult;
+}
+export async function removeRouterDhcpScope(section: string): Promise<RouterDhcpScopeRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid DHCP scope section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(DHCP_SCOPE_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Removing a DHCP scope requires an active router administrator session."
+      : "The router returned an invalid DHCP scope removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid DHCP scope removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("interface" in payload) || typeof payload.interface !== "string" ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm DHCP scope removal and dnsmasq restart.");
+  }
+  return payload as RouterDhcpScopeRemoveResult;
 }
