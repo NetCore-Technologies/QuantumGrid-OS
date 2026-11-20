@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
+trap 'status=$?; printf "ERROR: firmware smoke check failed at line %s: %s (status %s)\\n" "$LINENO" "$BASH_COMMAND" "$status" >&2; exit "$status"' ERR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/configs/aw1000-max.config"
