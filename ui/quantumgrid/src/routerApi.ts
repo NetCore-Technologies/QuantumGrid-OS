@@ -626,6 +626,7 @@ export interface RouterOfficeDhcpScope {
 }
 
 export interface RouterOfficeStaticLease {
+  section: string;
   name: string;
   mac: string;
   ipv4: string;
