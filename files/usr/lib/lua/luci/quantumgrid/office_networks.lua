@@ -163,6 +163,22 @@ function validate_reservation(name, mac, ipv4)
 	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
 end
 
+function snapshot_dhcp_scope_options(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
+		return nil, "A DHCP scope snapshot is required."
+	end
+	local result = {}
+	for _, name in ipairs({ "start", "limit", "leasetime" }) do
+		local value = snapshot[name]
+		table.insert(result, {
+			name = name,
+			present = value ~= nil,
+			value = value
+		})
+	end
+	return result
+end
+
 function validate_dhcp_scope_update(start_value, limit_value, lease_time, interface_address, netmask, other_ranges)
 	if type(start_value) ~= "string" or #start_value > 10
 		or not start_value:match("^[1-9]%d*$") then
