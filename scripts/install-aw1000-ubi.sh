@@ -5,17 +5,43 @@ die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 usage() {
   cat <<'EOF'
 Usage:
-  sh install-aw1000-ubi.sh <AW1000-factory.ubi>
-  sh install-aw1000-ubi.sh <AW1000-factory.ubi> --write
+  sh install-aw1000-ubi.sh <AW1000-factory.ubi> [--manifest <SHA256SUMS>] [--write]
 
-The default mode is a read-only preflight. --write requires interactive confirmation.
+The default mode is a read-only preflight. The release manifest is verified
+before any installation checks. --write requires interactive confirmation.
 EOF
 }
 [ "$#" -ge 1 ] || { usage >&2; exit 2; }
 IMAGE=$1
-MODE=${2:-}
-[ "$#" -le 2 ] || { usage >&2; exit 2; }
-case "$MODE" in ""|--write) ;; *) usage >&2; exit 2 ;; esac
+shift
+WRITE=0
+IMAGE_DIR=${IMAGE%/*}
+[ "$IMAGE_DIR" != "$IMAGE" ] || IMAGE_DIR=.
+MANIFEST="$IMAGE_DIR/SHA256SUMS"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --write)
+      [ "$WRITE" -eq 0 ] || die "--write was supplied more than once."
+      WRITE=1
+      shift
+      ;;
+    --manifest)
+      [ "$#" -ge 2 ] || { usage >&2; exit 2; }
+      MANIFEST=$2
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
 [ "$(id -u)" -eq 0 ] || die "Run as root from the AW1000 initramfs."
 [ -f "$IMAGE" ] && [ -r "$IMAGE" ] && [ ! -L "$IMAGE" ] || die "Image must be a readable regular file, not a symlink."
 IMAGE_NAME=${IMAGE##*/}
@@ -23,6 +49,12 @@ case "$IMAGE_NAME" in
   *arcadyan_aw1000-squashfs-factory.ubi|QuantumGrid-OS-*-AW1000-squashfs-factory.ubi) ;;
   *) die "Expected a QuantumGrid Arcadyan AW1000 factory UBI image; refusing: $IMAGE_NAME" ;;
 esac
+
+# The verifier is shipped beside this installer. A matching release manifest
+# is mandatory even for a dry run so no unverified image can reach the write path.
+SCRIPT_DIR=$(CDPATH= cd "$(dirname "$0")" && pwd)
+[ -f "$SCRIPT_DIR/verify-aw1000-release-manifest.sh" ] || die "Release manifest verifier is missing beside the installer."
+sh "$SCRIPT_DIR/verify-aw1000-release-manifest.sh" "$IMAGE" "$MANIFEST"
 
 BOARD_NAME=$(cat /tmp/sysinfo/board_name 2>/dev/null || true)
 case "$BOARD_NAME" in arcadyan_aw1000|arcadyan,aw1000) ;; *) die "Board identity is '$BOARD_NAME', not a confirmed Arcadyan AW1000." ;; esac
@@ -41,7 +73,7 @@ fi
 [ -r /proc/mtd ] || die "Cannot read /proc/mtd."
 mtd_entry() {
   wanted=$1
-  awk -F '[:, ]+' -v name="\"$wanted\"" '$4 == name { count++; print $1, $2, $3 } END { if (count != 1) exit 1 }' /proc/mtd
+  awk -F '[:, ]+' -v name="\\"$wanted\\"" '$4 == name { count++; print $1, $2, $3 } END { if (count != 1) exit 1 }' /proc/mtd
 }
 ROOTFS_ENTRY=$(mtd_entry rootfs) || die "Could not identify exactly one rootfs partition."
 ROOTFS1_ENTRY=$(mtd_entry rootfs_1) || die "Could not identify exactly one rootfs_1 partition."
@@ -72,13 +104,14 @@ printf 'Board:               %s\n' "$BOARD_NAME"
 printf 'Boot root:           %s (RAM initramfs)\n' "$ROOT_FS"
 printf 'Image:               %s\n' "$IMAGE_NAME"
 printf 'Image size:          %s bytes\n' "$IMAGE_SIZE"
+printf 'Release manifest:    verified (%s)\n' "$MANIFEST"
 printf 'Target:              %s (rootfs, 100 MiB)\n' "$TARGET"
 printf 'Preserved partition: /dev/%s (rootfs_1)\n' "$ROOTFS1_MTD"
 printf 'No MIBIB, bootloader, Wi-Fi calibration, or rootfs_1 write is requested.\n'
 
-if [ "$MODE" != "--write" ]; then
+if [ "$WRITE" -ne 1 ]; then
   printf '\nDry run only. No flash writes were made.\n'
-  printf 'After verifying SHA256SUMS, re-run with --write to request installation.\n'
+  printf 'After reviewing the board and MTD preflight, re-run with --write to request installation.\n'
   exit 0
 fi
 [ -r /dev/tty ] || die "--write requires an interactive terminal."
