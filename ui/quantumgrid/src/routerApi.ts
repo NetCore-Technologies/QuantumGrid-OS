@@ -87,6 +87,7 @@ export interface RouterWirelessConfig {
   radio: string;
   mode: "ap";
   ssid: string;
+  networks: string[];
   encryption: string;
   ieee80211w: string;
   hidden: boolean;
@@ -116,6 +117,7 @@ export interface RouterWirelessUpdateResult {
   radio: string;
   section: string;
   ssid: string;
+  network: string;
   encryption: string;
   ieee80211w?: string;
   hidden: boolean;
@@ -1342,6 +1344,7 @@ export async function updateRouterWirelessConfig(input: {
   radio: string;
   section: string;
   ssid: string;
+  network: string;
   encryption: "psk2" | "sae" | "sae-mixed" | "wpa2" | "wpa3" | "none";
   key: string;
   radiusServer: string;
@@ -1359,6 +1362,10 @@ export async function updateRouterWirelessConfig(input: {
   const validSection = (value: string) => /^[A-Za-z0-9_-]{1,32}$/.test(value);
   if (!validSection(input.radio) || !validSection(input.section)) {
     throw new Error("Invalid wireless radio or interface section.");
+  }
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) ||
+      input.network === "." || input.network === "..") {
+    throw new Error("Select one existing routed network interface.");
   }
   if (input.ssid.length < 1 || new TextEncoder().encode(input.ssid).length > 32 ||
       hasControlCharacters(input.ssid)) {
@@ -1437,6 +1444,7 @@ export async function updateRouterWirelessConfig(input: {
   form.set("radio", input.radio);
   form.set("section", input.section);
   form.set("ssid", input.ssid);
+  form.set("network", input.network);
   form.set("encryption", input.encryption);
   form.set("key", input.key);
   form.set("radius_server", input.radiusServer);
@@ -1481,6 +1489,7 @@ export async function updateRouterWirelessConfig(input: {
     !("radio" in payload) || payload.radio !== input.radio ||
     !("section" in payload) || payload.section !== input.section ||
     !("ssid" in payload) || payload.ssid !== input.ssid ||
+    !("network" in payload) || payload.network !== input.network ||
     !("encryption" in payload) || payload.encryption !== input.encryption ||
     !("hidden" in payload) || payload.hidden !== input.hidden ||
     !("channel" in payload) || payload.channel !== input.channel ||
