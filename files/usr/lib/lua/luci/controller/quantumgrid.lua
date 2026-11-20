@@ -1729,8 +1729,11 @@ local function platform_status(fs)
 	local modules = {
 		{ name = "ath11k Wi-Fi driver", path = "/sys/module/ath11k" },
 		{ name = "mac80211 wireless stack", path = "/sys/module/mac80211" },
-		{ name = "Qualcomm NSS data path", path = "/sys/module/qca_nss_dp" },
+		{ name = "Qualcomm NSS core driver", path = "/sys/module/qca_nss_drv" },
+		{ name = "Qualcomm NSS datapath / EDMA driver", path = "/sys/module/qca_nss_dp" },
 		{ name = "Qualcomm switch SDK", path = "/sys/module/qca_ssdk" },
+		{ name = "Qualcomm NSS ECM", path = "/sys/module/ecm" },
+		{ name = "Qualcomm multicast snooping (MCS)", path = "/sys/module/qca_mcs" },
 		{ name = "WireGuard", path = "/sys/module/wireguard" },
 		{ name = "CAKE scheduler", path = "/sys/module/sch_cake" }
 	}
@@ -1747,6 +1750,8 @@ local function platform_status(fs)
 		{ name = "Firewall", path = "/etc/init.d/firewall" },
 		{ name = "DNS and DHCP", path = "/etc/init.d/dnsmasq" },
 		{ name = "Smart Queue Management", path = "/etc/init.d/sqm" },
+		{ name = "Qualcomm NSS CPU/IRQ tuning", path = "/etc/init.d/qca-nss-drv" },
+		{ name = "Qualcomm NSS ECM integration", path = "/etc/init.d/qca-nss-ecm" },
 		{ name = "Wi-Fi roaming assist (usteer)", path = "/etc/init.d/usteer" },
 		{ name = "Adblock Fast", path = "/etc/init.d/adblock-fast" },
 		{ name = "FXS voice daemon", path = "/etc/init.d/fxsd" }
@@ -1847,6 +1852,92 @@ local function platform_status(fs)
 		if type(value) ~= "string" or value == "" then return nil end
 		return value:gsub("[%c]", " "):sub(1, limit or 160)
 	end
+	local acceleration_components = {
+		{
+			name = "EDMA device-tree node",
+			kind = "device-tree",
+			present = fs.access("/sys/firmware/devicetree/base/soc/edma@3ab00000") == true,
+			detail = "Qualcomm EDMA node in the running device tree"
+		},
+		{
+			name = "ESS / PPE switch device-tree node",
+			kind = "device-tree",
+			present = fs.access("/sys/firmware/devicetree/base/soc/ess-switch@3a000000") == true,
+			detail = "Ethernet switch and PPE-capable ESS node; node presence does not prove NSS acceleration"
+		},
+		{
+			name = "NSS core 0 device-tree node",
+			kind = "device-tree",
+			present = fs.access("/sys/firmware/devicetree/base/soc/nss@40000000") == true,
+			detail = "NSS core 0 platform description"
+		},
+		{
+			name = "NSS core 1 device-tree node",
+			kind = "device-tree",
+			present = fs.access("/sys/firmware/devicetree/base/soc/nss@40800000") == true,
+			detail = "NSS core 1 platform description"
+		},
+		{
+			name = "NSS core driver",
+			kind = "kernel-module",
+			present = fs.access("/sys/module/qca_nss_drv") == true,
+			detail = "qca_nss_drv.ko loaded in the running kernel"
+		},
+		{
+			name = "NSS datapath / EDMA driver",
+			kind = "kernel-module",
+			present = fs.access("/sys/module/qca_nss_dp") == true,
+			detail = "qca_nss_dp.ko loaded; this is not proof that flows are being offloaded"
+		},
+		{
+			name = "Qualcomm SSDK",
+			kind = "kernel-module",
+			present = fs.access("/sys/module/qca_ssdk") == true,
+			detail = "qca_ssdk kernel module loaded"
+		},
+		{
+			name = "NSS Enhanced Connection Manager",
+			kind = "kernel-module",
+			present = fs.access("/sys/module/ecm") == true,
+			detail = "ecm.ko loaded for flow classification and offload coordination"
+		},
+		{
+			name = "NSS firmware core 0",
+			kind = "firmware",
+			present = fs.access("/lib/firmware/qca-nss0-retail.bin") == true,
+			detail = "qca-nss0-retail.bin"
+		},
+		{
+			name = "NSS firmware core 1",
+			kind = "firmware",
+			present = fs.access("/lib/firmware/qca-nss1-retail.bin") == true,
+			detail = "qca-nss1-retail.bin"
+		},
+		{
+			name = "Wi-Fi driver",
+			kind = "kernel-module",
+			present = fs.access("/sys/module/ath11k") == true,
+			detail = "ath11k loaded; this alone does not prove NSS Wi-Fi hooks are compiled or active"
+		}
+	}
+	local acceleration_present = 0
+	for _, component in ipairs(acceleration_components) do
+		if component.present then acceleration_present = acceleration_present + 1 end
+	end
+	local acceleration_required = 10
+	local acceleration_status = "not-detected"
+	if acceleration_present > 0 then acceleration_status = "partial" end
+	if acceleration_present >= acceleration_required then
+		acceleration_status = "components-present-unverified"
+	end
+	local acceleration = {
+		status = acceleration_status,
+		present_components = acceleration_present,
+		required_components = acceleration_required,
+		offload_verified = false,
+		components = acceleration_components,
+		note = "Component and device-tree presence only. This inventory does not verify NSS firmware boot, ath11k NSS integration, PPE flow programming, active EDMA queues, ECM offload state or packet counters. End-to-end offload remains unverified until traffic-path counters and controlled benchmarks pass on the device."
+	}
 	return {
 		available = next(board) ~= nil,
 		hostname = field(board.hostname, 64),
@@ -1860,6 +1951,7 @@ local function platform_status(fs)
 		target = field(release.target, 128),
 		description = field(release.description, 192),
 		package_manager = package_manager,
+		acceleration = acceleration,
 		modules = modules, tools = tools, services = services, storage = storage,
 		block_devices = block_devices, mounts = mounts
 	}
