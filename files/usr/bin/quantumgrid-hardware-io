@@ -1,0 +1,102 @@
+#!/bin/sh
+# QuantumGrid AW1000 hardware I/O inspection.
+# Read-only: never changes GPIO direction/value or LED brightness/trigger.
+
+set -eu
+
+usage() {
+  cat <<'USAGE'
+QuantumGrid hardware I/O inspector (read-only)
+
+Usage:
+  sh /usr/bin/quantumgrid-hardware-io [all|gpio|buttons|leds]
+
+Commands:
+  all       Show GPIO, button-like labels and LED class devices (default)
+  gpio      Show the kernel GPIO debugfs inventory
+  buttons   Filter GPIO labels/consumers for button-like names
+  leds      Show Linux LED-class brightness and trigger metadata
+
+This utility does not drive GPIO outputs or change LED settings.
+USAGE
+}
+
+show_gpio() {
+  if [ ! -r /sys/kernel/debug/gpio ]; then
+    echo "GPIO debugfs is unavailable (not mounted or not enabled)."
+    return 0
+  fi
+  echo "=== Kernel GPIO inventory (read-only) ==="
+  cat /sys/kernel/debug/gpio
+}
+
+show_buttons() {
+  if [ ! -r /sys/kernel/debug/gpio ]; then
+    echo "Button inventory unavailable: GPIO debugfs is not readable."
+    return 0
+  fi
+  echo "=== Button-like GPIO labels/consumers (name hints only) ==="
+  if ! grep -Ei 'button|reset|wps|power|key|wlan' /sys/kernel/debug/gpio; then
+    echo "No button-like labels were reported by the kernel."
+  fi
+  echo "A matching label is not proof of a physical button mapping or event stream."
+}
+
+show_leds() {
+  if [ ! -d /sys/class/leds ]; then
+    echo "Linux LED class is unavailable."
+    return 0
+  fi
+  echo "=== Linux LED class inventory (read-only) ==="
+  found=0
+  for led in /sys/class/leds/*; do
+    [ -d "$led" ] || continue
+    found=1
+    name=${led##*/}
+    printf '\n%s\n' "$name"
+    if [ -r "$led/brightness" ]; then
+      printf '  brightness: '
+      cat "$led/brightness"
+    else
+      echo "  brightness: unavailable"
+    fi
+    if [ -r "$led/max_brightness" ]; then
+      printf '  max_brightness: '
+      cat "$led/max_brightness"
+    else
+      echo "  max_brightness: unavailable"
+    fi
+    if [ -r "$led/trigger" ]; then
+      printf '  trigger: '
+      cat "$led/trigger"
+    else
+      echo "  trigger: unavailable"
+    fi
+  done
+  [ "$found" -eq 1 ] || echo "No LED class devices were found."
+}
+
+command=${1:-all}
+case "$command" in
+  all)
+    show_gpio
+    show_buttons
+    show_leds
+    ;;
+  gpio)
+    show_gpio
+    ;;
+  buttons)
+    show_buttons
+    ;;
+  leds)
+    show_leds
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac
