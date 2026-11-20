@@ -930,6 +930,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "audit"}, call("action_audit_log")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-reservation"}, call("action_dhcp_reservation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-reservation-remove"}, call("action_dhcp_reservation_remove")).leaf = true
+	entry({"admin", "services", "quantumgrid", "dhcp-scope-update"}, call("action_dhcp_scope_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
@@ -2535,6 +2536,174 @@ function action_config_backup()
 	http.header("Content-Length", tostring(validated_size))
 	http.prepare_content("application/gzip")
 	http.write(contents)
+end
+
+
+function action_dhcp_scope_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	local confirmed, confirmation_error = validator.validate_reservation_confirmation(
+		http.formvalue("confirmed", true))
+	if not confirmed then
+		respond(400, { ok = false, error = confirmation_error })
+		return
+	end
+	if fs.access("/etc/config/dhcp") ~= true or fs.access("/etc/config/network") ~= true
+		or fs.access("/etc/init.d/dnsmasq") ~= true then
+		respond(503, { ok = false, error = "DHCP, network configuration or dnsmasq service is unavailable." })
+		return
+	end
+
+	local section, section_error = validator.validate_reservation_section(
+		http.formvalue("section", true))
+	if not section then
+		respond(400, { ok = false, error = section_error })
+		return
+	end
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "dhcp", section)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
+		respond(404, { ok = false, error = "The selected DHCP server scope no longer exists." })
+		return
+	end
+	if snapshot.ignore == "1" then
+		respond(409, { ok = false, error = "Disabled DHCP scopes cannot be edited from this control." })
+		return
+	end
+	local network = type(snapshot.interface) == "string" and snapshot.interface or ""
+	if network == "" or not network:match("^[%w_.%-]+$") then
+		respond(409, { ok = false, error = "The DHCP scope is not attached to a valid network interface." })
+		return
+	end
+	local network_ok, network_config = pcall(uci.get_all, uci, "network", network)
+	if not network_ok or type(network_config) ~= "table"
+		or network_config[".type"] ~= "interface" or network_config.proto ~= "static" then
+		respond(409, { ok = false, error = "Only scopes attached to existing static IPv4 networks can be edited." })
+		return
+	end
+	local interface_address = type(network_config.ipaddr) == "string" and network_config.ipaddr or
+		type(network_config.ipaddr) == "table" and network_config.ipaddr[1] or nil
+	local netmask = type(network_config.netmask) == "string" and network_config.netmask or nil
+
+	local inventory = office_network_status(uci, fs)
+	local other_ranges = {}
+	for _, scope in ipairs(inventory.dhcp_scopes or {}) do
+		if scope.name ~= section and not scope.ignore and scope.range_valid then
+			table.insert(other_ranges, {
+				start = scope.pool_start_ip,
+				finish = scope.pool_end_ip
+			})
+		end
+	end
+	local update, validation_error = validator.validate_dhcp_scope_update(
+		http.formvalue("start", true),
+		http.formvalue("limit", true),
+		http.formvalue("leasetime", true),
+		interface_address,
+		netmask,
+		other_ranges
+	)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local previous = {
+		start = snapshot.start,
+		limit = snapshot.limit,
+		leasetime = snapshot.leasetime
+	}
+	for option, value in pairs({
+		start = update.start,
+		limit = update.limit,
+		leasetime = update.lease_time
+	}) do
+		local set_ok, set_result = pcall(uci.set, uci, "dhcp", section, option, value)
+		if not set_ok or set_result ~= true then
+			pcall(uci.revert, uci, "dhcp")
+			respond(500, { ok = false, error = "The DHCP scope update could not be staged; dnsmasq was not restarted." })
+			return
+		end
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "dhcp")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "dhcp")
+		respond(500, { ok = false, error = "The DHCP scope update could not be committed; dnsmasq was not restarted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local restored = true
+		for option, value in pairs(previous) do
+			local option_ok, option_result
+			if value == nil then
+				option_ok, option_result = pcall(uci.delete, uci, "dhcp", section, option)
+			else
+				option_ok, option_result = pcall(uci.set, uci, "dhcp", section, option, value)
+			end
+			if not option_ok or option_result ~= true then restored = false break end
+		end
+		local rollback_commit_ok, rollback_committed = false, false
+		if restored then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "dhcp")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+		end
+		local rolled_back = restored and rollback_commit_ok and rollback_committed == true
+			and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "dhcp.scope.update", section, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "dnsmasq could not restart. The previous DHCP scope settings were restored."
+				or "dnsmasq restart failed and the previous DHCP scope could not be fully restored. Inspect DHCP configuration and service state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "dhcp.scope.update", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		start = update.start,
+		limit = update.limit,
+		lease_time = update.lease_time,
+		pool_start_ip = update.pool_start_ip,
+		pool_end_ip = update.pool_end_ip,
+		restarted = true,
+		rolled_back = false
+	})
 end
 
 
