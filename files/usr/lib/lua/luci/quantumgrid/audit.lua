@@ -17,7 +17,8 @@ local ALLOWED_ACTIONS = {
 	["package.remove"] = true,
 	["package.feed.update"] = true,
 	["hardware.led.update"] = true,
-	["system.config.backup"] = true
+	["system.config.backup"] = true,
+	["system.syslog.update"] = true
 }
 
 local function clean(value, limit)
