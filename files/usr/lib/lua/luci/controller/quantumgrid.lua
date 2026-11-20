@@ -770,6 +770,7 @@ local function security_status(uci, fs)
 		firewall_config_available = fs.access("/etc/config/firewall") == true,
 		firewall_config_readable = false,
 		zones = {},
+		rules = {},
 		rules_count = 0,
 		redirects_count = 0,
 		nft_available = false,
@@ -786,6 +787,24 @@ local function security_status(uci, fs)
 			openvpn_enabled_instances = 0
 		}
 	}
+	local function rule_value(value, limit)
+		local values = {}
+		if type(value) == "string" then
+			if value ~= "" then table.insert(values, value) end
+		elseif type(value) == "table" then
+			for _, item in ipairs(value) do
+				if type(item) == "string" and item ~= "" and #values < 8 then
+					table.insert(values, item)
+				end
+			end
+		end
+		return table.concat(values, " "):gsub("[%c]", " "):sub(1, limit or 96)
+	end
+	local function has_rule_value(value)
+		return (type(value) == "string" and value ~= "") or
+			(type(value) == "table" and #value > 0)
+	end
+
 	local config_ok = pcall(function()
 		uci:foreach("firewall", "zone", function(section)
 			if #result.zones < 32 then
@@ -805,7 +824,27 @@ local function security_status(uci, fs)
 				})
 			end
 		end)
-		uci:foreach("firewall", "rule", function() result.rules_count = result.rules_count + 1 end)
+		uci:foreach("firewall", "rule", function(section)
+			result.rules_count = result.rules_count + 1
+			if #result.rules < 64 then
+				local name = rule_value(section.name or section[".name"], 64)
+				if name == "" then name = "unnamed-rule-" .. tostring(result.rules_count) end
+				table.insert(result.rules, {
+					name = name,
+					source_zone = rule_value(section.src, 48),
+					destination_zone = rule_value(section.dest, 48),
+					protocol = rule_value(section.proto, 48),
+					target = rule_value(section.target, 24):upper(),
+					family = rule_value(section.family, 16),
+					source_port = rule_value(section.src_port, 48),
+					destination_port = rule_value(section.dest_port, 48),
+					enabled = section.enabled ~= "0",
+					source_ip_match = has_rule_value(section.src_ip),
+					destination_ip_match = has_rule_value(section.dest_ip),
+					source_mac_match = has_rule_value(section.src_mac)
+				})
+			end
+		end)
 		uci:foreach("firewall", "redirect", function() result.redirects_count = result.redirects_count + 1 end)
 	end)
 	result.firewall_config_readable = config_ok
