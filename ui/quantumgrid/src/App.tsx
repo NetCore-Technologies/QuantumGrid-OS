@@ -3044,12 +3044,27 @@ const nativeOpenWrtApps: NativeOpenWrtApp[] = [
   { title: "System Overview", description: "OpenWrt status, board identity, uptime and health.", section: "Status", href: "/cgi-bin/luci/admin/status/overview", packageName: "luci-mod-status" },
   { title: "Realtime Bandwidth", description: "Native LuCI interface throughput graphs.", section: "Status", href: "/cgi-bin/luci/admin/status/realtime/bandwidth", packageName: "luci-mod-status" },
   { title: "Processes", description: "Inspect running processes and resource consumption.", section: "Status", href: "/cgi-bin/luci/admin/status/processes", packageName: "luci-mod-status" },
+  { title: "System Log", description: "Read recent system and service log messages.", section: "Status", href: "/cgi-bin/luci/admin/status/logs/syslog", packageName: "luci-mod-status" },
+  { title: "Kernel Log", description: "Inspect kernel, driver and hardware messages.", section: "Status", href: "/cgi-bin/luci/admin/status/logs/dmesg", packageName: "luci-mod-status" },
+  { title: "Routing Table", description: "Inspect the router's active route inventory.", section: "Status", href: "/cgi-bin/luci/admin/status/routes", packageName: "luci-mod-status" },
+  { title: "Realtime Load", description: "View live CPU, load and memory graphs.", section: "Status", href: "/cgi-bin/luci/admin/status/realtime/load", packageName: "luci-mod-status" },
+  { title: "Realtime Wireless", description: "View radio signal and wireless throughput graphs.", section: "Status", href: "/cgi-bin/luci/admin/status/realtime/wireless", packageName: "luci-mod-status" },
+  { title: "Realtime Connections", description: "Inspect live connection tracking and traffic graphs.", section: "Status", href: "/cgi-bin/luci/admin/status/realtime/connections", packageName: "luci-mod-status" },
+  { title: "Channel Analysis", description: "Open the native wireless channel analysis view.", section: "Status", href: "/cgi-bin/luci/admin/status/channel_analysis", packageName: "luci-mod-status" },
   { title: "Network Interfaces", description: "Configure WAN, LAN, VLAN interfaces and devices.", section: "Network", href: "/cgi-bin/luci/admin/network/network", packageName: "luci-mod-network" },
   { title: "Wireless", description: "Native radio, access-point and client configuration.", section: "Network", href: "/cgi-bin/luci/admin/network/wireless", packageName: "luci-mod-network" },
   { title: "Wi-Fi Roaming (uSteer)", description: "Configure multi-AP neighbor reporting and opt-in client steering policies.", section: "Network", href: "/cgi-bin/luci/admin/network/usteer", packageName: "luci-app-usteer" },
   { title: "DHCP & DNS", description: "DHCP leases, static assignments and DNS settings.", section: "Network", href: "/cgi-bin/luci/admin/network/dhcp", packageName: "luci-mod-network" },
+  { title: "DNS Settings", description: "Manage local DNS forwarding and resolver configuration.", section: "Network", href: "/cgi-bin/luci/admin/network/dns", packageName: "luci-mod-network" },
+  { title: "Network Diagnostics", description: "Use native ping, route and connectivity diagnostics.", section: "Network", href: "/cgi-bin/luci/admin/network/diagnostics", packageName: "luci-mod-network" },
   { title: "Firewall", description: "Firewall zones, traffic rules, NAT and port forwards.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall", packageName: "luci-app-firewall" },
-  { title: "Multi-WAN", description: "WAN failover, tracking, policies and traffic rules.", section: "Network", href: "/cgi-bin/luci/admin/network/mwan", packageName: "luci-app-mwan3" },
+  { title: "Port Forwards", description: "Manage inbound port-forward and destination-NAT rules.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall/forwards", packageName: "luci-app-firewall" },
+  { title: "Traffic Rules", description: "Manage firewall filter rules and zone permissions.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall/rules", packageName: "luci-app-firewall" },
+  { title: "NAT Rules", description: "Inspect and configure source NAT rules.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall/snats", packageName: "luci-app-firewall" },
+  { title: "IP Sets", description: "Configure firewall address sets and their matches.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall/ipsets", packageName: "luci-app-firewall" },
+  { title: "Firewall Status", description: "Inspect the runtime nftables firewall tables.", section: "Status", href: "/cgi-bin/luci/admin/status/nftables", packageName: "luci-mod-status" },
+  { title: "Multi-WAN Manager", description: "Configure WAN members, health checks, failover policies and traffic rules.", section: "Network", href: "/cgi-bin/luci/admin/network/mwan3", packageName: "luci-app-mwan3" },
+  { title: "Multi-WAN Status", description: "Inspect live multi-WAN state, failover and diagnostics.", section: "Status", href: "/cgi-bin/luci/admin/status/mwan3/overview", packageName: "luci-app-mwan3" },
   { title: "Smart Queue Management", description: "Native SQM queue configuration and queue scripts.", section: "Services", href: "/cgi-bin/luci/admin/network/sqm", packageName: "luci-app-sqm" },
   { title: "Adblock Fast", description: "DNS-based domain blocking and block-list services.", section: "Security", href: "/cgi-bin/luci/admin/services/adblock-fast", packageName: "luci-app-adblock-fast" },
   { title: "Dynamic DNS", description: "Maintain a hostname against changing WAN addresses.", section: "Services", href: "/cgi-bin/luci/admin/services/ddns", packageName: "luci-app-ddns" },
@@ -3057,10 +3072,23 @@ const nativeOpenWrtApps: NativeOpenWrtApp[] = [
   { title: "Unbound DNS", description: "Recursive DNS resolver configuration and status.", section: "Services", href: "/cgi-bin/luci/admin/services/unbound", packageName: "luci-app-unbound" },
   { title: "UPnP", description: "Manage UPnP and NAT-PMP service settings.", section: "Services", href: "/cgi-bin/luci/admin/services/upnp", packageName: "luci-app-upnp" },
   { title: "Administrator", description: "Root password, SSH access and system settings.", section: "System", href: "/cgi-bin/luci/admin/system/admin", packageName: "luci-mod-system" },
+  { title: "System Settings", description: "Configure hostname, timezone, logging and system settings.", section: "System", href: "/cgi-bin/luci/admin/system/system", packageName: "luci-mod-system" },
+  { title: "Router Password", description: "Change the root administrator password.", section: "System", href: "/cgi-bin/luci/admin/system/admin/password", packageName: "luci-mod-system" },
+  { title: "SSH Access", description: "Configure Dropbear SSH listener and access options.", section: "System", href: "/cgi-bin/luci/admin/system/admin/dropbear", packageName: "luci-mod-system" },
+  { title: "SSH Keys", description: "Manage public keys for SSH administrator access.", section: "System", href: "/cgi-bin/luci/admin/system/admin/sshkeys", packageName: "luci-mod-system" },
+  { title: "HTTPS Access", description: "Configure the native LuCI uHTTPd web server.", section: "System", href: "/cgi-bin/luci/admin/system/admin/uhttpd", packageName: "luci-mod-system" },
+  { title: "Repository Keys", description: "Inspect package feed signing public keys.", section: "System", href: "/cgi-bin/luci/admin/system/admin/repokeys", packageName: "luci-mod-system" },
+  { title: "Mount Points", description: "Inspect attached storage and filesystem mounts.", section: "System", href: "/cgi-bin/luci/admin/system/mounts", packageName: "luci-mod-system" },
+  { title: "LED Configuration", description: "Configure activity and status LED triggers.", section: "System", href: "/cgi-bin/luci/admin/system/leds", packageName: "luci-mod-system" },
+  { title: "Scheduled Tasks", description: "Edit scheduled cron jobs.", section: "System", href: "/cgi-bin/luci/admin/system/crontab", packageName: "luci-mod-system" },
+  { title: "Reboot", description: "Open the native router restart control.", section: "System", href: "/cgi-bin/luci/admin/system/reboot", packageName: "luci-mod-system" },
   { title: "Startup & Services", description: "Init scripts, enabled services and scheduled tasks.", section: "System", href: "/cgi-bin/luci/admin/system/startup", packageName: "luci-mod-system" },
   { title: "Software & APK", description: "Install, remove and update native OpenWrt packages.", section: "System", href: "/cgi-bin/luci/admin/system/package-manager", packageName: "luci-app-package-manager" },
   { title: "Backup & Flash", description: "Back up configuration and inspect native firmware actions. Do not use generic flash actions for QuantumGrid AW1000 UBI images.", section: "System", href: "/cgi-bin/luci/admin/system/flash", packageName: "luci-mod-system" },
   { title: "FXS / RJ11 Phone", description: "AW1000 analogue phone service and line controls.", section: "Services", href: "/cgi-bin/luci/admin/services/fxs/status", packageName: "luci-app-fxs" },
+  { title: "Statistics Graphs", description: "Native collectd graphs for CPU, interfaces, memory and services.", section: "Status", href: "/cgi-bin/luci/admin/statistics/graphs", packageName: "luci-app-statistics" },
+  { title: "Statistics Setup", description: "Configure native collectd data collection plugins.", section: "Services", href: "/cgi-bin/luci/admin/statistics/collectd", packageName: "luci-app-statistics" },
+  { title: "Watchcat", description: "Configure connectivity watchdog and recovery actions.", section: "Services", href: "/cgi-bin/luci/admin/services/watchcat", packageName: "luci-app-watchcat" },
 ];
 
 function OpenWrtAppsPage() {
@@ -3175,7 +3203,7 @@ function OpenWrtAppsPage() {
       <div className="metrics">
         <Metric title="Package Manager" value={inventory?.manager.toUpperCase() ?? "N/A"} unit="" detail="Detected from the authenticated router" icon={Settings} />
         <Metric title="Installed Packages" value={inventory ? fmt(inventory.count) : "N/A"} unit="" detail={inventory?.truncated ? "Inventory is capped at 1,500 entries" : "Read from the local package database"} icon={HardDrive} />
-        <Metric title="Native App Modules" value={inventory ? fmt(installedAppCount) : "N/A"} unit="" detail={nativeOpenWrtApps.length + " launcher entries"} icon={Monitor} />
+        <Metric title="Available LuCI Pages" value={inventory ? fmt(installedAppCount) : "N/A"} unit="" detail={nativeOpenWrtApps.length + " launcher entries"} icon={Monitor} />
       </div>
 
       <Panel title="Native OpenWrt applications" eyebrow="SAME-ROUTER LUCI LINKS">
