@@ -31,6 +31,36 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Audit npm dependency advisories
+        shell: bash
+        run: |
+          set +e
+          npm audit --json > /tmp/quantumgrid-npm-audit.json
+          node --input-type=commonjs <<'NODE'
+          const fs = require("node:fs");
+          const report = JSON.parse(fs.readFileSync("/tmp/quantumgrid-npm-audit.json", "utf8"));
+          const vulnerabilities = report.vulnerabilities ?? {};
+          const findings = Object.entries(vulnerabilities).map(([name, item]) => ({
+            name,
+            severity: item.severity,
+            range: item.range,
+            direct: item.isDirect,
+            fixAvailable: item.fixAvailable,
+            advisories: (item.via ?? []).filter((entry) => typeof entry === "object").map((entry) => ({
+              title: entry.title,
+              url: entry.url,
+              range: entry.range,
+            })),
+          }));
+          console.log(JSON.stringify({
+            summary: report.metadata?.vulnerabilities ?? {},
+            findings,
+          }, null, 2));
+          if ((report.metadata?.vulnerabilities?.high ?? 0) > 0 ||
+              (report.metadata?.vulnerabilities?.critical ?? 0) > 0) {
+            process.exitCode = 1;
+          }
+          NODE
 
   website:
     name: Static website validation
