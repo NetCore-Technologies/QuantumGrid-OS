@@ -346,6 +346,8 @@ grep -Fq 'destination_ip_match = has_rule_value(section.dest_ip)' "$ROOT/files/u
 grep -Fq 'source_mac_match = has_rule_value(section.src_mac)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'export interface RouterFirewallRule' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'Firewall rule inventory' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'external-allow-rule:' "$ROOT/ui/quantumgrid/src/firewallPosture.ts"
+grep -Fq 'REVIEW EXTERNAL ALLOW' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'IP and MAC values are deliberately omitted' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'uci:foreach("firewall", "rule"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'if #result.rules < 64 then' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
