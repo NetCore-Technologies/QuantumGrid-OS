@@ -4426,15 +4426,19 @@ function action_dhcp_scope_update()
 	local netmask = type(network_config.netmask) == "string" and network_config.netmask or nil
 
 	local inventory = office_network_status(uci, fs)
+	if inventory.truncated then
+		respond(409, { ok = false, error = "The office network inventory is truncated. Resolve it before modifying DHCP ranges." })
+		return
+	end
 	local other_ranges = {}
-	for _, scope in ipairs(inventory.dhcp_scopes or {}) do
-		if scope.name ~= section and not scope.ignore then
-			if scope.range_valid then
+	for _, scope_config in ipairs(inventory.dhcp_scopes or {}) do
+		if scope_config.section ~= section and not scope_config.ignore then
+			if scope_config.range_valid then
 				table.insert(other_ranges, {
-					start = scope.pool_start_ip,
-					finish = scope.pool_end_ip
+					start = scope_config.pool_start_ip,
+					finish = scope_config.pool_end_ip
 				})
-			elseif scope.interface == network then
+			elseif scope_config.interface == network then
 				respond(409, { ok = false, error = "Another enabled DHCP scope on this interface has an uncalculable range. Resolve that scope before changing this pool." })
 				return
 			end
@@ -4453,40 +4457,68 @@ function action_dhcp_scope_update()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
+	local ipv6_modes, ipv6_error = validator.validate_dhcp_scope_ipv6_modes(
+		http.formvalue("dhcpv6", true) or "UNCHANGED",
+		http.formvalue("ra", true) or "UNCHANGED",
+		http.formvalue("ndp", true) or "UNCHANGED")
+	if not ipv6_modes then
+		respond(400, { ok = false, error = ipv6_error })
+		return
+	end
+	local ipv6_changed = ipv6_modes.dhcpv6 ~= "UNCHANGED"
+		or ipv6_modes.ra ~= "UNCHANGED" or ipv6_modes.ndp ~= "UNCHANGED"
+	if ipv6_changed and fs.access("/etc/init.d/odhcpd") ~= true then
+		respond(503, { ok = false, error = "The native odhcpd service is unavailable. IPv6 scope settings were not changed." })
+		return
+	end
 
 	local previous, snapshot_error = validator.snapshot_dhcp_scope_options(snapshot)
 	if not previous then
 		respond(500, { ok = false, error = snapshot_error or "The DHCP scope options could not be snapshotted safely." })
 		return
 	end
-	for option, value in pairs({
+	local staged_options = {
 		start = update.start,
 		limit = update.limit,
 		leasetime = update.lease_time
-	}) do
+	}
+	if ipv6_modes.dhcpv6 ~= "UNCHANGED" then staged_options.dhcpv6 = ipv6_modes.dhcpv6 end
+	if ipv6_modes.ra ~= "UNCHANGED" then staged_options.ra = ipv6_modes.ra end
+	if ipv6_modes.ndp ~= "UNCHANGED" then staged_options.ndp = ipv6_modes.ndp end
+	for option, value in pairs(staged_options) do
 		local set_ok, set_result = pcall(uci.set, uci, "dhcp", section, option, value)
 		if not set_ok or set_result ~= true then
 			pcall(uci.revert, uci, "dhcp")
-			respond(500, { ok = false, error = "The DHCP scope update could not be staged; dnsmasq was not restarted." })
+			respond(500, { ok = false, error = "The DHCP scope update could not be staged; services were not restarted." })
 			return
 		end
 	end
 	local commit_ok, committed = pcall(uci.commit, uci, "dhcp")
 	if not commit_ok or committed ~= true then
 		pcall(uci.revert, uci, "dhcp")
-		respond(500, { ok = false, error = "The DHCP scope update could not be committed; dnsmasq was not restarted." })
+		respond(500, { ok = false, error = "The DHCP scope update could not be committed; services were not restarted." })
 		return
 	end
 
-	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
-	if not reload_ok or reload_status ~= 0 then
+	local dnsmasq_reload_ok, dnsmasq_reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+	local odhcpd_reload_ok, odhcpd_reload_status = true, 0
+	if dnsmasq_reload_ok and dnsmasq_reload_status == 0 and ipv6_changed then
+		odhcpd_reload_ok, odhcpd_reload_status = pcall(sys.call, "/etc/init.d/odhcpd restart >/dev/null 2>&1")
+	end
+	if not dnsmasq_reload_ok or dnsmasq_reload_status ~= 0
+		or not odhcpd_reload_ok or odhcpd_reload_status ~= 0 then
 		local restored = true
 		for _, previous_option in ipairs(previous) do
 			local option_ok, option_result
 			if previous_option.present then
 				option_ok, option_result = pcall(uci.set, uci, "dhcp", section, previous_option.name, previous_option.value)
 			else
-				option_ok, option_result = pcall(uci.delete, uci, "dhcp", section, previous_option.name)
+				local current = uci:get("dhcp", section, previous_option.name)
+				if current == nil then
+					option_ok, option_result = true, true
+				else
+					option_ok, option_result = pcall(uci.delete, uci, "dhcp", section, previous_option.name)
+				end
 			end
 			if not option_ok or option_result ~= true then restored = false break end
 		end
@@ -4494,18 +4526,23 @@ function action_dhcp_scope_update()
 		if restored then
 			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "dhcp")
 		end
-		local rollback_reload_ok, rollback_reload_status = false, -1
+		local rollback_dnsmasq_ok, rollback_dnsmasq_status = false, -1
+		local rollback_odhcpd_ok, rollback_odhcpd_status = true, 0
 		if rollback_commit_ok and rollback_committed == true then
-			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+			rollback_dnsmasq_ok, rollback_dnsmasq_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+			if ipv6_changed then
+				rollback_odhcpd_ok, rollback_odhcpd_status = pcall(sys.call, "/etc/init.d/odhcpd restart >/dev/null 2>&1")
+			end
 		end
 		local rolled_back = restored and rollback_commit_ok and rollback_committed == true
-			and rollback_reload_ok and rollback_reload_status == 0
+			and rollback_dnsmasq_ok and rollback_dnsmasq_status == 0
+			and rollback_odhcpd_ok and rollback_odhcpd_status == 0
 		record_audit(http, "dhcp.scope.update", section, "failed")
 		respond(502, {
 			ok = false,
 			error = rolled_back
-				and "dnsmasq could not restart. The previous DHCP scope settings were restored."
-				or "dnsmasq restart failed and the previous DHCP scope could not be fully restored. Inspect DHCP configuration and service state locally.",
+				and "A DHCP service reload failed. The previous IPv4 pool and IPv6 RA/DHCPv6/NDP settings were restored."
+				or "A DHCP service reload failed and rollback could not be confirmed. Inspect DHCP, odhcpd and network service state locally.",
 			rolled_back = rolled_back
 		})
 		return
@@ -4520,7 +4557,12 @@ function action_dhcp_scope_update()
 		lease_time = update.lease_time,
 		pool_start_ip = update.pool_start_ip,
 		pool_end_ip = update.pool_end_ip,
+		dhcpv6 = uci:get("dhcp", section, "dhcpv6") or "",
+		ra = uci:get("dhcp", section, "ra") or "",
+		ndp = uci:get("dhcp", section, "ndp") or "",
 		restarted = true,
+		dnsmasq_restarted = true,
+		odhcpd_restarted = ipv6_changed,
 		rolled_back = false
 	})
 end
