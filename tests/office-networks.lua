@@ -205,8 +205,8 @@ local segment_vlans = {
   { name = "vlan20", device = "br-lan", vlan_id = 20, ports = { { name = "lan1", mode = "tagged" } } },
 }
 local segment_zones = {
-  { section = "cfg-corp", name = "corp", networks = { "corp" }, input = "REJECT", selected = true },
-  { section = "cfg-wan", name = "wan", networks = { "wan" }, selected = false },
+  { section = "cfg-corp", name = "corp", networks = { "corp" }, input = "REJECT", forward = "REJECT", selected = true },
+  { section = "cfg-wan", name = "wan", networks = { "wan" }, input = "REJECT", forward = "REJECT", selected = false },
 }
 local segment_scopes = {
   { section = "lan_dhcp", interface = "lan", ignore = false, range_valid = true,
@@ -244,6 +244,9 @@ reject_segment({ address = "8.8.8.8" }, "public address as office gateway")
 reject_segment({ netmask = "255.0.255.0" }, "non-contiguous subnet mask")
 reject_segment({ zones = { { section = "wan", name = "wan", networks = { "wan" }, selected = true } } }, "external firewall zone")
 reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp" }, selected = false } } }, "no selected firewall zone")
+reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp" }, input = "ACCEPT", forward = "REJECT", selected = true } } }, "firewall zone with open router input")
+reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp" }, input = "REJECT", forward = "ACCEPT", selected = true } } }, "firewall zone with open forwarding default")
+reject_segment({ vlans = { { name = "vlan20", device = "br-lan", vlan_id = 20, ports = {} } } }, "bridge VLAN without switch-port members")
 reject_segment({ scopes = { { ignore = false, range_valid = false } } }, "unresolved existing DHCP scope")
 
 local forwarding_zones = {
