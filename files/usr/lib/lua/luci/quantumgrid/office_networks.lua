@@ -82,8 +82,10 @@ local function ipv4_number(value)
 	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
 	if not a then return nil end
 	local octets = { tonumber(a), tonumber(b), tonumber(c), tonumber(d) }
-	for _, octet in ipairs(octets) do
-		if not octet or octet < 0 or octet > 255 or octet ~= math.floor(octet) then
+	local parts = { a, b, c, d }
+	for index, octet in ipairs(octets) do
+		if not octet or octet < 0 or octet > 255 or octet ~= math.floor(octet)
+			or tostring(octet) ~= parts[index] then
 			return nil
 		end
 	end
@@ -135,6 +137,20 @@ function validate_reservation(name, mac, ipv4)
 		return nil, "The IPv4 address must be a usable unicast host address."
 	end
 	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
+end
+
+function live_lease_conflict(contents, address, mac)
+	if type(contents) ~= "string" or type(address) ~= "string" or type(mac) ~= "string" then
+		return false
+	end
+	local wanted_mac = mac:lower()
+	for line in contents:gmatch("[^\\r\\n]+") do
+		local _, lease_mac, lease_ip = line:match("^(%S+)%s+(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)%s+(%d+%.%d+%.%d+%.%d+)%s")
+		if lease_ip == address and lease_mac and lease_mac:lower() ~= wanted_mac then
+			return true
+		end
+	end
+	return false
 end
 
 function ipv4_in_subnet(address, interface_address, netmask)
