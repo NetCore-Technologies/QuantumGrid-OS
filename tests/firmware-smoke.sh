@@ -27,9 +27,16 @@ grep -Fq 'OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"' "$ROOT/build.sh"
 grep -Fq 'QG_OPENWRT_REF:' "$ROOT/.github/workflows/firmware-release.yml"
 ! grep -Fq 'branches: [main]' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq '"qg-v*"' "$ROOT/.github/workflows/firmware-release.yml"
-grep -Fq 'squashfs-sysupgrade.bin' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'squashfs-factory.ubi' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'initramfs-uImage.itb' "$ROOT/.github/workflows/firmware-release.yml"
+! grep -Fq 'squashfs-sysupgrade.bin' "$ROOT/.github/workflows/firmware-release.yml"
+! grep -Fq 'CONFIG_PACKAGE_attendedsysupgrade-common=y' "$CONFIG"
+! grep -Fq 'CONFIG_PACKAGE_luci-app-attendedsysupgrade=y' "$CONFIG"
+! grep -Fq 'luci-app-attendedsysupgrade' "$ROOT/quantumgrid-configure.sh"
+grep -Fq 'verify-aw1000-ubi.sh' "$ROOT/.github/workflows/firmware-release.yml"
+grep -Fq 'Persistent firmware format: squashfs factory UBI (.ubi)' "$ROOT/.github/workflows/firmware-release.yml"
+! grep -Fq '`*-squashfs-sysupgrade.bin`' "$ROOT/README.md"
+grep -Fq 'There is no QuantumGrid AW1000' "$ROOT/docs/RECOVERY.md"
 grep -Fq 'function PhonePage(' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'admin/services/quantumgrid/api' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'loginToRouter' "$ROOT/ui/quantumgrid/src/App.tsx"
@@ -385,4 +392,27 @@ grep -Fq 'sampledAt >= sample.sampledAt' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'Bar heights compare readings within this session only' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq '.rf-history-track' "$ROOT/ui/quantumgrid/src/index.css"
 
-echo "QuantumGrid AW1000 target, pinned firmware source, RJ11, QMI history, Wi-Fi scan and release asset checks passed."
+# Exercise the UBI verifier with a valid header and reject corrupt or wrongly named files.
+UBI_TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$UBI_TEST_DIR"' EXIT
+VALID_UBI="$UBI_TEST_DIR/openwrt-arcadyan_aw1000-squashfs-factory.ubi"
+printf 'UBI#' > "$VALID_UBI"
+truncate -s 1048576 "$VALID_UBI"
+bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$VALID_UBI"
+
+INVALID_UBI="$UBI_TEST_DIR/openwrt-arcadyan_aw1000-squashfs-factory-bad.ubi"
+printf 'NOPE' > "$INVALID_UBI"
+truncate -s 1048576 "$INVALID_UBI"
+if bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$INVALID_UBI"; then
+    echo "ERROR: UBI verifier accepted an invalid header." >&2
+    exit 1
+fi
+
+WRONG_EXTENSION="$UBI_TEST_DIR/openwrt-arcadyan_aw1000-squashfs-factory.bin"
+cp "$VALID_UBI" "$WRONG_EXTENSION"
+if bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$WRONG_EXTENSION"; then
+    echo "ERROR: UBI verifier accepted a non-UBI filename." >&2
+    exit 1
+fi
+
+echo "QuantumGrid AW1000 target, UBI-only release validation, RJ11, QMI history and Wi-Fi scan checks passed."
