@@ -6944,3 +6944,72 @@ input::placeholder {
 @media(max-width:1050px) { .phone-hero { grid-template-columns:auto minmax(0,1fr); } .phone-readiness { grid-column:1/-1; min-height:auto; } .phone-feature-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
 @media(max-width:760px) { .phone-layout { grid-template-columns:1fr; } .phone-hero { grid-template-columns:1fr; padding:22px; } .phone-hero-actions { align-items:stretch; flex-direction:column; } .phone-hero-actions>a { width:100%; } .phone-feature-grid { grid-template-columns:1fr; } }
 @media(max-width:480px) { .phone-detail-grid { grid-template-columns:1fr; } }
+
+
+.platform-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.platform-detail-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.025);
+}
+.platform-detail-grid small,
+.platform-check-row small {
+  color: var(--muted2);
+  font-size: 7px;
+  letter-spacing: .09em;
+}
+.platform-detail-grid strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 10px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.platform-detail-grid .platform-detail-wide {
+  grid-column: 1 / -1;
+}
+.platform-check-list {
+  display: grid;
+  gap: 7px;
+}
+.platform-check-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.platform-check-row > span {
+  color: var(--text);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.platform-storage-row {
+  grid-template-columns: minmax(180px, 1.6fr) repeat(2, minmax(105px, 1fr));
+}
+@media (max-width: 760px) {
+  .platform-detail-grid {
+    grid-template-columns: 1fr;
+  }
+  .platform-detail-grid .platform-detail-wide {
+    grid-column: auto;
+  }
+  .platform-storage-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .platform-storage-row .device-title {
+    grid-column: 1 / -1;
+  }
+}
