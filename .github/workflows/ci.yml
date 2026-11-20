@@ -125,8 +125,8 @@ jobs:
             local actual_sha
             actual_sha="$(git rev-parse --verify "refs/remotes/origin/${branch}^{commit}" 2>/dev/null || true)"
 
-            if [[ -z "${actual_sha}" || "${actual_sha}" != "${expected_sha}" ]]; then
-              echo "SKIP ${branch}: branch head changed or no longer exists"
+            if [[ -z "${actual_sha}" ]]; then
+              echo "SKIP ${branch}: branch no longer exists"
               return 0
             fi
             if grep -Fxq "${branch}" <<< "${open_heads}"; then
@@ -135,6 +135,10 @@ jobs:
             fi
 
             if [[ -n "${merged_pr}" ]]; then
+              if [[ "${actual_sha}" != "${expected_sha}" ]]; then
+                echo "SKIP ${branch}: branch head differs from the verified merged PR"
+                return 0
+              fi
               local pr_head pr_merged_at
               pr_head="$(gh api "repos/${REPOSITORY}/pulls/${merged_pr}" --jq '.head.ref')"
               pr_merged_at="$(gh api "repos/${REPOSITORY}/pulls/${merged_pr}" --jq '.merged_at')"
@@ -143,8 +147,8 @@ jobs:
                 return 0
               fi
             else
-              if ! git merge-base --is-ancestor "${expected_sha}" "${TARGET_SHA}"; then
-                echo "SKIP ${branch}: its head is not contained in main history"
+              if ! git merge-base --is-ancestor "${actual_sha}" "${TARGET_SHA}"; then
+                echo "SKIP ${branch}: its current head is not contained in main history"
                 return 0
               fi
             fi
