@@ -1290,6 +1290,7 @@ export async function createRouterDhcpReservation(input: {
   form.set("mac", input.mac);
   form.set("ipv4", input.ipv4);
   form.set("network", input.network);
+  form.set("confirmed", "1");
   const response = await fetch(DHCP_RESERVATION_URL, {
     method: "POST",
     credentials: "same-origin",
