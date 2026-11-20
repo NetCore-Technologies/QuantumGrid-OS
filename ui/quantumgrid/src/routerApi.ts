@@ -454,6 +454,16 @@ export interface RouterPackage {
   manager: "apk" | "opkg";
 }
 
+export interface RouterPackageOperationResult {
+  ok: true;
+  manager: "apk" | "opkg";
+  operation: "update" | "install" | "remove";
+  package?: string;
+  exit_code: 0;
+  output: string;
+  sampled_at: number;
+}
+
 export interface RouterPackageInventory {
   ok: true;
   manager: "apk" | "opkg";
@@ -581,6 +591,7 @@ const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test"
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
+const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -690,6 +701,68 @@ export async function fetchRouterOverview(): Promise<RouterOverview> {
   return decodeOverview(response);
 }
 
+
+export async function runRouterPackageOperation(
+  operation: "update" | "install" | "remove",
+  packageName = "",
+  confirmed = false,
+): Promise<RouterPackageOperationResult> {
+  if (operation !== "update" && !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(packageName)) {
+    throw new Error("Enter a valid OpenWrt package name.");
+  }
+  if (!confirmed) {
+    throw new Error("Confirm the package operation before continuing.");
+  }
+  if (operation === "remove" &&
+      (/^kmod-/.test(packageName) || /^wpad/.test(packageName) || /^qca-nss/.test(packageName))) {
+    throw new Error("Kernel, Wi-Fi and NSS packages must be changed through an offline firmware build.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("operation", operation);
+  form.set("package", operation === "update" ? "" : packageName);
+  form.set("confirmed", "1");
+  const response = await fetch(PACKAGES_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Package management requires an active router administrator session."
+      : "The router returned an invalid package-operation response.");
+  }
+
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid package-operation response.");
+  }
+  if (!response.ok || !("ok" in payload) || payload.ok !== true) {
+    const message = "error" in payload && typeof payload.error === "string"
+      ? payload.error
+      : "The package manager rejected the operation.";
+    const output = "output" in payload && typeof payload.output === "string"
+      ? payload.output
+      : "";
+    throw new Error(output ? message + "\n" + output : message);
+  }
+  if (
+    !("manager" in payload) || (payload.manager !== "apk" && payload.manager !== "opkg") ||
+    !("operation" in payload) || payload.operation !== operation ||
+    !("exit_code" in payload) || payload.exit_code !== 0 ||
+    !("output" in payload) || typeof payload.output !== "string" ||
+    !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
+  ) {
+    throw new Error("The router did not confirm successful completion of the package operation.");
+  }
+  return payload as RouterPackageOperationResult;
+}
 
 export async function fetchRouterPackages(): Promise<RouterPackageInventory> {
   const response = await fetch(PACKAGES_URL, {
