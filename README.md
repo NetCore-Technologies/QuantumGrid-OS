@@ -283,7 +283,9 @@ the native `gpio-button-hotplug` driver and existing `/etc/rc.button` handler na
 dispatches events to the handler matching the kernel-reported button name; QuantumGrid deliberately
 does not wrap or replace these handlers, which may implement reset/WPS behaviour. GPIO ownership,
 event interception, direction changes and output writes remain read-only/locked until the board pin
-map and recovery-safe behaviour are validated.
+map and recovery-safe behaviour are validated. It also reads `/proc/bus/input/devices` to list
+kernel input-device names, handler names and `eventN` nodes, but it never opens those event devices
+or consumes input events.
 
 The same page enumerates Linux LED-class devices under `/sys/class/leds`. An administrator can
 change brightness only for a discovered device whose kernel trigger is explicitly reported as
