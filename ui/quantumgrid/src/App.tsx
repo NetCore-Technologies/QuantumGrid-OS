@@ -1860,7 +1860,7 @@ function NetworkControlPage({
         const delta = interfaceCounterDeltas.get(item.name);
         return [
           exportedAt, interfaceScope, interfaceSort, item.name, item.device, item.is_wan ? "WAN" : "LAN / other",
-          item.up ? "UP" : "DOWN", item.ipv4.join(" "), item.ipv6.join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
+          item.up ? "UP" : "DOWN", item.ipv4.join(" "), (item.ipv6 ?? []).join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
           item.rx_dropped, item.tx_bytes, item.tx_packets, item.tx_errors, item.tx_dropped,
           delta?.rxErrors, delta?.rxDropped, delta?.txErrors, delta?.txDropped,
         ];
@@ -1937,7 +1937,7 @@ function NetworkControlPage({
                 </div>
                 <div><small>STATE</small><b>{item.up ? "UP" : "DOWN"}</b></div>
                 <div><small>IPV4</small><b>{item.ipv4.length > 0 ? item.ipv4.join(", ") : "—"}</b></div>
-                <div><small>IPV6</small><b>{item.ipv6.length > 0 ? item.ipv6.join(", ") : "—"}</b></div>
+                <div><small>IPV6</small><b>{(item.ipv6 ?? []).length > 0 ? item.ipv6?.join(", ") : "—"}</b></div>
                 <div>
                   <small>RX TOTAL</small>
                   <b>{formatTrafficBytes(item.rx_bytes)}</b>
@@ -1976,7 +1976,7 @@ function NetworkControlPage({
         {!routerOverview ? (
           <div className="module-message">Waiting for authenticated router telemetry.</div>
         ) : !routerOverview.routes_available ? (
-          <div className="module-message">The router could not read its kernel routing table. The ip utility may not be installed.</div>
+          <div className="module-message">This router API does not report the kernel route inventory. Update the router firmware to enable this read-only view.</div>
         ) : visibleRoutes.length === 0 ? (
           <div className="module-message">No default routes were returned for the selected address family.</div>
         ) : (
