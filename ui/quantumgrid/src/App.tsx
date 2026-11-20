@@ -3689,10 +3689,27 @@ function WirelessConfigEditor({
   const [passphrase, setPassphrase] = useState("");
   const [hidden, setHidden] = useState(config.hidden);
   const [channel, setChannel] = useState(config.channel || "auto");
+  const [htmode, setHtmode] = useState(config.htmode || "auto");
+  const [txpower, setTxpower] = useState(config.txpower === undefined ? "auto" : String(config.txpower));
   const [allowOpen, setAllowOpen] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const encryptionForConfig = (value: string): "psk2" | "sae" | "sae-mixed" | "none" =>
+    value === "sae" || value === "sae-mixed" || value === "none" ? value : "psk2";
+  useEffect(() => {
+    setSsid(config.ssid);
+    setEncryption(encryptionForConfig(config.encryption));
+    setPassphrase("");
+    setHidden(config.hidden);
+    setChannel(config.channel || "auto");
+    setHtmode(config.htmode || "auto");
+    setTxpower(config.txpower === undefined ? "auto" : String(config.txpower));
+    setAllowOpen(false);
+    setConfirmDisconnect(false);
+    setNotice(null);
+  }, [config.section, config.ssid, config.encryption, config.hidden, config.channel, config.htmode, config.txpower, config.key_set]);
 
   const supportedChannels = [...new Set(
     (radio?.channels ?? []).filter((item) => !item.restricted).map((item) => item.channel),
@@ -3700,12 +3717,18 @@ function WirelessConfigEditor({
   const currentChannel = config.channel || "auto";
   const channelSupported = channel === "auto" || supportedChannels.includes(Number(channel)) ||
     channel === currentChannel;
+  const currentHtmode = config.htmode || "auto";
+  const supportedHtModes = [...new Set(config.htmodes ?? [])].sort();
+  const htmodeSupported = htmode === "auto" || supportedHtModes.includes(htmode) || htmode === currentHtmode;
+  const currentTxpower = config.txpower === undefined ? "auto" : String(config.txpower);
+  const supportedTxPower = [...new Set((config.txpower_levels ?? []).map((item) => item.dbm))].sort((left, right) => left - right);
+  const txpowerSupported = txpower === "auto" || supportedTxPower.includes(Number(txpower)) || txpower === currentTxpower;
   const encryptionChanged = encryption !== config.encryption;
   const passphraseRequired = encryption !== "none" &&
     (encryptionChanged || !config.key_set) && passphrase.length === 0;
   const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
-    hidden !== config.hidden || channel !== currentChannel;
-  const ready = changed && channelSupported && !passphraseRequired &&
+    hidden !== config.hidden || channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
+  const ready = changed && channelSupported && htmodeSupported && txpowerSupported && !passphraseRequired &&
     (encryption !== "none" || allowOpen) && confirmDisconnect && !saving;
 
   const apply = async () => {
@@ -3721,6 +3744,8 @@ function WirelessConfigEditor({
         key: passphrase,
         hidden,
         channel,
+        htmode,
+        txpower,
         allowOpen,
       });
       setPassphrase("");
@@ -3794,6 +3819,32 @@ function WirelessConfigEditor({
           </select>
           <small>Changing this channel affects every SSID on {config.radio}.</small>
         </label>
+        <label className="wireless-config-field">
+          <span>CHANNEL WIDTH / PHY MODE</span>
+          <select value={htmode} onChange={(event) => setHtmode(event.target.value)}>
+            <option value="auto">Auto / driver default</option>
+            {htmode !== "auto" && htmode === currentHtmode && !supportedHtModes.includes(htmode) ? (
+              <option value={htmode}>Current {htmode} (not in driver list)</option>
+            ) : null}
+            {supportedHtModes.map((mode) => (
+              <option value={mode} key={mode}>{mode}</option>
+            ))}
+          </select>
+          <small>Only driver-reported modes are selectable; width changes affect every AP on this radio.</small>
+        </label>
+        <label className="wireless-config-field">
+          <span>TRANSMIT POWER</span>
+          <select value={txpower} onChange={(event) => setTxpower(event.target.value)}>
+            <option value="auto">Auto / regulatory default</option>
+            {txpower !== "auto" && txpower === currentTxpower && !supportedTxPower.includes(Number(txpower)) ? (
+              <option value={txpower}>Current {txpower} dBm (not in driver list)</option>
+            ) : null}
+            {supportedTxPower.map((power) => (
+              <option value={String(power)} key={power}>{power} dBm</option>
+            ))}
+          </select>
+          <small>Values are limited to the radio driver’s reported power levels and local regulatory configuration.</small>
+        </label>
       </div>
       <div className="wireless-config-options">
         <label>
@@ -3808,7 +3859,7 @@ function WirelessConfigEditor({
         ) : null}
       </div>
       <div className="module-message wireless-config-note">
-        The existing AP is edited in place; no new SSID or radio is created. The passphrase is never returned by the router API. Leave it blank to retain the existing key. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
+        The existing AP is edited in place; no new SSID or radio is created. The passphrase is never returned by the router API. Leave it blank to retain the existing key. Channel, width and transmit power are radio-wide and may affect every SSID on this radio. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
       </div>
       <label className="wireless-config-confirm">
         <input type="checkbox" checked={confirmDisconnect} onChange={(event) => setConfirmDisconnect(event.target.checked)} />
@@ -3822,6 +3873,8 @@ function WirelessConfigEditor({
           setPassphrase("");
           setHidden(config.hidden);
           setChannel(currentChannel);
+          setHtmode(currentHtmode);
+          setTxpower(currentTxpower);
           setAllowOpen(false);
           setConfirmDisconnect(false);
           setNotice(null);
@@ -3831,6 +3884,8 @@ function WirelessConfigEditor({
         </button>
       </div>
       {!channelSupported ? <div className="module-message">Choose Auto or a non-restricted channel reported by the radio driver.</div> : null}
+      {!htmodeSupported ? <div className="module-message">Choose Auto or a width/PHY mode reported by the radio driver.</div> : null}
+      {!txpowerSupported ? <div className="module-message">Choose Auto or a transmit-power level reported by the radio driver.</div> : null}
       {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling protected security or changing the security mode.</div> : null}
     </div>
   );
