@@ -370,7 +370,7 @@ local result = office.build_inventory({
   },
   dhcp_available = true,
   dhcp_scopes = {
-    { name = "lan_dhcp", interface = "lan", start = "100", limit = "120", lease_time = "12h", ignore = false, dhcpv6 = "server", ra = "server" },
+    { name = "lan_dhcp", interface = "lan", start = "100", limit = "120", lease_time = "12h", ignore = false, dhcpv6 = "server", ra = "server", ndp = "disabled" },
     { name = "guest_dhcp", interface = "guest", start = "50", limit = "200", lease_time = "4h", ignore = true },
     { name = "corp_dhcp", interface = "corp", start = "150", limit = "20", lease_time = "8h", ignore = false },
     { name = "corp_overlap", interface = "corp", start = "160", limit = "20", lease_time = "8h", ignore = false },
@@ -417,6 +417,7 @@ assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" a
 assert(result.zones[1].section == "cfg_lan", "firewall zone UCI section IDs should be preserved for safe editing")
 assert(result.forwardings[1].section == "cfg-corp-printers", "firewall forwarding UCI section IDs must be preserved for safe removal")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
+assert(result.dhcp_scopes[1].dhcpv6 == "server" and result.dhcp_scopes[1].ra == "server" and result.dhcp_scopes[1].ndp == "disabled", "DHCPv6, RA and NDP modes must survive normalisation")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
 assert(result.dhcp_scopes[1].section == "lan_dhcp", "DHCP scopes must retain stable UCI section IDs")
 assert(result.dhcp_scopes[1].range_valid)
