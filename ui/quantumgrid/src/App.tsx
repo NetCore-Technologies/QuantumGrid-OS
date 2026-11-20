@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterSqmQueue, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -2927,7 +2927,7 @@ function DashboardPage({
   };
 
   if (page === "gaming") {
-    return <GamingControlPage routerOverview={routerOverview} />;
+    return <GamingControlPage routerOverview={routerOverview} refresh={refresh} />;
   }
 
   if (page === "security") {
@@ -3876,7 +3876,78 @@ function formatKbps(value: number | undefined): string {
   return value >= 1000 ? `${fmt(value / 1000, 2)} Mbps` : `${fmt(value)} Kbps`;
 }
 
-function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
+function SqmQueueEditor({
+  queue,
+  saving,
+  onApply,
+}: {
+  queue: RouterSqmQueue;
+  saving: boolean;
+  onApply: (section: string, enabled: boolean, download: number, upload: number) => Promise<void>;
+}) {
+  const [enabled, setEnabled] = useState(queue.enabled);
+  const [download, setDownload] = useState(queue.download_kbps === undefined ? "" : String(queue.download_kbps));
+  const [upload, setUpload] = useState(queue.upload_kbps === undefined ? "" : String(queue.upload_kbps));
+  const [acknowledged, setAcknowledged] = useState(false);
+
+  useEffect(() => {
+    setEnabled(queue.enabled);
+    setDownload(queue.download_kbps === undefined ? "" : String(queue.download_kbps));
+    setUpload(queue.upload_kbps === undefined ? "" : String(queue.upload_kbps));
+    setAcknowledged(false);
+  }, [queue.name, queue.enabled, queue.download_kbps, queue.upload_kbps]);
+
+  const parseRate = (value: string) => /^\\d+$/.test(value) ? Number(value) : NaN;
+  const downloadRate = parseRate(download);
+  const uploadRate = parseRate(upload);
+  const validRates = Number.isInteger(downloadRate) && Number.isInteger(uploadRate) &&
+    downloadRate >= 64 && downloadRate <= 1000000 &&
+    uploadRate >= 64 && uploadRate <= 1000000;
+  const changed = enabled !== queue.enabled ||
+    downloadRate !== (queue.download_kbps ?? NaN) ||
+    uploadRate !== (queue.upload_kbps ?? NaN);
+
+  return (
+    <div className="sqm-policy-editor">
+      <div className="sqm-policy-heading">
+        <div><strong>{queue.name}</strong><span>{queue.interface || "Interface not set"} · {queue.qdisc || "qdisc not set"}</span></div>
+        <Status active={queue.enabled}>{queue.enabled ? "ENABLED" : "DISABLED"}</Status>
+      </div>
+      <div className="sqm-policy-fields">
+        <label className="sqm-policy-enabled">
+          <input type="checkbox" checked={enabled} onChange={(event) => { setEnabled(event.target.checked); setAcknowledged(false); }} />
+          <span>Enable SQM shaping for this queue</span>
+        </label>
+        <label>
+          <span>Download limit (kbit/s)</span>
+          <input type="number" min={64} max={1000000} step={1} inputMode="numeric" value={download}
+            onChange={(event) => { setDownload(event.target.value); setAcknowledged(false); }} />
+        </label>
+        <label>
+          <span>Upload limit (kbit/s)</span>
+          <input type="number" min={64} max={1000000} step={1} inputMode="numeric" value={upload}
+            onChange={(event) => { setUpload(event.target.value); setAcknowledged(false); }} />
+        </label>
+      </div>
+      <label className="sqm-policy-ack">
+        <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
+        <span>I understand applying changes restarts SQM and may briefly interrupt traffic.</span>
+      </label>
+      <div className="sqm-policy-actions">
+        <span>Only enabled, download and upload options are changed. Interface, qdisc and script are preserved.</span>
+        <button className="hero-button" disabled={!changed || !validRates || !acknowledged || saving}
+          onClick={() => { void onApply(queue.name, enabled, downloadRate, uploadRate); }}>
+          {saving ? "Applying…" : "Apply & restart SQM"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function GamingControlPage({ routerOverview, refresh }: {
+  routerOverview: RouterOverview | null;
+  refresh: () => Promise<void>;
+}) {
   const sqm = routerOverview?.sqm;
   const queues = sqm?.queues ?? [];
   const enabledQueues = queues.filter((queue) => queue.enabled);
@@ -3895,6 +3966,28 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
   const cakeCount = qdiscs.filter((qdisc) => qdisc.kind.toLowerCase() === "cake").length;
   const queueConfigAvailable = sqm?.config_available === true && sqm.config_readable;
   const runtimeAvailable = sqm?.runtime_available === true;
+  const [savingQueue, setSavingQueue] = useState<string | null>(null);
+  const [sqmNotice, setSqmNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const applySqmQueue = async (section: string, enabled: boolean, download: number, upload: number) => {
+    setSavingQueue(section);
+    setSqmNotice(null);
+    try {
+      await updateRouterSqmQueue(section, enabled, download, upload);
+      setSqmNotice({ success: true, message: "SQM settings were saved and the service restarted." });
+      try {
+        await refresh();
+      } catch {
+        setSqmNotice({ success: true, message: "SQM settings were saved and the service restarted, but telemetry could not refresh." });
+      }
+    } catch (error) {
+      setSqmNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "SQM queue update failed.",
+      });
+    } finally {
+      setSavingQueue(null);
+    }
+  };
   const exportQdiscs = () => {
     if (visibleQdiscs.length === 0) return;
     const exportedAt = new Date().toISOString();
@@ -3963,6 +4056,24 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
         <div className="module-message">Queue rates are configured SQM values in kbit/s. An enabled UCI section alone does not prove that its shaper is attached to the live WAN path.</div>
       </Panel>
 
+      <Panel title="SQM queue controls" eyebrow="BOUNDED · EXISTING UCI QUEUES ONLY">
+        {!queueConfigAvailable ? (
+          <div className="module-message">SQM configuration is unavailable. No changes can be made.</div>
+        ) : queues.length === 0 ? (
+          <div className="module-message">No existing SQM queue sections are available to edit. QuantumGrid will not create a queue or guess a WAN interface.</div>
+        ) : (
+          <div className="sqm-policy-list">
+            {queues.map((queue) => (
+              <SqmQueueEditor key={queue.name} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} />
+            ))}
+          </div>
+        )}
+        {sqmNotice ? (
+          <div className={sqmNotice.success ? "sqm-policy-notice success" : "sqm-policy-notice error"} role="status">{sqmNotice.message}</div>
+        ) : null}
+        <div className="module-message">Limits must be whole numbers from 64 to 1,000,000 kbit/s. Applying a change restarts SQM. The router API modifies only the selected existing queue's enabled/download/upload values and attempts to restore the previous values if the restart fails.</div>
+      </Panel>
+
       <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={
         <div className="qdisc-export-actions">
           <Status active={runtimeAvailable}>{runtimeAvailable ? "RUNTIME READ" : "NOT AVAILABLE"}</Status>
@@ -4019,9 +4130,9 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
             ["PER-CLIENT PRIORITY", "NOT CONFIGURED"],
           ]} />
         </Panel>
-        <Panel title="Policy controls" eyebrow="READ-ONLY SAFETY">
-          <Status active={false}>CONFIGURATION LOCKED</Status>
-          <div className="module-message">Gaming profiles, CAKE options, bandwidth changes, traffic classes and per-client priority are not writable through this API. No changes are made to the router from this page.</div>
+        <Panel title="Advanced traffic policy" eyebrow="NOT YET AVAILABLE">
+          <Status active={false}>CLASSIFICATION LOCKED</Status>
+          <div className="module-message">This first write-capable SQM control changes only existing queue enable state and rate limits. CAKE tuning, firewall marks, per-client priority and traffic classification remain locked until their packet-path and rollback behaviour can be tested.</div>
         </Panel>
       </div>
     </div>
