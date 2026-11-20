@@ -12,6 +12,7 @@ local ALLOWED_ACTIONS = {
 	["sqm.update"] = true,
 	["dhcp.reservation.add"] = true,
 	["dhcp.reservation.remove"] = true,
+	["dhcp.scope.update"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
 	["package.feed.update"] = true,
