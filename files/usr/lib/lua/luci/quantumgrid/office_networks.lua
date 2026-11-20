@@ -163,6 +163,23 @@ function validate_reservation(name, mac, ipv4)
 	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
 end
 
+function snapshot_dhcp_scope_section(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp"
+		or type(snapshot[".name"]) ~= "string" then
+		return nil, "A named DHCP server section is required."
+	end
+	local values = {}
+	for key, value in pairs(snapshot) do
+		if type(key) == "string" and key:sub(1, 1) ~= "." then
+			values[key] = value
+		end
+	end
+	return {
+		name = snapshot[".name"],
+		values = values
+	}
+end
+
 function snapshot_dhcp_scope_enabled(snapshot)
 	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
 		return nil, "A DHCP scope snapshot is required."
