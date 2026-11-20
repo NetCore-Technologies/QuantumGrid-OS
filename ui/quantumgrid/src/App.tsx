@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { downloadRouterConfigBackup, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { downloadRouterConfigBackup, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -67,6 +67,7 @@ type Page =
   | "advanced"
   | "hardware"
   | "office"
+  | "audit"
   | "apps";
 
 type SetupStep = "welcome" | "account" | "wifi" | "wan";
@@ -102,6 +103,7 @@ const nav = [
   ["security", "Security", Shield],
   ["diagnostics", "Diagnostics", Activity],
   ["office", "Office Networks", Network],
+  ["audit", "Admin Audit", Shield],
   ["analytics", "Analytics", Database],
   ["system", "System", Cpu],
   ["advanced", "Advanced", Settings],
@@ -1263,7 +1265,7 @@ function Dashboard({
           </NavSection>
 
           <NavSection title="Office" collapsed={collapsed}>
-            {nav.slice(9, 10).map(([id, label, Icon]) => (
+            {nav.slice(9, 11).map(([id, label, Icon]) => (
               <NavButton
                 key={id}
                 label={label}
@@ -1279,7 +1281,7 @@ function Dashboard({
           </NavSection>
 
           <NavSection title="System" collapsed={collapsed}>
-            {nav.slice(10).map(([id, label, Icon]) => (
+            {nav.slice(11).map(([id, label, Icon]) => (
               <NavButton
                 key={id}
                 label={label}
@@ -3563,6 +3565,7 @@ function DashboardPage({
     advanced: ["Advanced", "Advanced Control", Settings],
     hardware: ["Hardware I/O", "GPIO, Buttons & LEDs", Cpu],
     office: ["Office Networks", "VLAN & Network Segmentation", Network],
+    audit: ["Admin Audit", "Administrative Change History", Shield],
     apps: ["OpenWrt Apps", "Native LuCI & APK", Monitor],
   };
 
@@ -3592,6 +3595,10 @@ function DashboardPage({
 
   if (page === "office") {
     return <OfficeNetworksPage routerOverview={routerOverview} />;
+  }
+
+  if (page === "audit") {
+    return <AuditLogPage />;
   }
 
   if (page === "apps") {
@@ -5008,6 +5015,155 @@ function GamingControlPage({ routerOverview, refresh }: {
           <div className="module-message">This first write-capable SQM control changes only existing queue enable state and rate limits. CAKE tuning, firewall marks, per-client priority and traffic classification remain locked until their packet-path and rollback behaviour can be tested.</div>
         </Panel>
       </div>
+    </div>
+  );
+}
+
+
+function AuditLogPage() {
+  const [inventory, setInventory] = useState<RouterAuditLog | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [outcomeFilter, setOutcomeFilter] = useState<"all" | "success" | "failed">("all");
+
+  const loadAudit = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setInventory(await fetchRouterAuditLog());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The administrative audit log is unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAudit();
+  }, [loadAudit]);
+
+  const events = inventory?.events ?? [];
+  const visible = events.filter((event) => {
+    const matchesOutcome = outcomeFilter === "all" || event.outcome === outcomeFilter;
+    const query = search.trim().toLocaleLowerCase();
+    const matchesText = !query || [
+      event.actor, event.remote_ip, event.action, event.target, event.outcome,
+    ].some((value) => value.toLocaleLowerCase().includes(query));
+    return matchesOutcome && matchesText;
+  });
+
+  const exportAudit = () => {
+    if (visible.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number>> = [
+      ["Exported at (UTC)", "Event at (UTC)", "Actor", "Remote IP", "Action", "Target", "Outcome"],
+      ...visible.map((event) => [
+        exportedAt,
+        new Date(event.timestamp * 1000).toISOString(),
+        event.actor,
+        event.remote_ip,
+        event.action,
+        event.target,
+        event.outcome,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-admin-audit-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
+  const successCount = events.filter((event) => event.outcome === "success").length;
+  const failedCount = events.filter((event) => event.outcome === "failed").length;
+
+  return (
+    <div className="module-page audit-log-page">
+      <section className="module-hero">
+        <div className="module-icon"><Shield size={25} /></div>
+        <div>
+          <div className="setup-kicker">OFFICE OPERATIONS · ADMINISTRATION HISTORY</div>
+          <h1>Admin Audit</h1>
+          <p>Review supported administrative operations, their outcome and source address. The logger excludes submitted credentials, Wi-Fi keys, VPN private keys and configuration values.</p>
+        </div>
+      </section>
+
+      <div className="metrics">
+        <Metric title="Stored Events" value={inventory ? fmt(inventory.count) : "N/A"} unit="" detail="Current + one rotated log" icon={Database} />
+        <Metric title="Successful Changes" value={inventory ? fmt(successCount) : "N/A"} unit="" detail="Supported operations recorded" icon={Check} />
+        <Metric title="Failed Operations" value={inventory ? fmt(failedCount) : "N/A"} unit="" detail="Execution failures recorded" icon={Activity} />
+        <Metric title="Returned Events" value={inventory ? fmt(events.length) : "N/A"} unit="" detail="Newest 200 records maximum" icon={HardDrive} />
+      </div>
+
+      <Panel
+        title="Administrative event history"
+        eyebrow={inventory?.available ? new Date(inventory.sampled_at * 1000).toLocaleString() : "LOCAL PERMISSION-RESTRICTED LOG"}
+        action={
+          <div className="audit-log-actions">
+            <button className="hero-button" onClick={() => { void loadAudit(); }} disabled={loading}>
+              <RefreshCw size={14} /> {loading ? "Refreshing…" : "Refresh"}
+            </button>
+            <button className="hero-button" onClick={exportAudit} disabled={visible.length === 0}>
+              <Download size={14} /> Export CSV
+            </button>
+          </div>
+        }
+      >
+        <div className="audit-log-toolbar">
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search action, target, actor or source address"
+            aria-label="Search audit events"
+          />
+          <select
+            value={outcomeFilter}
+            onChange={(event) => setOutcomeFilter(event.target.value as "all" | "success" | "failed")}
+            aria-label="Filter audit outcome"
+          >
+            <option value="all">All outcomes</option>
+            <option value="success">Successful</option>
+            <option value="failed">Failed</option>
+          </select>
+          <span>{loading ? "Loading…" : visible.length + " of " + events.length + " events"}</span>
+        </div>
+        {error ? <div className="module-message" role="alert">{error}</div> : null}
+        {!inventory && !loading ? (
+          <div className="module-message">The audit log could not be loaded.</div>
+        ) : inventory && !inventory.available ? (
+          <div className="module-message">No audit events have been recorded yet. Supported administrative operations will appear here after they execute.</div>
+        ) : visible.length === 0 ? (
+          <div className="module-message">{events.length === 0 ? "No audit events are available." : "No audit events match the current search and outcome filter."}</div>
+        ) : (
+          <div className="audit-event-list">
+            <div className="audit-event-row header"><span>TIME</span><span>ADMIN / SOURCE</span><span>ACTION / TARGET</span><span>OUTCOME</span></div>
+            {visible.map((event, index) => (
+              <div className="audit-event-row" key={event.timestamp + "-" + event.action + "-" + event.target + "-" + index}>
+                <div><strong>{new Date(event.timestamp * 1000).toLocaleString()}</strong><small>{new Date(event.timestamp * 1000).toISOString()}</small></div>
+                <div><b>{event.actor || "root"}</b><small>{event.remote_ip || "Source unavailable"}</small></div>
+                <div><b>{event.action}</b><small>{event.target || "No target recorded"}</small></div>
+                <Status active={event.outcome === "success"}>{event.outcome.toUpperCase()}</Status>
+              </div>
+            ))}
+          </div>
+        )}
+        {inventory?.truncated && <div className="module-message">The UI is showing the newest 200 records. Older records are not included in this response.</div>}
+      </Panel>
+
+      <Panel title="Audit coverage and retention" eyebrow="LOCAL OPERATIONAL HISTORY">
+        <div className="audit-coverage-grid">
+          <div><strong>Recorded actions</strong><span>First-boot administrator password setup, Wi-Fi changes, SQM changes, package install/remove/feed updates, LED brightness changes and configuration backup downloads.</span></div>
+          <div><strong>Secret handling</strong><span>Only allowlisted action names, outcome, target label, actor and source IP are stored. Submitted passwords, keys, SSIDs, package output and configuration values are excluded.</span></div>
+          <div><strong>Storage</strong><span>Stored under /etc/quantumgrid with restrictive directory/file permissions and one rotated log file. The read API returns at most 200 valid events.</span></div>
+          <div><strong>Limitations</strong><span>This is a local operational log, not tamper-proof accounting or a compliance certification. Root access can alter it, and some rejected or pre-validation requests are not recorded.</span></div>
+        </div>
+      </Panel>
     </div>
   );
 }
