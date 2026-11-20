@@ -28,7 +28,7 @@ local function valid_hostname(value)
 			return false
 		end
 	end
-	return not value:find("%.%.", 1, true)
+	return not value:find("..", 1, true)
 end
 
 function validate(input)
