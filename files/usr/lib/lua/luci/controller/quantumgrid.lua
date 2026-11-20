@@ -2567,6 +2567,12 @@ function action_dhcp_reservation()
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
 	end
+	local confirmed, confirmation_error = validator.validate_reservation_confirmation(
+		http.formvalue("confirmed", true))
+	if not confirmed then
+		respond(400, { ok = false, error = confirmation_error })
+		return
+	end
 	if fs.access("/etc/config/dhcp") ~= true or fs.access("/etc/config/network") ~= true then
 		respond(503, { ok = false, error = "DHCP and network configuration files must both be available." })
 		return
