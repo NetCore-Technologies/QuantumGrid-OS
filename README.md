@@ -181,10 +181,11 @@ Windows EXE/MSI installers for this project.
 
 ## Quality gates
 
-CI checks the existing React control centre with ESLint, TypeScript and Vite; validates the
-static website's local links and metadata; checks the website JavaScript; and verifies the AW1000
-profile, RJ11 packages and shell script syntax. The full OpenWrt firmware build runs only for a release tag or manual firmware workflow
-dispatch. Routine commits run the faster lint, website, Lua syntax and firmware integration gates
+CI checks the existing React control centre with ESLint, TypeScript and Vite; audits npm dependencies
+and fails on high/critical advisories; validates the static website's local links and metadata;
+checks the website JavaScript; verifies the AW1000 profile, RJ11 packages and shell script syntax;
+and runs GitHub CodeQL analysis for Python and JavaScript/TypeScript. The full OpenWrt firmware
+build runs only for a release tag or manual firmware workflow dispatch. Routine commits run the faster lint, website, Lua syntax and firmware integration gates
 without launching another full OpenWrt compilation.
 
 A successful compile does not prove RF performance, voice-call compatibility, emergency calling,
