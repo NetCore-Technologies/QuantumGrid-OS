@@ -114,6 +114,7 @@ jobs:
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
           sh -n files/usr/bin/quantumgrid-hardware-io
+          sh -n files/etc/uci-defaults/93-quantumgrid-audit-backup
           bash -n tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
