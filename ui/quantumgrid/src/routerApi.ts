@@ -90,6 +90,9 @@ export interface RouterWirelessConfig {
   encryption: string;
   hidden: boolean;
   key_set: boolean;
+  radius_auth_server: string;
+  radius_auth_port: number;
+  radius_secret_set: boolean;
   interface_disabled: boolean;
   radio_disabled: boolean;
   channel: string;
@@ -115,6 +118,9 @@ export interface RouterWirelessUpdateResult {
   htmode: string;
   txpower: string;
   key_set: boolean;
+  radius_auth_server?: string;
+  radius_auth_port?: number;
+  radius_secret_set: boolean;
   reloaded: true;
   rolled_back: false;
 }
@@ -1228,8 +1234,11 @@ export async function updateRouterWirelessConfig(input: {
   radio: string;
   section: string;
   ssid: string;
-  encryption: "psk2" | "sae" | "sae-mixed" | "none";
+  encryption: "psk2" | "sae" | "sae-mixed" | "wpa2" | "none";
   key: string;
+  radiusServer: string;
+  radiusPort: string;
+  radiusSecret: string;
   hidden: boolean;
   channel: string;
   htmode: string;
@@ -1252,6 +1261,32 @@ export async function updateRouterWirelessConfig(input: {
   if (input.encryption === "none" && (!input.allowOpen || input.key !== "")) {
     throw new Error("An open wireless network requires explicit confirmation and no passphrase.");
   }
+  if (input.encryption === "wpa2") {
+    const host = input.radiusServer;
+    const labels = host.split(".");
+    const hostnameValid = host.length >= 1 && host.length <= 253 &&
+      /^[A-Za-z0-9.-]+$/.test(host) && !host.startsWith(".") && !host.endsWith(".") &&
+      !host.includes("..") && labels.every((label) =>
+        label.length >= 1 && label.length <= 63 &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label));
+    const ipv4 = labels.length === 4 && labels.every((label) => /^\d+$/.test(label));
+    const ipv4Valid = !ipv4 || labels.every((label) => Number(label) >= 0 && Number(label) <= 255);
+    if (!hostnameValid || !ipv4Valid) {
+      throw new Error("RADIUS server must be an IPv4 address or valid DNS hostname.");
+    }
+    if (!/^[0-9]{1,5}$/.test(input.radiusPort) ||
+        Number(input.radiusPort) < 1 || Number(input.radiusPort) > 65535) {
+      throw new Error("RADIUS authentication port must be a whole number from 1 to 65535.");
+    }
+    const secretBytes = new TextEncoder().encode(input.radiusSecret).length;
+    if (input.radiusSecret.length > 0 &&
+        (secretBytes < 16 || secretBytes > 128 || hasControlCharacters(input.radiusSecret))) {
+      throw new Error("RADIUS shared secret must be 16–128 bytes and contain no control characters.");
+    }
+    if (input.key !== "") {
+      throw new Error("WPA2-Enterprise uses the RADIUS shared secret, not a personal Wi-Fi passphrase.");
+    }
+  }
   if (input.channel !== "auto" && !/^[0-9]{1,3}$/.test(input.channel)) {
     throw new Error("Choose Auto or a supported numeric channel.");
   }
@@ -1269,6 +1304,9 @@ export async function updateRouterWirelessConfig(input: {
   form.set("ssid", input.ssid);
   form.set("encryption", input.encryption);
   form.set("key", input.key);
+  form.set("radius_server", input.radiusServer);
+  form.set("radius_port", input.radiusPort);
+  form.set("radius_secret", input.radiusSecret);
   form.set("hidden", input.hidden ? "1" : "0");
   form.set("channel", input.channel);
   form.set("htmode", input.htmode);
