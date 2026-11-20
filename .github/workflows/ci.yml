@@ -97,7 +97,14 @@ jobs:
           sudo apt-get install -y lua5.1
       - name: Check shell and Lua syntax
         run: |
-          bash -n build.sh quantumgrid-configure.sh scripts/setup-aw1000-phone-feed.sh scripts/verify-aw1000-ubi.sh scripts/install-aw1000-ubi.sh scripts/verify-aw1000-release-manifest.sh tests/install-aw1000-ubi-smoke.sh tests/firmware-smoke.sh
+          bash -n build.sh
+          bash -n quantumgrid-configure.sh
+          bash -n scripts/setup-aw1000-phone-feed.sh
+          bash -n scripts/verify-aw1000-ubi.sh
+          bash -n scripts/install-aw1000-ubi.sh
+          bash -n scripts/verify-aw1000-release-manifest.sh
+          bash -n tests/install-aw1000-ubi-smoke.sh
+          bash -n tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/sqm.lua
