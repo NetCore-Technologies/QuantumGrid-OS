@@ -316,17 +316,21 @@ hostname, unicast MAC, canonical IPv4 address, subnet membership, duplicate rese
 current DHCP leases. Editing preserves the original UCI host section and unrelated dnsmasq options;
 removal targets a validated UCI host-section ID and snapshots the original section. All three
 operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
+New DHCP scopes can be created on an existing static IPv4 LAN only when that interface has no
+DHCP scope already. Creation validates the pool boundary and overlaps with every calculable active
+pool, and fails closed if any existing active pool has an unknown range. It adds a native DHCP UCI
+section and removes it again if dnsmasq cannot restart.
+
 Existing DHCP scope edits are limited to start offset, pool size and lease duration. The server
 checks address boundaries and collisions against other enabled scopes, and fails closed if a sibling
 scope on the same interface has an uncalculable range. It snapshots the three changed UCI options,
 restarts dnsmasq and attempts rollback on failure. Existing scopes can also be explicitly enabled or
 disabled. Enabling validates the stored pool against the network subnet and active sibling pools;
 both directions restart dnsmasq and restore the previous `ignore` setting if the restart fails.
-These controls do not create new scopes or change DNS, DHCPv6, RA or network interface settings.
+These controls do not create or alter network interfaces, VLANs, firewall zones, DNS, DHCPv6 or RA settings.
 
 The selected LAN is used for reservation subnet validation only: a standard dnsmasq host section is
-global to that dnsmasq instance, not a per-VLAN reservation binding. Creating or removing DHCP server
-scopes, changing network interfaces, and migrating active clients are not exposed yet.
+global to that dnsmasq instance, not a per-VLAN reservation binding. Removing DHCP server scopes, changing network interfaces, and migrating active clients are not exposed yet.
 
 This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
 switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
@@ -393,7 +397,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/edit/remove, and existing DHCP pool edit/enable/disable controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
