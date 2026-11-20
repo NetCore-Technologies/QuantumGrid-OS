@@ -12,11 +12,13 @@ esac
 
 if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     OPENWRT_REPO="${QG_NSS_OPENWRT_REPO:-https://github.com/qosmio/openwrt-ipq.git}"
-    OPENWRT_REF="${QG_NSS_OPENWRT_REF:-d6848fa2ea00193b5b7d3973e3990da7f608027c}"
+    OPENWRT_REF="${QG_NSS_OPENWRT_REF:-25.12-nss}"
+    OPENWRT_EXPECTED_SHA="${QG_NSS_EXPECTED_SHA:-d6848fa2ea00193b5b7d3973e3990da7f608027c}"
     BUILD_PROFILE="AW1000 NSS (experimental)"
 else
     OPENWRT_REPO="${QG_OPENWRT_REPO:-https://github.com/openwrt/openwrt.git}"
     OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"
+    OPENWRT_EXPECTED_SHA=""
     BUILD_PROFILE="AW1000 stable OpenWrt"
 fi
 BUILD_JOBS="${QG_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)}"
@@ -62,6 +64,9 @@ git -C "$OPENWRT_DIR" remote get-url origin >/dev/null 2>&1 || die "OpenWrt chec
 git -C "$OPENWRT_DIR" fetch --depth 1 origin "$OPENWRT_REF"
 git -C "$OPENWRT_DIR" checkout --detach FETCH_HEAD
 OPENWRT_SHA="$(git -C "$OPENWRT_DIR" rev-parse HEAD)"
+if [[ "$QG_ENABLE_NSS" == "1" && "$OPENWRT_SHA" != "$OPENWRT_EXPECTED_SHA" ]]; then
+    die "NSS source ref resolved to $OPENWRT_SHA, expected the reviewed commit $OPENWRT_EXPECTED_SHA"
+fi
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 
 printf '\n[3/9] Registering pinned AW1000 RJ11 phone feed...\n'
