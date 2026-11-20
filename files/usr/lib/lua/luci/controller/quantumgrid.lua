@@ -1147,24 +1147,25 @@ function action_wireless_update()
 	end
 
 	local current_encryption = uci:get("wireless", update.section, "encryption") or "none"
+	local enterprise_encryption = update.encryption == "wpa2" or update.encryption == "wpa3"
 	local current_key = uci:get("wireless", update.section, "key")
-	if update.encryption ~= "none" and update.encryption ~= "wpa2" and not update.key_supplied
+	if update.encryption ~= "none" and not enterprise_encryption and not update.key_supplied
 		and (current_encryption ~= update.encryption or type(current_key) ~= "string" or current_key == "") then
 		respond(400, { ok = false, error = "Enter a new passphrase when enabling or changing wireless security." })
 		return
 	end
 	local current_radius_server = uci:get("wireless", update.section, "auth_server") or ""
 	local current_radius_secret = uci:get("wireless", update.section, "auth_secret")
-	if update.encryption == "wpa2" and not update.radius_secret_supplied
-		and (current_encryption ~= "wpa2" or current_radius_server ~= update.radius_server
+	if enterprise_encryption and not update.radius_secret_supplied
+		and (not (current_encryption == "wpa2" or current_encryption == "wpa3") or current_radius_server ~= update.radius_server
 			or type(current_radius_secret) ~= "string" or current_radius_secret == "") then
 		respond(400, { ok = false, error = "Enter a new RADIUS shared secret when enabling enterprise security or changing its server." })
 		return
 	end
 	local current_accounting_server = uci:get("wireless", update.section, "acct_server") or ""
 	local current_accounting_secret = uci:get("wireless", update.section, "acct_secret")
-	if update.encryption == "wpa2" and update.accounting_server ~= "" and not update.accounting_secret_supplied
-		and (current_encryption ~= "wpa2" or current_accounting_server ~= update.accounting_server
+	if enterprise_encryption and update.accounting_server ~= "" and not update.accounting_secret_supplied
+		and (not (current_encryption == "wpa2" or current_encryption == "wpa3") or current_accounting_server ~= update.accounting_server
 			or type(current_accounting_secret) ~= "string" or current_accounting_secret == "") then
 		respond(400, { ok = false, error = "Enter a new RADIUS accounting shared secret when enabling accounting or changing its server." })
 		return
@@ -1179,7 +1180,7 @@ function action_wireless_update()
 		end
 		snapshot.radio[option] = value or false
 	end
-	for _, option in ipairs({ "ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret" }) do
+	for _, option in ipairs({ "ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
@@ -1204,7 +1205,7 @@ function action_wireless_update()
 		encryption = update.encryption,
 		hidden = update.hidden
 	}
-	if update.encryption == "wpa2" then
+	if enterprise_encryption then
 		interface_updates.auth_server = update.radius_server
 		interface_updates.auth_port = update.radius_port
 		if update.radius_secret_supplied then
@@ -1215,7 +1216,12 @@ function action_wireless_update()
 		interface_updates.auth_port = false
 		interface_updates.auth_secret = false
 	end
-	if update.encryption == "wpa2" and update.accounting_server ~= "" then
+	if update.encryption == "wpa3" then
+		interface_updates.ieee80211w = "2"
+	elseif current_encryption == "wpa3" then
+		interface_updates.ieee80211w = false
+	end
+	if enterprise_encryption and update.accounting_server ~= "" then
 		interface_updates.acct_server = update.accounting_server
 		interface_updates.acct_port = update.accounting_port
 		if update.accounting_secret_supplied then
@@ -1289,13 +1295,13 @@ function action_wireless_update()
 		channel = update.channel,
 		htmode = update.htmode,
 		txpower = update.txpower,
-		key_set = update.encryption ~= "none" and update.encryption ~= "wpa2",
-		radius_auth_server = update.encryption == "wpa2" and update.radius_server or nil,
-		radius_auth_port = update.encryption == "wpa2" and tonumber(update.radius_port) or nil,
-		radius_secret_set = update.encryption == "wpa2",
-		accounting_server = update.encryption == "wpa2" and update.accounting_server ~= "" and update.accounting_server or nil,
-		accounting_port = update.encryption == "wpa2" and update.accounting_server ~= "" and tonumber(update.accounting_port) or nil,
-		accounting_secret_set = update.encryption == "wpa2" and update.accounting_server ~= "",
+		key_set = update.encryption ~= "none" and not enterprise_encryption,
+		radius_auth_server = enterprise_encryption and update.radius_server or nil,
+		radius_auth_port = enterprise_encryption and tonumber(update.radius_port) or nil,
+		radius_secret_set = enterprise_encryption,
+		accounting_server = enterprise_encryption and update.accounting_server ~= "" and update.accounting_server or nil,
+		accounting_port = enterprise_encryption and update.accounting_server ~= "" and tonumber(update.accounting_port) or nil,
+		accounting_secret_set = enterprise_encryption and update.accounting_server ~= "",
 		reloaded = true,
 		rolled_back = false
 	})
