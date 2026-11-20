@@ -73,6 +73,8 @@ function build_inventory(source)
 	source = type(source) == "table" and source or {}
 	local result = {
 		available = source.available == true,
+		firewall_available = source.firewall_available == true,
+		wireless_available = source.wireless_available == true,
 		truncated = false,
 		interfaces = {},
 		bridges = {},
