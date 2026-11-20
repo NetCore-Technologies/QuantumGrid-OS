@@ -451,6 +451,161 @@ function snapshot_firewall_zone_policy_options(snapshot)
 	return { section = snapshot[".name"], options = result }
 end
 
+local RESERVED_INTERFACE_NAMES = {
+	lan = true, wan = true, wan6 = true, loopback = true,
+	wwan = true, cellular = true
+}
+
+local function private_ipv4(value)
+	local address = ipv4_number(value)
+	if not address then return false end
+	local first = math.floor(address / 16777216)
+	local second = math.floor(address / 65536) % 256
+	return first == 10 or
+		(first == 172 and second >= 16 and second <= 31) or
+		(first == 192 and second == 168)
+end
+
+local function ipv4_subnet_bounds(address, netmask)
+	local host = ipv4_number(address)
+	local prefix = ipv4_prefix(netmask)
+	if not host or not prefix then return nil end
+	local size = 2 ^ (32 - prefix)
+	local network = math.floor(host / size) * size
+	local broadcast = network + size - 1
+	if host <= network or host >= broadcast then return nil end
+	return { first = network, last = broadcast, prefix = prefix }
+end
+
+local function ipv4_overlaps(left, right)
+	return left and right and left.first <= right.last and right.first <= left.last
+end
+
+function validate_office_segment(name, bridge_name, vlan_id, address, netmask,
+	start_value, limit_value, lease_time, interfaces, bridges, vlans, zones, scopes)
+	if type(name) ~= "string" or #name < 1 or #name > 32
+		or not name:match("^[A-Za-z][A-Za-z0-9_%-]*$") or RESERVED_INTERFACE_NAMES[name] then
+		return nil, "Network name must be 1–32 letters, digits, underscores or hyphens and must not use a reserved interface name."
+	end
+	if type(bridge_name) ~= "string" or #bridge_name < 1 or #bridge_name > 64
+		or not bridge_name:match("^[%w_.%-]+$") then
+		return nil, "Select an existing VLAN-filtered bridge."
+	end
+	if type(vlan_id) ~= "string" or #vlan_id > 4 or not vlan_id:match("^[1-9]%d*$") then
+		return nil, "Select an existing VLAN ID from 1 to 4094."
+	end
+	local numeric_vlan = tonumber(vlan_id)
+	if not numeric_vlan or numeric_vlan < 1 or numeric_vlan > 4094 then
+		return nil, "Select an existing VLAN ID from 1 to 4094."
+	end
+
+	local selected_bridge = nil
+	for _, bridge in ipairs(type(bridges) == "table" and bridges or {}) do
+		if type(bridge) == "table" and bridge.name == bridge_name then
+			selected_bridge = bridge
+			break
+		end
+	end
+	if not selected_bridge or selected_bridge.vlan_filtering ~= true then
+		return nil, "The selected bridge must already exist with VLAN filtering enabled."
+	end
+
+	local selected_vlan = nil
+	for _, vlan in ipairs(type(vlans) == "table" and vlans or {}) do
+		if type(vlan) == "table" and vlan.device == bridge_name and tonumber(vlan.vlan_id) == numeric_vlan then
+			selected_vlan = vlan
+			break
+		end
+	end
+	if not selected_vlan or type(selected_vlan.name) ~= "string" or selected_vlan.name == "" then
+		return nil, "The selected bridge VLAN must already exist before an L3 network can be provisioned."
+	end
+	local device = bridge_name .. "." .. tostring(numeric_vlan)
+	if #device > 64 then return nil, "The generated VLAN device name is too long." end
+
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" then
+			if iface.name == name then
+				return nil, "A network interface with this name already exists."
+			end
+			if iface.device == device then
+				return nil, "This bridge VLAN device is already assigned to another network interface."
+			end
+		end
+	end
+
+	if not private_ipv4(address) then
+		return nil, "Use a canonical RFC1918 private IPv4 address for the new office gateway."
+	end
+	local subnet = ipv4_subnet_bounds(address, netmask)
+	if not subnet then
+		return nil, "The gateway must be a usable host address with a contiguous IPv4 netmask from /1 through /30."
+	end
+
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" then
+			local existing_addresses = values(iface.ipv4, 16)
+			for _, existing_address in ipairs(existing_addresses) do
+				local existing_host = ipv4_number(existing_address)
+				if existing_host == ipv4_number(address) then
+					return nil, "The new gateway address is already assigned to another interface."
+				end
+				local existing_subnet = ipv4_subnet_bounds(existing_address, iface.netmask)
+				if existing_subnet and ipv4_overlaps(subnet, existing_subnet) then
+					return nil, "The new office subnet overlaps an existing static IPv4 interface subnet."
+				end
+			end
+		end
+	end
+
+	local selected_zone = nil
+	local zone_name, zone_section = nil, nil
+	-- The caller marks exactly one selected zone after validating its section identifier.
+	if type(zones) == "table" then
+		for _, candidate in ipairs(zones) do
+			if type(candidate) == "table" and candidate.selected == true then
+				if selected_zone then return nil, "Select exactly one existing firewall zone." end
+				selected_zone = candidate
+				zone_name, zone_section = candidate.name, candidate.section
+			end
+		end
+	end
+	if not selected_zone or type(selected_zone.section) ~= "string" or selected_zone.section == ""
+		or is_external_zone(selected_zone) then
+		return nil, "Choose an existing internal firewall zone. External WAN/WWAN zones cannot host an office LAN."
+	end
+
+	local other_ranges = {}
+	for _, scope in ipairs(type(scopes) == "table" and scopes or {}) do
+		if type(scope) == "table" and not scope.ignore then
+			if scope.range_valid then
+				table.insert(other_ranges, { start = scope.pool_start_ip, finish = scope.pool_end_ip })
+			else
+				return nil, "An existing enabled DHCP pool has an invalid or unknown range. Resolve it before creating another office network."
+			end
+		end
+	end
+	local pool, pool_error = validate_dhcp_scope_update(
+		start_value, limit_value, lease_time, address, netmask, other_ranges)
+	if not pool then return nil, pool_error end
+
+	return {
+		name = name,
+		bridge = bridge_name,
+		vlan_id = numeric_vlan,
+		device = device,
+		address = address,
+		netmask = netmask,
+		zone_section = selected_zone.section,
+		zone_name = selected_zone.name,
+		dhcp_start = pool.start,
+		dhcp_limit = pool.limit,
+		lease_time = pool.lease_time,
+		pool_start_ip = pool.pool_start_ip,
+		pool_end_ip = pool.pool_end_ip
+	}
+end
+
 function validate_office_forwarding(source, destination, zones, existing)
 	if type(source) ~= "string" or not source:match("^[%w_.%-]+$") or #source > 64 then
 		return nil, "Select an existing source firewall zone."
