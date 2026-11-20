@@ -6588,6 +6588,35 @@ input::placeholder {
 
 /* ---------- WIFI CLIENT TABLE ---------- */
 
+.wifi-station-tools {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(150px, .65fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 13px;
+}
+.wifi-station-tools input,
+.wifi-station-tools select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font: inherit;
+  font-size: 8px;
+}
+.wifi-station-tools span {
+  color: var(--muted2);
+  font-size: 7px;
+  white-space: nowrap;
+}
+.wifi-station-tools .hero-button {
+  padding: 8px 10px;
+  font-size: 8px;
+}
 .wifi-client-table {
   margin-top: 14px;
 }
@@ -6786,6 +6815,12 @@ input::placeholder {
     width: 100%;
   }
 
+  .wifi-station-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+  .wifi-station-tools span {
+    white-space: normal;
+  }
   .wifi-client-table-head {
     display: none;
   }

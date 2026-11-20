@@ -1500,11 +1500,70 @@ function WirelessClientList({
   available: boolean;
   leases: RouterClient[];
 }) {
+  const [filter, setFilter] = useState("");
+  const [sort, setSort] = useState<"signal" | "rx" | "tx" | "mac">("signal");
+  const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
+  const visibleClients = clients
+    .filter((client) => {
+      const query = filter.trim().toLocaleLowerCase();
+      return !query || [
+        client.mac, client.ssid, client.ifname, client.radio, client.band,
+        hostnames.get(client.mac.toLowerCase()) ?? "",
+      ].some((value) => value.toLocaleLowerCase().includes(query));
+    })
+    .slice()
+    .sort((left, right) => {
+      if (sort === "mac") return left.mac.localeCompare(right.mac);
+      if (sort === "rx") return (right.rx_rate_mbps ?? -Infinity) - (left.rx_rate_mbps ?? -Infinity);
+      if (sort === "tx") return (right.tx_rate_mbps ?? -Infinity) - (left.tx_rate_mbps ?? -Infinity);
+      return (right.signal_dbm ?? -Infinity) - (left.signal_dbm ?? -Infinity);
+    });
+  const exportStations = () => {
+    if (visibleClients.length === 0) return;
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Hostname", "SSID", "MAC", "Radio", "Interface", "Band", "Authorized", "Signal average dBm", "Signal current dBm", "Noise dBm", "RX Mbps", "TX Mbps", "RX PHY", "TX PHY", "RX bytes", "RX packets", "TX bytes", "TX packets", "Connected seconds", "Inactive ms", "TX retries", "TX failed"],
+      ...visibleClients.map((client) => [
+        hostnames.get(client.mac.toLowerCase()) ?? "", client.ssid, client.mac, client.radio, client.ifname,
+        client.band, client.authorized, client.signal_avg_dbm, client.signal_current_dbm, client.noise_dbm,
+        client.rx_rate_mbps, client.tx_rate_mbps, formatWifiRateDetails(client.rx_details),
+        formatWifiRateDetails(client.tx_details), client.rx_bytes, client.rx_packets,
+        client.tx_bytes, client.tx_packets, client.connected_seconds, client.inactive_ms,
+        client.tx_retries, client.tx_failed,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `quantumgrid-wifi-stations-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
   if (!available) return <div className="module-message">Wireless association telemetry is not available from this router API.</div>;
   if (clients.length === 0) return <div className="module-message">No associated Wi-Fi stations were reported by iwinfo.</div>;
-  const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
+
   return (
     <div className="wifi-client-table">
+      <div className="wifi-station-tools">
+        <input
+          type="search"
+          aria-label="Filter associated Wi-Fi clients"
+          placeholder="Filter hostname, MAC, SSID or radio"
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+        />
+        <select aria-label="Sort associated Wi-Fi clients" value={sort} onChange={(event) => setSort(event.target.value as "signal" | "rx" | "tx" | "mac")}>
+          <option value="signal">Strongest signal</option>
+          <option value="rx">Highest RX rate</option>
+          <option value="tx">Highest TX rate</option>
+          <option value="mac">MAC address A–Z</option>
+        </select>
+        <span>{visibleClients.length} of {clients.length} clients</span>
+        <button className="hero-button wifi-export-button" onClick={exportStations} disabled={visibleClients.length === 0}>Export station CSV</button>
+      </div>
       <div className="wifi-client-table-head">
         <span>DEVICE / MAC</span>
         <span>RADIO</span>
@@ -1512,7 +1571,7 @@ function WirelessClientList({
         <span>RX / TX RATE</span>
         <span>STATE</span>
       </div>
-      {clients.map((client) => (
+      {visibleClients.map((client) => (
         <div className="wifi-client-table-row" key={`${client.ifname}-${client.mac}`}>
           <div className="wifi-client-name">
             <div className="device-icon"><Wifi size={15} /></div>
