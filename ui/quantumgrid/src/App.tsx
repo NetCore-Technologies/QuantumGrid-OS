@@ -3594,7 +3594,7 @@ function DashboardPage({
   }
 
   if (page === "office") {
-    return <OfficeNetworksPage routerOverview={routerOverview} refresh={refresh} />;;
+    return <OfficeNetworksPage routerOverview={routerOverview} refresh={refresh} />;
   }
 
   if (page === "audit") {
