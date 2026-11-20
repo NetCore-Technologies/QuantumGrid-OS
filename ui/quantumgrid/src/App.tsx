@@ -5954,13 +5954,25 @@ function DhcpScopeEditor({ scope, refresh }: {
   const [dhcpv6, setDhcpv6] = useState<"UNCHANGED" | "disabled" | "server">("UNCHANGED");
   const [ra, setRa] = useState<"UNCHANGED" | "disabled" | "server">("UNCHANGED");
   const [ndp, setNdp] = useState<"UNCHANGED" | "disabled">("UNCHANGED");
+  const [raFlags, setRaFlags] = useState<"UNCHANGED" | "none" | "other-config" | "managed-config" | "managed-config+other-config">("UNCHANGED");
+  const [raSlaac, setRaSlaac] = useState<"UNCHANGED" | "0" | "1">("UNCHANGED");
+  const [raDns, setRaDns] = useState<"UNCHANGED" | "0" | "1">("UNCHANGED");
+  const [raPreference, setRaPreference] = useState<"UNCHANGED" | "low" | "medium" | "high">("UNCHANGED");
+  const [raLifetime, setRaLifetime] = useState("UNCHANGED");
+  const [dhcpv6Na, setDhcpv6Na] = useState<"UNCHANGED" | "0" | "1">("UNCHANGED");
+  const [dhcpv6Pd, setDhcpv6Pd] = useState<"UNCHANGED" | "0" | "1">("UNCHANGED");
+  const [dhcpv6AssignAll, setDhcpv6AssignAll] = useState<"UNCHANGED" | "0" | "1">("UNCHANGED");
+  const [dhcpv6PdMinLen, setDhcpv6PdMinLen] = useState("UNCHANGED");
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const changed = start !== scope.start || limit !== String(scope.limit ?? "") ||
     leaseTime !== (scope.lease_time || "12h") || dhcpv6 !== "UNCHANGED" ||
-    ra !== "UNCHANGED" || ndp !== "UNCHANGED";
+    ra !== "UNCHANGED" || ndp !== "UNCHANGED" || raFlags !== "UNCHANGED" ||
+    raSlaac !== "UNCHANGED" || raDns !== "UNCHANGED" || raPreference !== "UNCHANGED" ||
+    raLifetime !== "UNCHANGED" || dhcpv6Na !== "UNCHANGED" || dhcpv6Pd !== "UNCHANGED" ||
+    dhcpv6AssignAll !== "UNCHANGED" || dhcpv6PdMinLen !== "UNCHANGED";
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!confirmed || !changed || busy || scope.ignore) return;
@@ -5975,6 +5987,15 @@ function DhcpScopeEditor({ scope, refresh }: {
         dhcpv6,
         ra,
         ndp,
+        ra_flags: raFlags,
+        ra_slaac: raSlaac,
+        ra_dns: raDns,
+        ra_preference: raPreference,
+        ra_lifetime: raLifetime,
+        dhcpv6_na: dhcpv6Na,
+        dhcpv6_pd: dhcpv6Pd,
+        dhcpv6_assignall: dhcpv6AssignAll,
+        dhcpv6_pd_min_len: dhcpv6PdMinLen,
       });
       setNotice({
         success: true,
@@ -5986,6 +6007,15 @@ function DhcpScopeEditor({ scope, refresh }: {
       setDhcpv6("UNCHANGED");
       setRa("UNCHANGED");
       setNdp("UNCHANGED");
+      setRaFlags("UNCHANGED");
+      setRaSlaac("UNCHANGED");
+      setRaDns("UNCHANGED");
+      setRaPreference("UNCHANGED");
+      setRaLifetime("UNCHANGED");
+      setDhcpv6Na("UNCHANGED");
+      setDhcpv6Pd("UNCHANGED");
+      setDhcpv6AssignAll("UNCHANGED");
+      setDhcpv6PdMinLen("UNCHANGED");
       refresh();
     } catch (cause) {
       setNotice({
@@ -6047,6 +6077,99 @@ function DhcpScopeEditor({ scope, refresh }: {
                 <option value="disabled">Disabled</option>
               </select>
             </label>
+          </div>
+          <div className="office-dhcp-ipv6-advanced">
+            <div className="office-dhcp-ipv6-advanced-heading">
+              <strong>Advanced IPv6 address allocation</strong>
+              <span>RA flags, SLAAC, DNS advertisement and DHCPv6 prefix services</span>
+            </div>
+            <div className="office-dhcp-ipv6-advanced-fields">
+              <label>
+                <span>ROUTER ADVERTISEMENT FLAGS</span>
+                <select value={raFlags} onChange={(event) => { setRaFlags(event.target.value as typeof raFlags); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.ra_flags?.join(" + ") || "default"})</option>
+                  <option value="none">None</option>
+                  <option value="other-config">Other configuration (O)</option>
+                  <option value="managed-config">Managed address configuration (M)</option>
+                  <option value="managed-config+other-config">Managed + other configuration (M + O)</option>
+                </select>
+              </label>
+              <label>
+                <span>RA ROUTE PREFERENCE</span>
+                <select value={raPreference} onChange={(event) => { setRaPreference(event.target.value as typeof raPreference); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.ra_preference || "medium"})</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </label>
+              <label>
+                <span>RA ROUTER LIFETIME (SECONDS)</span>
+                <select value={raLifetime} onChange={(event) => { setRaLifetime(event.target.value); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.ra_lifetime ?? 2700}s)</option>
+                  <option value="0">0 · No default route</option>
+                  <option value="600">600 seconds</option>
+                  <option value="900">900 seconds</option>
+                  <option value="1800">1800 seconds</option>
+                  <option value="2100">2100 seconds</option>
+                  <option value="2400">2400 seconds</option>
+                  <option value="2700">2700 seconds</option>
+                </select>
+              </label>
+              <label>
+                <span>RA SLAAC</span>
+                <select value={raSlaac} onChange={(event) => { setRaSlaac(event.target.value as typeof raSlaac); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.ra_slaac ? "enabled" : "disabled"})</option>
+                  <option value="1">Enabled</option>
+                  <option value="0">Disabled</option>
+                </select>
+              </label>
+              <label>
+                <span>RA DNS ADVERTISEMENT</span>
+                <select value={raDns} onChange={(event) => { setRaDns(event.target.value as typeof raDns); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.ra_dns ? "enabled" : "disabled"})</option>
+                  <option value="1">Enabled</option>
+                  <option value="0">Disabled</option>
+                </select>
+              </label>
+              <label>
+                <span>DHCPv6 IA_NA ADDRESSES</span>
+                <select value={dhcpv6Na} onChange={(event) => { setDhcpv6Na(event.target.value as typeof dhcpv6Na); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.dhcpv6_na ? "enabled" : "disabled"})</option>
+                  <option value="1">Enabled</option>
+                  <option value="0">Disabled</option>
+                </select>
+              </label>
+              <label>
+                <span>DHCPv6 PREFIX DELEGATION (IA_PD)</span>
+                <select value={dhcpv6Pd} onChange={(event) => { setDhcpv6Pd(event.target.value as typeof dhcpv6Pd); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.dhcpv6_pd ? "enabled" : "disabled"})</option>
+                  <option value="1">Enabled</option>
+                  <option value="0">Disabled</option>
+                </select>
+              </label>
+              <label>
+                <span>DELEGATE TO ALL DOWNSTREAM REQUESTERS</span>
+                <select value={dhcpv6AssignAll} onChange={(event) => { setDhcpv6AssignAll(event.target.value as typeof dhcpv6AssignAll); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current ({scope.dhcpv6_assignall ? "enabled" : "disabled"})</option>
+                  <option value="1">Enabled</option>
+                  <option value="0">Disabled</option>
+                </select>
+              </label>
+              <label>
+                <span>MINIMUM DELEGATED PREFIX LENGTH</span>
+                <select value={dhcpv6PdMinLen} onChange={(event) => { setDhcpv6PdMinLen(event.target.value); setConfirmed(false); }} disabled={busy}>
+                  <option value="UNCHANGED">Keep current (/{scope.dhcpv6_pd_min_len || 62})</option>
+                  <option value="48">/48</option>
+                  <option value="52">/52</option>
+                  <option value="56">/56</option>
+                  <option value="60">/60</option>
+                  <option value="62">/62</option>
+                  <option value="64">/64</option>
+                </select>
+              </label>
+            </div>
+            <div className="module-message">Prefix delegation requires the WAN/ upstream interface to receive a usable delegated prefix, and each downstream LAN must have a suitable IPv6 assignment configured. The minimum length is the downstream prefix-size constraint; changing it cannot create an ISP prefix or configure network interfaces automatically.</div>
           </div>
           <div className="module-message">Relay and hybrid modes are preserved as-is but are not configured here. They require an odhcpd master/relay topology that must be established and validated separately in native LuCI. DHCPv6 does not provide the default router by itself; clients that need an IPv6 default route generally also need working RA service and prefix configuration.</div>
           <label className="office-reservation-confirm">
@@ -6421,7 +6544,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                   </div>
                   <DhcpScopeToggle scope={scope} refresh={refresh} />
                   <DhcpScopeEditor
-                    key={`${scope.section}:${scope.start}:${scope.limit ?? ""}:${scope.lease_time || "12h"}:${scope.dhcpv6}:${scope.ra}:${scope.ndp}`}
+                    key={`${scope.section}:${scope.start}:${scope.limit ?? ""}:${scope.lease_time || "12h"}:${scope.dhcpv6}:${scope.ra}:${scope.ndp}:${scope.ra_flags.join(",")}:${scope.ra_slaac}:${scope.ra_dns}:${scope.ra_preference}:${scope.ra_lifetime}:${scope.dhcpv6_na}:${scope.dhcpv6_pd}:${scope.dhcpv6_assignall}:${scope.dhcpv6_pd_min_len}`}
                     scope={scope}
                     refresh={refresh}
                   />
