@@ -7611,3 +7611,63 @@ input::placeholder {
   .network-interface-tools.mwan3-tools { grid-template-columns: 1fr; }
   .mwan3-interface-row { grid-template-columns: 1fr; }
 }
+
+
+/* Multi-WAN policy distribution and directly connected network inventory */
+.mwan3-secondary-grid { align-items: stretch; }
+.mwan3-policy-list { display: grid; gap: 11px; margin-top: 10px; }
+.mwan3-policy-row {
+  display: grid;
+  grid-template-columns: minmax(100px, .7fr) minmax(0, 1.5fr);
+  gap: 14px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.mwan3-policy-row > div:first-child { display: grid; align-content: start; gap: 5px; }
+.mwan3-policy-row > div:first-child small { color: var(--muted2); font-size: 7px; letter-spacing: .08em; }
+.mwan3-policy-row > div:first-child strong { color: var(--text); font-size: 9px; overflow-wrap: anywhere; }
+.mwan3-policy-members { display: grid; gap: 8px; }
+.mwan3-policy-members > div {
+  display: grid;
+  grid-template-columns: minmax(55px, .6fr) auto minmax(70px, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.mwan3-policy-members > div > span { color: var(--muted); font-size: 8px; overflow-wrap: anywhere; }
+.mwan3-policy-members > div > b { color: var(--text); font-size: 8px; font-variant-numeric: tabular-nums; }
+.mwan3-policy-members > div > i {
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(255,255,255,.07);
+}
+.mwan3-policy-members > div > i > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, #5a88e8);
+}
+.mwan3-policy-members > span { color: var(--muted2); font-size: 8px; }
+.mwan3-connected-grid { display: grid; gap: 12px; margin-top: 10px; }
+.mwan3-connected-grid > div {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.mwan3-connected-grid strong { color: var(--muted); font-size: 8px; }
+.mwan3-connected-grid code {
+  padding: 5px 7px;
+  border-radius: 5px;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+.mwan3-connected-grid span { color: var(--muted2); font-size: 8px; }
+@media (max-width: 760px) { .mwan3-policy-row { grid-template-columns: 1fr; } }
