@@ -196,10 +196,12 @@ it reports missing and unreferenced tables without claiming they are invalid or 
 Multi-WAN panel reads mwan3 tracking state, logical interface state, tracked-target latency/loss
 and elapsed online/offline time, with search and spreadsheet-safe CSV export. The tracker result
 and netifd interface state are deliberately shown separately. A further read-only view exposes
-active IPv4/IPv6 policy weights and mwan3 directly connected networks. Policy percentages are
-weights, not measured traffic shares; these views do not change failover policy or simulate packet
+active IPv4/IPv6 policy weights and mwan3 directly connected networks. Each WAN also reports
+measured RX/TX Mbps from successive kernel byte-counter samples, with sample interval and N/A
+handling for first samples, resets or stale intervals. These rates are not link-speed estimates or
+policy traffic-share measurements; the views do not change failover policy or simulate packet
 routing.
-WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi association
+The dashboard's primary WAN throughput is also calculated from successive kernel byte-counter samples. Wi-Fi association
 data is read from OpenWrt's iwinfo ubus API; the client inventory can filter and sort stations by
 reported TX retries and failed packets, and exports the active diagnostic filters with each row.
 Missing driver counters remain unavailable rather than being inferred; retry/failure counts are
