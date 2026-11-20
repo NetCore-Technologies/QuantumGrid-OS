@@ -3152,7 +3152,7 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
   const queueConfigAvailable = sqm?.config_available === true && sqm.config_readable;
   const runtimeAvailable = sqm?.runtime_available === true;
   const exportQdiscs = () => {
-    if (qdiscs.length === 0) return;
+    if (visibleQdiscs.length === 0) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
       ["Exported at (UTC)", "Search filter", "Sort order", "Qdisc", "Handle", "Device", "Parent", "Root", "Bytes", "Packets", "Dropped", "Overlimits", "Requeues", "Backlog bytes", "Backlog packets"],
