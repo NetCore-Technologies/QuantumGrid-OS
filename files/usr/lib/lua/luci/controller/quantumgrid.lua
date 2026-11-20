@@ -964,7 +964,7 @@ local function platform_status(fs)
 				source = source:sub(1, 128),
 				mountpoint = mountpoint:sub(1, 128),
 				filesystem = filesystem:sub(1, 48),
-				read_only = options:match("(^|,)ro(,|$)") ~= nil
+				read_only = ("," .. options .. ","):find(",ro,", 1, true) ~= nil
 			})
 		end
 	end
