@@ -110,6 +110,18 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     grep -qx 'CONFIG_NSS_FIRMWARE_VERSION_12_5=y' .config || die "NSS firmware 12.5 was not selected"
     grep -qx 'CONFIG_PACKAGE_kmod-qca-nss-drv=y' .config || die "NSS core driver package was not selected"
     grep -qx 'CONFIG_PACKAGE_kmod-qca-nss-ecm=y' .config || die "NSS ECM package was not selected"
+    grep -qx 'CONFIG_PACKAGE_kmod-qca-nss-dp=y' .config || die "NSS datapath driver package was not selected"
+    grep -qx 'CONFIG_PACKAGE_kmod-qca-ssdk=y' .config || die "Qualcomm SSDK package was not selected"
+    grep -qx 'CONFIG_PACKAGE_kmod-qca-nss-drv-bridge-mgr=y' .config || die "NSS bridge manager package was not selected"
+    grep -qx 'CONFIG_PACKAGE_nss-firmware-ipq807x=y' .config || die "IPQ807x NSS firmware package was not selected"
+    grep -qx 'CONFIG_PACKAGE_kmod-qca-mcs=y' .config || die "NSS multicast snooping package was not selected"
+    grep -qx 'CONFIG_PACKAGE_sqm-scripts-nss=y' .config || die "NSS SQM scripts package was not selected"
+    grep -qx 'CONFIG_ATH11K_MEM_PROFILE_1G=y' .config || die "1 GiB ath11k memory profile was not selected"
+    grep -qx 'CONFIG_NSS_MEM_PROFILE_HIGH=y' .config || die "high-memory NSS profile was not selected"
+    grep -qx 'CONFIG_NSS_DRV_BRIDGE_ENABLE=y' .config || die "NSS bridge support was not enabled"
+    grep -qx 'CONFIG_NSS_DRV_IPV6_ENABLE=y' .config || die "NSS IPv6 support was not enabled"
+    grep -qx 'CONFIG_NSS_DRV_PPPOE_ENABLE=y' .config || die "NSS PPPoE support was not enabled"
+    grep -qx 'CONFIG_NSS_DRV_VLAN_ENABLE=y' .config || die "NSS VLAN support was not enabled"
     grep -qx 'CONFIG_NSS_DRV_WIFIOFFLOAD_ENABLE=y' .config || die "NSS Wi-Fi offload support was not enabled"
     printf 'Validated NSS Wi-Fi, firmware, core-driver and ECM selections.\n'
 fi
