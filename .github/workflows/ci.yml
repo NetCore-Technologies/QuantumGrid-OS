@@ -41,6 +41,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/policy-routing-analysis.test.mjs
       - name: Test measured interface throughput rates
         run: node --experimental-strip-types --test ../../tests/interface-rates.test.mjs
+      - name: Test measured WireGuard peer rates
+        run: node --experimental-strip-types --test ../../tests/wireguard-peer-rates.test.mjs
       - name: Audit npm dependency advisories
         shell: bash
         run: |
