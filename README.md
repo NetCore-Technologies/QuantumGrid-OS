@@ -36,7 +36,7 @@ Explore the [platform](https://netcore-technologies.github.io/QuantumGrid-OS/fea
 | Voice interface | RJ11 / FXS, Si32261 SLIC |
 | Wireless | Qualcomm Wi-Fi 6 platform |
 
-The current firmware is based on the upstream OpenWrt networking stack. **NSS acceleration is not included or claimed** until a compatible kernel/driver integration is selected and validated.
+The default stable firmware uses upstream OpenWrt `v25.12.6` and does not include or claim Qualcomm NSS acceleration. A separate, opt-in experimental AW1000 NSS profile uses the maintained `qosmio/openwrt-ipq` `25.12-nss` tree (Linux 6.12), the AW1000 NSS device-tree include, NSS 12.5 firmware, NSS core/ECM packages and the ath11k/mac80211 NSS Wi-Fi integration. The optional profile is not the stable default, and end-to-end NSS packet offload is **not yet verified on physical AW1000 hardware**.
 
 ## AW1000 RJ11 phone port
 
@@ -65,6 +65,28 @@ cd QuantumGrid-OS
 The build script fetches the pinned RJ11 source feed, updates OpenWrt feeds, applies
 `configs/aw1000-max.config`, installs QuantumGrid first-boot files and builds the AW1000 target.
 
+To build the separate experimental NSS image instead of the stable upstream image:
+
+```bash
+QG_ENABLE_NSS=1 ./build.sh
+```
+
+That profile selects the pinned `qosmio/openwrt-ipq` 25.12 NSS commit
+`d6848fa2ea00193b5b7d3973e3990da7f608027c`, appends
+`configs/aw1000-nss.fragment`, and validates that ath11k/mac80211 NSS Wi-Fi support,
+NSS 12.5 firmware, the NSS core driver and ECM are selected. The GitHub firmware workflow
+also exposes an explicit **Enable NSS** manual-dispatch option; release-tag builds remain
+on stable upstream OpenWrt. NSS images are labelled with an `-nss` suffix in their release
+asset names and build provenance.
+
+The NSS profile disables generic packet steering and generic software/hardware flow offload
+at first boot so they do not compete with the NSS datapath. The upstream NSS project also
+documents DSA `config bridge-vlan` filtering as incompatible with NSS Wi-Fi offload; do not
+enable that topology on an NSS image. Firmware 12.5 does not support 802.11s mesh, so this
+profile leaves mesh off and keeps usteer as the separately configurable roaming service.
+A full hardware traffic-counter and throughput/latency validation is still required before
+calling NSS offload operational.
+
 To use a different OpenWrt revision deliberately:
 
 ```bash
@@ -87,7 +109,7 @@ while scanning. The same page groups observed BSSIDs by reported band/channel an
 reported signal; these counts are scan visibility only, not airtime or interference measurements.
 Scan inventories can be searched by SSID/BSSID/radio, band, channel, security or mode; filtered by band/security; sorted by signal, channel or SSID; and exported using the visible filtered result set with a one-click filter reset.
 They can also be exported as CSV; network-controlled text is quoted and spreadsheet formula
-prefixes are neutralised in the export. The Wi-Fi page also includes an authenticated editor for existing AP interfaces: SSID, WPA2/WPA3 security, a new or preserved passphrase, hidden SSID and driver-reported unrestricted channel selection. It commits only the selected AP/radio options, reloads Wi-Fi and attempts restoration if reload fails; width, power, band steering and full radio enable/disable controls are not yet connected. The image includes upstream usteer and its LuCI app for optional multi-AP steering, but the usteer daemon is disabled by first-boot defaults until an administrator defines the participating SSIDs and policy. The native app is available at `/cgi-bin/luci/admin/network/usteer`. The Wi-Fi page also builds a read-only shortlist from
+prefixes are neutralised in the export. The Wi-Fi page also includes an authenticated editor for existing AP interfaces: SSID, WPA2/WPA3 security, a new or preserved passphrase, hidden SSID and driver-reported unrestricted channel selection. It commits only the selected AP/radio options, reloads Wi-Fi and attempts restoration if reload fails; channel width/PHY mode and transmit power are selectable only from values reported by the selected radio driver. Band steering, radio scheduling and full radio enable/disable controls are not yet connected in QuantumGrid. The image includes upstream usteer and its LuCI app for optional multi-AP steering, but the usteer daemon is disabled by first-boot defaults until an administrator defines the participating SSIDs and policy. The native app is available at `/cgi-bin/luci/admin/network/usteer`. The Wi-Fi page also builds a read-only shortlist from
 unrestricted channels returned by the radio driver, comparing nearby BSSID signal and advertised
 channel-width overlap within each radio/band. The router's own BSSID is excluded when reported.
 Scores are relative to that shortlist, not measured airtime, CCA busy time, noise or guaranteed
