@@ -1781,6 +1781,19 @@ function DevicesControlPage({ routerOverview }: { routerOverview: RouterOverview
   );
 }
 
+function formatDurationSeconds(value: number | undefined): string {
+  if (value === undefined || !Number.isFinite(value) || value < 0) return "N/A";
+  const seconds = Math.floor(value);
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remaining = seconds % 60;
+  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${remaining}s`;
+  return `${remaining}s`;
+}
+
 function formatTrafficBytes(bytes: number | undefined): string {
   if (bytes === undefined || !Number.isFinite(bytes) || bytes < 0) return "N/A";
   if (bytes < 1024) return `${fmt(bytes)} B`;
@@ -1806,6 +1819,11 @@ function NetworkControlPage({
   const interfaces = routerOverview?.interfaces ?? [];
   const routes = routerOverview?.routes ?? [];
   const policyRules = routerOverview?.policy_rules ?? [];
+  const mwan3 = routerOverview?.mwan3;
+  const mwan3Interfaces = mwan3?.interfaces ?? [];
+  const mwanOnlineCount = mwan3Interfaces.filter((item) => item.enabled && item.running && item.status === "online").length;
+  const mwanOfflineCount = mwan3Interfaces.filter((item) => item.enabled && item.status === "offline").length;
+  const mwanStoppedCount = mwan3Interfaces.filter((item) => item.enabled && !item.running).length;
   const mwan3 = routerOverview?.mwan3;
   const mwan3Interfaces = mwan3?.interfaces ?? [];
   const [mwanSearch, setMwanSearch] = useState("");
@@ -2048,6 +2066,58 @@ function NetworkControlPage({
           </>
         )}
         <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Short-interval error/drop deltas compare successive API samples, remain N/A on the first sample or after a counter reset, and do not estimate packet loss. Counters the driver does not expose remain N/A. CSV export includes the active scope and sort filters.</div>
+      </Panel>
+
+      <Panel title="Multi-WAN interface health" eyebrow="MWAN3 TRACKER · READ-ONLY">
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !mwan3?.installed ? (
+          <div className="module-message">The mwan3 package is not installed in this router image.</div>
+        ) : !mwan3.available ? (
+          <div className="module-message">mwan3 is installed, but its tracker status is unavailable. Check that the mwan3 service is running and that at least one interface has tracking targets configured.</div>
+        ) : mwan3Interfaces.length === 0 ? (
+          <div className="module-message">mwan3 is available, but no tracked interfaces were reported.</div>
+        ) : (
+          <>
+            <div className="mwan3-summary">
+              <div><small>TRACKED INTERFACES</small><strong>{fmt(mwan3.count)}</strong></div>
+              <div><small>ONLINE</small><strong>{fmt(mwanOnlineCount)}</strong></div>
+              <div><small>OFFLINE</small><strong>{fmt(mwanOfflineCount)}</strong></div>
+              <div><small>TRACKER STOPPED</small><strong>{fmt(mwanStoppedCount)}</strong></div>
+            </div>
+            <div className="device-list">
+              {mwan3Interfaces.map((item) => {
+                const tone = item.status === "online" ? "online" : item.status === "offline" ? "offline" : item.status === "disabled" ? "disabled" : "unknown";
+                return (
+                  <div className="device-row mwan3-interface-row" key={item.name}>
+                    <div className="device-title">
+                      <div className="device-icon"><Network size={17} /></div>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>{item.enabled ? "Enabled" : "Disabled"} · {item.running ? "Tracker running" : "Tracker stopped"} · {item.tracking.toUpperCase()}</span>
+                      </div>
+                    </div>
+                    <div><small>TRACKER STATUS</small><b className={`mwan3-state ${tone}`}>{item.status.toUpperCase()}</b></div>
+                    <div><small>LINK STATE</small><b>{item.up ? "UP" : "DOWN"}</b></div>
+                    <div><small>ONLINE / OFFLINE</small><b>{formatDurationSeconds(item.online_seconds)} / {formatDurationSeconds(item.offline_seconds)}</b></div>
+                    <div><small>INTERFACE UPTIME</small><b>{formatDurationSeconds(item.interface_uptime_seconds)}</b></div>
+                    <div><small>TRACK QUALITY</small><b>Score {item.score === undefined ? "N/A" : fmt(item.score)} · lost {item.lost === undefined ? "N/A" : fmt(item.lost)} · turn {item.turn === undefined ? "N/A" : fmt(item.turn)}</b></div>
+                    <div className="mwan3-targets">
+                      {item.track_targets.length > 0 ? item.track_targets.map((target) => (
+                        <div className="mwan3-track-target" key={item.name + "-" + target.ip}>
+                          <strong>{target.ip}</strong>
+                          <span>{target.status.toUpperCase()} · RTT {target.latency_ms === undefined ? "N/A" : `${fmt(target.latency_ms, 1)} ms`} · loss {target.packet_loss_percent === undefined ? "N/A" : `${fmt(target.packet_loss_percent, 1)}%`}</span>
+                        </div>
+                      )) : <span className="mwan3-no-targets">No tracking targets reported.</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {mwan3.truncated ? <div className="module-message">The inventory is capped. Showing {mwan3Interfaces.length} of {fmt(mwan3.count)} interfaces; some tracking targets may also be omitted.</div> : null}
+          </>
+        )}
+        <div className="module-message">This is mwan3 tracker telemetry, not a bandwidth test or a guarantee that every destination is reachable. Track-target RTT and loss describe the configured probes only. The page does not change interface state, routes, metrics, policies or failover settings.</div>
       </Panel>
 
       <Panel
