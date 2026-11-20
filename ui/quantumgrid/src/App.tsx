@@ -1796,12 +1796,16 @@ function NetworkControlPage({
     if (visibleInterfaces.length === 0) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Scope filter", "Sort order", "Interface", "Device", "Class", "State", "IPv4 addresses", "RX bytes", "RX packets", "RX errors", "RX dropped", "TX bytes", "TX packets", "TX errors", "TX dropped"],
-      ...visibleInterfaces.map((item) => [
-        exportedAt, interfaceScope, interfaceSort, item.name, item.device, item.is_wan ? "WAN" : "LAN / other",
-        item.up ? "UP" : "DOWN", item.ipv4.join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
-        item.rx_dropped, item.tx_bytes, item.tx_packets, item.tx_errors, item.tx_dropped,
-      ]),
+      ["Exported at (UTC)", "Scope filter", "Sort order", "Interface", "Device", "Class", "State", "IPv4 addresses", "RX bytes", "RX packets", "RX errors", "RX dropped", "TX bytes", "TX packets", "TX errors", "TX dropped", "RX error delta", "RX drop delta", "TX error delta", "TX drop delta"],
+      ...visibleInterfaces.map((item) => {
+        const delta = interfaceCounterDeltas.get(item.name);
+        return [
+          exportedAt, interfaceScope, interfaceSort, item.name, item.device, item.is_wan ? "WAN" : "LAN / other",
+          item.up ? "UP" : "DOWN", item.ipv4.join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
+          item.rx_dropped, item.tx_bytes, item.tx_packets, item.tx_errors, item.tx_dropped,
+          delta?.rxErrors, delta?.rxDropped, delta?.txErrors, delta?.txDropped,
+        ];
+      }),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
     const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
