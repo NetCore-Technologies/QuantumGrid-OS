@@ -928,6 +928,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
 	entry({"admin", "services", "quantumgrid", "audit"}, call("action_audit_log")).leaf = true
+	entry({"admin", "services", "quantumgrid", "dhcp-reservation"}, call("action_dhcp_reservation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
@@ -2532,6 +2533,180 @@ function action_config_backup()
 	http.header("Content-Length", tostring(validated_size))
 	http.prepare_content("application/gzip")
 	http.write(contents)
+end
+
+
+function action_dhcp_reservation()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/etc/config/dhcp") ~= true or fs.access("/etc/config/network") ~= true then
+		respond(503, { ok = false, error = "DHCP and network configuration files must both be available." })
+		return
+	end
+	if fs.access("/etc/init.d/dnsmasq") ~= true then
+		respond(503, { ok = false, error = "The native dnsmasq service is unavailable." })
+		return
+	end
+
+	local reservation, validation_error = validator.validate_reservation(
+		http.formvalue("name", true),
+		http.formvalue("mac", true),
+		http.formvalue("ipv4", true))
+	if not reservation then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+	local network = http.formvalue("network", true)
+	if type(network) ~= "string" or #network > 64
+		or not network:match("^[%w_.%-]+$") then
+		respond(400, { ok = false, error = "Select an existing static LAN network." })
+		return
+	end
+
+	local interface_address, netmask, protocol
+	local interface_ok = pcall(function()
+		uci:foreach("network", "interface", function(section)
+			if section[".name"] == network then
+				interface_address = type(section.ipaddr) == "string" and section.ipaddr or
+					type(section.ipaddr) == "table" and section.ipaddr[1] or nil
+				netmask = section.netmask
+				protocol = section.proto
+			end
+		end)
+	end)
+	if not interface_ok or protocol ~= "static" or type(interface_address) ~= "string"
+		or type(netmask) ~= "string" then
+		respond(400, { ok = false, error = "Reservations are available only on an existing static IPv4 network with a readable netmask." })
+		return
+	end
+	if not validator.ipv4_in_subnet(reservation.ipv4, interface_address, netmask) then
+		respond(400, { ok = false, error = "The reserved IPv4 address must be a usable host address inside the selected network subnet." })
+		return
+	end
+
+	local dhcp_scope = false
+	local dhcp_ok = pcall(function()
+		uci:foreach("dhcp", "dhcp", function(section)
+			if section.interface == network and section.ignore ~= "1" then dhcp_scope = true end
+		end)
+	end)
+	if not dhcp_ok or not dhcp_scope then
+		respond(409, { ok = false, error = "The selected network does not have an enabled DHCP server scope." })
+		return
+	end
+
+	local duplicate_mac, duplicate_ip = false, false
+	local duplicate_ok = pcall(function()
+		uci:foreach("dhcp", "host", function(section)
+			local existing_mac = type(section.mac) == "string" and section.mac:lower() or ""
+			if existing_mac == reservation.mac then duplicate_mac = true end
+			if section.ip == reservation.ipv4 then duplicate_ip = true end
+		end)
+	end)
+	if not duplicate_ok then
+		respond(500, { ok = false, error = "Existing DHCP reservations could not be checked safely." })
+		return
+	end
+	if duplicate_mac or duplicate_ip then
+		respond(409, {
+			ok = false,
+			error = duplicate_mac and "This MAC address already has a DHCP reservation." or
+				"This IPv4 address is already reserved by another DHCP host."
+		})
+		return
+	end
+
+	local leases = read_file("/tmp/dhcp.leases") or ""
+	for line in leases:gmatch("[^\\r\\n]+") do
+		local _, lease_mac, lease_ip = line:match("^(%S+)%s+(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)%s+(%d+%.%d+%.%d+%.%d+)%s")
+		if lease_ip == reservation.ipv4 and lease_mac and lease_mac:lower() ~= reservation.mac then
+			respond(409, { ok = false, error = "The selected IPv4 address is currently leased to a different MAC address." })
+			return
+		end
+	end
+
+	local section_ok, section = pcall(uci.section, uci, "dhcp", "host", nil, {
+		name = reservation.name,
+		mac = reservation.mac,
+		ip = reservation.ipv4,
+		network = network
+	})
+	if not section_ok or type(section) ~= "string" or section == "" then
+		pcall(uci.revert, uci, "dhcp")
+		respond(500, { ok = false, error = "The DHCP reservation could not be staged in UCI." })
+		return
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "dhcp")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "dhcp")
+		respond(500, { ok = false, error = "The DHCP reservation could not be committed; dnsmasq was not restarted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local delete_ok, deleted = pcall(uci.delete, uci, "dhcp", section)
+		local rollback_commit_ok, rollback_committed = false, false
+		if delete_ok and deleted == true then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "dhcp")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+		end
+		local rolled_back = rollback_commit_ok and rollback_committed == true
+			and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "dhcp.reservation.add", network, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "dnsmasq could not restart. The new reservation was removed and the previous state restored."
+				or "dnsmasq failed to restart and rollback could not be confirmed. Inspect DHCP configuration and service state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "dhcp.reservation.add", network, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		name = reservation.name,
+		mac = reservation.mac,
+		ipv4 = reservation.ipv4,
+		network = network,
+		restarted = true,
+		rolled_back = false
+	})
 end
 
 
