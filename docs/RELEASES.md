@@ -9,8 +9,11 @@ Use tags matching `qg-v<semver>`, for example:
 - `qg-v0.1.0-alpha.1` for an early preview
 - `qg-v0.1.0` for a first stable release
 
-The release workflow pins OpenWrt to `v25.12.6` by default and the AW1000 FXS source to
-`v0.9.0`. Both resolved commit hashes are written into `BUILDINFO.txt`.
+The release workflow uses upstream OpenWrt `v25.12.6` by default and the AW1000 FXS source
+at `v0.9.0`. Manual firmware dispatches can opt into the experimental NSS profile, which pins
+`qosmio/openwrt-ipq` at `d6848fa2ea00193b5b7d3973e3990da7f608027c`; NSS artefacts carry an
+`-nss` suffix. Resolved source commits and profile configuration hashes are written into
+`BUILDINFO.txt`. Automatic release-tag builds remain on the stable upstream profile.
 
 ## AW1000 image formats
 
@@ -58,6 +61,11 @@ installation path before any persistent flash write.
 
 The FXS phone service ships disabled by default and needs a compatible kernel, VoLTE service
 and user-supplied Skyworks patch. Never claim emergency-call certification without dedicated
-testing. The base OpenWrt build does not claim NSS acceleration; a loaded `qca-nss-dp` or `qca-ssdk`
-module alone does not establish that NSS firmware, core drivers, ECM, PPE/EDMA integration, Wi-Fi
-offload and required device-tree wiring are present or functional.
+testing. The stable upstream image does not include NSS. The opt-in NSS profile selects the
+AW1000 NSS device-tree include, EDMA/PPE switch path, NSS 12.5 firmware for both cores, NSS core
+and ECM modules, and ath11k/mac80211 NSS Wi-Fi hooks. Presence of these components or a loaded
+`qca-nss-dp`/`qca-nss-drv` module does not establish that NSS firmware booted or that flows are
+being offloaded. Keep the generic OpenWrt packet-steering/software/hardware flow-offload options
+disabled on NSS builds. DSA bridge-VLAN filtering is incompatible with NSS Wi-Fi offload. Do not
+claim working NSS acceleration until packet-path counters, throughput/latency benchmarks and
+recovery have been validated on physical AW1000 hardware.
