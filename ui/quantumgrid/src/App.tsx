@@ -3058,6 +3058,37 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               </div>
             )}
           </Panel>
+          <div className="module-grid">
+            <Panel title="Block device inventory" eyebrow="READ-ONLY · /PROC/PARTITIONS">
+              {(platform.block_devices ?? []).length === 0 ? (
+                <div className="module-message">No block devices were reported by /proc/partitions.</div>
+              ) : (
+                <div className="device-list">
+                  {platform.block_devices.map((device) => (
+                    <div className="device-row platform-storage-row" key={device.name}>
+                      <div className="device-title"><div className="device-icon"><HardDrive size={17} /></div><div><strong>{device.name}</strong><span>{device.major}:{device.minor}</span></div></div>
+                      <div><small>CAPACITY</small><b>{fmt(device.size_bytes / 1073741824, 2)} GiB</b></div>
+                      <div><small>DEVICE</small><b>/dev/{device.name}</b></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+            <Panel title="Mounted system filesystems" eyebrow="READ-ONLY · /PROC/MOUNTS">
+              {(platform.mounts ?? []).length === 0 ? (
+                <div className="module-message">No root, overlay, ROM, temporary or /mnt mounts were reported.</div>
+              ) : (
+                <div className="platform-check-list">
+                  {platform.mounts.map((mount) => (
+                    <div className="platform-mount-row" key={mount.mountpoint + "-" + mount.source}>
+                      <div><strong>{mount.mountpoint}</strong><span>{mount.source} · {mount.filesystem}</span></div>
+                      <Status active={!mount.read_only}>{mount.read_only ? "READ ONLY" : "READ / WRITE"}</Status>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Panel>
+          </div>
         </>
       )}
       <div className="module-message">This page is read-only. It does not install packages, load/unload modules, change service state or write firmware. Module and service presence are reported separately from operational status.</div>

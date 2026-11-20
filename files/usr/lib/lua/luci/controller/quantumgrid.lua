@@ -933,6 +933,42 @@ local function platform_status(fs)
 			})
 		end
 	end
+	local block_devices = {}
+	local partitions = read_file("/proc/partitions") or ""
+	for line in partitions:gmatch("[^\r\n]+") do
+		if #block_devices >= 64 then break end
+		local major, minor, blocks, name =
+			line:match("^%s*(%d+)%s+(%d+)%s+(%d+)%s+([%w_.%-]+)%s*$")
+		local block_count = tonumber(blocks)
+		if major and minor and block_count and block_count > 0 then
+			table.insert(block_devices, {
+				name = name:sub(1, 96),
+				major = tonumber(major),
+				minor = tonumber(minor),
+				size_bytes = block_count * 1024
+			})
+		end
+	end
+
+	local mounts = {}
+	local mount_table = read_file("/proc/mounts") or ""
+	for line in mount_table:gmatch("[^\r\n]+") do
+		if #mounts >= 32 then break end
+		local source, mountpoint, filesystem, options =
+			line:match("^(%S+)%s+(%S+)%s+(%S+)%s+(%S+)")
+		local relevant = mountpoint == "/" or mountpoint == "/rom"
+			or mountpoint == "/overlay" or mountpoint == "/tmp"
+			or (mountpoint and mountpoint:match("^/mnt/") ~= nil)
+		if source and relevant then
+			table.insert(mounts, {
+				source = source:sub(1, 128),
+				mountpoint = mountpoint:sub(1, 128),
+				filesystem = filesystem:sub(1, 48),
+				read_only = options:match("(^|,)ro(,|$)") ~= nil
+			})
+		end
+	end
+
 	local package_manager = "Not detected"
 	if fs.access("/sbin/apk") == true or fs.access("/usr/bin/apk") == true then
 		package_manager = "apk"
@@ -956,7 +992,8 @@ local function platform_status(fs)
 		target = field(release.target, 128),
 		description = field(release.description, 192),
 		package_manager = package_manager,
-		modules = modules, tools = tools, services = services, storage = storage
+		modules = modules, tools = tools, services = services, storage = storage,
+		block_devices = block_devices, mounts = mounts
 	}
 end
 

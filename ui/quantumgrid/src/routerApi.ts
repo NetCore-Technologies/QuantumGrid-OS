@@ -235,6 +235,8 @@ export interface RouterPlatformStatus {
   tools: Array<{ name: string; available: boolean }>;
   services: Array<{ name: string; installed: boolean }>;
   storage: Array<{ device: string; name: string; size_bytes: number; erase_size_bytes: number }>;
+  block_devices: Array<{ name: string; major: number; minor: number; size_bytes: number }>;
+  mounts: Array<{ source: string; mountpoint: string; filesystem: string; read_only: boolean }>;
 }
 
 export interface RouterOverview {
