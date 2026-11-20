@@ -364,6 +364,84 @@ local function parse_bridge_ports(value)
 	return result
 end
 
+local EXTERNAL_ZONE_NAMES = {
+	wan = true,
+	wan6 = true,
+	wwan = true,
+	cellular = true,
+}
+
+local function zone_networks(value)
+	local result = {}
+	if type(value) == "string" then
+		result[1] = value
+	elseif type(value) == "table" then
+		for _, item in ipairs(value) do
+			if type(item) == "string" then table.insert(result, item) end
+		end
+	end
+	return result
+end
+
+local function is_external_zone(zone)
+	if type(zone) ~= "table" then return false end
+	local name = type(zone.name) == "string" and zone.name:lower() or ""
+	if EXTERNAL_ZONE_NAMES[name] then return true end
+	for _, network in ipairs(zone_networks(zone.networks)) do
+		if EXTERNAL_ZONE_NAMES[network:lower()] then return true end
+	end
+	return false
+end
+
+function validate_office_forwarding(source, destination, zones, existing)
+	if type(source) ~= "string" or not source:match("^[%w_.%-]+$") or #source > 64 then
+		return nil, "Select an existing source firewall zone."
+	end
+	if type(destination) ~= "string" or not destination:match("^[%w_.%-]+$") or #destination > 64 then
+		return nil, "Select an existing destination firewall zone."
+	end
+	if source == destination then
+		return nil, "Source and destination firewall zones must be different."
+	end
+
+	local source_zone, destination_zone = nil, nil
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			if zone.name == source then source_zone = zone end
+			if zone.name == destination then destination_zone = zone end
+		end
+	end
+	if not source_zone or not destination_zone then
+		return nil, "Both firewall zones must already exist in the router configuration."
+	end
+	if is_external_zone(source_zone) then
+		return nil, "An external WAN/WWAN zone cannot be used as the source of a new forwarding."
+	end
+
+	for _, forwarding in ipairs(type(existing) == "table" and existing or {}) do
+		if type(forwarding) == "table" and forwarding.source == source
+			and forwarding.destination == destination then
+			return nil, "This source-to-destination forwarding already exists."
+		end
+	end
+
+	return { source = source, destination = destination }
+end
+
+function snapshot_firewall_forwarding_section(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "forwarding"
+		or type(snapshot[".name"]) ~= "string" or snapshot[".name"] == "" then
+		return nil, "A named firewall forwarding section is required."
+	end
+	local values = {}
+	for key, value in pairs(snapshot) do
+		if type(key) == "string" and key:sub(1, 1) ~= "." then
+			values[key] = value
+		end
+	end
+	return { name = snapshot[".name"], values = values }
+end
+
 function validate_bridge_vlan(device, vlan_id, requested_ports, bridge_ports, existing_vlans, current_section)
 	if type(device) ~= "string" or #device < 1 or #device > 64
 		or not device:match("^[%w_.%-]+$") then
@@ -502,11 +580,13 @@ function build_inventory(source)
 	for _, item in ipairs(source_forwardings) do
 		if type(item) == "table" and #result.forwardings < MAX_FORWARDINGS then
 			local name = token(item.name, 64)
+			local section = token(item.section, 64)
 			local source_zone = token(item.source, 64)
 			local destination_zone = token(item.destination, 64)
-			if name and source_zone and destination_zone then
+			if name and section and source_zone and destination_zone then
 				table.insert(result.forwardings, {
 					name = name,
+					section = section,
 					source = source_zone,
 					destination = destination_zone
 				})
