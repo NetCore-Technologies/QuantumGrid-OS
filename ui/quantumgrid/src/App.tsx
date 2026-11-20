@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterSqmQueue, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterSqmQueue } from "./routerApi";
+import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -3213,7 +3213,7 @@ function DashboardPage({
   }
 
   if (page === "wifi") {
-    return <WifiControlPage routerOverview={routerOverview} />;
+    return <WifiControlPage routerOverview={routerOverview} refresh={refresh} />;
   }
 
   if (page === "devices") {
@@ -3507,8 +3507,175 @@ type InterfaceCounterDelta = {
   sampleSeconds: number | null;
 };
 
+function WirelessConfigEditor({
+  config,
+  radio,
+  refresh,
+}: {
+  config: RouterWirelessConfig;
+  radio?: RouterWirelessRadio;
+  refresh: () => void;
+}) {
+  const [ssid, setSsid] = useState(config.ssid);
+  const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed" | "none">(
+    config.encryption === "sae" || config.encryption === "sae-mixed" || config.encryption === "none"
+      ? config.encryption
+      : "psk2",
+  );
+  const [passphrase, setPassphrase] = useState("");
+  const [hidden, setHidden] = useState(config.hidden);
+  const [channel, setChannel] = useState(config.channel || "auto");
+  const [allowOpen, setAllowOpen] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const supportedChannels = [...new Set(
+    (radio?.channels ?? []).filter((item) => !item.restricted).map((item) => item.channel),
+  )].sort((left, right) => left - right);
+  const currentChannel = config.channel || "auto";
+  const channelSupported = channel === "auto" || supportedChannels.includes(Number(channel)) ||
+    channel === currentChannel;
+  const encryptionChanged = encryption !== config.encryption;
+  const passphraseRequired = encryption !== "none" &&
+    (encryptionChanged || !config.key_set) && passphrase.length === 0;
+  const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
+    hidden !== config.hidden || channel !== currentChannel;
+  const ready = changed && channelSupported && !passphraseRequired &&
+    (encryption !== "none" || allowOpen) && confirmDisconnect && !saving;
+
+  const apply = async () => {
+    if (!ready) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      await updateRouterWirelessConfig({
+        radio: config.radio,
+        section: config.section,
+        ssid,
+        encryption,
+        key: passphrase,
+        hidden,
+        channel,
+        allowOpen,
+      });
+      setPassphrase("");
+      setAllowOpen(false);
+      setConfirmDisconnect(false);
+      setNotice({
+        success: true,
+        message: "Wireless settings were saved and the radio reload completed. Devices may need to reconnect.",
+      });
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "Wireless configuration failed.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="wireless-config-editor">
+      <div className="wireless-config-heading">
+        <div>
+          <strong>{config.ssid || "Hidden / unnamed network"}</strong>
+          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {config.key_set ? "PASSPHRASE SET" : "NO PASSPHRASE"}</span>
+        </div>
+        <Status active={!config.interface_disabled && !config.radio_disabled}>
+          {config.interface_disabled || config.radio_disabled ? "DISABLED" : "CONFIGURED"}
+        </Status>
+      </div>
+      <div className="wireless-config-grid">
+        <label className="wireless-config-field">
+          <span>NETWORK NAME (SSID)</span>
+          <input value={ssid} maxLength={32} onChange={(event) => setSsid(event.target.value)} autoComplete="off" />
+        </label>
+        <label className="wireless-config-field">
+          <span>SECURITY</span>
+          <select value={encryption} onChange={(event) => {
+            setEncryption(event.target.value as "psk2" | "sae" | "sae-mixed" | "none");
+            setPassphrase("");
+            setAllowOpen(false);
+          }}>
+            <option value="psk2">WPA2-Personal (AES)</option>
+            <option value="sae">WPA3-Personal (SAE)</option>
+            <option value="sae-mixed">WPA2 / WPA3 transition</option>
+            <option value="none">Open (no encryption)</option>
+          </select>
+        </label>
+        <label className="wireless-config-field">
+          <span>NEW PASSPHRASE</span>
+          <input
+            type="password"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            placeholder={config.key_set && !encryptionChanged ? "Leave blank to keep the current key" : "Enter 8–63 characters"}
+            autoComplete="new-password"
+            disabled={encryption === "none"}
+          />
+        </label>
+        <label className="wireless-config-field">
+          <span>RADIO CHANNEL</span>
+          <select value={channel} onChange={(event) => setChannel(event.target.value)}>
+            <option value="auto">Auto (driver chooses)</option>
+            {channel !== "auto" && channel === currentChannel && !supportedChannels.includes(Number(channel)) ? (
+              <option value={channel}>Current channel {channel} (not in driver list)</option>
+            ) : null}
+            {supportedChannels.map((item) => (
+              <option value={String(item)} key={item}>Channel {item}</option>
+            ))}
+          </select>
+          <small>Changing this channel affects every SSID on {config.radio}.</small>
+        </label>
+      </div>
+      <div className="wireless-config-options">
+        <label>
+          <input type="checkbox" checked={hidden} onChange={(event) => setHidden(event.target.checked)} />
+          <span>Hide network name (SSID)</span>
+        </label>
+        {encryption === "none" ? (
+          <label className="wireless-config-risk">
+            <input type="checkbox" checked={allowOpen} onChange={(event) => setAllowOpen(event.target.checked)} />
+            <span>I explicitly want an unencrypted, open Wi-Fi network.</span>
+          </label>
+        ) : null}
+      </div>
+      <div className="module-message wireless-config-note">
+        The existing AP is edited in place; no new SSID or radio is created. The passphrase is never returned by the router API. Leave it blank to retain the existing key. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
+      </div>
+      <label className="wireless-config-confirm">
+        <input type="checkbox" checked={confirmDisconnect} onChange={(event) => setConfirmDisconnect(event.target.checked)} />
+        <span>I understand that applying these settings may disconnect my current Wi-Fi session.</span>
+      </label>
+      {notice ? <div className={notice.success ? "wireless-config-result success" : "wireless-config-result error"} role="status">{notice.message}</div> : null}
+      <div className="wireless-config-actions">
+        <button className="hero-button" onClick={() => {
+          setSsid(config.ssid);
+          setEncryption(config.encryption === "sae" || config.encryption === "sae-mixed" || config.encryption === "none" ? config.encryption : "psk2");
+          setPassphrase("");
+          setHidden(config.hidden);
+          setChannel(currentChannel);
+          setAllowOpen(false);
+          setConfirmDisconnect(false);
+          setNotice(null);
+        }} disabled={!changed || saving}>Discard changes</button>
+        <button className="hero-button" onClick={() => void apply()} disabled={!ready}>
+          {saving ? "Applying…" : "Save & reload Wi-Fi"}
+        </button>
+      </div>
+      {!channelSupported ? <div className="module-message">Choose Auto or a non-restricted channel reported by the radio driver.</div> : null}
+      {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling protected security or changing the security mode.</div> : null}
+    </div>
+  );
+}
+
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
+  const wirelessConfigs = routerOverview?.wireless_configs;
   const clients = routerOverview?.clients ?? [];
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
   const wirelessClients = routerOverview?.wireless_clients ?? [];
@@ -3810,16 +3977,35 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         <div>
           <div className="setup-kicker">LIVE WIRELESS TELEMETRY</div>
           <h1>Wi-Fi</h1>
-          <p>Radio and wireless-interface status from the authenticated OpenWrt API. Configuration changes remain disabled until safe router-side handlers and rollback checks are implemented.</p>
+          <p>Live radio diagnostics, nearby access-point scanning, client history and guarded edits to existing access-point settings.</p>
         </div>
       </section>
       <div className="module-grid">
         <Panel title="Wireless radios" eyebrow="NETWORK.WIRELESS STATUS" action={<Status active={Boolean(routerOverview)}>{routerOverview ? "LIVE" : "WAITING"}</Status>}>
           <WirelessRadioInventory radios={radios} available={Boolean(routerOverview)} />
         </Panel>
-        <Panel title="Configuration controls" eyebrow="SAFE READ-ONLY MODE">
-          <Status active={false}>NOT CONNECTED</Status>
-          <div className="module-message">Channel, power, width, band steering, roaming and radio enable/disable are not writable here. Driver-reported channel/frequency/signal/bitrate/quality are live measurements; configuration remains read-only until safe service handlers and rollback checks exist.</div>
+        <Panel title="Wireless configuration" eyebrow="AUTHENTICATED UCI · GUARDED WIFI RELOAD">
+          {!wirelessConfigs ? (
+            <div className="module-message">Waiting for the router's wireless configuration inventory.</div>
+          ) : !wirelessConfigs.available ? (
+            <div className="module-message">The router could not read /etc/config/wireless. Configuration controls remain unavailable.</div>
+          ) : wirelessConfigs.sections.length === 0 ? (
+            <div className="module-message">No existing AP-mode wireless interfaces were found. QuantumGrid does not create a new radio or SSID from this panel.</div>
+          ) : (
+            <>
+              <div className="module-message">Edit existing AP interfaces only. SSID, WPA security, hidden-network state and the selected radio channel are saved together. The server checks channel availability, commits UCI and reloads Wi-Fi; on reload failure it attempts to restore the previous settings.</div>
+              <div className="wireless-config-list">
+                {wirelessConfigs.sections.map((config) => (
+                  <WirelessConfigEditor
+                    key={config.section}
+                    config={config}
+                    radio={radios.find((item) => item.name === config.radio)}
+                    refresh={refresh}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </Panel>
       </div>
       <Panel title="Associated Wi-Fi clients" eyebrow="IWINFO ASSOCIATION DATA">
