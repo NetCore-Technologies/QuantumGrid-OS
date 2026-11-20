@@ -418,6 +418,20 @@ export interface RouterAccelerationStatus {
   note: string;
 }
 
+export interface RouterKernelModule {
+  name: string;
+  path: string;
+  loaded: boolean;
+}
+
+export interface RouterKernelModuleInventory {
+  available: boolean;
+  count: number;
+  loaded_count: number;
+  truncated: boolean;
+  modules: RouterKernelModule[];
+}
+
 export interface RouterPlatformStatus {
   available: boolean;
   hostname?: string;
@@ -432,6 +446,7 @@ export interface RouterPlatformStatus {
   description?: string;
   package_manager: string;
   acceleration?: RouterAccelerationStatus;
+  kernel_modules?: RouterKernelModuleInventory;
   modules: Array<{ name: string; loaded: boolean }>;
   tools: Array<{ name: string; available: boolean }>;
   services: Array<{ name: string; installed: boolean }>;
