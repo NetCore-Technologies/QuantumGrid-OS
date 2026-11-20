@@ -2084,6 +2084,7 @@ local function office_network_status(uci, fs)
 		bridges = {},
 		vlans = {},
 		zones = {},
+		forwardings = {},
 		wifi_aps = {},
 		dhcp_scopes = {},
 		static_leases = {},
@@ -2154,6 +2155,20 @@ local function office_network_status(uci, fs)
 					output = section.output,
 					forward = section.forward,
 					masquerade = section.masq == "1"
+				})
+			end
+		end)
+		uci:foreach("firewall", "forwarding", function(section)
+			if #source.forwardings >= 64 then source.truncated = true return end
+			local name = tostring(section.name or section[".name"] or "")
+			local source_zone = tostring(section.src or "")
+			local destination_zone = tostring(section.dest or "")
+			if name:match("^[%w_.%-]+$") and source_zone:match("^[%w_.%-]+$")
+				and destination_zone:match("^[%w_.%-]+$") then
+				table.insert(source.forwardings, {
+					name = name,
+					source = source_zone,
+					destination = destination_zone
 				})
 			end
 		end)
