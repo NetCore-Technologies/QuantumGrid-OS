@@ -22,6 +22,7 @@ export interface RouterInterface {
   rx_dropped?: number;
   tx_dropped?: number;
   ipv4: string[];
+  ipv6: string[];
 }
 
 export interface RouterWirelessInterface {
