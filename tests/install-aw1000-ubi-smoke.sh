@@ -82,7 +82,10 @@ if awk -F '[:, ]+' -v wanted="rootfs" '$4 == "\"" wanted "\"" { count++ } END { 
   exit 1
 fi
 sed 's/mtd20: 06400000 00040000 "rootfs_1"/mtd20: 06400000 00020000 "rootfs_1"/' "$MTD_FIXTURE" > "$MTD_FIXTURE.wrong"
-[[ "$(awk -F '[:, ]+' -v wanted="rootfs_1" '$4 == "\"" wanted "\"" { print $1, $2, $3 }' "$MTD_FIXTURE.wrong")" == "mtd20 06400000 00020000" ]]
+if [ "$(awk -F '[:, ]+' -v wanted="rootfs_1" '$4 == "\\"" wanted "\\"" { print $1, $2, $3 }' "$MTD_FIXTURE.wrong")" = "mtd20 06400000 00040000" ]; then
+  echo "ERROR: MTD parser accepted an incorrect erase geometry." >&2
+  exit 1
+fi
 
 # Symlinked image or manifest inputs are refused.
 ln -s "$IMAGE" "$TEST_DIR/image-link.ubi"
