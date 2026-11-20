@@ -12,13 +12,14 @@ image="$1"
 
 filename="${image##*/}"
 case "$filename" in
-    *arcadyan_aw1000-squashfs-factory.ubi) ;;
+    *arcadyan_aw1000-squashfs-factory.ubi|QuantumGrid-OS-*-AW1000-squashfs-factory.ubi) ;;
     *) die "Expected an Arcadyan AW1000 squashfs factory .ubi image; refusing: $filename" ;;
 esac
 
 size="$(stat -c '%s' -- "$image")"
 [[ "$size" =~ ^[0-9]+$ ]] || die "Could not determine image size: $image"
 (( size >= 1048576 )) || die "UBI image is unexpectedly small (${size} bytes): $image"
+(( size <= 104857600 )) || die "UBI image exceeds the standard AW1000 rootfs size (${size} bytes): $image"
 
 magic="$(od -An -N4 -t x1 -- "$image" | tr -d '[:space:]')"
 [[ "$magic" == "55424923" ]] || die "Invalid UBI erase-counter header (expected UBI#): $image"
