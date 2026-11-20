@@ -1502,8 +1502,10 @@ function WirelessClientList({
 }) {
   const [filter, setFilter] = useState("");
   const [authorizationFilter, setAuthorizationFilter] = useState<"all" | "authorized" | "associated">("all");
+  const [bandFilter, setBandFilter] = useState("all");
   const [sort, setSort] = useState<"signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "mac">("signal");
   const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
+  const availableBands = [...new Set(clients.map((client) => client.band || "Unknown"))].sort();
   const authorizedCount = clients.filter((client) => client.authorized).length;
   const associatedOnlyCount = clients.length - authorizedCount;
   const measuredStations = clients.filter((client) =>
@@ -1527,7 +1529,8 @@ function WirelessClientList({
       const matchesAuthorization = authorizationFilter === "all" ||
         (authorizationFilter === "authorized" && client.authorized) ||
         (authorizationFilter === "associated" && !client.authorized);
-      return matchesText && matchesAuthorization;
+      const matchesBand = bandFilter === "all" || (client.band || "Unknown") === bandFilter;
+      return matchesText && matchesAuthorization && matchesBand;
     })
     .slice()
     .sort((left, right) => {
@@ -1583,6 +1586,10 @@ function WirelessClientList({
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
+        <select aria-label="Filter station band" value={bandFilter} onChange={(event) => setBandFilter(event.target.value)}>
+          <option value="all">All Wi-Fi bands</option>
+          {availableBands.map((band) => <option value={band} key={band}>{band}</option>)}
+        </select>
         <select aria-label="Filter station authorization" value={authorizationFilter} onChange={(event) => setAuthorizationFilter(event.target.value as "all" | "authorized" | "associated")}>
           <option value="all">All station states</option>
           <option value="authorized">Authorized only</option>
@@ -1607,7 +1614,7 @@ function WirelessClientList({
         <span>STATE</span>
       </div>
       {visibleClients.length === 0 ? (
-        <div className="module-message">No associated stations match the current text and authorization filters.</div>
+        <div className="module-message">No associated stations match the current text, band and authorization filters.</div>
       ) : visibleClients.map((client) => (
         <div className="wifi-client-table-row" key={`${client.ifname}-${client.mac}`}>
           <div className="wifi-client-name">

@@ -6599,7 +6599,7 @@ input::placeholder {
 }
 .wifi-station-tools {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) minmax(140px, .65fr) minmax(140px, .7fr) auto auto;
+  grid-template-columns: minmax(150px, 1.1fr) repeat(3, minmax(125px, .8fr)) auto auto;
   align-items: center;
   gap: 8px;
   margin: 10px 0 13px;
