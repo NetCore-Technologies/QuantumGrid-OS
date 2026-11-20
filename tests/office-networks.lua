@@ -58,6 +58,29 @@ assert(enabled_scope_state and enabled_scope_state.enabled and not enabled_scope
 assert(office.snapshot_dhcp_scope_enabled({ [".type"] = "host" }) == nil,
   "static host reservations cannot be toggled as DHCP scopes")
 
+local full_scope_snapshot = office.snapshot_dhcp_scope_section({
+  [".name"] = "cfg0042",
+  [".type"] = "dhcp",
+  [".anonymous"] = false,
+  interface = "guest",
+  start = "80",
+  limit = "40",
+  leasetime = "6h",
+  dhcp_option = { "6,192.168.1.1", "15,office.example" },
+  ra = "server",
+  ra_flags = { "managed-config", "other-config" },
+})
+assert(full_scope_snapshot and full_scope_snapshot.name == "cfg0042")
+assert(full_scope_snapshot.values.interface == "guest")
+assert(full_scope_snapshot.values.dhcp_option[2] == "15,office.example")
+assert(full_scope_snapshot.values.ra_flags[1] == "managed-config")
+assert(full_scope_snapshot.values[".type"] == nil and full_scope_snapshot.values[".name"] == nil,
+  "UCI metadata must not be replayed as option data")
+assert(office.snapshot_dhcp_scope_section({ [".name"] = "cfg001", [".type"] = "host" }) == nil,
+  "host reservations must not be removed as DHCP server scopes")
+assert(office.snapshot_dhcp_scope_section({ [".type"] = "dhcp" }) == nil,
+  "anonymous or unnamed scopes must not be removed by the UI")
+
 local rollback_snapshot = office.snapshot_dhcp_scope_options({
   [".type"] = "dhcp",
   start = "100",
