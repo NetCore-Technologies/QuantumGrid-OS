@@ -163,6 +163,61 @@ local gateway_scope = office.validate_dhcp_scope_update(
   "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
 
+local redirect_zones = {
+  { name = "wan", networks = { "wan", "wan6" } },
+  { name = "corp", networks = { "corp" } },
+  { name = "guest", networks = { "guest" } },
+}
+local redirect_interfaces = {
+  { name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0" },
+  { name = "guest", ipv4 = { "192.168.30.1" }, netmask = "255.255.255.0" },
+}
+local valid_redirect = office.validate_office_port_forward(
+  "office-vpn", "wan", "corp", "tcp", "443", "192.168.20.30", "8443",
+  redirect_zones, redirect_interfaces, {})
+assert(valid_redirect and valid_redirect.source == "wan" and valid_redirect.destination == "corp")
+assert(valid_redirect.source_port == "443" and valid_redirect.destination_port == "8443")
+
+local function reject_redirect(name, source, dest, proto, src_port, ip, dst_port, existing, label)
+  local result, err = office.validate_office_port_forward(
+    name, source, dest, proto, src_port, ip, dst_port,
+    redirect_zones, redirect_interfaces, existing or {})
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
+end
+reject_redirect("rule", "corp", "wan", "tcp", "443", "192.168.20.30", "443", {}, "internal zone as port-forward source")
+reject_redirect("rule", "wan", "wan", "tcp", "443", "192.168.20.30", "443", {}, "same source and destination")
+reject_redirect("rule", "wan", "corp", "icmp", "443", "192.168.20.30", "443", {}, "unsupported protocol")
+reject_redirect("rule", "wan", "corp", "tcp", "0", "192.168.20.30", "443", {}, "external port zero")
+reject_redirect("rule", "wan", "corp", "tcp", "65536", "192.168.20.30", "443", {}, "external port above range")
+reject_redirect("rule", "wan", "corp", "tcp", "443;uci", "192.168.20.30", "443", {}, "injected external port")
+reject_redirect("rule", "wan", "corp", "tcp", "443", "192.168.21.30", "443", {}, "destination outside selected LAN subnet")
+reject_redirect("rule", "wan", "corp", "tcp", "443", "192.168.20.1", "443", {}, "router IP as internal destination")
+reject_redirect("rule", "wan", "corp", "tcp", "443", "192.168.20.30", "0", {}, "destination port zero")
+reject_redirect("rule", "wan", "corp", "tcp", "443", "192.168.20.30", "443", {
+  { name = "other", source = "wan", source_port = "443", protocol = "tcp" }
+}, "duplicate external TCP port")
+reject_redirect("rule", "wan", "corp", "tcp udp", "443", "192.168.20.30", "443", {
+  { name = "other", source = "wan", source_port = "443", protocol = "udp" }
+}, "combined protocol overlaps UDP rule")
+
+local redirect_snapshot = office.snapshot_firewall_redirect_section({
+  [".name"] = "cfg443",
+  [".type"] = "redirect",
+  name = "office-vpn",
+  src = "wan",
+  dest = "corp",
+  proto = { "tcp" },
+  src_dport = "443",
+  dest_ip = "192.168.20.30",
+  dest_port = "8443",
+  target = "DNAT",
+})
+assert(redirect_snapshot and redirect_snapshot.name == "cfg443")
+assert(redirect_snapshot.values.dest_ip == "192.168.20.30")
+assert(redirect_snapshot.values.target == "DNAT")
+assert(office.snapshot_firewall_redirect_section({ [".name"] = "cfg", [".type"] = "forwarding" }) == nil)
+
 local wifi_aps = {
   { section = "corp_ap", ssid = "Office-Corp", networks = { "corp" } },
   { section = "guest_ap", ssid = "Office-Guest", networks = { "guest" } },
