@@ -427,6 +427,21 @@ export interface RouterPlatformStatus {
   }>;
 }
 
+export interface RouterPackage {
+  name: string;
+  version: string;
+  manager: "apk" | "opkg";
+}
+
+export interface RouterPackageInventory {
+  ok: true;
+  manager: "apk" | "opkg";
+  count: number;
+  truncated: boolean;
+  packages: RouterPackage[];
+  sampled_at: number;
+}
+
 export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
@@ -473,6 +488,7 @@ const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
+const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -581,6 +597,34 @@ export async function fetchRouterOverview(): Promise<RouterOverview> {
   return decodeOverview(response);
 }
 
+
+export async function fetchRouterPackages(): Promise<RouterPackageInventory> {
+  const response = await fetch(PACKAGES_URL, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    if (response.status === 403) {
+      throw new Error("Package inventory requires an active router administrator session.");
+    }
+    throw new Error("The router could not read its installed-package inventory.");
+  }
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== "object" || payload === null ||
+    !("ok" in payload) || payload.ok !== true ||
+    !("manager" in payload) || (payload.manager !== "apk" && payload.manager !== "opkg") ||
+    !("count" in payload) || typeof payload.count !== "number" ||
+    !("packages" in payload) || !Array.isArray(payload.packages) ||
+    !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
+  ) {
+    throw new Error("The router returned an invalid package inventory response.");
+  }
+  return payload as RouterPackageInventory;
+}
 
 export async function scanRouterWifi(): Promise<RouterWifiScan> {
   const response = await fetch(WIFI_SCAN_URL, {
