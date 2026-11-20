@@ -8,6 +8,21 @@ export interface RouterDefaultRoute {
   protocol: string;
 }
 
+export interface RouterPolicyRule {
+  family: "IPv4" | "IPv6";
+  priority: number;
+  source: string;
+  destination: string;
+  fwmark: string;
+  input_interface: string;
+  output_interface: string;
+  protocol: string;
+  uid_range: string;
+  table: string;
+  action: string;
+  selectors: string;
+}
+
 export interface RouterInterface {
   name: string;
   device: string;
@@ -304,6 +319,10 @@ export interface RouterOverview {
   timestamp: number;
   routes_available?: boolean;
   routes?: RouterDefaultRoute[];
+  policy_rules_available?: boolean;
+  policy_rules_count?: number;
+  policy_rules_truncated?: boolean;
+  policy_rules?: RouterPolicyRule[];
   system: {
     uptime_seconds: number;
     load_avg: number[];
