@@ -310,6 +310,10 @@ static IPv4/MAC host reservations. Interface link state is queried from the rout
 status API. The page supports office network design reviews and CSV inventory hand-off without
 inventing missing VLANs, expanding DHCP ranges incorrectly, or claiming isolation from names alone.
 
+The reservation form can also prefill host, MAC and address fields from an unexpired DHCP lease
+reported by dnsmasq. It suggests a LAN only when the lease IPv4 matches a configured eligible static
+subnet; the form remains a draft and the administrator must verify the selector and explicitly confirm.
+
 Guarded **Add**, **Edit** and **Remove** static reservation controls are also available for
 existing enabled DHCP scopes on static IPv4 LAN interfaces. Creation and editing validate the
 hostname, unicast MAC, canonical IPv4 address, subnet membership, duplicate reservations and
