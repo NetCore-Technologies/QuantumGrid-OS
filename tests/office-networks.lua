@@ -95,6 +95,15 @@ assert(rollback_snapshot[4].name == "dhcpv6" and not rollback_snapshot[4].presen
 assert(rollback_snapshot[5].name == "ra" and not rollback_snapshot[5].present)
 assert(rollback_snapshot[6].name == "ndp" and not rollback_snapshot[6].present,
   "DHCPv6, RA and NDP rollback snapshots must preserve absent UCI options")
+assert(rollback_snapshot[7].name == "ra_flags" and not rollback_snapshot[7].present)
+assert(rollback_snapshot[8].name == "ra_slaac" and not rollback_snapshot[8].present)
+assert(rollback_snapshot[9].name == "ra_dns" and not rollback_snapshot[9].present)
+assert(rollback_snapshot[10].name == "ra_preference" and not rollback_snapshot[10].present)
+assert(rollback_snapshot[11].name == "ra_lifetime" and not rollback_snapshot[11].present)
+assert(rollback_snapshot[12].name == "dhcpv6_na" and not rollback_snapshot[12].present)
+assert(rollback_snapshot[13].name == "dhcpv6_pd" and not rollback_snapshot[13].present)
+assert(rollback_snapshot[14].name == "dhcpv6_assignall" and not rollback_snapshot[14].present)
+assert(rollback_snapshot[15].name == "dhcpv6_pd_min_len" and not rollback_snapshot[15].present)
 local invalid_snapshot = office.snapshot_dhcp_scope_options({ [".type"] = "host" })
 assert(invalid_snapshot == nil, "only DHCP server sections may be snapshotted for pool updates")
 
@@ -255,6 +264,37 @@ reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp
 reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp" }, input = "REJECT", forward = "ACCEPT", selected = true } } }, "firewall zone with open forwarding default")
 reject_segment({ vlans = { { name = "vlan20", device = "br-lan", vlan_id = 20, ports = {} } } }, "bridge VLAN without switch-port members")
 reject_segment({ scopes = { { ignore = false, range_valid = false } } }, "unresolved existing DHCP scope")
+
+local advanced_ipv6 = office.validate_dhcp_scope_ipv6_advanced(
+  "managed-config+other-config", "0", "1", "high", "1800",
+  "1", "1", "0", "60")
+assert(advanced_ipv6 and advanced_ipv6.ra_flags == "managed-config+other-config")
+assert(advanced_ipv6.ra_slaac == "0" and advanced_ipv6.ra_dns == "1")
+assert(advanced_ipv6.ra_preference == "high" and advanced_ipv6.ra_lifetime == "1800")
+assert(advanced_ipv6.dhcpv6_na == "1" and advanced_ipv6.dhcpv6_pd == "1")
+assert(advanced_ipv6.dhcpv6_assignall == "0" and advanced_ipv6.dhcpv6_pd_min_len == "60")
+
+local unchanged_advanced = office.validate_dhcp_scope_ipv6_advanced(
+  "UNCHANGED", "UNCHANGED", "UNCHANGED", "UNCHANGED", "UNCHANGED",
+  "UNCHANGED", "UNCHANGED", "UNCHANGED", "UNCHANGED")
+assert(unchanged_advanced and unchanged_advanced.ra_flags == "UNCHANGED"
+  and unchanged_advanced.dhcpv6_pd_min_len == "UNCHANGED")
+
+local function reject_advanced_ipv6(ra_flags, ra_slaac, ra_dns, ra_preference, ra_lifetime,
+  dhcpv6_na, dhcpv6_pd, dhcpv6_assignall, pd_min_len, label)
+  local result, err = office.validate_dhcp_scope_ipv6_advanced(
+    ra_flags, ra_slaac, ra_dns, ra_preference, ra_lifetime,
+    dhcpv6_na, dhcpv6_pd, dhcpv6_assignall, pd_min_len)
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should report why it was rejected")
+end
+reject_advanced_ipv6("managed-config;uci", "1", "1", "medium", "1800", "1", "1", "1", "62", "injected RA flags")
+reject_advanced_ipv6("none", "maybe", "1", "medium", "1800", "1", "1", "1", "62", "noncanonical SLAAC flag")
+reject_advanced_ipv6("none", "1", "0", "fast", "1800", "1", "1", "1", "62", "invalid RA preference")
+reject_advanced_ipv6("none", "1", "0", "medium", "2701", "1", "1", "1", "62", "RA lifetime above RFC safe ceiling")
+reject_advanced_ipv6("none", "1", "0", "medium", "-1", "1", "1", "1", "62", "negative RA lifetime")
+reject_advanced_ipv6("none", "1", "0", "medium", "1800", "1", "1", "1", "65", "PD minimum prefix length above 64")
+reject_advanced_ipv6("none", "1", "0", "medium", "1800", "1", "1", "1", "0", "zero PD minimum prefix length")
 
 local valid_ipv6_modes = office.validate_dhcp_scope_ipv6_modes("server", "server", "disabled")
 assert(valid_ipv6_modes and valid_ipv6_modes.dhcpv6 == "server"
