@@ -25,6 +25,7 @@ Every completed build must include:
 - The exact AW1000 build configuration
 - `BUILDINFO.txt` and `SHA256SUMS`
 - `verify-aw1000-release-manifest.sh` for on-router checksum enforcement
+- `inspect-aw1000-install-target.sh` for read-only board, mount, MTD and tool inspection
 
 The factory `.ubi` is the only persistent AW1000 firmware image published by QuantumGrid.
 The bundled installer verifies its exact filename and SHA-256 digest against `SHA256SUMS`
@@ -57,4 +58,6 @@ installation path before any persistent flash write.
 
 The FXS phone service ships disabled by default and needs a compatible kernel, VoLTE service
 and user-supplied Skyworks patch. Never claim emergency-call certification without dedicated
-testing. The base OpenWrt build does not claim NSS acceleration.
+testing. The base OpenWrt build does not claim NSS acceleration; a loaded `qca-nss-dp` or `qca-ssdk`
+module alone does not establish that NSS firmware, core drivers, ECM, PPE/EDMA integration, Wi-Fi
+offload and required device-tree wiring are present or functional.
