@@ -49,6 +49,12 @@ show_buttons() {
   else
     echo "Native /etc/rc.button directory is unavailable."
   fi
+  if [ -r /proc/bus/input/devices ]; then
+    echo "=== Linux input device names and event handlers ==="
+    awk '/^N: Name=|^H: Handlers=/{print}' /proc/bus/input/devices
+  else
+    echo "Linux input-device inventory is unavailable."
+  fi
   if [ -r /sys/kernel/debug/gpio ]; then
     echo "=== Button-like GPIO labels/consumers (name hints only) ==="
     if ! grep -Ei 'button|reset|wps|power|key|wlan' /sys/kernel/debug/gpio; then
