@@ -310,12 +310,12 @@ static IPv4/MAC host reservations. Interface link state is queried from the rout
 status API. The page supports office network design reviews and CSV inventory hand-off without
 inventing missing VLANs, expanding DHCP ranges incorrectly, or claiming isolation from names alone.
 
-A guarded **Add static reservation** control is also available for an existing enabled DHCP
-scope on a static IPv4 LAN interface. It validates the hostname, unicast MAC, canonical IPv4 address,
-subnet membership, existing reservations and current DHCP leases. It writes only a new DHCP host
-section and restarts dnsmasq; if the restart fails, it removes the new section and attempts to restore
-the prior service state. This first write workflow is add-only: editing/removing reservations,
-creating DHCP pools, and migrating live clients are not exposed yet.
+Guarded **Add** and **Remove** static reservation controls are also available for existing
+enabled DHCP scopes on static IPv4 LAN interfaces. Creation validates the hostname, unicast MAC,
+canonical IPv4 address, subnet membership, existing reservations and current DHCP leases. Removal
+targets a validated UCI host-section ID and snapshots the original section before changing it. Both
+operations restart dnsmasq and attempt to restore the previous UCI/service state if the restart fails.
+Editing reservations in place, creating DHCP pools, and migrating live clients are not exposed yet.
 
 This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
 switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
@@ -366,8 +366,7 @@ server and define an independent retention policy. Parser and redaction rules ar
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export and guarded add-only
-  static DHCP reservations, authenticated explicit-confirmation configuration backup downloads, and a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export and guarded add/remove static DHCP reservations, authenticated explicit-confirmation configuration backup downloads, and a
   redacted local administrative audit history with bounded retention.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
