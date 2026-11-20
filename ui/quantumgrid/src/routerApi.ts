@@ -623,6 +623,11 @@ export interface RouterOfficeDhcpScope {
   ignore: boolean;
   dhcpv6: string;
   ra: string;
+  range_valid: boolean;
+  pool_start_ip: string;
+  pool_end_ip: string;
+  range_error: string;
+  overlap: boolean;
 }
 
 export interface RouterOfficeStaticLease {
