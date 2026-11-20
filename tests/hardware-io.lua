@@ -27,6 +27,27 @@ end
 local capped = hardware.parse_gpio_debugfs(table.concat(many, "\n"))
 assert(capped.line_count == 140 and #capped.lines == 128 and capped.truncated, "GPIO inventory must be capped")
 
+local input = hardware.parse_input_devices([[
+I: Bus=0019 Vendor=0001 Product=0001 Version=0100
+N: Name="gpio-keys"
+P: Phys=gpio-keys/input0
+H: Handlers=kbd event0
+
+I: Bus=0011 Vendor=0001 Product=0001 Version=ab41
+N: Name="Power Button"
+H: Handlers=kbd event1
+
+I: Bus=0011 Vendor=0002 Product=0003 Version=0001
+N: Name="USB Keyboard"
+H: Handlers=sysrq kbd event2
+]])
+assert(input.available and input.count == 3 and #input.devices == 3, "Linux input devices should be parsed")
+assert(input.devices[1].name == "gpio-keys" and input.devices[1].button_like)
+assert(input.devices[1].bus == "0019" and input.devices[1].event_nodes[1] == "event0")
+assert(input.devices[2].button_like and input.devices[2].event_nodes[1] == "event1")
+assert(not input.devices[3].button_like and input.devices[3].handlers[1] == "sysrq")
+assert(not hardware.parse_input_devices(nil).available, "missing input inventory must be unavailable")
+
 local trigger = hardware.parse_trigger_text("none timer [heartbeat] default-on")
 assert(trigger.available and trigger.active == "heartbeat", "active LED trigger should be parsed")
 local noTrigger = hardware.parse_trigger_text("trigger data unavailable")
