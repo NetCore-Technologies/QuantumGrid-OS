@@ -1,6 +1,10 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local office = require "luci.quantumgrid.office_networks"
 
+assert(office.validate_reservation_confirmation("1") == true)
+assert(office.validate_reservation_confirmation("0") == nil)
+assert(office.validate_reservation_confirmation(nil) == nil)
+
 local reservation, reservation_error = office.validate_reservation(
   "Office-Printer", "AA:BB:CC:DD:EE:01", "192.168.20.30")
 assert(reservation and reservation.mac == "aa:bb:cc:dd:ee:01" and reservation.ipv4_number > 0)
