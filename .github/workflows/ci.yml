@@ -112,6 +112,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/sqm.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/mwan3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireguard.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/conntrack.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
       - name: Test bounded SQM queue update validation
@@ -120,5 +121,7 @@ jobs:
         run: lua5.1 tests/mwan3-status.lua
       - name: Test redacted WireGuard peer telemetry
         run: lua5.1 tests/wireguard-status.lua
+      - name: Test read-only conntrack capacity telemetry
+        run: lua5.1 tests/conntrack-status.lua
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
         run: bash tests/firmware-smoke.sh
