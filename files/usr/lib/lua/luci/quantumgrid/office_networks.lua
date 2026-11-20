@@ -144,7 +144,7 @@ function live_lease_conflict(contents, address, mac)
 		return false
 	end
 	local wanted_mac = mac:lower()
-	for line in contents:gmatch("[^\\r\\n]+") do
+	for line in contents:gmatch("[^\r\n]+") do
 		local _, lease_mac, lease_ip = line:match("^(%S+)%s+(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)%s+(%d+%.%d+%.%d+%.%d+)%s")
 		if lease_ip == address and lease_mac and lease_mac:lower() ~= wanted_mac then
 			return true
