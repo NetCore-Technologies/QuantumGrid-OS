@@ -2375,7 +2375,8 @@ local function office_network_status(uci, fs)
 					lease_time = section.leasetime,
 					ignore = section.ignore == "1",
 					dhcpv6 = section.dhcpv6,
-					ra = section.ra
+					ra = section.ra,
+					ndp = section.ndp
 				})
 			end
 		end)
