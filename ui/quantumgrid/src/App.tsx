@@ -2,6 +2,17 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import {
+  collectWifiClientHistory,
+  mergeWifiClientHistory,
+  pruneWifiClientHistory,
+  readWifiClientHistory,
+  WIFI_CLIENT_HISTORY_KEY,
+  WIFI_CLIENT_HISTORY_SETTINGS_KEY,
+  WIFI_CLIENT_HISTORY_SAMPLE_INTERVAL_SECONDS,
+  type WifiClientHistoryRetentionDays,
+  type WifiClientHistorySample,
+} from "./wifiClientHistory";
+import {
   Activity,
   ArrowLeft,
   ArrowRight,
@@ -2917,10 +2928,69 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
+  const [clientHistory, setClientHistory] = useState<WifiClientHistorySample[]>([]);
+  const [clientHistoryEnabled, setClientHistoryEnabled] = useState(false);
+  const [clientHistoryRetention, setClientHistoryRetention] = useState<WifiClientHistoryRetentionDays>(7);
+  const [clientHistorySettingsLoaded, setClientHistorySettingsLoaded] = useState(false);
+  const [clientHistoryError, setClientHistoryError] = useState("");
+  const lastClientHistorySampleAt = useRef(0);
   const [scanFilter, setScanFilter] = useState("");
   const [scanSecurityFilter, setScanSecurityFilter] = useState<"all" | "open" | "encrypted" | "unknown">("all");
   const [scanBandFilter, setScanBandFilter] = useState("all");
   const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
+
+  useEffect(() => {
+    try {
+      const settingsRaw = window.localStorage.getItem(WIFI_CLIENT_HISTORY_SETTINGS_KEY);
+      if (settingsRaw) {
+        const settings: unknown = JSON.parse(settingsRaw);
+        if (typeof settings === "object" && settings !== null) {
+          const value = settings as { enabled?: unknown; retentionDays?: unknown };
+          setClientHistoryEnabled(value.enabled === true);
+          if (value.retentionDays === 1 || value.retentionDays === 7 || value.retentionDays === 30) {
+            setClientHistoryRetention(value.retentionDays);
+          }
+        }
+      }
+      const history = readWifiClientHistory(window.localStorage.getItem(WIFI_CLIENT_HISTORY_KEY));
+      setClientHistory(history);
+      lastClientHistorySampleAt.current = history[history.length - 1]?.sampledAt ?? 0;
+    } catch {
+      setClientHistoryError("Browser storage could not be read. Client history remains unavailable on this browser.");
+    } finally {
+      setClientHistorySettingsLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!clientHistorySettingsLoaded) return;
+    try {
+      window.localStorage.setItem(WIFI_CLIENT_HISTORY_SETTINGS_KEY, JSON.stringify({
+        enabled: clientHistoryEnabled,
+        retentionDays: clientHistoryRetention,
+      }));
+    } catch {
+      setClientHistoryError("Browser settings could not be saved. Check the browser's local storage permissions.");
+    }
+  }, [clientHistoryEnabled, clientHistoryRetention, clientHistorySettingsLoaded]);
+
+  useEffect(() => {
+    if (!clientHistorySettingsLoaded || !clientHistoryEnabled || !routerOverview) return;
+    const sampledAt = routerOverview.timestamp;
+    if (!Number.isFinite(sampledAt) || sampledAt <= 0 ||
+        sampledAt - lastClientHistorySampleAt.current < WIFI_CLIENT_HISTORY_SAMPLE_INTERVAL_SECONDS) return;
+    lastClientHistorySampleAt.current = sampledAt;
+    const incoming = collectWifiClientHistory(routerOverview, sampledAt);
+    if (incoming.length === 0) return;
+    const next = mergeWifiClientHistory(clientHistory, incoming, sampledAt, clientHistoryRetention);
+    setClientHistory(next);
+    try {
+      window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(next));
+      setClientHistoryError("");
+    } catch {
+      setClientHistoryError("Browser storage is full or unavailable. Export or clear history, or disable local collection.");
+    }
+  }, [clientHistory, clientHistoryEnabled, clientHistoryRetention, clientHistorySettingsLoaded, routerOverview]);
   const availableScanBands = scan
     ? [...new Set(scan.results.map((network) => network.band || "Unknown"))].sort()
     : [];
@@ -2969,6 +3039,8 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
       null,
     ) ?? null;
   const bandsObserved = scan ? new Set(scan.results.map((network) => network.band)).size : 0;
+  const clientHistoryUniqueCount = new Set(clientHistory.map((sample) => sample.mac)).size;
+  const recentClientHistory = clientHistory.slice(-12).reverse();
   const openNetworkCount = scan ? scan.results.filter((network) => network.security === "Open").length : 0;
   const unknownSecurityCount = scan ? scan.results.filter((network) => network.security === "Unknown").length : 0;
   const exportScanHistory = () => {
@@ -3049,6 +3121,38 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   };
 
+
+  const exportClientHistory = () => {
+    if (clientHistory.length === 0) return;
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Sampled at (UTC)", "MAC", "Hostname", "IP", "SSID", "Radio", "Band", "Authorized", "Signal dBm", "RX Mbps", "TX Mbps"],
+      ...clientHistory.map((sample) => [
+        new Date(sample.sampledAt * 1000).toISOString(),
+        sample.mac, sample.hostname, sample.ip, sample.ssid, sample.radio, sample.band,
+        sample.authorized, sample.signalDbm, sample.rxMbps, sample.txMbps,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `quantumgrid-wifi-client-history-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
+  const clearClientHistory = () => {
+    setClientHistory([]);
+    lastClientHistorySampleAt.current = routerOverview?.timestamp ?? 0;
+    try {
+      window.localStorage.removeItem(WIFI_CLIENT_HISTORY_KEY);
+      setClientHistoryError("");
+    } catch {
+      setClientHistoryError("The browser could not delete the saved history. Clear this site's local storage in browser settings.");
+    }
+  };
   const runWirelessScan = async () => {
     setScanLoading(true);
     setScanError("");
@@ -3361,6 +3465,74 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
           </div>
         )}
         <div className="module-message">Only distinct, completed manual scans are recorded. The last ten summaries and the minimum BSSID/SSID/band/channel/signal fields needed for comparison stay in page memory only; they are cleared when this page is left, reloaded or the history is cleared. No scan history is written to browser storage or sent to another service.</div>
+      </Panel>
+      <Panel
+        title="Persistent client history"
+        eyebrow="OPT-IN · STORED IN THIS BROWSER"
+        action={
+          <div className="wifi-client-history-actions">
+            <label className="wifi-client-history-toggle">
+              <input
+                type="checkbox"
+                checked={clientHistoryEnabled}
+                disabled={!clientHistorySettingsLoaded}
+                onChange={(event) => setClientHistoryEnabled(event.target.checked)}
+              />
+              <span>Enable local history</span>
+            </label>
+            <select
+              className="wifi-client-history-retention"
+              aria-label="Client history retention"
+              value={clientHistoryRetention}
+              onChange={(event) => {
+                const next = Number(event.target.value);
+                if (next !== 1 && next !== 7 && next !== 30) return;
+                const days = next as WifiClientHistoryRetentionDays;
+                setClientHistoryRetention(days);
+                const now = Math.floor(Date.now() / 1000);
+                setClientHistory((previous) => {
+                  const retained = pruneWifiClientHistory(previous, now, days);
+                  try { window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(retained)); }
+                  catch { setClientHistoryError("Browser storage could not be updated. Export or clear history."); }
+                  return retained;
+                });
+              }}
+            >
+              <option value={1}>Keep 1 day</option>
+              <option value={7}>Keep 7 days</option>
+              <option value={30}>Keep 30 days</option>
+            </select>
+            <button className="hero-button wifi-export-button" onClick={exportClientHistory} disabled={clientHistory.length === 0}>Export CSV</button>
+            <button className="hero-button wifi-export-button" onClick={clearClientHistory} disabled={clientHistory.length === 0}>Clear history</button>
+          </div>
+        }
+      >
+        <div className="wifi-client-history-summary">
+          <div><small>SAVED OBSERVATIONS</small><strong>{fmt(clientHistory.length)}</strong></div>
+          <div><small>DISTINCT CLIENTS</small><strong>{fmt(clientHistoryUniqueCount)}</strong></div>
+          <div><small>RETENTION</small><strong>{clientHistoryRetention} DAYS</strong></div>
+          <div><small>COLLECTION</small><strong>{clientHistoryEnabled ? "ENABLED" : "OFF"}</strong></div>
+        </div>
+        {clientHistoryError && <div className="module-message" role="alert">{clientHistoryError}</div>}
+        {recentClientHistory.length === 0 ? (
+          <div className="module-message">History is empty. Enable local history to save an observation of associated Wi-Fi clients every 15 minutes while this router page is open.</div>
+        ) : (
+          <div className="device-list">
+            {recentClientHistory.map((sample, index) => (
+              <div className="device-row wifi-client-history-row" key={sample.sampledAt + "-" + sample.mac + "-" + index}>
+                <div className="device-title">
+                  <div className="device-icon"><Users size={17} /></div>
+                  <div><strong>{sample.hostname || sample.mac}</strong><span>{sample.mac} · {sample.ip || "No DHCP lease recorded"}</span></div>
+                </div>
+                <div><small>NETWORK</small><b>{sample.ssid || "Hidden"} · {sample.band}</b></div>
+                <div><small>RADIO / ACCESS</small><b>{sample.radio} · {sample.authorized ? "AUTHORIZED" : "ASSOCIATED"}</b></div>
+                <div><small>SIGNAL / RATES</small><b>{sample.signalDbm === null ? "N/A" : sample.signalDbm + " dBm"} · RX {sample.rxMbps === null ? "N/A" : fmt(sample.rxMbps, 1) + " Mbps"} / TX {sample.txMbps === null ? "N/A" : fmt(sample.txMbps, 1) + " Mbps"}</b></div>
+                <div><small>OBSERVED AT</small><b>{new Date(sample.sampledAt * 1000).toLocaleString()}</b></div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">Off by default. When enabled, associated Wi-Fi client MAC addresses and available DHCP hostname/IP details are saved only in this browser's local storage, sampled every 15 minutes while this page is open, and automatically pruned to the selected retention period (up to 10,000 observations). The history is not uploaded, encrypted or synced to another device. Disable collection or clear the history at any time, especially on a shared administrator computer.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />
