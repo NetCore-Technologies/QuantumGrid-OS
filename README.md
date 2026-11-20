@@ -195,8 +195,10 @@ table-coverage view cross-references lookup rules with default routes by address
 it reports missing and unreferenced tables without claiming they are invalid or unused. The
 Multi-WAN panel reads mwan3 tracking state, logical interface state, tracked-target latency/loss
 and elapsed online/offline time, with search and spreadsheet-safe CSV export. The tracker result
-and netifd interface state are deliberately shown separately. These are read-only views, not a
-simulation of packet routing or a change to Multi-WAN policy.
+and netifd interface state are deliberately shown separately. A further read-only view exposes
+active IPv4/IPv6 policy weights and mwan3 directly connected networks. Policy percentages are
+weights, not measured traffic shares; these views do not change failover policy or simulate packet
+routing.
 WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi association
 data is read from OpenWrt's iwinfo ubus API; the client inventory can filter and sort stations by
 reported TX retries and failed packets, and exports the active diagnostic filters with each row.
