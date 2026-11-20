@@ -7599,3 +7599,52 @@ input::placeholder {
 }
 .mwan3-connected-grid span { color: var(--muted2); font-size: 8px; }
 @media (max-width: 760px) { .mwan3-policy-row { grid-template-columns: 1fr; } }
+
+
+/* Redacted WireGuard peer health inventory */
+.wireguard-peer-list {
+  display: grid;
+  gap: 9px;
+  margin-top: 12px;
+}
+.wireguard-peer-row {
+  display: grid;
+  grid-template-columns: minmax(80px, .7fr) minmax(120px, 1fr) minmax(85px, .7fr) minmax(85px, .7fr) minmax(150px, 1.5fr);
+  gap: 11px;
+  align-items: center;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.wireguard-peer-row > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.wireguard-peer-row small {
+  color: var(--muted2);
+  font-size: 7px;
+  letter-spacing: .07em;
+}
+.wireguard-peer-row strong,
+.wireguard-peer-row b {
+  color: var(--text);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.wireguard-peer-row .wireguard-peer-allowed span {
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .wireguard-peer-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wireguard-peer-row .wireguard-peer-allowed { grid-column: 1 / -1; }
+}
+@media (max-width: 520px) {
+  .wireguard-peer-row { grid-template-columns: 1fr; }
+  .wireguard-peer-row .wireguard-peer-allowed { grid-column: auto; }
+}
