@@ -88,6 +88,7 @@ export interface RouterWirelessConfig {
   mode: "ap";
   ssid: string;
   encryption: string;
+  ieee80211w: string;
   hidden: boolean;
   key_set: boolean;
   radius_auth_server: string;
@@ -116,6 +117,7 @@ export interface RouterWirelessUpdateResult {
   section: string;
   ssid: string;
   encryption: string;
+  ieee80211w?: string;
   hidden: boolean;
   channel: string;
   htmode: string;
@@ -1386,6 +1388,7 @@ export async function updateRouterWirelessConfig(input: {
     !("txpower" in payload) || payload.txpower !== input.txpower ||
     !("reloaded" in payload) || payload.reloaded !== true ||
     !("rolled_back" in payload) || payload.rolled_back !== false ||
+    (input.encryption === "wpa3" && (!("ieee80211w" in payload) || payload.ieee80211w !== "2")) ||
     !("radius_secret_set" in payload) || payload.radius_secret_set !== enterpriseMode ||
     !("accounting_secret_set" in payload) ||
       payload.accounting_secret_set !== (enterpriseMode && input.accountingServer !== "")
