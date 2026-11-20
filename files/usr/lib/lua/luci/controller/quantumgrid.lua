@@ -3862,16 +3862,17 @@ function action_office_segment_add()
 	end
 
 	local rule_definitions = {
-		{ section = rule_sections[1], protocol = "udp", port = "67", label = "DHCP" },
-		{ section = rule_sections[2], protocol = "udp", port = "53", label = "DNS UDP" },
-		{ section = rule_sections[3], protocol = "tcp", port = "53", label = "DNS TCP" }
+		{ section = rule_sections[1], protocol = "udp", source_port = "68", port = "67", label = "DHCP" },
+		{ section = rule_sections[2], protocol = "udp", source_port = nil, port = "53", label = "DNS UDP" },
+		{ section = rule_sections[3], protocol = "tcp", source_port = nil, port = "53", label = "DNS TCP" }
 	}
 	for _, rule in ipairs(rule_definitions) do
 		local create_ok, created = pcall(uci.section, uci, "firewall", "rule", rule.section, {
 			name = "QuantumGrid " .. update.name .. " " .. rule.label,
 			src = update.zone_name,
 			proto = rule.protocol,
-			dest_ip = update.address,
+			src_port = rule.source_port,
+			dest_ip = rule.label ~= "DHCP" and update.address or nil,
 			src_ip = rule.label ~= "DHCP" and update.subnet_cidr or nil,
 			dest_port = rule.port,
 			family = "ipv4",
