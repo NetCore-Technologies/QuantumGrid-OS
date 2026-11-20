@@ -3897,7 +3897,7 @@ function SqmQueueEditor({
     setAcknowledged(false);
   }, [queue.name, queue.enabled, queue.download_kbps, queue.upload_kbps]);
 
-  const parseRate = (value: string) => /^\\d+$/.test(value) ? Number(value) : NaN;
+  const parseRate = (value: string) => /^\d+$/.test(value) ? Number(value) : NaN;
   const downloadRate = parseRate(download);
   const uploadRate = parseRate(upload);
   const validRates = Number.isInteger(downloadRate) && Number.isInteger(uploadRate) &&
@@ -4017,7 +4017,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         <div>
           <div className="setup-kicker">SMART QUEUE MANAGEMENT · LIVE INSPECTION</div>
           <h1>Gaming & Latency</h1>
-          <p>Inspect configured SQM queues and kernel queue disciplines. This page is read-only: it does not change bandwidth limits, priorities or traffic-shaping policy.</p>
+          <p>Inspect configured SQM queues and kernel queue disciplines. Edit existing queue enable state and rates with a guarded restart; advanced classification and per-client priority stay locked.</p>
         </div>
       </section>
 
