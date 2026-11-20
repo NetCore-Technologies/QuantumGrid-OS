@@ -2971,6 +2971,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Firewall", "Configuration", security.firewall_config_readable ? "READABLE" : "UNAVAILABLE", ""],
       [exportedAt, "Firewall", "Rules", "REPORTED", security.rules_count],
       [exportedAt, "Firewall", "Redirects", "REPORTED", security.redirects_count],
+      [exportedAt, "Firewall", "Redirect sample coverage", security.redirects_truncated ? "TRUNCATED" : "COMPLETE", "Returned " + firewallRedirects.length + " of " + security.redirects_count + " configured redirects"],
       [exportedAt, "Firewall", "fw4 table", fw4Present ? "PRESENT" : "NOT FOUND", "inet/fw4"],
       ...zones.map((zone) => [
         exportedAt, "Firewall zone", zone.name, "REPORTED",
