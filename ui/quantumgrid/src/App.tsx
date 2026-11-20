@@ -2425,12 +2425,12 @@ function describeScanOperation(network: RouterWifiScan["results"][number]): stri
   if (!selected) return "N/A";
   const details = [selected.name, describeWidth(selected.name, selected.value?.channel_width)];
   if (selected.name === "HT" && selected.value?.primary_channel !== undefined) {
-    details.push(`primary CH ${selected.value.primary_channel}`);
+    details.push("primary CH " + selected.value.primary_channel);
     if (selected.value.secondary_channel_offset) details.push(selected.value.secondary_channel_offset);
   } else {
-    if (selected.value?.center_freq_1 !== undefined) details.push(`center CH ${selected.value.center_freq_1}`);
+    if (selected.value?.center_freq_1 !== undefined) details.push("center CH " + selected.value.center_freq_1);
     if (selected.value?.center_freq_2 !== undefined && selected.value.center_freq_2 > 0) {
-      details.push(`center 2 CH ${selected.value.center_freq_2}`);
+      details.push("center 2 CH " + selected.value.center_freq_2);
     }
   }
   return details.join(" · ");
