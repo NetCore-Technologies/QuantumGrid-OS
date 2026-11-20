@@ -239,6 +239,29 @@ export function auditFirewallPosture(
     });
   }
 
+  const runtime = security.nft_runtime;
+  if (runtime?.available && !runtime.truncated) {
+    checks.push({
+      id: "fw4-chain-snapshot",
+      title: "Live fw4 chain snapshot",
+      scope: "inet/fw4",
+      status: "ok",
+      detail: "The active fw4 table was parsed into a bounded chain inventory. This confirms only that a metadata snapshot was collected; it does not validate rule semantics or packet behaviour.",
+    });
+  } else {
+    checks.push({
+      id: "fw4-chain-snapshot",
+      title: "Live fw4 chain snapshot",
+      scope: "inet/fw4",
+      status: "unknown",
+      detail: runtime?.truncated
+        ? "The fw4 chain inventory exceeded its 64-chain limit or the JSON snapshot exceeded its byte cap. The visible chain list is incomplete."
+        : runtime?.table_present
+          ? "The fw4 table is present, but its JSON chain inventory could not be parsed."
+          : "A live fw4 chain snapshot is not available. Table presence and detailed runtime availability are not treated as equivalent.",
+    });
+  }
+
   const externalAllowRules = (security.rules ?? []).filter((rule) =>
     rule.enabled === true &&
     rule.target.trim().toUpperCase() === "ACCEPT" &&
