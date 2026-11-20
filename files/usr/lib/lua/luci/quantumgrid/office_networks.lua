@@ -92,6 +92,15 @@ local function ipv4_number(value)
 	return octets[1] * 16777216 + octets[2] * 65536 + octets[3] * 256 + octets[4]
 end
 
+local function ipv4_text(address)
+	if type(address) ~= "number" or address < 0 or address > 4294967295 then return nil end
+	local a = math.floor(address / 16777216) % 256
+	local b = math.floor(address / 65536) % 256
+	local c = math.floor(address / 256) % 256
+	local d = address % 256
+	return table.concat({ a, b, c, d }, ".")
+end
+
 local function ipv4_prefix(netmask)
 	local address = ipv4_number(netmask)
 	if not address then return nil end
@@ -424,6 +433,64 @@ function build_inventory(source)
 	end
 	result.interface_count = #result.interfaces
 	if #source_interfaces > #result.interfaces then result.truncated = true end
+
+	local pool_ranges = {}
+	for _, scope in ipairs(result.dhcp_scopes) do
+		scope.range_valid = false
+		scope.pool_start_ip = ""
+		scope.pool_end_ip = ""
+		scope.range_error = ""
+		scope.overlap = false
+		if scope.ignore then
+			scope.range_error = "DHCP scope is disabled."
+		else
+			local iface = nil
+			for _, candidate in ipairs(result.interfaces) do
+				if candidate.name == scope.interface then iface = candidate break end
+			end
+			local interface_address = iface and iface.ipv4[1] or nil
+			local router_number = ipv4_number(interface_address)
+			local prefix = iface and ipv4_prefix(iface.netmask) or nil
+			local start = tonumber(scope.start)
+			local limit = tonumber(scope.limit)
+			if not iface or not router_number or not prefix then
+				scope.range_error = "A static IPv4 address and contiguous netmask are required to calculate this pool."
+			elseif not start or start ~= math.floor(start) or start < 1
+				or not limit or limit ~= math.floor(limit) or limit < 1
+				or start > 4294967294 or limit > 4294967294 then
+				scope.range_error = "DHCP start offset or pool size is invalid."
+			else
+				local size = 2 ^ (32 - prefix)
+				local network = math.floor(router_number / size) * size
+				local broadcast = network + size - 1
+				local first = network + start
+				local last = first + limit - 1
+				if first <= network or last >= broadcast then
+					scope.range_error = "The configured pool extends outside usable host addresses in the subnet."
+				elseif router_number >= first and router_number <= last then
+					scope.range_error = "The configured pool includes the router interface address."
+				else
+					scope.range_valid = true
+					scope.pool_start_ip = ipv4_text(first) or ""
+					scope.pool_end_ip = ipv4_text(last) or ""
+					pool_ranges[#pool_ranges + 1] = {
+						scope = scope,
+						first = first,
+						last = last
+					}
+				end
+			end
+		end
+	end
+	for left = 1, #pool_ranges do
+		for right = left + 1, #pool_ranges do
+			local first, second = pool_ranges[left], pool_ranges[right]
+			if first.first <= second.last and second.first <= first.last then
+				first.scope.overlap = true
+				second.scope.overlap = true
+			end
+		end
+	end
 
 	return result
 end
