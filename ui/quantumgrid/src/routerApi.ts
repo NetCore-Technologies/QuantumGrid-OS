@@ -676,6 +676,17 @@ export interface RouterDhcpScopeUpdateResult {
   rolled_back: false;
 }
 
+export interface RouterDhcpReservationUpdateResult {
+  ok: true;
+  section: string;
+  name: string;
+  mac: string;
+  ipv4: string;
+  network: string;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterDhcpReservationRemoveResult {
   ok: true;
   section: string;
@@ -796,6 +807,7 @@ const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backu
 const AUDIT_URL = "/cgi-bin/luci/admin/services/quantumgrid/audit";
 const DHCP_RESERVATION_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation";
 const DHCP_RESERVATION_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-remove";
+const DHCP_RESERVATION_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-update";
 const DHCP_SCOPE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-update";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
@@ -1553,4 +1565,70 @@ export async function updateRouterRemoteSyslog(input: {
     throw new Error("The router did not confirm the remote syslog update and log-service restart.");
   }
   return payload as RouterRemoteSyslogUpdateResult;
+}
+export async function updateRouterDhcpReservation(input: {
+  section: string;
+  name: string;
+  mac: string;
+  ipv4: string;
+  network: string;
+}): Promise<RouterDhcpReservationUpdateResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) || input.section === "." || input.section === "..") {
+    throw new Error("Invalid DHCP reservation section identifier.");
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9-]{0,62}$/.test(input.name)) {
+    throw new Error("Host name must start with a letter or digit and contain only letters, digits or hyphens.");
+  }
+  if (!/^[A-Fa-f0-9]{2}(:[A-Fa-f0-9]{2}){5}$/.test(input.mac)) {
+    throw new Error("A six-octet MAC address is required.");
+  }
+  if (!/^[0-9]{1,3}(\.[0-9]{1,3}){3}$/.test(input.ipv4)) {
+    throw new Error("A dotted-decimal IPv4 address is required.");
+  }
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) || input.network === "." || input.network === "..") {
+    throw new Error("Invalid LAN interface name.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", input.section);
+  form.set("name", input.name);
+  form.set("mac", input.mac);
+  form.set("ipv4", input.ipv4);
+  form.set("network", input.network);
+  form.set("confirmed", "1");
+  const response = await fetch(DHCP_RESERVATION_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Editing DHCP reservations requires an active router administrator session."
+      : "The router returned an invalid DHCP reservation update response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid DHCP reservation update response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== input.section ||
+    !("name" in payload) || payload.name !== input.name ||
+    !("mac" in payload) || payload.mac !== input.mac.toLowerCase() ||
+    !("ipv4" in payload) || payload.ipv4 !== input.ipv4 ||
+    !("network" in payload) || payload.network !== input.network ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the reservation edit and dnsmasq restart.");
+  }
+  return payload as RouterDhcpReservationUpdateResult;
 }
