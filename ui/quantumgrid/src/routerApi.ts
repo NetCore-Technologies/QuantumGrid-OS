@@ -664,6 +664,19 @@ export interface RouterOfficeNetworks {
   sampled_at: number;
 }
 
+export interface RouterDhcpScopeCreateResult {
+  ok: true;
+  section: string;
+  network: string;
+  start: string;
+  limit: string;
+  lease_time: string;
+  pool_start_ip: string;
+  pool_end_ip: string;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterDhcpScopeToggleResult {
   ok: true;
   section: string;
@@ -819,6 +832,7 @@ const DHCP_RESERVATION_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dh
 const DHCP_RESERVATION_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-update";
 const DHCP_SCOPE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-update";
 const DHCP_SCOPE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-toggle";
+const DHCP_SCOPE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -1685,4 +1699,64 @@ export async function updateRouterDhcpScopeEnabled(section: string, enabled: boo
     throw new Error("The router did not confirm the DHCP scope state and dnsmasq result.");
   }
   return payload as RouterDhcpScopeToggleResult;
+}
+export async function createRouterDhcpScope(input: {
+  network: string;
+  start: string;
+  limit: string;
+  lease_time: string;
+}): Promise<RouterDhcpScopeCreateResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) || input.network === "." || input.network === "..") {
+    throw new Error("Invalid LAN interface name.");
+  }
+  if (!/^[1-9][0-9]{0,9}$/.test(input.start) || !/^[1-9][0-9]{0,9}$/.test(input.limit)) {
+    throw new Error("DHCP start and limit must be positive whole numbers.");
+  }
+  if (!/^[1-9][0-9]{0,8}[smhdw]?$/.test(input.lease_time)) {
+    throw new Error("DHCP lease time must be a positive duration such as 12h, 30m or 86400s.");
+  }
+  const form = new URLSearchParams();
+  form.set("network", input.network);
+  form.set("start", input.start);
+  form.set("limit", input.limit);
+  form.set("leasetime", input.lease_time);
+  form.set("confirmed", "1");
+  const response = await fetch(DHCP_SCOPE_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Creating a DHCP scope requires an active router administrator session."
+      : "The router returned an invalid DHCP scope creation response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid DHCP scope creation response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || typeof payload.section !== "string" || payload.section.length === 0 ||
+    !("network" in payload) || payload.network !== input.network ||
+    !("start" in payload) || payload.start !== String(Number(input.start)) ||
+    !("limit" in payload) || payload.limit !== String(Number(input.limit)) ||
+    !("lease_time" in payload) || payload.lease_time !== input.lease_time ||
+    !("pool_start_ip" in payload) || typeof payload.pool_start_ip !== "string" ||
+    !("pool_end_ip" in payload) || typeof payload.pool_end_ip !== "string" ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the new DHCP scope and dnsmasq restart.");
+  }
+  return payload as RouterDhcpScopeCreateResult;
 }
