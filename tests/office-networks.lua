@@ -150,6 +150,45 @@ local gateway_scope = office.validate_dhcp_scope_update(
   "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
 
+local policy_zones = {
+  { section = "cfg_corp", name = "corp" },
+  { section = "cfg_guest", name = "guest" },
+  { section = "cfg_wan", name = "wan" },
+}
+local valid_zone_policy = office.validate_office_zone_policy("cfg_corp", "REJECT", "REJECT", "0", policy_zones)
+assert(valid_zone_policy and valid_zone_policy.output == "REJECT" and valid_zone_policy.forward == "REJECT")
+assert(valid_zone_policy.masquerade == false and valid_zone_policy.masq_value == "0")
+local masquerade_policy = office.validate_office_zone_policy("cfg_guest", "ACCEPT", "DROP", "1", policy_zones)
+assert(masquerade_policy and masquerade_policy.masquerade == true and masquerade_policy.forward == "DROP")
+
+local function reject_zone_policy(section, output, forward, masquerade, label)
+  local result, err = office.validate_office_zone_policy(section, output, forward, masquerade, policy_zones)
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain why it was rejected")
+end
+reject_zone_policy("../firewall", "REJECT", "REJECT", "0", "path-like zone section")
+reject_zone_policy("missing", "REJECT", "REJECT", "0", "unknown zone section")
+reject_zone_policy("cfg_corp", "INVALID", "REJECT", "0", "unknown zone output policy")
+reject_zone_policy("cfg_corp", "REJECT", "ACCEPT;uci", "0", "injected zone forward policy")
+reject_zone_policy("cfg_corp", "REJECT", "REJECT", "true", "non-canonical masquerade flag")
+
+local zone_snapshot, zone_snapshot_error = office.snapshot_firewall_zone_policy_options({
+  [".name"] = "cfg_corp",
+  [".type"] = "zone",
+  name = "corp",
+  input = "REJECT",
+  output = "ACCEPT",
+  forward = "DROP",
+  network = { "corp", "corp6" },
+})
+assert(zone_snapshot and zone_snapshot.section == "cfg_corp")
+assert(zone_snapshot.options.output.present and zone_snapshot.options.output.value == "ACCEPT")
+assert(zone_snapshot.options.forward.present and zone_snapshot.options.forward.value == "DROP")
+assert(not zone_snapshot.options.masq.present and zone_snapshot.options.masq.value == nil,
+  "absent masquerade options must be preserved as absent during rollback")
+assert(office.snapshot_firewall_zone_policy_options({ [".name"] = "bad", [".type"] = "forwarding" }) == nil,
+  "forwarding sections cannot be snapshotted as firewall zones")
+
 local forwarding_zones = {
   { name = "lan", networks = { "lan" } },
   { name = "corp", networks = { "corp" } },
@@ -267,10 +306,10 @@ local result = office.build_inventory({
     { name = "../unsafe", source = "corp", destination = "lan" },
   },
   zones = {
-    { name = "lan", networks = { "lan" }, input = "ACCEPT", output = "ACCEPT", forward = "ACCEPT" },
-    { name = "corp", networks = { "corp" }, input = "ACCEPT", output = "ACCEPT", forward = "REJECT" },
-    { name = "guest", networks = { "guest" }, input = "REJECT", output = "ACCEPT", forward = "REJECT", masquerade = true },
-    { name = "iot", networks = "iot", input = "REJECT", output = "ACCEPT", forward = "REJECT" },
+    { section = "cfg_lan", name = "lan", networks = { "lan" }, input = "ACCEPT", output = "ACCEPT", forward = "ACCEPT" },
+    { section = "cfg_corp", name = "corp", networks = { "corp" }, input = "ACCEPT", output = "ACCEPT", forward = "REJECT" },
+    { section = "cfg_guest", name = "guest", networks = { "guest" }, input = "REJECT", output = "ACCEPT", forward = "REJECT", masquerade = true },
+    { section = "cfg_iot", name = "iot", networks = "iot", input = "REJECT", output = "ACCEPT", forward = "REJECT" },
   },
   wifi_aps = {
     { section = "corp_ap", mode = "ap", ssid = "Office-Corp", device = "radio1", networks = { "corp" } },
@@ -292,6 +331,7 @@ assert(result.static_lease_count == 2, "invalid MAC and IPv4 static leases must 
 assert(result.static_leases[1].mac == "aa:bb:cc:dd:ee:01", "MAC addresses should be normalized")
 assert(result.static_leases[1].section == "cfg0001", "static lease UCI section should be preserved for safe removal")
 assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" and result.forwardings[1].destination == "printers", "explicit firewall zone forwarding should be inventoried")
+assert(result.zones[1].section == "cfg_lan", "firewall zone UCI section IDs should be preserved for safe editing")
 assert(result.forwardings[1].section == "cfg-corp-printers", "firewall forwarding UCI section IDs must be preserved for safe removal")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
