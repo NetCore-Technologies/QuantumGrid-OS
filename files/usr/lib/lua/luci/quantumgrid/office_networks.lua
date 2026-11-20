@@ -163,6 +163,17 @@ function validate_reservation(name, mac, ipv4)
 	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
 end
 
+function snapshot_dhcp_scope_enabled(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
+		return nil, "A DHCP scope snapshot is required."
+	end
+	return {
+		ignore_present = snapshot.ignore ~= nil,
+		ignore_value = snapshot.ignore,
+		enabled = snapshot.ignore ~= "1"
+	}
+end
+
 function snapshot_dhcp_scope_options(snapshot)
 	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
 		return nil, "A DHCP scope snapshot is required."
