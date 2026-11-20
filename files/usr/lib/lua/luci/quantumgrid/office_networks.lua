@@ -416,8 +416,16 @@ function validate_bridge_vlan(device, vlan_id, requested_ports, bridge_ports, ex
 				local existing_ports = parse_bridge_ports(existing.ports) or {}
 				for _, raw in ipairs(existing_ports) do
 					local old_port = parse_port(raw)
-					if old_port and old_port.pvid and pvid_ports[old_port.name] then
-						return nil, "A switch port can have only one untagged PVID across the bridge."
+					if old_port and old_port.mode == "untagged" then
+						for _, new_raw in ipairs(normalized) do
+							local new_port = parse_port(new_raw)
+							if new_port and new_port.name == old_port.name and new_port.mode == "untagged" then
+								return nil, "A switch port can have only one untagged VLAN membership across the bridge."
+							end
+						end
+						if old_port.pvid and pvid_ports[old_port.name] then
+							return nil, "A switch port can have only one untagged PVID across the bridge."
+						end
 					end
 				end
 			end
