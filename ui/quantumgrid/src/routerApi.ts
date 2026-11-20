@@ -171,6 +171,16 @@ export interface RouterSqmStatus {
   qdiscs: RouterQdiscState[];
 }
 
+export interface RouterSqmQueueUpdateResult {
+  ok: true;
+  section: string;
+  enabled: boolean;
+  download_kbps: number;
+  upload_kbps: number;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterFirewallZone {
   name: string;
   networks: string[];
@@ -354,6 +364,7 @@ const API_URL = "/cgi-bin/luci/admin/services/quantumgrid/api";
 const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
+const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -512,4 +523,63 @@ export async function runRouterLatencyTest(): Promise<RouterLatencyTest> {
     throw new Error("The router returned an invalid latency-test response.");
   }
   return payload as RouterLatencyTest;
+}
+
+
+export async function updateRouterSqmQueue(
+  section: string,
+  enabled: boolean,
+  downloadKbps: number,
+  uploadKbps: number,
+): Promise<RouterSqmQueueUpdateResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(section)) {
+    throw new Error("Invalid SQM queue section name.");
+  }
+  const validRate = (value: number) => Number.isInteger(value) && value >= 64 && value <= 1_000_000;
+  if (!validRate(downloadKbps) || !validRate(uploadKbps)) {
+    throw new Error("Download and upload rates must be whole numbers from 64 to 1,000,000 kbit/s.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("enabled", enabled ? "1" : "0");
+  form.set("download", String(downloadKbps));
+  form.set("upload", String(uploadKbps));
+
+  const response = await fetch(SQM_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "SQM queue changes require an active router administrator session."
+      : "The router returned an invalid SQM update response.");
+  }
+
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid SQM update response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("enabled" in payload) || payload.enabled !== enabled ||
+    !("download_kbps" in payload) || payload.download_kbps !== downloadKbps ||
+    !("upload_kbps" in payload) || payload.upload_kbps !== uploadKbps ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the SQM queue update and service restart.");
+  }
+  return payload as RouterSqmQueueUpdateResult;
 }
