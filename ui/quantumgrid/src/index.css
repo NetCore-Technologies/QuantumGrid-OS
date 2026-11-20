@@ -1802,12 +1802,13 @@ button:disabled {
 }
 .wifi-scan-tools {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(170px, .7fr) auto;
+  grid-template-columns: minmax(160px, 1fr) minmax(145px, .7fr) minmax(145px, .7fr) auto;
   align-items: center;
   gap: 9px;
   margin: 10px 0 14px;
 }
 .wifi-scan-filter,
+.wifi-scan-security,
 .wifi-scan-sort {
   width: 100%;
   min-width: 0;

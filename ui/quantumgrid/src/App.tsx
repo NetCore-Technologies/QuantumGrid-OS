@@ -2576,13 +2576,19 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scanError, setScanError] = useState("");
   const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
   const [scanFilter, setScanFilter] = useState("");
+  const [scanSecurityFilter, setScanSecurityFilter] = useState<"all" | "open" | "encrypted" | "unknown">("all");
   const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
   const visibleScanResults = scan
     ? scan.results
       .filter((network) => {
         const query = scanFilter.trim().toLocaleLowerCase();
-        return !query || [network.ssid, network.bssid, network.radio, network.ifname, network.band]
+        const matchesText = !query || [network.ssid, network.bssid, network.radio, network.ifname, network.band]
           .some((value) => value.toLocaleLowerCase().includes(query));
+        const matchesSecurity = scanSecurityFilter === "all" ||
+          (scanSecurityFilter === "open" && network.security === "Open") ||
+          (scanSecurityFilter === "unknown" && network.security === "Unknown") ||
+          (scanSecurityFilter === "encrypted" && !["Open", "Unknown"].includes(network.security));
+        return matchesText && matchesSecurity;
       })
       .sort((left, right) => {
         if (scanSort === "ssid") return (left.ssid || "").localeCompare(right.ssid || "");
@@ -2731,6 +2737,12 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
               <>
                 <div className="wifi-scan-tools">
                   <input className="wifi-scan-filter" type="search" aria-label="Filter nearby access points" placeholder="Filter SSID, BSSID or radio" value={scanFilter} onChange={(event) => setScanFilter(event.target.value)} />
+                  <select className="wifi-scan-security" aria-label="Filter nearby access point security" value={scanSecurityFilter} onChange={(event) => setScanSecurityFilter(event.target.value as "all" | "open" | "encrypted" | "unknown")}>
+                    <option value="all">All security states</option>
+                    <option value="open">Open networks</option>
+                    <option value="encrypted">Encrypted networks</option>
+                    <option value="unknown">Security unknown</option>
+                  </select>
                   <select className="wifi-scan-sort" aria-label="Sort nearby access points" value={scanSort} onChange={(event) => setScanSort(event.target.value as "signal" | "channel" | "ssid")}>
                     <option value="signal">Strongest signal first</option>
                     <option value="channel">Band and channel</option>
