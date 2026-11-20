@@ -124,7 +124,8 @@ raw IP and MAC values are omitted. Summaries can be searched, sorted and exporte
 order, NAT, full address matching and actual packet matching are not evaluated. This is not a
 vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, loaded kernel
 modules, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
-connection-tracking count, configured maximum, free capacity and 75%/90% warning thresholds, MTD partitions,
+connection-tracking count, configured maximum, free capacity and 75%/90% warning thresholds, plus a
+30-sample session-only occupancy trend and CSV export, MTD partitions,
 block devices and important system mounts, including total/available capacity and usage where
 statvfs is supported. These checks are read-only; service-script presence is not presented as proof
 that a service is running. The Advanced page adds a live runtime-health snapshot from the
