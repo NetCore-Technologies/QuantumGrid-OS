@@ -3890,13 +3890,6 @@ function SqmQueueEditor({
   const [upload, setUpload] = useState(queue.upload_kbps === undefined ? "" : String(queue.upload_kbps));
   const [acknowledged, setAcknowledged] = useState(false);
 
-  useEffect(() => {
-    setEnabled(queue.enabled);
-    setDownload(queue.download_kbps === undefined ? "" : String(queue.download_kbps));
-    setUpload(queue.upload_kbps === undefined ? "" : String(queue.upload_kbps));
-    setAcknowledged(false);
-  }, [queue.name, queue.enabled, queue.download_kbps, queue.upload_kbps]);
-
   const parseRate = (value: string) => /^\d+$/.test(value) ? Number(value) : NaN;
   const downloadRate = parseRate(download);
   const uploadRate = parseRate(upload);
@@ -4064,7 +4057,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         ) : (
           <div className="sqm-policy-list">
             {queues.map((queue) => (
-              <SqmQueueEditor key={queue.name} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} />
+              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} />
             ))}
           </div>
         )}
