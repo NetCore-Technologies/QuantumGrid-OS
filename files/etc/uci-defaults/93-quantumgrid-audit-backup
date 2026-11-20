@@ -1,0 +1,18 @@
+#!/bin/sh
+# Preserve the redacted QuantumGrid audit history in native sysupgrade backups.
+# Append only our two fixed paths; never replace administrator backup entries.
+
+set -eu
+
+backup_list="/etc/sysupgrade.conf"
+touch "$backup_list"
+
+for entry in \
+  "/etc/quantumgrid/audit.jsonl" \
+  "/etc/quantumgrid/audit.jsonl.1"; do
+  if ! grep -qxF "$entry" "$backup_list"; then
+    printf '%s\n' "$entry" >> "$backup_list"
+  fi
+done
+
+exit 0
