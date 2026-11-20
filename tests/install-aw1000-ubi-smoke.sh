@@ -2,8 +2,12 @@
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 INSTALLER="$ROOT/scripts/install-aw1000-ubi.sh"
+VERIFIER="$ROOT/scripts/verify-aw1000-release-manifest.sh"
+
 test -s "$INSTALLER"
+test -s "$VERIFIER"
 sh -n "$INSTALLER"
+sh -n "$VERIFIER"
 grep -Fq 'arcadyan_aw1000|arcadyan,aw1000' "$INSTALLER"
 grep -Fq 'ROOT_FS=$(awk' "$INSTALLER"
 grep -Fq 'rootfs|tmpfs|ramfs' "$INSTALLER"
@@ -13,8 +17,61 @@ grep -Fq 'ROOTFS1_MTD" = "mtd20"' "$INSTALLER"
 grep -Fq 'ubiformat "$TARGET" -y -f "$IMAGE"' "$INSTALLER"
 grep -Fq 'ERASE rootfs' "$INSTALLER"
 grep -Fq 'Dry run only. No flash writes were made.' "$INSTALLER"
+grep -Fq 'verify-aw1000-release-manifest.sh' "$INSTALLER"
+grep -Fq 'sh "$SCRIPT_DIR/verify-aw1000-release-manifest.sh" "$IMAGE" "$MANIFEST"' "$INSTALLER"
+grep -Fq 'sha256sum' "$VERIFIER"
+grep -Fq 'count != 1' "$VERIFIER"
+
 if sh "$INSTALLER" >/dev/null 2>&1; then
   echo "ERROR: installer accepted a missing image argument." >&2
   exit 1
 fi
-echo "AW1000 UBI installer preflight contract checks passed."
+
+TEST_DIR="$(mktemp -d)"
+trap 'rm -rf "$TEST_DIR"' EXIT
+IMAGE="$TEST_DIR/QuantumGrid-OS-test-AW1000-squashfs-factory.ubi"
+MANIFEST="$TEST_DIR/SHA256SUMS"
+printf 'synthetic AW1000 image fixture\n' > "$IMAGE"
+DIGEST="$(sha256sum "$IMAGE" | awk '{ print $1 }')"
+printf '%s  %s\n' "$DIGEST" "${IMAGE##*/}" > "$MANIFEST"
+sh "$VERIFIER" "$IMAGE" "$MANIFEST"
+
+# A changed image must never match the original release manifest.
+printf 'tampered AW1000 image fixture\n' > "$IMAGE"
+if sh "$VERIFIER" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: release verifier accepted a tampered image." >&2
+  exit 1
+fi
+
+# Duplicate entries are ambiguous and must be rejected.
+printf 'synthetic AW1000 image fixture\n' > "$IMAGE"
+DIGEST="$(sha256sum "$IMAGE" | awk '{ print $1 }')"
+printf '%s  %s\n' "$DIGEST" "${IMAGE##*/}" > "$MANIFEST"
+cat "$MANIFEST" >> "$MANIFEST.duplicate"
+cat "$MANIFEST.duplicate" >> "$MANIFEST"
+if sh "$VERIFIER" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: release verifier accepted duplicate manifest entries." >&2
+  exit 1
+fi
+
+# A wrong image name cannot be authorized by a manifest entry.
+WRONG_IMAGE="$TEST_DIR/not-an-aw1000-image.ubi"
+cp "$IMAGE" "$WRONG_IMAGE"
+if sh "$VERIFIER" "$WRONG_IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: release verifier accepted a non-AW1000 image name." >&2
+  exit 1
+fi
+
+# Symlinked image or manifest inputs are refused.
+ln -s "$IMAGE" "$TEST_DIR/image-link.ubi"
+if sh "$VERIFIER" "$TEST_DIR/image-link.ubi" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: release verifier accepted a symlinked image." >&2
+  exit 1
+fi
+ln -s "$MANIFEST" "$TEST_DIR/manifest-link"
+if sh "$VERIFIER" "$IMAGE" "$TEST_DIR/manifest-link" >/dev/null 2>&1; then
+  echo "ERROR: release verifier accepted a symlinked manifest." >&2
+  exit 1
+fi
+
+echo "AW1000 UBI installer and release SHA-256 manifest checks passed."
