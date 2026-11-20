@@ -520,6 +520,9 @@ function validate_office_segment(name, bridge_name, vlan_id, address, netmask,
 	if not selected_vlan or type(selected_vlan.name) ~= "string" or selected_vlan.name == "" then
 		return nil, "The selected bridge VLAN must already exist before an L3 network can be provisioned."
 	end
+	if type(selected_vlan.ports) ~= "table" or #selected_vlan.ports == 0 then
+		return nil, "The selected bridge VLAN has no validated switch-port membership."
+	end
 	local device = bridge_name .. "." .. tostring(numeric_vlan)
 	if #device > 64 then return nil, "The generated VLAN device name is too long." end
 
@@ -559,20 +562,23 @@ function validate_office_segment(name, bridge_name, vlan_id, address, netmask,
 	end
 
 	local selected_zone = nil
-	local zone_name, zone_section = nil, nil
-	-- The caller marks exactly one selected zone after validating its section identifier.
 	if type(zones) == "table" then
 		for _, candidate in ipairs(zones) do
 			if type(candidate) == "table" and candidate.selected == true then
 				if selected_zone then return nil, "Select exactly one existing firewall zone." end
 				selected_zone = candidate
-				zone_name, zone_section = candidate.name, candidate.section
 			end
 		end
 	end
 	if not selected_zone or type(selected_zone.section) ~= "string" or selected_zone.section == ""
 		or is_external_zone(selected_zone) then
 		return nil, "Choose an existing internal firewall zone. External WAN/WWAN zones cannot host an office LAN."
+	end
+	if selected_zone.input ~= "REJECT" and selected_zone.input ~= "DROP" then
+		return nil, "The selected zone must already default router input to REJECT or DROP. QuantumGrid adds only narrow DHCP and DNS access rules for the new segment."
+	end
+	if selected_zone.forward ~= "REJECT" and selected_zone.forward ~= "DROP" then
+		return nil, "The selected zone must already default inter-zone forwarding to REJECT or DROP. Add explicit inter-zone forwarding only after the segment is provisioned."
 	end
 
 	local other_ranges = {}
@@ -598,6 +604,8 @@ function validate_office_segment(name, bridge_name, vlan_id, address, netmask,
 		netmask = netmask,
 		zone_section = selected_zone.section,
 		zone_name = selected_zone.name,
+		zone_input = selected_zone.input,
+		zone_forward = selected_zone.forward,
 		dhcp_start = pool.start,
 		dhcp_limit = pool.limit,
 		lease_time = pool.lease_time,
