@@ -12,7 +12,7 @@ export interface PolicyRoutingCoverage {
 }
 
 function tableKey(family: string, table: string): string {
-  return family + "\\u0000" + table;
+  return family + "|" + table;
 }
 
 /**
