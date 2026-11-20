@@ -2222,6 +2222,8 @@ button:disabled {
   .wifi-client-history-summary { grid-template-columns: 1fr 1fr; }
   .wifi-client-history-actions { justify-content: flex-start; }
   .wifi-channel-plan-heading { align-items: flex-start; flex-direction: column; }
+  .firewall-posture-summary { grid-template-columns: 1fr; }
+  .firewall-posture-heading { align-items: flex-start; flex-direction: column; }
   .wifi-station-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .wifi-station-tools { grid-template-columns: 1fr 1fr; }
   .wifi-station-tools span { white-space: normal; }
@@ -6730,6 +6732,20 @@ input::placeholder {
   font-size: 8px;
 }
 .security-export-button { margin-top: 10px; }
+.firewall-posture-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 13px; }
+.firewall-posture-summary > div { display: grid; gap: 5px; min-width: 0; padding: 11px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.02); }
+.firewall-posture-summary small { color: var(--muted2); font-size: 7px; letter-spacing: .05em; }
+.firewall-posture-summary strong { font-size: 15px; }
+.firewall-posture-list { display: grid; gap: 8px; }
+.firewall-posture-item { display: grid; gap: 7px; padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255,255,255,.018); }
+.firewall-posture-item.review { border-left: 3px solid #d9a45d; }
+.firewall-posture-item.ok { border-left: 3px solid #52b98f; }
+.firewall-posture-item.unknown { border-left: 3px solid rgba(255,255,255,.22); }
+.firewall-posture-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.firewall-posture-heading > div { display: grid; gap: 4px; }
+.firewall-posture-heading strong { font-size: 9px; }
+.firewall-posture-heading span { color: var(--muted2); font-size: 8px; }
+.firewall-posture-item p { margin: 0; color: var(--muted); font-size: 8px; line-height: 1.65; }
 .qdisc-tools {
   display: grid;
   grid-template-columns: minmax(180px, 1.3fr) minmax(170px, 1fr) auto;
