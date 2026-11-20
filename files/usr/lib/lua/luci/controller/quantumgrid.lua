@@ -1743,7 +1743,8 @@ local function platform_status(fs)
 		{ name = "iwinfo", paths = { "/sbin/iwinfo", "/usr/bin/iwinfo" } },
 		{ name = "uqmi", paths = { "/sbin/uqmi", "/usr/bin/uqmi" } },
 		{ name = "nft", paths = { "/usr/sbin/nft", "/sbin/nft" } },
-		{ name = "tc", paths = { "/sbin/tc", "/usr/sbin/tc" } }
+		{ name = "tc", paths = { "/sbin/tc", "/usr/sbin/tc" } },
+		{ name = "NSS statistics utility", paths = { "/usr/bin/nss_stats", "/sbin/nss_stats" } }
 	}
 	local services = {
 		{ name = "Network manager", path = "/etc/init.d/network" },
@@ -1924,7 +1925,7 @@ local function platform_status(fs)
 	for _, component in ipairs(acceleration_components) do
 		if component.present then acceleration_present = acceleration_present + 1 end
 	end
-	local acceleration_required = 10
+	local acceleration_required = 11
 	local acceleration_status = "not-detected"
 	if acceleration_present > 0 then acceleration_status = "partial" end
 	if acceleration_present >= acceleration_required then
