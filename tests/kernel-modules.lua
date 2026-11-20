@@ -6,7 +6,7 @@ local inventory = kernel_modules.parse(table.concat({
 	"kernel/net/netfilter/nf_conntrack.ko:",
 	"kernel/drivers/net/wireless/ath/ath11k/ath11k.ko:",
 	"kernel/drivers/net/ethernet/qcom/nss-dp.ko:",
-	"invalid path/../bad.ko:",
+	"kernel/../bad.ko:",
 	"kernel/drivers/net/ethernet/qcom/qca_ssdk.ko.zst:"
 }, "\n"), table.concat({
 	"nss_dp 12345 1 - Live 0x00000000",
@@ -25,6 +25,12 @@ assert(by_name.qca_ssdk.path:find("%.ko%.zst$"))
 assert(by_name.out_of_tree.loaded == true and by_name.out_of_tree.path == "")
 
 local limited = kernel_modules.parse("kernel/a.ko:\nkernel/b.ko:\nkernel/c.ko:", "", 2)
+local duplicates_after_limit = kernel_modules.parse(
+	"kernel/a.ko:\nkernel/b.ko:\nkernel/c.ko:\nkernel/c.ko:",
+	"", 2
+)
+assert(duplicates_after_limit.count == 3 and #duplicates_after_limit.modules == 2,
+	"duplicate entries after the API cap must not inflate the count")
 assert(limited.count == 3 and #limited.modules == 2 and limited.truncated == true)
 
 local absent = kernel_modules.parse(nil, "x 10 0 - Live 0x0")
