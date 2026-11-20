@@ -5031,8 +5031,8 @@ function OfficeNetworksPage({ routerOverview }: {
 
       <div className="metrics">
         <Metric title="LAN Interfaces" value={inventory?.available ? fmt(inventory.interface_count) : "N/A"} unit="" detail="Network UCI interface sections" icon={Network} />
-        <Metric title="Bridge Devices" value={inventory?.available ? fmt(inventory.bridge_count) : "N/A"} unit="" detail={inventory?.vlan_filtering_bridge_count + " with VLAN filtering"} icon={Database} />
-        <Metric title="Bridge VLANs" value={inventory?.available ? fmt(inventory.vlan_count) : "N/A"} unit="" detail={inventory?.segmented_interface_count + " L3 interfaces linked to a VLAN"} icon={SlidersHorizontal} />
+        <Metric title="Bridge Devices" value={inventory?.available ? fmt(inventory.bridge_count) : "N/A"} unit="" detail={inventory ? inventory.vlan_filtering_bridge_count + " with VLAN filtering" : "Waiting for router inventory"} icon={Database} />
+        <Metric title="Bridge VLANs" value={inventory?.available ? fmt(inventory.vlan_count) : "N/A"} unit="" detail={inventory ? inventory.segmented_interface_count + " L3 interfaces linked to a VLAN" : "Waiting for router inventory"} icon={SlidersHorizontal} />
         <Metric title="Wi-Fi Access Points" value={inventory?.available ? fmt(inventory.wifi_ap_count) : "N/A"} unit="" detail="Configured AP sections, including disabled entries" icon={Wifi} />
       </div>
 
