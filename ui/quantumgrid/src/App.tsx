@@ -3939,7 +3939,7 @@ function SqmQueueEditor({
 
 function GamingControlPage({ routerOverview, refresh }: {
   routerOverview: RouterOverview | null;
-  refresh: () => Promise<void>;
+  refresh: () => void;
 }) {
   const sqm = routerOverview?.sqm;
   const queues = sqm?.queues ?? [];
@@ -3967,11 +3967,7 @@ function GamingControlPage({ routerOverview, refresh }: {
     try {
       await updateRouterSqmQueue(section, enabled, download, upload);
       setSqmNotice({ success: true, message: "SQM settings were saved and the service restarted." });
-      try {
-        await refresh();
-      } catch {
-        setSqmNotice({ success: true, message: "SQM settings were saved and the service restarted, but telemetry could not refresh." });
-      }
+      refresh();
     } catch (error) {
       setSqmNotice({
         success: false,
