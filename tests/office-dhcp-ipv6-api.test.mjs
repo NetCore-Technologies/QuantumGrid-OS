@@ -20,6 +20,15 @@ const baseInput = {
   start: "100",
   limit: "120",
   lease_time: "12h",
+  ra_flags: "UNCHANGED",
+  ra_slaac: "UNCHANGED",
+  ra_dns: "UNCHANGED",
+  ra_preference: "UNCHANGED",
+  ra_lifetime: "UNCHANGED",
+  dhcpv6_na: "UNCHANGED",
+  dhcpv6_pd: "UNCHANGED",
+  dhcpv6_assignall: "UNCHANGED",
+  dhcpv6_pd_min_len: "UNCHANGED",
 };
 
 test("DHCP scope API sends IPv6 server modes and verifies both service restarts", async () => {
@@ -39,6 +48,15 @@ test("DHCP scope API sends IPv6 server modes and verifies both service restarts"
       dhcpv6: "server",
       ra: "server",
       ndp: "disabled",
+      ra_flags: ["managed-config", "other-config"],
+      ra_slaac: false,
+      ra_dns: true,
+      ra_preference: "high",
+      ra_lifetime: 1800,
+      dhcpv6_na: true,
+      dhcpv6_pd: true,
+      dhcpv6_assignall: false,
+      dhcpv6_pd_min_len: 60,
       restarted: true,
       dnsmasq_restarted: true,
       odhcpd_restarted: true,
@@ -51,6 +69,15 @@ test("DHCP scope API sends IPv6 server modes and verifies both service restarts"
     dhcpv6: "server",
     ra: "server",
     ndp: "disabled",
+    ra_flags: "managed-config+other-config",
+    ra_slaac: "0",
+    ra_dns: "1",
+    ra_preference: "high",
+    ra_lifetime: "1800",
+    dhcpv6_na: "1",
+    dhcpv6_pd: "1",
+    dhcpv6_assignall: "0",
+    dhcpv6_pd_min_len: "60",
   });
   assert.equal(requestUrl, "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-update");
   assert.equal(requestInit.method, "POST");
@@ -79,6 +106,15 @@ test("IPv4-only scope edits preserve existing relay/hybrid configuration without
       dhcpv6: "relay",
       ra: "hybrid",
       ndp: "relay",
+      ra_flags: ["managed-config"],
+      ra_slaac: true,
+      ra_dns: true,
+      ra_preference: "medium",
+      ra_lifetime: 2700,
+      dhcpv6_na: true,
+      dhcpv6_pd: true,
+      dhcpv6_assignall: true,
+      dhcpv6_pd_min_len: 62,
       restarted: true,
       dnsmasq_restarted: true,
       odhcpd_restarted: false,
@@ -131,6 +167,24 @@ test("DHCP scope API rejects relay and hybrid changes without native master-topo
       ndp: "relay",
     }),
     /Relay\/hybrid requires native odhcpd master configuration/,
+  );
+});
+
+test("DHCP scope API rejects unsupported RA flags, lifetimes and delegated prefix lengths", async () => {
+  globalThis.fetch = async () => {
+    throw new Error("fetch must not be called for invalid IPv6 configuration");
+  };
+  await assert.rejects(
+    updateRouterDhcpScope({ ...baseInput, ra_flags: "managed-config;uci" }),
+    /Invalid RA flags or DHCPv6\/SLAAC boolean option/,
+  );
+  await assert.rejects(
+    updateRouterDhcpScope({ ...baseInput, ra_lifetime: "2701" }),
+    /RA lifetime must be unchanged or a whole number/,
+  );
+  await assert.rejects(
+    updateRouterDhcpScope({ ...baseInput, dhcpv6_pd_min_len: "65" }),
+    /Minimum delegated IPv6 prefix length must be unchanged or a whole number/,
   );
 });
 
