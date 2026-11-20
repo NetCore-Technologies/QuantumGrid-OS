@@ -24,7 +24,9 @@ local malformed = wireguard.parse_dump(table.concat({
 	"wg0\\tPUBLIC\\tPSK\\t\\t0.0.0.0/0\\t1699999990\\t-1\\t1\\t0",
 	"wg0\\tPUBLIC\\tPSK\\t\\tbad network;command\\t1699999990\\t1\\t1\\t0",
 }, "\\n"), now)
-assert(malformed.count == 0 and #malformed.peers == 0, "invalid fields and unsafe interfaces are rejected")
+assert(malformed.count == 2 and #malformed.peers == 2, "invalid interfaces and counters are rejected")
+assert(malformed.peers[1].handshake_seen == false, "negative handshake is not treated as valid")
+assert(#malformed.peers[2].allowed_ips == 0, "unsafe allowed-IP text is rejected")
 
 local many = {}
 for index = 1, 70 do
