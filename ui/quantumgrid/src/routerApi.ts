@@ -195,12 +195,29 @@ export interface RouterMwan3Interface {
   track_targets: RouterMwan3TrackTarget[];
 }
 
+export interface RouterMwan3PolicyMember {
+  interface: string;
+  percent: number;
+}
+
+export interface RouterMwan3Policy {
+  family: "IPv4" | "IPv6";
+  name: string;
+  members: RouterMwan3PolicyMember[];
+}
+
 export interface RouterMwan3Status {
   installed: boolean;
   available: boolean;
   count: number;
   truncated: boolean;
   interfaces: RouterMwan3Interface[];
+  policies_available: boolean;
+  policy_count: number;
+  policies: RouterMwan3Policy[];
+  connected_available: boolean;
+  connected_ipv4: string[];
+  connected_ipv6: string[];
 }
 
 export interface RouterSqmQueueUpdateResult {
