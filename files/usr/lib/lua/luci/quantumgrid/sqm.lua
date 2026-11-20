@@ -36,7 +36,3 @@ function validate_queue_update(section, enabled, download, upload)
 	}
 end
 
-return {
-	MIN_RATE_KBPS = MIN_RATE_KBPS,
-	MAX_RATE_KBPS = MAX_RATE_KBPS
-}
