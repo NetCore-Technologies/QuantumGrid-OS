@@ -1501,7 +1501,7 @@ function WirelessClientList({
   leases: RouterClient[];
 }) {
   const [filter, setFilter] = useState("");
-  const [sort, setSort] = useState<"signal" | "rx" | "tx" | "mac">("signal");
+  const [sort, setSort] = useState<"signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "mac">("signal");
   const hostnames = new Map(leases.map((lease) => [lease.mac.toLowerCase(), lease.hostname]));
   const visibleClients = clients
     .filter((client) => {
@@ -1516,6 +1516,8 @@ function WirelessClientList({
       if (sort === "mac") return left.mac.localeCompare(right.mac);
       if (sort === "rx") return (right.rx_rate_mbps ?? -Infinity) - (left.rx_rate_mbps ?? -Infinity);
       if (sort === "tx") return (right.tx_rate_mbps ?? -Infinity) - (left.tx_rate_mbps ?? -Infinity);
+      if (sort === "measured-rx") return (right.measured_rx_mbps ?? -Infinity) - (left.measured_rx_mbps ?? -Infinity);
+      if (sort === "measured-tx") return (right.measured_tx_mbps ?? -Infinity) - (left.measured_tx_mbps ?? -Infinity);
       return (right.signal_dbm ?? -Infinity) - (left.signal_dbm ?? -Infinity);
     });
   const exportStations = () => {
@@ -1556,10 +1558,12 @@ function WirelessClientList({
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
-        <select aria-label="Sort associated Wi-Fi clients" value={sort} onChange={(event) => setSort(event.target.value as "signal" | "rx" | "tx" | "mac")}>
+        <select aria-label="Sort associated Wi-Fi clients" value={sort} onChange={(event) => setSort(event.target.value as "signal" | "rx" | "tx" | "measured-rx" | "measured-tx" | "mac")}>
           <option value="signal">Strongest signal</option>
-          <option value="rx">Highest RX rate</option>
-          <option value="tx">Highest TX rate</option>
+          <option value="rx">Highest RX PHY rate</option>
+          <option value="tx">Highest TX PHY rate</option>
+          <option value="measured-rx">Highest measured RX throughput</option>
+          <option value="measured-tx">Highest measured TX throughput</option>
           <option value="mac">MAC address A–Z</option>
         </select>
         <span>{visibleClients.length} of {clients.length} clients</span>
