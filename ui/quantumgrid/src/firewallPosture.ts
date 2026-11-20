@@ -157,6 +157,21 @@ export function auditFirewallPosture(
     });
   }
 
+  const externalAllowRules = (security.rules ?? []).filter((rule) =>
+    rule.enabled === true &&
+    rule.target.trim().toUpperCase() === "ACCEPT" &&
+    looksLikeExternalName(rule.source_zone),
+  );
+  for (const rule of externalAllowRules) {
+    checks.push({
+      id: "external-allow-rule:" + rule.name,
+      title: "Enabled external allow rule",
+      scope: "Rule " + rule.name,
+      status: "review",
+      detail: "This enabled ACCEPT rule is sourced from a standard WAN/WWAN-named zone. Review its protocol, port constraints and address-match conditions. Raw address values are not collected; this check does not prove public reachability.",
+    });
+  }
+
   if (!security.firewall_config_readable) {
     checks.push({
       id: "external-zones",
