@@ -664,6 +664,15 @@ export interface RouterOfficeNetworks {
   sampled_at: number;
 }
 
+export interface RouterDhcpScopeToggleResult {
+  ok: true;
+  section: string;
+  enabled: boolean;
+  changed: boolean;
+  restarted: boolean;
+  rolled_back: false;
+}
+
 export interface RouterDhcpScopeUpdateResult {
   ok: true;
   section: string;
@@ -809,6 +818,7 @@ const DHCP_RESERVATION_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-rese
 const DHCP_RESERVATION_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-remove";
 const DHCP_RESERVATION_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-update";
 const DHCP_SCOPE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-update";
+const DHCP_SCOPE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-toggle";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -1631,4 +1641,48 @@ export async function updateRouterDhcpReservation(input: {
     throw new Error("The router did not confirm the reservation edit and dnsmasq restart.");
   }
   return payload as RouterDhcpReservationUpdateResult;
+}
+export async function updateRouterDhcpScopeEnabled(section: string, enabled: boolean): Promise<RouterDhcpScopeToggleResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid DHCP scope section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("enabled", enabled ? "1" : "0");
+  form.set("confirmed", "1");
+  const response = await fetch(DHCP_SCOPE_TOGGLE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "DHCP scope changes require an active router administrator session."
+      : "The router returned an invalid DHCP scope state response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid DHCP scope state response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("enabled" in payload) || payload.enabled !== enabled ||
+    !("changed" in payload) || typeof payload.changed !== "boolean" ||
+    !("restarted" in payload) || typeof payload.restarted !== "boolean" ||
+    !("rolled_back" in payload) || payload.rolled_back !== false ||
+    payload.changed !== payload.restarted
+  ) {
+    throw new Error("The router did not confirm the DHCP scope state and dnsmasq result.");
+  }
+  return payload as RouterDhcpScopeToggleResult;
 }
