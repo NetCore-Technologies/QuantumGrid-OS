@@ -1133,11 +1133,17 @@ function action_wireless_update()
 		snapshot.interface[option] = value or false
 	end
 
-	local radio_updates = {
-		channel = update.channel,
-		htmode = update.htmode == "auto" and false or update.htmode,
-		txpower = update.txpower == "auto" and false or update.txpower
-	}
+	local radio_updates = { channel = update.channel }
+	if update.htmode == "auto" then
+		radio_updates.htmode = false
+	else
+		radio_updates.htmode = update.htmode
+	end
+	if update.txpower == "auto" then
+		radio_updates.txpower = false
+	else
+		radio_updates.txpower = update.txpower
+	end
 	local interface_updates = {
 		ssid = update.ssid,
 		encryption = update.encryption,
