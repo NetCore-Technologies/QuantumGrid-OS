@@ -27,6 +27,10 @@ done
 
 grep -Fq 'setup-aw1000-phone-feed.sh' "$ROOT/build.sh"
 grep -Fq 'scripts/build-ui.sh' "$ROOT/build.sh"
+test -s "$ROOT/configs/aw1000-nss.fragment"
+test -s "$ROOT/files/etc/uci-defaults/92-quantumgrid-nss-safe"
+grep -Fq 'QG_ENABLE_NSS' "$ROOT/build.sh"
+grep -Fq 'enable_nss:' "$ROOT/.github/workflows/firmware-release.yml"
 grep -Fq 'npm ci --no-audit --no-fund' "$ROOT/scripts/build-ui.sh"
 grep -Fq 'files/www/quantumgrid' "$ROOT/scripts/build-ui.sh"
 grep -Fq "base: './'" "$ROOT/ui/quantumgrid/vite.config.ts"
