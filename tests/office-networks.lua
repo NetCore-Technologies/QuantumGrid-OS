@@ -59,6 +59,19 @@ assert(rollback_snapshot[3].name == "leasetime" and rollback_snapshot[3].present
 local invalid_snapshot = office.snapshot_dhcp_scope_options({ [".type"] = "host" })
 assert(invalid_snapshot == nil, "only DHCP server sections may be snapshotted for pool updates")
 
+local host_snapshot = office.snapshot_dhcp_host_options({
+  [".type"] = "host",
+  name = "Office-Printer",
+  mac = "aa:bb:cc:dd:ee:01",
+})
+assert(host_snapshot and #host_snapshot == 3)
+assert(host_snapshot[1].name == "name" and host_snapshot[1].present and host_snapshot[1].value == "Office-Printer")
+assert(host_snapshot[2].name == "mac" and host_snapshot[2].present and host_snapshot[2].value == "aa:bb:cc:dd:ee:01")
+assert(host_snapshot[3].name == "ip" and not host_snapshot[3].present and host_snapshot[3].value == nil,
+  "reservation rollback must preserve an originally absent IP option")
+assert(office.snapshot_dhcp_host_options({ [".type"] = "dhcp" }) == nil,
+  "DHCP scope sections cannot be edited as static hosts")
+
 local valid_scope, scope_error = office.validate_dhcp_scope_update(
   "100", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(valid_scope and valid_scope.pool_start_ip == "192.168.10.100")
