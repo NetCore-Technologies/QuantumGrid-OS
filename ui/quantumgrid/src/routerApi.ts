@@ -356,6 +356,15 @@ export interface RouterCellularStatus {
   data_status?: string;
 }
 
+export interface RouterConntrackStatus {
+  available: boolean;
+  count?: number;
+  maximum?: number;
+  free?: number;
+  used_percent?: number;
+  status?: "normal" | "warning" | "critical";
+}
+
 export interface RouterPlatformStatus {
   available: boolean;
   hostname?: string;
@@ -388,6 +397,7 @@ export interface RouterPlatformStatus {
 export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
+  conntrack?: RouterConntrackStatus;
   timestamp: number;
   routes_available?: boolean;
   routes?: RouterDefaultRoute[];
