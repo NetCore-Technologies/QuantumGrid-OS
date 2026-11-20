@@ -2301,6 +2301,24 @@ end
 local function hardware_io_status(fs)
 	local hardware = require "luci.quantumgrid.hardware_io"
 	local gpio = hardware.parse_gpio_debugfs(read_file("/sys/kernel/debug/gpio"))
+	local gpio_sysfs_entries = {}
+	local gpio_sysfs_ok, gpio_sysfs_iter = pcall(fs.dir, "/sys/bus/gpio/devices")
+	local gpio_sysfs_available = gpio_sysfs_ok and type(gpio_sysfs_iter) == "function"
+	if gpio_sysfs_available then
+		for name in gpio_sysfs_iter do
+			if type(name) == "string" and #gpio_sysfs_entries < 64
+				and name:match("^gpiochip%d+$") then
+				local base = "/sys/bus/gpio/devices/" .. name
+				table.insert(gpio_sysfs_entries, {
+					name = name,
+					label = read_file(base .. "/label"),
+					base = read_number(base .. "/base"),
+					ngpio = read_number(base .. "/ngpio")
+				})
+			end
+		end
+	end
+	gpio.sysfs = hardware.parse_gpio_sysfs_chips(gpio_sysfs_entries, gpio_sysfs_available)
 	local input_devices = hardware.parse_input_devices(read_file("/proc/bus/input/devices"))
 	local button_events = hardware.parse_button_events(
 		read_file("/var/run/quantumgrid/button-events.tsv"), os.time())
@@ -2348,7 +2366,7 @@ local function hardware_io_status(fs)
 	local button_driver_loaded = fs.access("/sys/module/gpio_button_hotplug") == true
 
 	return {
-		available = gpio.available or input_devices.available or leds_available or button_hooks_available,
+		available = gpio.available or gpio.sysfs.available or input_devices.available or leds_available or button_hooks_available,
 		gpio = gpio,
 		input_devices = input_devices,
 		leds_available = leds_available,

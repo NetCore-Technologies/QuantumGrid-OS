@@ -277,7 +277,9 @@ as such.
 
 The authenticated QuantumGrid **Hardware I/O** page reads the kernel GPIO debugfs inventory
 when it is mounted and readable, including chip ranges, line labels, consumers, direction and
-reported high/low state. It flags button-like lines only when their kernel label or consumer
+reported high/low state. When debugfs is unavailable, it falls back to read-only GPIO sysfs chip
+metadata (controller label, base offset and line count); that fallback does not infer line ownership,
+per-line state or a physical pin mapping. It flags button-like lines only when their kernel label or consumer
 contains a button/reset/WPS/power/key/WLAN hint; this is not a verified physical AW1000 pin map
 or an inferred physical button mapping. The UI and `quantumgrid-hardware-io buttons` command
 also inventory the native `gpio-button-hotplug` driver and existing `/etc/rc.button` handler names.
@@ -291,7 +293,7 @@ GPIO ownership,
 event interception, direction changes and output writes remain read-only/locked until the board pin
 map and recovery-safe behaviour are validated. It also reads `/proc/bus/input/devices` to list
 kernel input-device names, handler names and `eventN` nodes, but it never opens those event devices
-or consumes input events. Button telemetry comes only from procd's ubus notifications; it does not
+or consumes input events. GPIO sysfs fallback likewise reads metadata only; it never exports or drives lines. Button telemetry comes only from procd's ubus notifications; it does not
 read from input event nodes or modify native hotplug scripts.
 
 The same page enumerates Linux LED-class devices under `/sys/class/leds`. An administrator can

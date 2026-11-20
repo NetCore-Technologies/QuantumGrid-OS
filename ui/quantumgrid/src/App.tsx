@@ -6354,6 +6354,7 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
   const gpio = hardware?.gpio;
   const lines = gpio?.lines ?? [];
   const buttonLines = lines.filter((line) => line.is_button);
+  const sysfsGpioChips = gpio?.sysfs?.chips ?? [];
   const leds = hardware?.leds ?? [];
   const inputDevices = hardware?.input_devices?.devices ?? [];
   const [brightnessValues, setBrightnessValues] = useState<Record<string, number>>({});
@@ -6395,8 +6396,8 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
       </section>
 
       <div className="metrics">
-        <Metric title="GPIO Debugfs" value={gpio?.available ? "AVAILABLE" : "UNAVAILABLE"} unit="" detail="Kernel-owned line inventory" icon={Cpu} />
-        <Metric title="GPIO Chips" value={gpio?.available ? fmt(gpio.chip_count) : "N/A"} unit="" detail={gpio?.truncated ? "Inventory is capped" : "Reported by debugfs"} icon={Database} />
+        <Metric title="GPIO Debugfs" value={gpio?.available ? "AVAILABLE" : gpio?.sysfs?.available ? "CHIPS ONLY" : "UNAVAILABLE"} unit="" detail={gpio?.available ? "Kernel-owned line inventory" : "Sysfs fallback does not expose line state"} icon={Cpu} />
+        <Metric title="GPIO Chips" value={gpio?.available ? fmt(gpio.chip_count) : gpio?.sysfs?.available ? fmt(gpio.sysfs.count) : "N/A"} unit="" detail={gpio?.available ? (gpio.truncated ? "Debugfs inventory is capped" : "Reported by debugfs") : "Reported by GPIO sysfs"} icon={Database} />
         <Metric title="Button-like Lines" value={gpio?.available ? fmt(buttonLines.length) : "N/A"} unit="" detail="Label/consumer name matches only" icon={Settings} />
         <Metric title="LED Devices" value={hardware?.leds_available ? fmt(leds.length) : "N/A"} unit="" detail={leds.filter((led) => led.controllable).length + " with safe manual control"} icon={Zap} />
       </div>
@@ -6407,11 +6408,25 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
         </div>
       )}
 
-      <Panel title="GPIO chips and line inventory" eyebrow="READ-ONLY · /SYS/KERNEL/DEBUG/GPIO" action={<button className="hero-button" onClick={refresh}><RefreshCw size={14} /> Refresh hardware</button>}>
+      <Panel title="GPIO chips and line inventory" eyebrow="READ-ONLY · DEBUGFS + SYSFS" action={<button className="hero-button" onClick={refresh}><RefreshCw size={14} /> Refresh hardware</button>}>
         {!routerOverview ? (
           <div className="module-message">Waiting for authenticated router telemetry.</div>
         ) : !gpio?.available ? (
-          <div className="module-message">GPIO debugfs is not readable on this firmware. Enable the kernel debugfs GPIO view locally to inspect line ownership; QuantumGrid will not guess pin numbers or export arbitrary GPIO controls.</div>
+          <>
+            {sysfsGpioChips.length > 0 && (
+              <div className="hardware-chip-list">
+                {sysfsGpioChips.map((chip) => (
+                  <div className="hardware-chip" key={chip.name}>
+                    <strong>{chip.name}</strong>
+                    <span>{chip.label || "Unlabelled controller"} · base {chip.base} · {chip.ngpio} lines</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="module-message">{sysfsGpioChips.length > 0
+              ? "GPIO debugfs is unavailable, but kernel sysfs exposes chip labels, base offsets and line counts. It does not expose per-line consumers, direction or level; enable debugfs locally for that read-only detail."
+              : "Neither GPIO debugfs nor GPIO sysfs chip metadata is available on this firmware. QuantumGrid will not guess pin numbers or export arbitrary GPIO controls."}</div>
+          </>
         ) : (
           <>
             <div className="hardware-chip-list">
@@ -6437,7 +6452,7 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
               {lines.length === 0 && <div className="module-message">No GPIO line entries were exposed by the running kernel.</div>}
             </div>
             {gpio.truncated && <div className="module-message">The raw GPIO inventory exceeded the 128-line display cap. The chip and line counts above indicate the full reported count where available.</div>}
-            <div className="module-message">Button-like is a label/consumer-name hint, not a verified physical pin map. The page does not read button event state, change pin direction, drive output lines, or alter GPIO ownership.</div>
+            <div className="module-message">Button-like is a label/consumer-name hint, not a verified physical pin map. GPIO line state remains read-only: the page does not change pin direction, drive output lines, export GPIOs, or alter kernel ownership.</div>
           </>
         )}
       </Panel>

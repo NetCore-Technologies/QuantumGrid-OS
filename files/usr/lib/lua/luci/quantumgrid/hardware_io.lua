@@ -21,6 +21,41 @@ local function is_button_label(label, consumer)
 	return false
 end
 
+function parse_gpio_sysfs_chips(entries, available)
+	local result = {
+		available = available == true,
+		chips = {},
+		count = 0,
+		truncated = false
+	}
+	if type(entries) ~= "table" then return result end
+
+	for _, entry in ipairs(entries) do
+		if type(entry) == "table" and type(entry.name) == "string"
+			and #entry.name <= 32 and entry.name:match("^gpiochip%d+$") then
+			local base = tonumber(entry.base)
+			local count = tonumber(entry.ngpio)
+			if base and count and base >= 0 and base <= 4294967295
+				and count >= 1 and count <= 1024
+				and math.floor(base) == base and math.floor(count) == count then
+				result.count = result.count + 1
+				if #result.chips < 16 then
+					table.insert(result.chips, {
+						name = entry.name,
+						label = safe_text(entry.label, 96),
+						base = base,
+						ngpio = count
+					})
+				else
+					result.truncated = true
+				end
+			end
+		end
+	end
+	table.sort(result.chips, function(left, right) return left.base < right.base end)
+	return result
+end
+
 function parse_gpio_debugfs(contents)
 	local result = {
 		available = type(contents) == "string",

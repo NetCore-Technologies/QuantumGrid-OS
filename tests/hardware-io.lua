@@ -20,6 +20,19 @@ assert(gpio.lines[3].direction == "out" and gpio.lines[3].is_button == false)
 assert(gpio.lines[4].value == 0 and gpio.lines[4].state == "low")
 assert(hardware.parse_gpio_debugfs(nil).available == false, "missing debugfs must be reported unavailable")
 
+local gpio_sysfs = hardware.parse_gpio_sysfs_chips({
+	{ name = "gpiochip1", label = "pmic-gpio", base = "64", ngpio = "16" },
+	{ name = "gpiochip0", label = "soc-pinctrl", base = 0, ngpio = 64 },
+	{ name = "../invalid", label = "bad", base = 0, ngpio = 8 },
+	{ name = "gpiochip2", label = "bad-range", base = -1, ngpio = 8 },
+}, true)
+assert(gpio_sysfs.available and gpio_sysfs.count == 2 and #gpio_sysfs.chips == 2)
+assert(gpio_sysfs.chips[1].name == "gpiochip0" and gpio_sysfs.chips[1].label == "soc-pinctrl")
+assert(gpio_sysfs.chips[1].base == 0 and gpio_sysfs.chips[1].ngpio == 64)
+assert(gpio_sysfs.chips[2].base == 64 and gpio_sysfs.chips[2].ngpio == 16)
+assert(not hardware.parse_gpio_sysfs_chips({}, false).available,
+	"missing GPIO sysfs must remain explicitly unavailable")
+
 local many = {}
 for index = 1, 140 do
 	table.insert(many, " gpio-" .. tostring(index) .. " (line-" .. tostring(index) .. ") in hi")
@@ -106,4 +119,4 @@ expect_invalid("status", "1", 0, "zero maximum")
 expect_invalid("status", "1", 65536, "unsupported maximum")
 expect_invalid(string.rep("a", 65), "1", 255, "overlong LED name")
 
-print("hardware-io: GPIO, input-device, button-event, trigger and LED validation tests passed")
+print("hardware-io: GPIO debugfs/sysfs, input-device, button-event, trigger and LED validation tests passed")

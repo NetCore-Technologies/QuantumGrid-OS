@@ -504,6 +504,13 @@ export interface RouterGpioChip {
   last_gpio?: number;
 }
 
+export interface RouterGpioSysfsChip {
+  name: string;
+  label: string;
+  base: number;
+  ngpio: number;
+}
+
 export interface RouterGpioInventory {
   available: boolean;
   chips: RouterGpioChip[];
@@ -511,6 +518,12 @@ export interface RouterGpioInventory {
   lines: RouterGpioLine[];
   line_count: number;
   truncated: boolean;
+  sysfs: {
+    available: boolean;
+    chips: RouterGpioSysfsChip[];
+    count: number;
+    truncated: boolean;
+  };
 }
 
 export interface RouterLedDevice {

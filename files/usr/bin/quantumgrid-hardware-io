@@ -22,12 +22,33 @@ USAGE
 }
 
 show_gpio() {
-  if [ ! -r /sys/kernel/debug/gpio ]; then
+  if [ -r /sys/kernel/debug/gpio ]; then
+    echo "=== Kernel GPIO inventory (read-only debugfs) ==="
+    cat /sys/kernel/debug/gpio
+  else
     echo "GPIO debugfs is unavailable (not mounted or not enabled)."
-    return 0
   fi
-  echo "=== Kernel GPIO inventory (read-only) ==="
-  cat /sys/kernel/debug/gpio
+
+  if [ -d /sys/bus/gpio/devices ]; then
+    echo "=== GPIO chip metadata (read-only sysfs) ==="
+    found=0
+    for chip in /sys/bus/gpio/devices/gpiochip*; do
+      [ -d "$chip" ] || continue
+      found=1
+      name=${chip##*/}
+      label="unavailable"
+      base="unavailable"
+      count="unavailable"
+      [ ! -r "$chip/label" ] || label=$(cat "$chip/label")
+      [ ! -r "$chip/base" ] || base=$(cat "$chip/base")
+      [ ! -r "$chip/ngpio" ] || count=$(cat "$chip/ngpio")
+      printf '  %s | %s | base=%s | lines=%s\n' "$name" "$label" "$base" "$count"
+    done
+    [ "$found" -eq 1 ] || echo "No GPIO chip devices were reported."
+  else
+    echo "GPIO sysfs chip metadata is unavailable."
+  fi
+  echo "Sysfs chip metadata is not a per-line pin map and is never used to drive GPIO."
 }
 
 show_buttons() {
