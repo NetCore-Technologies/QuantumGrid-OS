@@ -46,6 +46,18 @@ for _, values in ipairs(invalid_reservations) do
   assert(valid == nil, "invalid static reservation input must be rejected")
 end
 
+local disabled_scope_state = office.snapshot_dhcp_scope_enabled({
+  [".type"] = "dhcp",
+  ignore = "1",
+})
+assert(disabled_scope_state and not disabled_scope_state.enabled and disabled_scope_state.ignore_present
+  and disabled_scope_state.ignore_value == "1")
+local enabled_scope_state = office.snapshot_dhcp_scope_enabled({ [".type"] = "dhcp" })
+assert(enabled_scope_state and enabled_scope_state.enabled and not enabled_scope_state.ignore_present
+  and enabled_scope_state.ignore_value == nil)
+assert(office.snapshot_dhcp_scope_enabled({ [".type"] = "host" }) == nil,
+  "static host reservations cannot be toggled as DHCP scopes")
+
 local rollback_snapshot = office.snapshot_dhcp_scope_options({
   [".type"] = "dhcp",
   start = "100",
