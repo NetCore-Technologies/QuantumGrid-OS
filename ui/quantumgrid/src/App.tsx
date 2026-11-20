@@ -4829,6 +4829,7 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
   const lines = gpio?.lines ?? [];
   const buttonLines = lines.filter((line) => line.is_button);
   const leds = hardware?.leds ?? [];
+  const inputDevices = hardware?.input_devices?.devices ?? [];
   const [brightnessValues, setBrightnessValues] = useState<Record<string, number>>({});
   const [savingLed, setSavingLed] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
@@ -4930,6 +4931,27 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
           </div>
         )}
         <div className="module-message">OpenWrt procd dispatches Linux button events to the matching /etc/rc.button handler. QuantumGrid inventories these existing names but does not replace, wrap or intercept reset/WPS actions, and does not yet display a live press/release event stream.</div>
+      </Panel>
+
+      <Panel title="Linux input devices" eyebrow="READ-ONLY · /PROC/BUS/INPUT/DEVICES">
+        {!hardware?.input_devices?.available ? (
+          <div className="module-message">The kernel input-device inventory is unavailable on this firmware.</div>
+        ) : inputDevices.length === 0 ? (
+          <div className="module-message">No Linux input devices were reported.</div>
+        ) : (
+          <div className="hardware-input-list">
+            {inputDevices.map((device) => (
+              <div className="hardware-input-row" key={device.name}>
+                <div><strong>{device.name}</strong><span>{device.bus ? `Bus ${device.bus}` : "Bus type unavailable"}</span></div>
+                <div><small>HANDLERS</small><span>{device.handlers.join(" · ") || "None reported"}</span></div>
+                <div><small>EVENT NODES</small><span>{device.event_nodes.join(", ") || "None reported"}</span></div>
+                <Status active={device.button_like}>{device.button_like ? "BUTTON-LIKE NAME" : "INPUT DEVICE"}</Status>
+              </div>
+            ))}
+          </div>
+        )}
+        {hardware?.input_devices?.truncated && <div className="module-message">The input inventory is capped at 32 devices.</div>}
+        <div className="module-message">Event node names are discovered from the kernel inventory only. QuantumGrid does not open /dev/input/event* or consume press/release events; native procd button actions remain untouched.</div>
       </Panel>
 
       <Panel title="LED class devices" eyebrow="KERNEL LED CLASS · BOUNDED RUNTIME CONTROL">
