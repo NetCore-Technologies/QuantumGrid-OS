@@ -136,9 +136,10 @@ requires substantial disk space, RAM and time; use a Linux build host with suffi
 
 The Arcadyan AW1000 release has one persistent firmware format: the device-specific
 squashfs factory UBI image. The initramfs image is a temporary RAM-boot recovery/development
-artifact; it is not a persistent firmware installer. The release also includes
-`install-aw1000-ubi.sh`, a conservative on-router preflight/installer for the original AW1000
-100 MiB MTD layout. It defaults to dry-run and requires interactive confirmation before writing.
+artifact; it is not a persistent firmware installer. The release includes
+`install-aw1000-ubi.sh` and `verify-aw1000-release-manifest.sh`: the on-router installer checks
+the SHA-256 manifest, target board, RAM-boot environment and standard AW1000 MTD geometry before
+it can request a confirmed write. It defaults to read-only preflight.
 
 | Artifact | Intended use |
 |---|---|
