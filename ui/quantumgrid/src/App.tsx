@@ -5420,7 +5420,7 @@ function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const changed = name.trim() !== lease.name || mac.trim().toLowerCase() !== lease.mac ||
-    ipv4.trim() !== lease.ipv4 || Boolean(network);
+    ipv4.trim() !== lease.ipv4;
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -5445,6 +5445,15 @@ function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
       setBusy(false);
     }
   };
+
+  if (networks.length === 0) {
+    return (
+      <div className="office-reservation-edit-form">
+        <div className="module-message">No enabled DHCP scope is attached to a static IPv4 interface with a readable subnet. Configure an eligible LAN before editing this reservation.</div>
+        <button className="office-remove-cancel" type="button" onClick={onCancel}>Close editor</button>
+      </div>
+    );
+  }
 
   return (
     <form className="office-reservation-edit-form" onSubmit={save}>
