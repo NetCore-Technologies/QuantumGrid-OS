@@ -1778,13 +1778,21 @@ function NetworkControlPage({
                 </div>
                 <div><small>STATE</small><b>{item.up ? "UP" : "DOWN"}</b></div>
                 <div><small>IPV4</small><b>{item.ipv4.length > 0 ? item.ipv4.join(", ") : "—"}</b></div>
-                <div><small>RX TOTAL</small><b>{formatTrafficBytes(item.rx_bytes)}</b></div>
-                <div><small>TX TOTAL</small><b>{formatTrafficBytes(item.tx_bytes)}</b></div>
+                <div>
+                  <small>RX TOTAL</small>
+                  <b>{formatTrafficBytes(item.rx_bytes)}</b>
+                  <small>Packets {item.rx_packets === undefined ? "N/A" : fmt(item.rx_packets)} · errors {item.rx_errors === undefined ? "N/A" : fmt(item.rx_errors)} · dropped {item.rx_dropped === undefined ? "N/A" : fmt(item.rx_dropped)}</small>
+                </div>
+                <div>
+                  <small>TX TOTAL</small>
+                  <b>{formatTrafficBytes(item.tx_bytes)}</b>
+                  <small>Packets {item.tx_packets === undefined ? "N/A" : fmt(item.tx_packets)} · errors {item.tx_errors === undefined ? "N/A" : fmt(item.tx_errors)} · dropped {item.tx_dropped === undefined ? "N/A" : fmt(item.tx_dropped)}</small>
+                </div>
               </div>
             ))}
           </div>
         )}
-        <div className="module-message">RX/TX values are cumulative kernel byte counters since the interface counters were reset; they are not instantaneous link speeds.</div>
+        <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Counters the driver does not expose remain N/A.</div>
       </Panel>
 
       <div className="module-grid">
