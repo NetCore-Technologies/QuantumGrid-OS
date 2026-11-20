@@ -2645,7 +2645,7 @@ function action_dhcp_reservation()
 	end
 
 	local leases = read_file("/tmp/dhcp.leases") or ""
-	for line in leases:gmatch("[^\\r\\n]+") do
+	for line in leases:gmatch("[^\r\n]+") do
 		local _, lease_mac, lease_ip = line:match("^(%S+)%s+(%x%x:%x%x:%x%x:%x%x:%x%x:%x%x)%s+(%d+%.%d+%.%d+%.%d+)%s")
 		if lease_ip == reservation.ipv4 and lease_mac and lease_mac:lower() ~= reservation.mac then
 			respond(409, { ok = false, error = "The selected IPv4 address is currently leased to a different MAC address." })
