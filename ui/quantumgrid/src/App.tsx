@@ -2706,6 +2706,8 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const activeWireGuard = security?.vpn.wireguard_interfaces.filter((item) => item.up) ?? [];
+  const wireGuardPeers = security?.vpn.wireguard_peers ?? [];
+  const wireGuardPeersAvailable = security?.vpn.wireguard_peers_available === true;
   const firewallPosture = auditFirewallPosture(security);
   const [firewallRuleSearch, setFirewallRuleSearch] = useState("");
   const [firewallRuleSort, setFirewallRuleSort] = useState<"name" | "source" | "destination" | "target">("source");
@@ -2765,6 +2767,15 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
       [exportedAt, "VPN", "OpenVPN enabled instances", "REPORTED", security.vpn.openvpn_enabled_instances],
       ...security.vpn.wireguard_interfaces.map((iface) => [
         exportedAt, "WireGuard interface", iface.name, iface.up ? "UP" : "DOWN", iface.device,
+      ]),
+      [exportedAt, "WireGuard", "Peer telemetry", wireGuardPeersAvailable ? "AVAILABLE" : "UNAVAILABLE", security.vpn.wireguard_tool_installed ? "wg tool installed" : "wg tool not installed"],
+      ...wireGuardPeers.map((peer) => [
+        exportedAt, "WireGuard peer", peer.interface,
+        peer.handshake_seen ? "HANDSHAKE SEEN" : "NO VALID HANDSHAKE",
+        "handshake_age_seconds=" + (peer.handshake_age_seconds === undefined ? "unknown" : peer.handshake_age_seconds) +
+          "; rx_bytes=" + peer.receive_bytes +
+          "; tx_bytes=" + peer.transmit_bytes +
+          "; allowed_ips=" + peer.allowed_ips.join(" "),
       ]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
@@ -2933,6 +2944,48 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
             </>
           )}
           <div className="module-message">Private keys, preshared keys and peer credentials are never returned by this telemetry endpoint.</div>
+        </Panel>
+        <Panel title="WireGuard peer health" eyebrow="WG SHOW ALL DUMP · REDACTED">
+          {!security ? (
+            <div className="module-message">Waiting for authenticated router telemetry.</div>
+          ) : !security.vpn.wireguard_tool_installed ? (
+            <div className="module-message">The WireGuard command-line tool is not installed.</div>
+          ) : !wireGuardPeersAvailable ? (
+            <div className="module-message">WireGuard peer telemetry is unavailable. This does not prove that every peer is disconnected.</div>
+          ) : wireGuardPeers.length === 0 ? (
+            <div className="module-message">No WireGuard peers were returned by the router.</div>
+          ) : (
+            <>
+              {security.vpn.wireguard_peers_truncated ? <div className="module-message">The peer inventory is capped at 64 entries. Export contains the visible subset only.</div> : null}
+              <div className="wireguard-peer-list">
+                {wireGuardPeers.map((peer, index) => (
+                  <div className="wireguard-peer-row" key={peer.interface + "-" + index}>
+                    <div>
+                      <small>INTERFACE</small>
+                      <strong>{peer.interface}</strong>
+                    </div>
+                    <div>
+                      <small>LAST HANDSHAKE</small>
+                      <b>{peer.handshake_seen && peer.handshake_age_seconds !== undefined ? formatUptime(peer.handshake_age_seconds) + " ago" : "Never / unavailable"}</b>
+                    </div>
+                    <div>
+                      <small>RECEIVED</small>
+                      <b>{formatTrafficBytes(peer.receive_bytes)}</b>
+                    </div>
+                    <div>
+                      <small>SENT</small>
+                      <b>{formatTrafficBytes(peer.transmit_bytes)}</b>
+                    </div>
+                    <div className="wireguard-peer-allowed">
+                      <small>ALLOWED IPs ({peer.allowed_ips.length})</small>
+                      <span>{peer.allowed_ips.length > 0 ? peer.allowed_ips.join(" · ") : "None reported"}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="module-message">A handshake timestamp is not a guarantee of end-to-end reachability. Private keys, preshared keys, public keys and endpoint addresses are deliberately omitted from this API and the security export.</div>
         </Panel>
       </div>
 
