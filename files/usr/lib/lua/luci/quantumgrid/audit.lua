@@ -21,6 +21,7 @@ local ALLOWED_ACTIONS = {
 	["office.vlan.remove"] = true,
 	["office.forwarding.add"] = true,
 	["office.forwarding.remove"] = true,
+	["office.segment.add"] = true,
 	["office.zone.update"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
