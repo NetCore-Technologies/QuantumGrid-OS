@@ -9973,3 +9973,80 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+.office-segment-manager {
+  display: grid;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(255,255,255,.018);
+}
+.office-segment-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.office-segment-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.office-segment-fields label > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.office-segment-fields input,
+.office-segment-fields select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 7px 9px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 10px;
+}
+.office-segment-fields small {
+  color: var(--warning, #e2b66e);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.office-segment-policy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.office-segment-policy > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.office-segment-policy strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.office-segment-policy span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.office-segment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+@media (max-width: 700px) {
+  .office-segment-fields,
+  .office-segment-policy {
+    grid-template-columns: 1fr;
+  }
+}
