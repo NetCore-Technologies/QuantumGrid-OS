@@ -56,4 +56,22 @@ for index = 1, 205 do table.insert(long, "one") end
 local capped = audit.parse_log(table.concat(long, "\n"), decode)
 assert(capped.count == 205 and #capped.events == 200 and capped.truncated, "audit history should be capped at 200 records")
 
+for _, action in ipairs({
+  "office.vlan.update",
+  "office.vlan.remove",
+  "office.forwarding.add",
+  "office.forwarding.remove",
+}) do
+  local event = audit.encode_event({
+    timestamp = 1700000000,
+    actor = "root",
+    remote_ip = "192.0.2.10",
+    action = action,
+    target = "cfg-office",
+    outcome = "success",
+  })
+  assert(type(event) == "string" and event:find(action, 1, true),
+    "office network write actions must be accepted by the redacted audit log")
+end
+
 print("audit: allowlist, secret exclusion, escaping, validation and bounded parsing passed")
