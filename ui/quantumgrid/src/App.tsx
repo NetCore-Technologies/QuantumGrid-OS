@@ -4310,7 +4310,9 @@ function WirelessConfigEditor({
         <div>
           <strong>{config.ssid || "Hidden / unnamed network"}</strong>
           <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {config.encryption === "wpa2"
-            ? (config.radius_secret_set ? "RADIUS SECRET SET" : "RADIUS NOT CONFIGURED")
+            ? (config.radius_secret_set
+              ? (config.accounting_secret_set ? "RADIUS AUTH + ACCOUNTING SET" : "RADIUS AUTH SET")
+              : "RADIUS NOT CONFIGURED")
             : (config.key_set ? "PASSPHRASE SET" : "NO PASSPHRASE")}</span>
         </div>
         <Status active={!config.interface_disabled && !config.radio_disabled}>
