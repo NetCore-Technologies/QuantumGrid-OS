@@ -194,6 +194,58 @@ assert(not zone_snapshot.options.masq.present and zone_snapshot.options.masq.val
 assert(office.snapshot_firewall_zone_policy_options({ [".name"] = "bad", [".type"] = "forwarding" }) == nil,
   "forwarding sections cannot be snapshotted as firewall zones")
 
+local segment_interfaces = {
+  { name = "lan", device = "br-lan", ipv4 = { "192.168.1.1" }, netmask = "255.255.255.0" },
+  { name = "wan", device = "eth1", ipv4 = { "203.0.113.2" }, netmask = "255.255.255.252" },
+}
+local segment_bridges = {
+  { name = "br-lan", vlan_filtering = true, ports = { "lan1", "lan2" } },
+}
+local segment_vlans = {
+  { name = "vlan20", device = "br-lan", vlan_id = 20, ports = { { name = "lan1", mode = "tagged" } } },
+}
+local segment_zones = {
+  { section = "cfg-corp", name = "corp", networks = { "corp" }, input = "REJECT", selected = true },
+  { section = "cfg-wan", name = "wan", networks = { "wan" }, selected = false },
+}
+local segment_scopes = {
+  { section = "lan_dhcp", interface = "lan", ignore = false, range_valid = true,
+    pool_start_ip = "192.168.1.100", pool_end_ip = "192.168.1.199" },
+}
+local segment, segment_error = office.validate_office_segment(
+  "corp20", "br-lan", "20", "192.168.20.1", "255.255.255.0",
+  "100", "100", "12h", segment_interfaces, segment_bridges, segment_vlans,
+  segment_zones, segment_scopes)
+assert(segment and segment.device == "br-lan.20" and segment.zone_name == "corp")
+assert(segment.pool_start_ip == "192.168.20.100" and segment.pool_end_ip == "192.168.20.199")
+
+local function reject_segment(overrides, label)
+  local args = {
+    name = "corp20", bridge = "br-lan", vlan = "20", address = "192.168.20.1",
+    netmask = "255.255.255.0", start = "100", limit = "100", lease = "12h",
+    interfaces = segment_interfaces, bridges = segment_bridges, vlans = segment_vlans,
+    zones = segment_zones, scopes = segment_scopes,
+  }
+  for key, value in pairs(overrides or {}) do args[key] = value end
+  local value, err = office.validate_office_segment(
+    args.name, args.bridge, args.vlan, args.address, args.netmask,
+    args.start, args.limit, args.lease, args.interfaces, args.bridges,
+    args.vlans, args.zones, args.scopes)
+  assert(value == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain why")
+end
+reject_segment({ name = "../corp" }, "unsafe interface name")
+reject_segment({ name = "lan" }, "reserved interface name")
+reject_segment({ bridge = "br-other" }, "unknown bridge")
+reject_segment({ vlan = "30" }, "nonexistent bridge VLAN")
+reject_segment({ address = "192.168.1.10" }, "overlapping existing subnet")
+reject_segment({ address = "192.168.20.0" }, "subnet network address as gateway")
+reject_segment({ address = "8.8.8.8" }, "public address as office gateway")
+reject_segment({ netmask = "255.0.255.0" }, "non-contiguous subnet mask")
+reject_segment({ zones = { { section = "wan", name = "wan", networks = { "wan" }, selected = true } } }, "external firewall zone")
+reject_segment({ zones = { { section = "corp", name = "corp", networks = { "corp" }, selected = false } } }, "no selected firewall zone")
+reject_segment({ scopes = { { ignore = false, range_valid = false } } }, "unresolved existing DHCP scope")
+
 local forwarding_zones = {
   { name = "lan", networks = { "lan" } },
   { name = "corp", networks = { "corp" } },
