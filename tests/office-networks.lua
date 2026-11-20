@@ -19,6 +19,18 @@ local result = office.build_inventory({
     { name = "vlan40", device = "br-lan", vlan = 40, ports = { "lan1:t", "lan4:u*" } },
     { name = "invalid", device = "br-lan", vlan = 4095, ports = { "lan1:t" } },
   },
+  dhcp_available = true,
+  dhcp_scopes = {
+    { name = "lan_dhcp", interface = "lan", start = "100", limit = "120", lease_time = "12h", ignore = false, dhcpv6 = "server", ra = "server" },
+    { name = "guest_dhcp", interface = "guest", start = "50", limit = "200", lease_time = "4h", ignore = true },
+    { name = "invalid_scope", interface = "../lan", start = "1", limit = "999999" },
+  },
+  static_leases = {
+    { name = "Office-Printer", mac = "AA:BB:CC:DD:EE:01", ipv4 = "192.168.20.30" },
+    { name = "Meeting-Room", mac = "aa:bb:cc:dd:ee:02", ipv4 = "192.168.20.31" },
+    { name = "Bad-MAC", mac = "aa:bb:cc:dd:ee:gg", ipv4 = "192.168.20.32" },
+    { name = "Bad-IP", mac = "aa:bb:cc:dd:ee:03", ipv4 = "300.1.2.3" },
+  },
   zones = {
     { name = "lan", networks = { "lan" }, input = "ACCEPT", output = "ACCEPT", forward = "ACCEPT" },
     { name = "corp", networks = { "corp" }, input = "ACCEPT", output = "ACCEPT", forward = "REJECT" },
@@ -40,6 +52,11 @@ assert(result.vlan_count == 3, "invalid VLAN IDs must be ignored")
 assert(result.vlan_filtering_bridge_count == 1)
 assert(result.segmented_interface_count == 3)
 assert(result.wifi_ap_count == 3, "only AP sections belong in the SSID inventory")
+assert(result.dhcp_available and result.dhcp_scope_count == 2, "DHCP scope inventory should reject invalid interface names")
+assert(result.static_lease_count == 2, "invalid MAC and IPv4 static leases must be dropped")
+assert(result.static_leases[1].mac == "aa:bb:cc:dd:ee:01", "MAC addresses should be normalized")
+assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
+assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
 
 local corp
 for _, iface in ipairs(result.interfaces) do
