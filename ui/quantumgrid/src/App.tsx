@@ -2135,8 +2135,8 @@ function CellularSignalHistory({ history }: { history: CellularHistorySample[] }
         sample.rssi_dbm, sample.rsrp_dbm, sample.rsrq_db, sample.snr_db,
       ]),
     ];
-    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\\\r\\\\n");
-    const objectUrl = URL.createObjectURL(new Blob(["\\\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
     link.download = "quantumgrid-cellular-rf-history-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
