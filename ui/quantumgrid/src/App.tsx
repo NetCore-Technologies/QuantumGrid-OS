@@ -3,6 +3,7 @@ import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWif
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
+import { calculateCounterRateMbps } from "./interfaceRates";
 import {
   collectWifiClientHistory,
   mergeWifiClientHistory,
@@ -1877,15 +1878,19 @@ function NetworkControlPage({
     if (!mwan3?.available || visibleMwanInterfaces.length === 0) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "State filter", "Search filter", "Sort order", "Interface", "Enabled", "Netifd up", "mwan3 status", "Tracker state", "Tracker running", "Age seconds", "Online seconds", "Offline seconds", "Interface uptime seconds", "Score", "Lost", "Turn", "Tracking targets"],
-      ...visibleMwanInterfaces.map((iface) => [
+      ["Exported at (UTC)", "State filter", "Search filter", "Sort order", "Interface", "Enabled", "Netifd up", "mwan3 status", "Tracker state", "Tracker running", "Age seconds", "Online seconds", "Offline seconds", "Interface uptime seconds", "Score", "Lost", "Turn", "Measured RX Mbps", "Measured TX Mbps", "Sample interval seconds", "Tracking targets"],
+      ...visibleMwanInterfaces.map((iface) => {
+        const delta = interfaceCounterDeltas.get(iface.name);
+        return [
         exportedAt, mwanStateFilter, mwanSearch, mwanSort, iface.name, iface.enabled, iface.up,
         iface.status, iface.tracking, iface.running, iface.age_seconds, iface.online_seconds,
         iface.offline_seconds, iface.interface_uptime_seconds, iface.score, iface.lost, iface.turn,
+        delta?.rxMbps, delta?.txMbps, delta?.sampleSeconds,
         iface.track_targets.map((target) =>
           [target.ip, target.status, target.latency_ms, target.packet_loss_percent].join("/")
         ).join(" | "),
-      ]),
+        ];
+      }),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
     const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
@@ -2246,6 +2251,9 @@ function NetworkControlPage({
                         <small>TRACK COUNTERS</small>
                         <b>Score {iface.score === undefined ? "N/A" : fmt(iface.score)}</b>
                         <small>Lost {iface.lost === undefined ? "N/A" : fmt(iface.lost)} · turn {iface.turn === undefined ? "N/A" : fmt(iface.turn)}</small>
+                        <small>MEASURED RX / TX</small>
+                        <b>{interfaceCounterDeltas.get(iface.name)?.rxMbps == null || interfaceCounterDeltas.get(iface.name)?.txMbps == null ? "Collecting two samples" : `${fmt(interfaceCounterDeltas.get(iface.name)!.rxMbps!, 2)} / ${fmt(interfaceCounterDeltas.get(iface.name)!.txMbps!, 2)} Mbps`}</b>
+                        <small>{interfaceCounterDeltas.get(iface.name)?.sampleSeconds == null ? "Sample interval N/A" : `Sample ${fmt(interfaceCounterDeltas.get(iface.name)!.sampleSeconds!, 1)} s`}</small>
                       </div>
                       <div className="mwan3-targets">
                         <small>TRACKING TARGETS ({iface.track_targets.length})</small>
@@ -3405,10 +3413,13 @@ type WirelessTrafficSample = {
 };
 
 type InterfaceCounterSnapshot = {
+  rx_bytes: number;
+  tx_bytes: number;
   rx_errors?: number;
   tx_errors?: number;
   rx_dropped?: number;
   tx_dropped?: number;
+  sampledAt: number;
 };
 
 type InterfaceCounterDelta = {
@@ -3416,6 +3427,9 @@ type InterfaceCounterDelta = {
   txErrors: number | null;
   rxDropped: number | null;
   txDropped: number | null;
+  rxMbps: number | null;
+  txMbps: number | null;
+  sampleSeconds: number | null;
 };
 
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
@@ -4663,6 +4677,7 @@ function App() {
   const refresh = useCallback(async () => {
     try {
       const overview = await fetchRouterOverview();
+      const now = Date.now();
       const nextInterfaceCounters = new Map<string, InterfaceCounterSnapshot>();
       const nextInterfaceDeltas = new Map<string, InterfaceCounterDelta>();
       const counterDelta = (current: number | undefined, previous: number | undefined) =>
@@ -4670,16 +4685,26 @@ function App() {
       for (const item of overview.interfaces) {
         const previousCounters = previousInterfaceCounters.current.get(item.name);
         if (previousCounters) {
+          const sampleSeconds = (now - previousCounters.sampledAt) / 1000;
+          const validSampleInterval = Number.isFinite(sampleSeconds) && sampleSeconds > 0 && sampleSeconds <= 60;
           nextInterfaceDeltas.set(item.name, {
             rxErrors: counterDelta(item.rx_errors, previousCounters.rx_errors),
             txErrors: counterDelta(item.tx_errors, previousCounters.tx_errors),
             rxDropped: counterDelta(item.rx_dropped, previousCounters.rx_dropped),
             txDropped: counterDelta(item.tx_dropped, previousCounters.tx_dropped),
+            rxMbps: calculateCounterRateMbps(item.rx_bytes, previousCounters.rx_bytes, sampleSeconds),
+            txMbps: calculateCounterRateMbps(item.tx_bytes, previousCounters.tx_bytes, sampleSeconds),
+            sampleSeconds: validSampleInterval ? sampleSeconds : null,
           });
         }
         nextInterfaceCounters.set(item.name, {
-          rx_errors: item.rx_errors, tx_errors: item.tx_errors,
-          rx_dropped: item.rx_dropped, tx_dropped: item.tx_dropped,
+          rx_bytes: item.rx_bytes,
+          tx_bytes: item.tx_bytes,
+          rx_errors: item.rx_errors,
+          tx_errors: item.tx_errors,
+          rx_dropped: item.rx_dropped,
+          tx_dropped: item.tx_dropped,
+          sampledAt: now,
         });
       }
       previousInterfaceCounters.current = nextInterfaceCounters;
@@ -4688,7 +4713,6 @@ function App() {
         overview.interfaces.find((item) => item.name === "wan" && item.up) ??
         overview.interfaces.find((item) => item.is_wan && item.up) ??
         overview.interfaces.find((item) => item.up);
-      const now = Date.now();
       const previous = previousNetworkSample.current;
       const previousWireless = previousWirelessCounters.current;
       const nextWireless = new Map<string, { rx: number; tx: number; sampledAt: number }>();
