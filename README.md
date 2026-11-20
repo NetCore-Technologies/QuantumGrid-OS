@@ -362,6 +362,26 @@ by the software tests. The firmware also includes a read-only command-line inspe
 run `sh /usr/bin/quantumgrid-hardware-io` on the router, or pass `gpio`, `buttons` or `leds`
 to focus the inventory.
 
+## Managed bridge VLAN configuration
+
+The authenticated **Office Networks → Bridge VLAN management** panel can create, edit and
+remove native OpenWrt `network.bridge-vlan` sections on existing bridge devices only when
+VLAN filtering is already enabled. The editor requires an explicit tagged, untagged or untagged
+PVID mode for every member port. It verifies that selected ports belong to the bridge, prevents
+duplicate VLAN IDs on the same bridge, rejects duplicate port entries and prevents a port from
+receiving more than one PVID. A legacy port whose mode cannot be determined is never guessed:
+the operator must choose a mode before saving.
+
+Every update requires an explicit confirmation and triggers the native network reload. A failed
+reload causes QuantumGrid to restore the prior UCI section (or remove a newly created section),
+commit the rollback and reload networking again. Failed recovery is reported as unconfirmed and
+must be inspected locally; it is not reported as a successful rollback. Change outcomes are
+written to the redacted office audit log. Incorrect membership can interrupt wired, wireless or
+administrator access. The editor does not create L3 interfaces, IP subnets, DHCP scopes, firewall
+zones, Wi-Fi SSIDs or downstream switch configuration; those remain separate explicit tasks.
+VLAN changes should be staged from a verified management path and tested with an out-of-band
+recovery method available.
+
 ## Office network inventory
 
 The authenticated **Office Networks** page provides a read-only correlation of configured
