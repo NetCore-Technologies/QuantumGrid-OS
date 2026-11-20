@@ -910,6 +910,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
+	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
 
@@ -1375,6 +1376,151 @@ function action_set_password()
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({ ok = true })
 end
+
+function action_package_operation()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or
+				status == 405 and "Method Not Allowed" or
+				status == 503 and "Service Unavailable" or
+				status == 502 and "Bad Gateway" or "Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+
+	local operation = http.formvalue("operation", true)
+	local package = http.formvalue("package", true) or ""
+	local confirmed = http.formvalue("confirmed", true)
+	if operation ~= "update" and operation ~= "install" and operation ~= "remove" then
+		respond(400, { ok = false, error = "Choose update, install or remove." })
+		return
+	end
+	if operation ~= "update" and
+		(type(package) ~= "string" or #package < 1 or #package > 128 or
+		 not package:match("^[%w][%w%+_.%-]*$")) then
+		respond(400, { ok = false, error = "Package names may contain only letters, numbers, plus, underscore, dot and hyphen." })
+		return
+	end
+	if confirmed ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required for package operations." })
+		return
+	end
+
+	if operation == "remove" then
+		local protected = {
+			["base-files"] = true,
+			["busybox"] = true,
+			["kernel"] = true,
+			["libc"] = true,
+			["libgcc"] = true,
+			["procd"] = true,
+			["netifd"] = true,
+			["firewall4"] = true,
+			["dnsmasq"] = true,
+			["dropbear"] = true,
+			["uhttpd"] = true,
+			["rpcd"] = true,
+			["luci-base"] = true,
+			["luci-mod-network"] = true,
+			["luci-mod-status"] = true,
+			["luci-mod-system"] = true,
+			["luci-app-package-manager"] = true,
+			["apk"] = true,
+			["opkg"] = true,
+			["uci"] = true,
+			["ubus"] = true,
+			["kmod-aw1000-fxs"] = true,
+			["luci-app-fxs"] = true
+		}
+		if protected[package] or package:match("^kmod%-") or package:match("^wpad") or package:match("^qca%-nss") then
+			respond(400, {
+				ok = false,
+				error = "Removal is blocked for core router, wireless, NSS and kernel-module packages. Use an offline firmware build for driver changes."
+			})
+			return
+		end
+	end
+
+	local manager, binary = nil, nil
+	for _, candidate in ipairs({ "/sbin/apk", "/usr/bin/apk" }) do
+		if fs.access(candidate) == true then manager, binary = "apk", candidate break end
+	end
+	if not binary then
+		for _, candidate in ipairs({ "/bin/opkg", "/usr/bin/opkg" }) do
+			if fs.access(candidate) == true then manager, binary = "opkg", candidate break end
+		end
+	end
+	if not binary then
+		respond(503, { ok = false, error = "No supported APK or OPKG package manager was detected." })
+		return
+	end
+
+	local command
+	if manager == "apk" then
+		if operation == "update" then command = binary .. " update"
+		elseif operation == "install" then command = binary .. " add " .. package
+		else command = binary .. " del " .. package end
+	else
+		if operation == "update" then command = binary .. " update"
+		elseif operation == "install" then command = binary .. " install " .. package
+		else command = binary .. " remove " .. package end
+	end
+
+	local log_path = "/tmp/quantumgrid-package-operation.log"
+	os.remove(log_path)
+	local call_ok, exit_code = pcall(sys.call, command .. " > " .. log_path .. " 2>&1")
+	local output = ""
+	local file = io.open(log_path, "r")
+	if file then
+		output = file:read(6000) or ""
+		file:close()
+	end
+	os.remove(log_path)
+	output = output:gsub("\r", "\n"):gsub("[%z\1-\9\11\12\14-\31\127]", " "):sub(1, 6000)
+
+	if not call_ok or exit_code ~= 0 then
+		respond(502, {
+			ok = false,
+			manager = manager,
+			operation = operation,
+			package = package ~= "" and package or nil,
+			exit_code = call_ok and tonumber(exit_code) or nil,
+			output = output,
+			error = "The " .. manager .. " package operation failed. Check the package feed, free storage and dependency messages below."
+		})
+		return
+	end
+
+	respond(nil, {
+		ok = true,
+		manager = manager,
+		operation = operation,
+		package = package ~= "" and package or nil,
+		exit_code = 0,
+		output = output,
+		sampled_at = os.time()
+	})
+end
+
 
 function action_packages()
 	local http = require "luci.http"
