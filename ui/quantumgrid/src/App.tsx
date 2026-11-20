@@ -2425,8 +2425,13 @@ function describeScanOperation(network: RouterWifiScan["results"][number]): stri
   if (!selected) return "N/A";
   const details = [selected.name, describeWidth(selected.name, selected.value?.channel_width)];
   if (selected.name === "HT" && selected.value?.primary_channel !== undefined) {
-    details.push(\`primary CH \${selected.value.primary_channel}\`);
+    details.push(`primary CH ${selected.value.primary_channel}`);
     if (selected.value.secondary_channel_offset) details.push(selected.value.secondary_channel_offset);
+  } else {
+    if (selected.value?.center_freq_1 !== undefined) details.push(`center CH ${selected.value.center_freq_1}`);
+    if (selected.value?.center_freq_2 !== undefined && selected.value.center_freq_2 > 0) {
+      details.push(`center 2 CH ${selected.value.center_freq_2}`);
+    }
   }
   return details.join(" · ");
 }
@@ -2475,12 +2480,12 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     if (!scan || scan.results.length === 0) return;
     const scannedAt = new Date(scan.scanned_at * 1000).toISOString();
     const rows: Array<Array<string | number | null | undefined>> = [
-      ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Mode", "PHY operation"],
+      ["Scanned at (UTC)", "Radio", "Interface", "SSID", "BSSID", "Band", "Channel", "Frequency MHz", "Signal dBm", "Quality", "Quality max", "Security", "Authentication", "Cipher suites", "Mode", "PHY operation"],
       ...scan.results.map((network) => [
         scannedAt, network.radio, network.ifname, network.ssid, network.bssid,
         network.band, network.channel, network.frequency_mhz, network.signal_dbm,
         network.quality, network.quality_max, network.security,
-        network.authentication?.join("/"), network.mode, describeScanOperation(network),
+        network.authentication?.join("/"), network.ciphers?.join("/"), network.mode, describeScanOperation(network),
       ]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
@@ -2592,7 +2597,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
                     <div><small>SIGNAL</small><b>{network.signal_dbm === undefined ? "N/A" : fmt(network.signal_dbm) + " dBm"}</b></div>
                     <div><small>QUALITY</small><b>{network.quality === undefined ? "N/A" : fmt(network.quality) + "/" + fmt(network.quality_max ?? 0)}</b></div>
                     <div><small>PHY / WIDTH</small><b>{describeScanOperation(network)}</b></div>
-                    <div><small>SECURITY</small><b>{network.security}{network.authentication?.length ? ` · ${network.authentication.join("/")}` : ""}</b></div>
+                    <div><small>SECURITY</small><b>{network.security}{network.authentication?.length ? ` · ${network.authentication.join("/")}` : ""}{network.ciphers?.length ? ` · ${network.ciphers.join("/")}` : ""}</b></div>
                   </div>
                 ))}
               </div>

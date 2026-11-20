@@ -168,7 +168,7 @@ export interface RouterWifiScanResult {
   radio: string; ifname: string; ssid: string; bssid: string; mode: string;
   channel?: number; frequency_mhz?: number; band: string;
   signal_dbm?: number; quality?: number; quality_max?: number;
-  security: string; authentication?: string[];
+  security: string; authentication?: string[]; ciphers?: string[];
   ht_operation?: RouterWifiOperation;
   vht_operation?: RouterWifiOperation;
   he_operation?: RouterWifiOperation;

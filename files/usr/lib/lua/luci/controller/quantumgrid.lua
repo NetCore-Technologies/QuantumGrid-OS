@@ -415,6 +415,14 @@ local function build_wifi_scan()
 								local eht_operation = type(network.eht_operation) == "table" and network.eht_operation or nil
 								local security = "Unknown"
 								local authentication = {}
+								local ciphers = {}
+								if type(encryption.ciphers) == "table" then
+									for _, cipher in ipairs(encryption.ciphers) do
+										if type(cipher) == "string" and #ciphers < 12 then
+											table.insert(ciphers, cipher)
+										end
+									end
+								end
 								if encryption.enabled == false or encryption.enabled == 0 then
 									security = "Open"
 								elseif encryption.enabled == true or encryption.enabled == 1 then
@@ -446,7 +454,7 @@ local function build_wifi_scan()
 									mode = type(network.mode) == "string" and network.mode or "",
 									channel = tonumber(network.channel), frequency_mhz = frequency,
 									band = band, signal_dbm = signal,
-									security = security, authentication = authentication,
+									security = security, authentication = authentication, ciphers = ciphers,
 									ht_operation = ht_operation and {
 										primary_channel = tonumber(ht_operation.primary_channel),
 										secondary_channel_offset = type(ht_operation.secondary_channel_offset) == "string"
