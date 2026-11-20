@@ -304,7 +304,7 @@ to focus the inventory.
 
 The authenticated **Office Networks** page provides a read-only correlation of configured
 network interfaces and subnet masks, IPv6 assignment prefixes, bridge devices, bridge VLAN IDs and
-tagged/untagged/PVID port membership, firewall zones and their input/output/forward policies,
+tagged/untagged/PVID port membership, firewall zones and their input/output/forward policies, explicit inter-zone forwarding entries,
 wireless AP sections mapped to network names, DHCP scope offsets/limits/lease options, and validated
 static IPv4/MAC host reservations. Interface link state is queried from the router's network-interface
 status API. The page supports office network design reviews and CSV inventory hand-off without
