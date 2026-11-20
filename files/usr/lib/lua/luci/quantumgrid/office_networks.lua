@@ -197,12 +197,28 @@ function snapshot_dhcp_scope_enabled(snapshot)
 	}
 end
 
+function validate_dhcp_scope_ipv6_modes(dhcpv6, ra, ndp)
+	local dhcpv6_modes = { UNCHANGED = true, disabled = true, server = true }
+	local ra_modes = { UNCHANGED = true, disabled = true, server = true }
+	local ndp_modes = { UNCHANGED = true, disabled = true }
+	if type(dhcpv6) ~= "string" or not dhcpv6_modes[dhcpv6] then
+		return nil, "DHCPv6 mode must be unchanged, disabled or server. Relay/hybrid requires an odhcpd master topology configured in native LuCI."
+	end
+	if type(ra) ~= "string" or not ra_modes[ra] then
+		return nil, "Router Advertisement mode must be unchanged, disabled or server. Relay/hybrid requires an odhcpd master topology configured in native LuCI."
+	end
+	if type(ndp) ~= "string" or not ndp_modes[ndp] then
+		return nil, "NDP mode must be unchanged or disabled. Relay/hybrid requires an odhcpd master topology configured in native LuCI."
+	end
+	return { dhcpv6 = dhcpv6, ra = ra, ndp = ndp }
+end
+
 function snapshot_dhcp_scope_options(snapshot)
 	if type(snapshot) ~= "table" or snapshot[".type"] ~= "dhcp" then
 		return nil, "A DHCP scope snapshot is required."
 	end
 	local result = {}
-	for _, name in ipairs({ "start", "limit", "leasetime" }) do
+	for _, name in ipairs({ "start", "limit", "leasetime", "dhcpv6", "ra", "ndp" }) do
 		local value = snapshot[name]
 		table.insert(result, {
 			name = name,
