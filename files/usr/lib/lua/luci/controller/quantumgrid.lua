@@ -364,11 +364,24 @@ local function wireless_config_inventory(uci, radios)
 					end
 					table.sort(supported_htmodes)
 					local channel = uci:get("wireless", radio, "channel")
+					local networks = {}
+					if type(section.network) == "string" then
+						if section.network:match("^[%w_.%-]+$") then table.insert(networks, section.network) end
+					elseif type(section.network) == "table" then
+						local seen_networks = {}
+						for _, network in ipairs(section.network) do
+							if type(network) == "string" and network:match("^[%w_.%-]+$") and not seen_networks[network] then
+								seen_networks[network] = true
+								table.insert(networks, network)
+							end
+						end
+					end
 					table.insert(result, {
 						section = name,
 						radio = radio,
 						mode = mode,
 						ssid = tostring(section.ssid or ""),
+						networks = networks,
 						encryption = tostring(section.encryption or "none"),
 						ieee80211w = tostring(section.ieee80211w or ""),
 						hidden = section.hidden == "1",
@@ -987,7 +1000,12 @@ local function restore_wireless_option(uci, section, option, previous)
 		local ok, result = pcall(uci.delete, uci, "wireless", section, option)
 		return ok and result == true
 	end
-	local ok, result = pcall(uci.set, uci, "wireless", section, option, previous)
+	local ok, result
+	if type(previous) == "table" then
+		ok, result = pcall(uci.set_list, uci, "wireless", section, option, previous)
+	else
+		ok, result = pcall(uci.set, uci, "wireless", section, option, previous)
+	end
 	return ok and result == true
 end
 
@@ -1057,6 +1075,75 @@ local function wireless_radio_power_levels(radio_name)
 end
 
 
+local function wireless_network_inventory(uci)
+	local result = { interfaces = {}, zones = {}, available = false }
+	local network_ok = pcall(function()
+		uci:foreach("network", "interface", function(section)
+			if #result.interfaces >= 64 then return end
+			local name = tostring(section[".name"] or "")
+			local device = type(section.device) == "string" and section.device or
+				type(section.ifname) == "string" and section.ifname or ""
+			if name:match("^[%w_.%-]+$") and device:match("^[%w_.%-]+$") then
+				table.insert(result.interfaces, {
+					name = name,
+					protocol = tostring(section.proto or ""),
+					device = device
+				})
+			end
+		end)
+	end)
+	local firewall_ok = pcall(function()
+		uci:foreach("firewall", "zone", function(section)
+			if #result.zones >= 32 then return end
+			local name = tostring(section.name or section[".name"] or "")
+			local section_name = tostring(section[".name"] or "")
+			local networks = {}
+			if type(section.network) == "string" then
+				for network in section.network:gmatch("%S+") do table.insert(networks, network) end
+			elseif type(section.network) == "table" then
+				for _, network in ipairs(section.network) do
+					if type(network) == "string" then table.insert(networks, network) end
+				end
+			end
+			if name:match("^[%w_.%-]+$") and section_name:match("^[%w_.%-]+$") then
+				table.insert(result.zones, {
+					section = section_name,
+					name = name,
+					networks = networks
+				})
+			end
+		end)
+	end)
+	result.available = network_ok and firewall_ok
+	return result
+end
+
+local function network_interface_for_remote_address(remote_ip, interfaces)
+	if not valid_ipv4(remote_ip) then
+		return nil, "The current administrator session is not using a validated IPv4 address."
+	end
+	local util = require "luci.util"
+	local ok, output = pcall(util.exec, "/sbin/ip -4 route get " .. remote_ip .. " 2>/dev/null")
+	if not ok or type(output) ~= "string" then
+		return nil, "The router could not inspect the administrator's IPv4 return route."
+	end
+	local device = output:match("%sdev%s+([%w_.%-]+)")
+	if not device then
+		return nil, "The administrator's IPv4 return route has no validated network device."
+	end
+	local found = nil
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and iface.device == device then
+			if found then return nil, "The administrator's IPv4 return device maps to more than one network interface." end
+			found = iface.name
+		end
+	end
+	if not found then
+		return nil, "The administrator's IPv4 return device is not mapped to a known network interface."
+	end
+	return found
+end
+
 function action_wireless_update()
 	local http = require "luci.http"
 	local sys = require "luci.sys"
@@ -1112,6 +1199,20 @@ function action_wireless_update()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
+	local requested_network = http.formvalue("network", true)
+	local network_inventory = wireless_network_inventory(uci)
+	if not network_inventory.available then
+		respond(503, { ok = false, error = "Network and firewall interface inventories are unavailable; SSID network binding cannot be verified." })
+		return
+	end
+	local office_validator = require "luci.quantumgrid.office_networks"
+	local binding, binding_error = office_validator.validate_wireless_network_binding(
+		requested_network, network_inventory.interfaces, network_inventory.zones)
+	if not binding then
+		respond(400, { ok = false, error = binding_error })
+		return
+	end
+	update.network = binding.network
 
 	local radio_type_ok, radio_type = pcall(uci.get, uci, "wireless", update.radio, ".type")
 	local interface_type_ok, interface_type = pcall(uci.get, uci, "wireless", update.section, ".type")
@@ -1153,6 +1254,35 @@ function action_wireless_update()
 		end
 	end
 
+	local current_ap_config = uci:get_all("wireless", update.section)
+	if type(current_ap_config) ~= "table" or current_ap_config[".type"] ~= "wifi-iface" then
+		respond(404, { ok = false, error = "The selected AP configuration no longer exists." })
+		return
+	end
+	local current_networks = {}
+	if type(current_ap_config.network) == "string" then
+		for name in current_ap_config.network:gmatch("%S+") do table.insert(current_networks, name) end
+	elseif type(current_ap_config.network) == "table" then
+		for _, name in ipairs(current_ap_config.network) do
+			if type(name) == "string" then table.insert(current_networks, name) end
+		end
+	end
+	local current_network = #current_networks == 1 and current_networks[1] or nil
+	if current_network ~= update.network then
+		local management_network, route_error = network_interface_for_remote_address(
+			http.getenv("REMOTE_ADDR"), network_inventory.interfaces)
+		if not management_network then
+			respond(409, { ok = false, error = route_error .. " Use an out-of-band management path to change this SSID's VLAN binding." })
+			return
+		end
+		for _, attached in ipairs(current_networks) do
+			if attached == management_network and update.network ~= management_network then
+				respond(409, { ok = false, error = "This AP currently carries the administrator's management network. Keep that network attached or use a separate/out-of-band management connection before moving the SSID." })
+				return
+			end
+		end
+	end
+
 	local current_encryption = uci:get("wireless", update.section, "encryption") or "none"
 	local enterprise_encryption = update.encryption == "wpa2" or update.encryption == "wpa3"
 	local current_key = uci:get("wireless", update.section, "key")
@@ -1187,7 +1317,7 @@ function action_wireless_update()
 		end
 		snapshot.radio[option] = value or false
 	end
-	for _, option in ipairs({ "ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w" }) do
+	for _, option in ipairs({ "ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
@@ -1209,6 +1339,7 @@ function action_wireless_update()
 	end
 	local interface_updates = {
 		ssid = update.ssid,
+		network = update.network,
 		encryption = update.encryption,
 		hidden = update.hidden
 	}
@@ -1297,6 +1428,7 @@ function action_wireless_update()
 		radio = update.radio,
 		section = update.section,
 		ssid = update.ssid,
+		network = update.network,
 		encryption = update.encryption,
 		hidden = update.hidden == "1",
 		channel = update.channel,
