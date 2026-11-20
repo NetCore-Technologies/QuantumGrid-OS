@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeVlan, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6650,25 +6650,13 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         </Panel>
       </div>
 
-      <Panel title="Inter-zone forwarding" eyebrow="FIREWALL UCI · SOURCE → DESTINATION">
-        {!inventory?.firewall_available ? (
-          <div className="module-message">Firewall configuration could not be read.</div>
-        ) : inventory.forwardings.length === 0 ? (
-          <div className="module-message">No explicit inter-zone forwarding sections were returned. Zone-level policies and firewall rules can still affect traffic; this list is not the complete packet policy.</div>
-        ) : (
-          <div className="office-forwarding-list">
-            {inventory.forwardings.map((forwarding) => (
-              <div className="office-forwarding-row" key={forwarding.name}>
-                <div><strong>{forwarding.source}</strong><span>{forwarding.name}</span></div>
-                <span className="office-forwarding-arrow">→</span>
-                <div><strong>{forwarding.destination}</strong><span>Explicit UCI forwarding</span></div>
-                <Status active={true}>CONFIGURED</Status>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="module-message">These are explicit UCI zone-forwarding entries only. They do not represent every firewall rule, rule ordering, runtime nftables verdict or a tested network path.</div>
-      </Panel>
+      <OfficeForwardingManager
+        available={Boolean(inventory?.firewall_available)}
+        truncated={Boolean(inventory?.truncated)}
+        zones={zones}
+        forwardings={inventory?.forwardings ?? []}
+        refresh={refresh}
+      />
 
       <Panel title="Office deployment readiness" eyebrow="CONFIGURATION INVENTORY · NOT A COMPLIANCE RESULT">
         <div className="office-readiness-list">
@@ -6677,12 +6665,174 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           <div><strong>Firewall segmentation</strong><span>{inventory?.firewall_available ? zones.length + " firewall zone(s) and " + inventory.forwarding_count + " explicit zone forwarding(s) are inventoried." : "Firewall configuration inventory unavailable."} Actual rule evaluation and inter-VLAN traffic tests are not performed.</span></div>
           <div><strong>Wireless mapping</strong><span>{inventory?.wireless_available ? (inventory.wifi_ap_count + " configured AP section(s); inspect the SSID-to-network associations above.") : "Wireless configuration inventory unavailable."}</span></div>
         </div>
-        <div className="module-message">This release provides visibility only. VLAN creation, DHCP pool provisioning, firewall isolation, RADIUS/802.1X, site-to-site VPN policy and switch-port changes are not yet exposed as write controls. Do not treat this inventory as proof that a network is safe for production office deployment.</div>
+        <div className="module-message">QuantumGrid now provides guarded bridge VLAN membership and explicit inter-zone forwarding controls, with confirmed UCI writes, service reload checks, rollback attempts and audit events. L3 interface/address provisioning, complete firewall zone/rule/NAT management, RADIUS/802.1X, site-to-site VPN policy, Wi-Fi SSID-to-VLAN provisioning and downstream switch configuration remain separate tasks. The inventory and configured rules are not proof that a network is safe for production office deployment.</div>
       </Panel>
     </div>
   );
 }
 
+
+function OfficeForwardingManager({
+  available,
+  truncated,
+  zones,
+  forwardings,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  zones: RouterOfficeFirewallZone[];
+  forwardings: RouterOfficeForwarding[];
+  refresh: () => void;
+}) {
+  const externalZone = (zone: RouterOfficeFirewallZone) =>
+    ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
+    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
+  const sourceZones = zones.filter((zone) => !externalZone(zone));
+  const [source, setSource] = useState(sourceZones[0]?.name ?? "");
+  const destinationOptions = zones.filter((zone) => zone.name !== source);
+  const [destination, setDestination] = useState(
+    destinationOptions.find((zone) => ["wan", "wan6", "wwan"].includes(zone.name.toLowerCase()))?.name ??
+      destinationOptions[0]?.name ?? "",
+  );
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState("");
+  const [removalBusy, setRemovalBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const canCreate = available && !truncated && sourceZones.length > 0 &&
+    Boolean(destination) && destination !== source && confirmed && !saving;
+  const create = async () => {
+    if (!canCreate) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterOfficeForwarding({ source, destination });
+      setNotice({
+        success: true,
+        message: "Forwarding " + result.source + " → " + result.destination +
+          " was saved and the firewall reload completed.",
+      });
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The firewall forwarding could not be created.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+  const remove = async (section: string) => {
+    if (!section || removalBusy) return;
+    setRemovalBusy(true);
+    setNotice(null);
+    try {
+      const result = await removeRouterOfficeForwarding(section);
+      setPendingRemoval("");
+      setNotice({
+        success: true,
+        message: "Forwarding " + result.source + " → " + result.destination +
+          " was removed and the firewall reload completed.",
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The firewall forwarding could not be removed.",
+      });
+    } finally {
+      setRemovalBusy(false);
+    }
+  };
+
+  return (
+    <Panel title="Inter-zone forwarding" eyebrow="FIREWALL UCI · GUARDED SOURCE → DESTINATION">
+      {!available ? (
+        <div className="module-message">Firewall configuration is unavailable. Forwarding changes are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The firewall inventory is truncated. Resolve the inventory before changing inter-zone forwarding.</div>
+      ) : zones.length < 2 ? (
+        <div className="module-message">At least two existing firewall zones are required before a forwarding can be configured.</div>
+      ) : null}
+      <div className="office-forwarding-manager">
+        <div className="office-forwarding-list">
+          {forwardings.length === 0 ? (
+            <div className="module-message">No explicit inter-zone forwarding sections were returned. Zone policies and firewall rules can still affect traffic.</div>
+          ) : (
+            forwardings.map((forwarding) => (
+              <div className="office-forwarding-row" key={forwarding.section}>
+                <div><strong>{forwarding.source}</strong><span>{forwarding.name} · {forwarding.section}</span></div>
+                <span className="office-forwarding-arrow">→</span>
+                <div><strong>{forwarding.destination}</strong><span>Explicit UCI forwarding</span></div>
+                {pendingRemoval === forwarding.section ? (
+                  <div className="office-forwarding-remove-confirm">
+                    <span>Remove this permitted path?</span>
+                    <button className="office-remove-start" type="button" onClick={() => void remove(forwarding.section)} disabled={removalBusy}>
+                      {removalBusy ? "Removing…" : "Confirm"}
+                    </button>
+                    <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={removalBusy}>Cancel</button>
+                  </div>
+                ) : (
+                  <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(forwarding.section)} disabled={!forwarding.section || removalBusy || saving}>
+                    Remove forwarding
+                  </button>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+        <div className="office-forwarding-editor">
+          <div>
+            <strong>Add an inter-zone forwarding</strong>
+            <span>Permit traffic initiated from one zone to a second zone. Router input policy is not changed.</span>
+          </div>
+          <div className="office-forwarding-fields">
+            <label>
+              <span>SOURCE ZONE</span>
+              <select value={source} onChange={(event) => {
+                setSource(event.target.value);
+                setConfirmed(false);
+                if (event.target.value === destination) {
+                  setDestination(zones.find((zone) => zone.name !== event.target.value)?.name ?? "");
+                }
+              }} disabled={!available || truncated || saving || sourceZones.length === 0}>
+                {sourceZones.map((zone) => (
+                  <option value={zone.name} key={zone.name}>{zone.name} · {zone.networks.join(", ") || "No network mapped"}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>DESTINATION ZONE</span>
+              <select value={destination} onChange={(event) => {
+                setDestination(event.target.value);
+                setConfirmed(false);
+              }} disabled={!available || truncated || saving || destinationOptions.length === 0}>
+                {destinationOptions.map((zone) => (
+                  <option value={zone.name} key={zone.name}>{zone.name} · {zone.networks.join(", ") || "No network mapped"}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="office-reservation-confirm">
+            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !source || !destination || source === destination} />
+            <span>I explicitly permit sessions initiated in {source || "the source zone"} to reach {destination || "the destination zone"} and authorize a firewall reload.</span>
+          </label>
+          <button className="hero-button" type="button" onClick={() => void create()} disabled={!canCreate}>
+            {saving ? "Applying…" : "Add forwarding"}
+          </button>
+        </div>
+      </div>
+      {notice ? (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+      <div className="module-message">The API never edits zone input/output policies through this control. WAN/WWAN zones cannot be selected as a forwarding source; an external zone may be a destination (for example, staff → WAN). Forwardings are directional and are not a substitute for reviewing the full firewall ruleset or testing the packet path. Changes are committed to UCI, followed by firewall reload and rollback attempts on failure.</div>
+    </Panel>
+  );
+}
 
 type OfficeVlanPortMode = "excluded" | "unspecified" | "tagged" | "untagged" | "untagged-pvid";
 
