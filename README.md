@@ -250,6 +250,25 @@ A successful compile does not prove RF performance, voice-call compatibility, em
 flash compatibility or NSS acceleration. Those require separate hardware tests and are reported
 as such.
 
+## Hardware I/O controls
+
+The authenticated QuantumGrid **Hardware I/O** page reads the kernel GPIO debugfs inventory
+when it is mounted and readable, including chip ranges, line labels, consumers, direction and
+reported high/low state. It flags button-like lines only when their kernel label or consumer
+contains a button/reset/WPS/power/key/WLAN hint; this is not a verified physical AW1000 pin map
+or a live button-event stream. GPIO ownership, event wiring, direction changes and output writes
+remain read-only/locked until the board pin map and recovery-safe behaviour are validated.
+
+The same page enumerates Linux LED-class devices under `/sys/class/leds`. An administrator can
+change brightness only for a discovered device whose kernel trigger is explicitly reported as
+`none`, with an integer value bounded by that device's reported maximum. The authenticated
+write endpoint revalidates the device, checks the trigger, verifies the resulting value and attempts
+to restore the prior brightness if verification fails. This is a runtime-only change; it is not
+persisted across reboot. LEDs with active or unknown trigger ownership remain locked. The Lua
+parser and validation rules are covered by `tests/hardware-io.lua` and the normal firmware CI gate.
+No physical button presses, LED wiring, or AW1000 pin-level behaviour are claimed as hardware-tested
+by the software tests.
+
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
