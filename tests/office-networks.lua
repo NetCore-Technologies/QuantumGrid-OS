@@ -315,6 +315,38 @@ reject_ipv6_mode("server;uci", "server", "disabled", "injected DHCPv6 mode")
 reject_ipv6_mode("server", "disabled;uci", "disabled", "injected RA mode")
 reject_ipv6_mode("server", "server", "hybrid", "NDP hybrid without a master topology")
 
+local wifi_interfaces = {
+  { name = "lan", protocol = "static", device = "br-lan" },
+  { name = "corp20", protocol = "static", device = "br-lan.20" },
+  { name = "wan", protocol = "dhcp", device = "eth1" },
+  { name = "unmapped", protocol = "static", device = "br-lan.30" },
+}
+local wifi_zones = {
+  { section = "cfg_lan", name = "lan", networks = { "lan" } },
+  { section = "cfg_corp", name = "corp", networks = { "corp20" } },
+  { section = "cfg_wan", name = "wan", networks = { "wan" } },
+}
+local valid_ssid_binding = office.validate_wireless_network_binding("corp20", wifi_interfaces, wifi_zones)
+assert(valid_ssid_binding and valid_ssid_binding.network == "corp20"
+  and valid_ssid_binding.device == "br-lan.20" and valid_ssid_binding.zone_name == "corp")
+
+local function reject_wifi_binding(network, interfaces, zones, label)
+  local value, err = office.validate_wireless_network_binding(network, interfaces, zones)
+  assert(value == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " must report a reason")
+end
+reject_wifi_binding("../corp", wifi_interfaces, wifi_zones, "unsafe SSID network binding")
+reject_wifi_binding("missing", wifi_interfaces, wifi_zones, "missing SSID network")
+reject_wifi_binding("wan", wifi_interfaces, wifi_zones, "external WAN SSID binding")
+reject_wifi_binding("unmapped", wifi_interfaces, wifi_zones, "network without a firewall zone")
+reject_wifi_binding("wan", {
+  { name = "wan", protocol = "static", device = "eth1" }
+}, wifi_zones, "WAN binding despite static protocol")
+reject_wifi_binding("corp20", wifi_interfaces, {
+  { section = "a", name = "corp", networks = { "corp20" } },
+  { section = "b", name = "corp2", networks = { "corp20" } },
+}, "ambiguous firewall-zone mapping")
+
 local forwarding_zones = {
   { name = "lan", networks = { "lan" } },
   { name = "corp", networks = { "corp" } },
