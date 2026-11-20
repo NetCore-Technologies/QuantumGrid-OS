@@ -10067,3 +10067,64 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+.office-dhcp-ipv6-advanced {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255,255,255,.018);
+}
+.office-dhcp-ipv6-advanced-heading {
+  display: grid;
+  gap: 4px;
+}
+.office-dhcp-ipv6-advanced-heading strong {
+  color: var(--text);
+  font-size: 10px;
+}
+.office-dhcp-ipv6-advanced-heading span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+.office-dhcp-ipv6-advanced-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.office-dhcp-ipv6-advanced-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.office-dhcp-ipv6-advanced-fields label > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .07em;
+}
+.office-dhcp-ipv6-advanced-fields select {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 6px 8px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 9px;
+}
+@media (max-width: 900px) {
+  .office-dhcp-ipv6-advanced-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .office-dhcp-ipv6-advanced-fields {
+    grid-template-columns: 1fr;
+  }
+}
