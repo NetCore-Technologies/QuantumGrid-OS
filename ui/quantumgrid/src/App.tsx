@@ -3271,7 +3271,7 @@ function OpenWrtAppsPage() {
           <button className="hero-button" onClick={() => void runPackageAction("install")} disabled={packageBusy || !confirmPackageAction || !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(packageName.trim())}>
             Install package
           </button>
-          <button className="hero-button" onClick={() => void runPackageAction("remove")} disabled={packageBusy || !confirmPackageAction || !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(packageName.trim()) || /^(kmod-|wpad|qca-nss)/.test(packageName.trim())}>
+          <button className="hero-button" onClick={() => void runPackageAction("remove")} disabled={packageBusy || !confirmPackageAction || !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(packageName.trim()) || /^(kmod-|wpad|qca-nss|ath11k|kernel-|luci-mod-)/.test(packageName.trim())}>
             Remove package
           </button>
         </div>
