@@ -543,10 +543,78 @@ export interface RouterLedUpdateResult {
   persistent: false;
 }
 
+export interface RouterOfficeBridge {
+  name: string;
+  type: string;
+  ports: string[];
+  vlan_filtering: boolean;
+}
+
+export interface RouterOfficeVlanPort {
+  name: string;
+  mode: "tagged" | "untagged";
+  pvid: boolean;
+}
+
+export interface RouterOfficeVlan {
+  name: string;
+  device: string;
+  vlan_id: number;
+  ports: RouterOfficeVlanPort[];
+}
+
+export interface RouterOfficeWifiAp {
+  ssid: string;
+  section: string;
+  device: string;
+  disabled: boolean;
+}
+
+export interface RouterOfficeInterface {
+  name: string;
+  protocol: string;
+  device: string;
+  up: boolean;
+  ipv4: string[];
+  ipv6: string[];
+  vlan_ids: number[];
+  firewall_zones: string[];
+  wifi_aps: RouterOfficeWifiAp[];
+}
+
+export interface RouterOfficeFirewallZone {
+  name: string;
+  networks: string[];
+  input: string;
+  output: string;
+  forward: string;
+  masquerade: boolean;
+}
+
+export interface RouterOfficeNetworks {
+  available: boolean;
+  firewall_available: boolean;
+  wireless_available: boolean;
+  truncated: boolean;
+  interfaces: RouterOfficeInterface[];
+  bridges: RouterOfficeBridge[];
+  vlans: RouterOfficeVlan[];
+  zones: RouterOfficeFirewallZone[];
+  interface_count: number;
+  bridge_count: number;
+  vlan_count: number;
+  zone_count: number;
+  wifi_ap_count: number;
+  vlan_filtering_bridge_count: number;
+  segmented_interface_count: number;
+  sampled_at: number;
+}
+
 export interface RouterOverview {
   ok: true;
   platform?: RouterPlatformStatus;
   hardware_io?: RouterHardwareIoStatus;
+  office_networks?: RouterOfficeNetworks;
   conntrack?: RouterConntrackStatus;
   timestamp: number;
   routes_available?: boolean;
