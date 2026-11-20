@@ -3047,7 +3047,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
           </Panel>
           <Panel title="Flash partition inventory" eyebrow="READ-ONLY · /PROC/MTD">
             {storage.length === 0 ? (
-              <div className="module-message">This device did not expose MTD partitions through /proc/mtd. eMMC/UFS and overlay space are not inferred from this table.</div>
+              <div className="module-message">This device did not expose MTD partitions through /proc/mtd. eMMC/UFS and overlay space are listed separately through block-device and mount telemetry when the kernel reports them.</div>
             ) : (
               <div className="device-list">
                 {storage.map((partition) => <div className="device-row platform-storage-row" key={partition.device}>
@@ -3081,7 +3081,12 @@ function AdvancedControlPage({ routerOverview, refresh }: {
                 <div className="platform-check-list">
                   {platform.mounts.map((mount) => (
                     <div className="platform-mount-row" key={mount.mountpoint + "-" + mount.source}>
-                      <div><strong>{mount.mountpoint}</strong><span>{mount.source} · {mount.filesystem}</span></div>
+                      <div className="platform-mount-identity"><strong>{mount.mountpoint}</strong><span>{mount.source} · {mount.filesystem}</span></div>
+                      <div className="platform-mount-capacity">
+                        <span>{mount.total_bytes === undefined ? "Capacity N/A" : `${fmt(mount.total_bytes / 1073741824, 2)} GiB total`}</span>
+                        <span>{mount.available_bytes === undefined ? "Available N/A" : `${fmt(mount.available_bytes / 1073741824, 2)} GiB available`}</span>
+                        <span>{mount.used_percent === undefined ? "Usage N/A" : `${fmt(mount.used_percent, 1)}% used`}</span>
+                      </div>
                       <Status active={!mount.read_only}>{mount.read_only ? "READ ONLY" : "READ / WRITE"}</Status>
                     </div>
                   ))}

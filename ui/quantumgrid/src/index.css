@@ -6999,6 +6999,29 @@ input::placeholder {
 .platform-storage-row {
   grid-template-columns: minmax(180px, 1.6fr) repeat(2, minmax(105px, 1fr));
 }
+.platform-mount-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(240px, 1.6fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.02);
+}
+.platform-mount-identity {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.platform-mount-identity strong { color: var(--text); font-size: 9px; overflow-wrap: anywhere; }
+.platform-mount-identity span { color: var(--muted2); font-size: 8px; overflow-wrap: anywhere; }
+.platform-mount-capacity {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 12px;
+}
+.platform-mount-capacity span { color: var(--muted); font-size: 8px; }
 @media (max-width: 760px) {
   .platform-detail-grid {
     grid-template-columns: 1fr;
@@ -7011,5 +7034,12 @@ input::placeholder {
   }
   .platform-storage-row .device-title {
     grid-column: 1 / -1;
+  }
+  .platform-mount-row {
+    grid-template-columns: 1fr auto;
+  }
+  .platform-mount-capacity {
+    grid-column: 1 / -1;
+    grid-row: 2;
   }
 }

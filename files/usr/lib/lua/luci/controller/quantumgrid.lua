@@ -960,12 +960,32 @@ local function platform_status(fs)
 			or mountpoint == "/overlay" or mountpoint == "/tmp"
 			or (mountpoint and mountpoint:match("^/mnt/") ~= nil)
 		if source and relevant then
-			table.insert(mounts, {
+			local mount = {
 				source = source:sub(1, 128),
 				mountpoint = mountpoint:sub(1, 128),
 				filesystem = filesystem:sub(1, 48),
 				read_only = ("," .. options .. ","):find(",ro,", 1, true) ~= nil
-			})
+			}
+			if type(fs.statvfs) == "function" then
+				local ok, stats = pcall(fs.statvfs, mountpoint)
+				if ok and type(stats) == "table" then
+					local blocks = tonumber(stats.blocks)
+					local free_blocks = tonumber(stats.bfree)
+					local available_blocks = tonumber(stats.bavail)
+					local fragment_size = tonumber(stats.frsize)
+					if blocks and blocks > 0 and fragment_size and fragment_size > 0 then
+						mount.total_bytes = blocks * fragment_size
+						if available_blocks and available_blocks >= 0 then
+							mount.available_bytes = available_blocks * fragment_size
+						end
+						if free_blocks and free_blocks >= 0 then
+							mount.used_percent = math.max(0, math.min(100,
+								((blocks - free_blocks) / blocks) * 100))
+						end
+					end
+				end
+			end
+			table.insert(mounts, mount)
 		end
 	end
 
