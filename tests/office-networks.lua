@@ -10,6 +10,14 @@ assert(not office.ipv4_in_subnet("192.168.20.1", "192.168.20.1", "255.255.255.0"
 assert(not office.ipv4_in_subnet("192.168.20.255", "192.168.20.1", "255.255.255.0"), "the subnet broadcast address cannot be reserved")
 assert(not office.ipv4_in_subnet("192.168.20.30", "192.168.20.1", "255.255.0.255"), "non-contiguous netmasks must be rejected")
 assert(not office.ipv4_in_subnet("192.168.20.30", "192.168.20.1", "255.255.255.254"), "point-to-point /31 scopes must not accept host reservations")
+assert(office.live_lease_conflict(
+  "1700000000 aa:bb:cc:dd:ee:02 192.168.20.30 Office-Laptop *\\n",
+  "192.168.20.30", "aa:bb:cc:dd:ee:01"), "a live lease to a different MAC must block the reservation")
+assert(not office.live_lease_conflict(
+  "1700000000 aa:bb:cc:dd:ee:01 192.168.20.30 Office-Printer *\\n",
+  "192.168.20.30", "AA:BB:CC:DD:EE:01"), "the same MAC may keep its current address")
+assert(not office.live_lease_conflict("unparseable lease", "192.168.20.30", "aa:bb:cc:dd:ee:01"))
+
 
 local invalid_reservations = {
   { "bad name", "aa:bb:cc:dd:ee:01", "192.168.20.30" },
@@ -19,6 +27,9 @@ local invalid_reservations = {
   { "Printer", "00:00:00:00:00:00", "192.168.20.30" },
   { "Printer", "aa:bb:cc:dd:ee:03", "127.0.0.1" },
   { "Printer", "aa:bb:cc:dd:ee:03", "224.0.0.1" },
+  { "Printer", "aa:bb:cc:dd:ee:03", "192.168.020.30" },
+  { "Printer", "aa:bb:cc:dd:ee:03", "169.254.1.1" },
+  { "Printer", "aa:bb:cc:dd:ee:03", "0.1.2.3" },
 }
 for _, values in ipairs(invalid_reservations) do
   local valid = office.validate_reservation(values[1], values[2], values[3])
