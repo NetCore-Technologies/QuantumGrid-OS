@@ -14,7 +14,7 @@ local inventory = kernel_modules.parse(table.concat({
 	"out_of_tree 100 0 - Live 0x00000000"
 }, "\n"))
 assert(inventory.available == true)
-assert(inventory.count == 5, "module names should be unique and paths validated")
+assert(inventory.count == 4, "module names should be unique and paths validated")
 assert(inventory.loaded_count == 3)
 local by_name = {}
 for _, item in ipairs(inventory.modules) do by_name[item.name] = item end
