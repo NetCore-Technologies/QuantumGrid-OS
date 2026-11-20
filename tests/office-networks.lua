@@ -163,6 +163,52 @@ local gateway_scope = office.validate_dhcp_scope_update(
   "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
 
+local wifi_aps = {
+  { section = "corp_ap", ssid = "Office-Corp", networks = { "corp" } },
+  { section = "guest_ap", ssid = "Office-Guest", networks = { "guest" } },
+}
+local wifi_interfaces = {
+  { name = "corp", protocol = "static" },
+  { name = "guest", protocol = "static" },
+  { name = "wan", protocol = "dhcp" },
+}
+local wifi_zones = {
+  { name = "corp", networks = { "corp" } },
+  { name = "guest", networks = { "guest" } },
+  { name = "wan", networks = { "wan" } },
+}
+local valid_wifi_binding = office.validate_office_wifi_ap_network(
+  "corp_ap", "corp", wifi_aps, wifi_interfaces, wifi_zones)
+assert(valid_wifi_binding and valid_wifi_binding.section == "corp_ap" and valid_wifi_binding.network == "corp")
+local function reject_wifi_binding(section, network, label)
+  local result, err = office.validate_office_wifi_ap_network(
+    section, network, wifi_aps, wifi_interfaces, wifi_zones)
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
+end
+reject_wifi_binding("../wireless", "corp", "path-like wireless AP section")
+reject_wifi_binding("unknown_ap", "corp", "unknown AP section")
+reject_wifi_binding("corp_ap", "unknown", "unknown office network")
+reject_wifi_binding("corp_ap", "wan", "WAN interface as client network")
+reject_wifi_binding("corp_ap", "guest", "network assigned to a WAN/WWAN firewall zone")
+
+local wifi_binding_snapshot = office.snapshot_wifi_ap_network({
+  [".name"] = "corp_ap",
+  [".type"] = "wifi-iface",
+  mode = "ap",
+  network = { "corp", "iot" },
+})
+assert(wifi_binding_snapshot and wifi_binding_snapshot.present)
+assert(wifi_binding_snapshot.value[1] == "corp" and wifi_binding_snapshot.value[2] == "iot")
+local wifi_binding_absent = office.snapshot_wifi_ap_network({
+  [".name"] = "guest_ap",
+  [".type"] = "wifi-iface",
+  mode = "ap",
+})
+assert(wifi_binding_absent and not wifi_binding_absent.present and #wifi_binding_absent.value == 0)
+assert(office.snapshot_wifi_ap_network({ [".name"] = "client", [".type"] = "wifi-iface", mode = "sta" }) == nil,
+  "station sections must not be snapshotted as office access points")
+
 local policy_zones = {
   { section = "cfg_corp", name = "corp" },
   { section = "cfg_guest", name = "guest" },
