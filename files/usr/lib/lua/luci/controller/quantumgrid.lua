@@ -2231,6 +2231,7 @@ local function office_network_status(uci, fs)
 			local interface = tostring(section.interface or "")
 			if name:match("^[%w_.%-]+$") and interface:match("^[%w_.%-]+$") then
 				table.insert(source.dhcp_scopes, {
+					section = name,
 					name = name,
 					interface = interface,
 					start = section.start,
