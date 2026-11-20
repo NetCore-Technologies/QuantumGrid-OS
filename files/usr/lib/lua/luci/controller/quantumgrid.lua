@@ -3078,6 +3078,7 @@ function action_remote_syslog_update()
 	end
 
 	local update, validation_error = validator.validate({
+		confirmed = http.formvalue("confirmed", true),
 		enabled = http.formvalue("enabled", true),
 		host = http.formvalue("host", true) or "",
 		port = http.formvalue("port", true) or "",
