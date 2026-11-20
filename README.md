@@ -89,6 +89,7 @@ Scan inventories can be filtered by SSID/BSSID/radio and sorted by signal, chann
 They can also be exported as CSV; network-controlled text is quoted and spreadsheet formula
 prefixes are neutralised in the export. The page keeps summaries from the last ten distinct manual
 scans in memory only; it does not persist the history or retain old network identifiers. The
+history can be exported as a compact CSV or cleared immediately from the Wi-Fi page. The
 The Wi-Fi and Network views also show the driver's frequency list, current channel and restricted-channel flags when iwinfo.freqlist reports them, plus the available transmit-power levels when iwinfo.txpowerlist is supported. These are driver-reported capabilities, not a replacement for the full regulatory database or a grant to use every level.
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. Gaming
 reports SQM queue configuration and read-only kernel qdisc

@@ -2477,6 +2477,33 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const bandsObserved = scan ? new Set(scan.results.map((network) => network.band)).size : 0;
   const openNetworkCount = scan ? scan.results.filter((network) => network.security === "Open").length : 0;
   const unknownSecurityCount = scan ? scan.results.filter((network) => network.security === "Unknown").length : 0;
+  const exportScanHistory = () => {
+    if (scanHistory.length === 0) return;
+    const rows: Array<Array<string | number | null | undefined>> = [
+      ["Scanned at (UTC)", "Access points", "2.4 GHz", "5 GHz", "6 GHz", "Other bands"],
+      ...scanHistory.map((sample) => [
+        new Date(sample.scannedAt * 1000).toISOString(),
+        sample.accessPoints,
+        sample.bandCounts["2.4 GHz"] ?? 0,
+        sample.bandCounts["5 GHz"] ?? 0,
+        sample.bandCounts["6 GHz"] ?? 0,
+        Object.entries(sample.bandCounts)
+          .filter(([band]) => !["2.4 GHz", "5 GHz", "6 GHz"].includes(band))
+          .map(([band, count]) => band + ": " + count)
+          .join(" / "),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `quantumgrid-wifi-history-${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+
   const exportWifiScan = () => {
     if (!scan || scan.results.length === 0) return;
     const scannedAt = new Date(scan.scanned_at * 1000).toISOString();
@@ -2640,7 +2667,16 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         )}
         <div className="module-message">Groups count distinct BSSIDs returned by this scan on each reported band/channel. A higher count means more networks were visible to this scan; it is not channel airtime, interference, channel width overlap or a channel recommendation. Security labels come from iwinfo encryption metadata; missing metadata is marked Unknown rather than treated as an open network. Take repeat scans from the router’s actual installation location before comparing environments.</div>
       </Panel>
-      <Panel title="Manual scan history" eyebrow="LAST 10 DISTINCT SCANS · THIS UI SESSION">
+      <Panel
+        title="Manual scan history"
+        eyebrow="LAST 10 DISTINCT SCANS · THIS UI SESSION"
+        action={
+          <div className="wifi-scan-actions">
+            <button className="hero-button wifi-export-button" onClick={exportScanHistory} disabled={scanHistory.length === 0}>Export history CSV</button>
+            <button className="hero-button wifi-export-button" onClick={() => setScanHistory([])} disabled={scanHistory.length === 0}>Clear history</button>
+          </div>
+        }
+      >
         {scanHistory.length === 0 ? (
           <div className="module-message">Completed manual scans will appear here. Cached repeat requests are not added as new samples.</div>
         ) : (
