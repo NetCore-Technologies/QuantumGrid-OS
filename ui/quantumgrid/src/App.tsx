@@ -8,7 +8,6 @@ import {
   readWifiClientHistory,
   WIFI_CLIENT_HISTORY_KEY,
   WIFI_CLIENT_HISTORY_SETTINGS_KEY,
-  WIFI_CLIENT_HISTORY_SAMPLE_INTERVAL_SECONDS,
   type WifiClientHistoryRetentionDays,
   type WifiClientHistorySample,
 } from "./wifiClientHistory";
@@ -2928,69 +2927,42 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
-  const [clientHistory, setClientHistory] = useState<WifiClientHistorySample[]>([]);
-  const [clientHistoryEnabled, setClientHistoryEnabled] = useState(false);
-  const [clientHistoryRetention, setClientHistoryRetention] = useState<WifiClientHistoryRetentionDays>(7);
-  const [clientHistorySettingsLoaded, setClientHistorySettingsLoaded] = useState(false);
-  const [clientHistoryError, setClientHistoryError] = useState("");
-  const lastClientHistorySampleAt = useRef(0);
-  const [scanFilter, setScanFilter] = useState("");
-  const [scanSecurityFilter, setScanSecurityFilter] = useState<"all" | "open" | "encrypted" | "unknown">("all");
-  const [scanBandFilter, setScanBandFilter] = useState("all");
-  const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
-
-  useEffect(() => {
+  const [clientHistoryState, setClientHistoryState] = useState(() => {
     try {
+      let enabled = false;
+      let retentionDays: WifiClientHistoryRetentionDays = 7;
       const settingsRaw = window.localStorage.getItem(WIFI_CLIENT_HISTORY_SETTINGS_KEY);
       if (settingsRaw) {
         const settings: unknown = JSON.parse(settingsRaw);
         if (typeof settings === "object" && settings !== null) {
           const value = settings as { enabled?: unknown; retentionDays?: unknown };
-          setClientHistoryEnabled(value.enabled === true);
+          enabled = value.enabled === true;
           if (value.retentionDays === 1 || value.retentionDays === 7 || value.retentionDays === 30) {
-            setClientHistoryRetention(value.retentionDays);
+            retentionDays = value.retentionDays;
           }
         }
       }
-      const history = readWifiClientHistory(window.localStorage.getItem(WIFI_CLIENT_HISTORY_KEY));
-      setClientHistory(history);
-      lastClientHistorySampleAt.current = history[history.length - 1]?.sampledAt ?? 0;
+      const stored = readWifiClientHistory(window.localStorage.getItem(WIFI_CLIENT_HISTORY_KEY));
+      const samples = pruneWifiClientHistory(stored, Math.floor(Date.now() / 1000), retentionDays);
+      return { samples, enabled, retentionDays, error: "" };
     } catch {
-      setClientHistoryError("Browser storage could not be read. Client history remains unavailable on this browser.");
-    } finally {
-      setClientHistorySettingsLoaded(true);
+      return {
+        samples: [] as WifiClientHistorySample[],
+        enabled: false,
+        retentionDays: 7 as WifiClientHistoryRetentionDays,
+        error: "Browser storage could not be read. Client history remains unavailable on this browser.",
+      };
     }
-  }, []);
+  });
+  const clientHistory = clientHistoryState.samples;
+  const clientHistoryEnabled = clientHistoryState.enabled;
+  const clientHistoryRetention = clientHistoryState.retentionDays;
+  const clientHistoryError = clientHistoryState.error;
+  const [scanFilter, setScanFilter] = useState("");
+  const [scanSecurityFilter, setScanSecurityFilter] = useState<"all" | "open" | "encrypted" | "unknown">("all");
+  const [scanBandFilter, setScanBandFilter] = useState("all");
+  const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
 
-  useEffect(() => {
-    if (!clientHistorySettingsLoaded) return;
-    try {
-      window.localStorage.setItem(WIFI_CLIENT_HISTORY_SETTINGS_KEY, JSON.stringify({
-        enabled: clientHistoryEnabled,
-        retentionDays: clientHistoryRetention,
-      }));
-    } catch {
-      setClientHistoryError("Browser settings could not be saved. Check the browser's local storage permissions.");
-    }
-  }, [clientHistoryEnabled, clientHistoryRetention, clientHistorySettingsLoaded]);
-
-  useEffect(() => {
-    if (!clientHistorySettingsLoaded || !clientHistoryEnabled || !routerOverview) return;
-    const sampledAt = routerOverview.timestamp;
-    if (!Number.isFinite(sampledAt) || sampledAt <= 0 ||
-        sampledAt - lastClientHistorySampleAt.current < WIFI_CLIENT_HISTORY_SAMPLE_INTERVAL_SECONDS) return;
-    lastClientHistorySampleAt.current = sampledAt;
-    const incoming = collectWifiClientHistory(routerOverview, sampledAt);
-    if (incoming.length === 0) return;
-    const next = mergeWifiClientHistory(clientHistory, incoming, sampledAt, clientHistoryRetention);
-    setClientHistory(next);
-    try {
-      window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(next));
-      setClientHistoryError("");
-    } catch {
-      setClientHistoryError("Browser storage is full or unavailable. Export or clear history, or disable local collection.");
-    }
-  }, [clientHistory, clientHistoryEnabled, clientHistoryRetention, clientHistorySettingsLoaded, routerOverview]);
   const availableScanBands = scan
     ? [...new Set(scan.results.map((network) => network.band || "Unknown"))].sort()
     : [];
@@ -3143,15 +3115,71 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   };
 
+  const setClientHistoryEnabled = (enabled: boolean) => {
+    let error = "";
+    try {
+      window.localStorage.setItem(WIFI_CLIENT_HISTORY_SETTINGS_KEY, JSON.stringify({
+        enabled,
+        retentionDays: clientHistoryRetention,
+      }));
+    } catch {
+      error = "Browser settings could not be saved. Check the browser's local storage permissions.";
+    }
+    setClientHistoryState((current) => ({ ...current, enabled, error }));
+  };
+
+  const changeClientHistoryRetention = (retentionDays: WifiClientHistoryRetentionDays) => {
+    const next = pruneWifiClientHistory(clientHistory, Math.floor(Date.now() / 1000), retentionDays);
+    let error = "";
+    try {
+      window.localStorage.setItem(WIFI_CLIENT_HISTORY_SETTINGS_KEY, JSON.stringify({
+        enabled: clientHistoryEnabled,
+        retentionDays,
+      }));
+      window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(next));
+    } catch {
+      error = "Browser storage could not be updated. Export or clear history.";
+    }
+    setClientHistoryState((current) => ({ ...current, retentionDays, samples: next, error }));
+  };
+
+  const saveClientHistorySnapshot = () => {
+    if (!clientHistoryEnabled) {
+      setClientHistoryState((current) => ({ ...current, error: "Enable local history before saving a snapshot." }));
+      return;
+    }
+    if (!routerOverview) {
+      setClientHistoryState((current) => ({ ...current, error: "Waiting for live router telemetry." }));
+      return;
+    }
+    const sampledAt = routerOverview.timestamp;
+    const incoming = collectWifiClientHistory(routerOverview, sampledAt);
+    if (incoming.length === 0) {
+      setClientHistoryState((current) => ({ ...current, error: "No associated Wi-Fi clients were reported in this sample." }));
+      return;
+    }
+    const next = mergeWifiClientHistory(clientHistory, incoming, sampledAt, clientHistoryRetention);
+    if (next.length === clientHistory.length) {
+      setClientHistoryState((current) => ({ ...current, error: "This router telemetry sample has already been saved." }));
+      return;
+    }
+    let error = "";
+    try {
+      window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(next));
+    } catch {
+      error = "Browser storage is full or unavailable. Export or clear history, or disable local collection.";
+    }
+    setClientHistoryState((current) => ({ ...current, samples: next, error }));
+  };
+
   const clearClientHistory = () => {
-    setClientHistory([]);
-    lastClientHistorySampleAt.current = routerOverview?.timestamp ?? 0;
+    let error = "";
     try {
       window.localStorage.removeItem(WIFI_CLIENT_HISTORY_KEY);
-      setClientHistoryError("");
     } catch {
-      setClientHistoryError("The browser could not delete the saved history. Clear this site's local storage in browser settings.");
+      error = "The browser could not delete the saved history. Clear this site's local storage in browser settings.";
     }
+    setClientHistoryState((current) => ({ ...current, samples: [], error }));
   };
   const runWirelessScan = async () => {
     setScanLoading(true);
@@ -3475,7 +3503,6 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
               <input
                 type="checkbox"
                 checked={clientHistoryEnabled}
-                disabled={!clientHistorySettingsLoaded}
                 onChange={(event) => setClientHistoryEnabled(event.target.checked)}
               />
               <span>Enable local history</span>
@@ -3486,22 +3513,16 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
               value={clientHistoryRetention}
               onChange={(event) => {
                 const next = Number(event.target.value);
-                if (next !== 1 && next !== 7 && next !== 30) return;
-                const days = next as WifiClientHistoryRetentionDays;
-                setClientHistoryRetention(days);
-                const now = Math.floor(Date.now() / 1000);
-                setClientHistory((previous) => {
-                  const retained = pruneWifiClientHistory(previous, now, days);
-                  try { window.localStorage.setItem(WIFI_CLIENT_HISTORY_KEY, JSON.stringify(retained)); }
-                  catch { setClientHistoryError("Browser storage could not be updated. Export or clear history."); }
-                  return retained;
-                });
+                if (next === 1 || next === 7 || next === 30) {
+                  changeClientHistoryRetention(next as WifiClientHistoryRetentionDays);
+                }
               }}
             >
               <option value={1}>Keep 1 day</option>
               <option value={7}>Keep 7 days</option>
               <option value={30}>Keep 30 days</option>
             </select>
+            <button className="hero-button wifi-export-button" onClick={saveClientHistorySnapshot} disabled={!clientHistoryEnabled || !routerOverview}>Save snapshot</button>
             <button className="hero-button wifi-export-button" onClick={exportClientHistory} disabled={clientHistory.length === 0}>Export CSV</button>
             <button className="hero-button wifi-export-button" onClick={clearClientHistory} disabled={clientHistory.length === 0}>Clear history</button>
           </div>
@@ -3515,7 +3536,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
         </div>
         {clientHistoryError && <div className="module-message" role="alert">{clientHistoryError}</div>}
         {recentClientHistory.length === 0 ? (
-          <div className="module-message">History is empty. Enable local history to save an observation of associated Wi-Fi clients every 15 minutes while this router page is open.</div>
+          <div className="module-message">History is empty. Enable local history, then use Save snapshot to store the currently associated Wi-Fi clients in this browser.</div>
         ) : (
           <div className="device-list">
             {recentClientHistory.map((sample, index) => (
@@ -3532,7 +3553,7 @@ function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | 
             ))}
           </div>
         )}
-        <div className="module-message">Off by default. When enabled, associated Wi-Fi client MAC addresses and available DHCP hostname/IP details are saved only in this browser's local storage, sampled every 15 minutes while this page is open, and automatically pruned to the selected retention period (up to 10,000 observations). The history is not uploaded, encrypted or synced to another device. Disable collection or clear the history at any time, especially on a shared administrator computer.</div>
+        <div className="module-message">Off by default. When enabled, Save snapshot stores the currently associated Wi-Fi client MAC addresses and available DHCP hostname/IP details only in this browser's local storage. Snapshots are manual, not automatic; the selected retention period (1, 7 or 30 days) is applied when saving or changing retention, up to 10,000 observations. The history is not uploaded, encrypted or synced to another device. Disable collection or clear the history at any time, especially on a shared administrator computer.</div>
       </Panel>
       <Panel title="Known network clients" eyebrow="UNEXPIRED DHCPV4 LEASES">
         <ClientLeaseList clients={clients} available={inventoryAvailable} />
