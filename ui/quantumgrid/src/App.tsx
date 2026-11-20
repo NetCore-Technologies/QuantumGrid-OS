@@ -6769,6 +6769,10 @@ function OfficeFirewallZoneEditor({
         <span>ROUTER INPUT · READ ONLY</span>
         <strong>{zone.input || "INHERITED / DEFAULT"}</strong>
       </div>
+      <div className="office-zone-policy-current office-zone-policy-current-secondary">
+        <span>CURRENT OUTPUT / FORWARD</span>
+        <strong>{(zone.output || "INHERITED") + " / " + (zone.forward || "INHERITED")}</strong>
+      </div>
       <div className="office-zone-policy-fields">
         <label>
           <span>ROUTER OUTPUT POLICY</span>
