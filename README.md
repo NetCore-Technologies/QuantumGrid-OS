@@ -236,9 +236,12 @@ as such.
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
-  safe first-boot default for the FXS service, Pages workflow and release build workflow.
-- **Active development:** service-backed telemetry, UI-to-ubus control wiring, radio intelligence,
-  SQM policy controls, controlled-load bufferbloat testing and modem observability.
+  safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
+  IPv4/IPv6 route and policy-rule inventory, and bounded edits to existing SQM queue enable/rate
+  settings with restart and rollback handling.
+- **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
+  traffic classification, per-client priority, controlled-load bufferbloat testing and modem
+  observability.
 - **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
 
 See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).
