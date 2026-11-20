@@ -1,4 +1,4 @@
-import type { RouterSecurityStatus } from "./routerApi.js";
+import type { RouterFirewallRedirect, RouterSecurityStatus } from "./routerApi.js";
 
 export type FirewallPostureStatus = "review" | "ok" | "unknown";
 
@@ -38,7 +38,82 @@ function looksLikeExternalName(value: string): boolean {
 function hasPotentialExternalSource(sourceZone: string): boolean {
   const names = normalizeName(sourceZone).split(/\s+/).filter(Boolean);
   // An omitted source zone is an unrestricted source match and therefore needs review.
-  return names.length === 0 || names.some(looksLikeExternalName);
+  return names.length === 0 || names.some((name) => name === "*" || looksLikeExternalName(name));
+}
+
+const SENSITIVE_SERVICE_PORTS = new Map<number, string>([
+  [22, "SSH"],
+  [23, "Telnet"],
+  [445, "SMB"],
+  [3389, "RDP"],
+  [5900, "VNC"],
+  [2375, "Docker API"],
+  [2376, "Docker TLS API"],
+  [3306, "MySQL"],
+  [5432, "PostgreSQL"],
+  [6443, "Kubernetes API"],
+  [9200, "Elasticsearch"],
+  [27017, "MongoDB"],
+]);
+
+function containsPort(value: string, wanted: number): boolean {
+  for (const raw of value.trim().split(/[\\s,]+/).filter(Boolean)) {
+    const match = /^(\\d+)(?:-(\\d+))?$/.exec(raw);
+    if (!match) continue;
+    const start = Number(match[1]);
+    const end = match[2] === undefined ? start : Number(match[2]);
+    if (!Number.isInteger(start) || !Number.isInteger(end) ||
+        start < 1 || end > 65535 || end < start) continue;
+    if (wanted >= start && wanted <= end) return true;
+  }
+  return false;
+}
+
+function redirectReviewChecks(redirect: RouterFirewallRedirect): FirewallPostureCheck[] {
+  if (!redirect.enabled || !hasPotentialExternalSource(redirect.source_zone)) return [];
+  const checks: FirewallPostureCheck[] = [{
+    id: "external-redirect:" + redirect.name,
+    title: "Enabled external NAT redirect",
+    scope: "Redirect " + redirect.name,
+    status: "review",
+    detail: "This enabled redirect uses a WAN/WWAN or unrestricted source-zone selector. Review the external and internal port mapping, destination host and source-address restrictions. The private destination address is deliberately not collected; this check does not prove that the service is reachable from the Internet.",
+  }];
+
+  if (!redirect.external_port.trim()) {
+    checks.push({
+      id: "external-redirect-any-port:" + redirect.name,
+      title: "External redirect has no port constraint",
+      scope: "Redirect " + redirect.name,
+      status: "review",
+      detail: "No external source-port constraint (src_dport) was reported. OpenWrt documents that a redirect without src_dport can match traffic on any port that satisfies its other selectors. Inspect the rule before leaving it enabled.",
+    });
+  }
+
+  const destinationPort = redirect.internal_port.trim() || redirect.external_port.trim();
+  const exposedServices = [...SENSITIVE_SERVICE_PORTS.entries()]
+    .filter(([port]) => containsPort(destinationPort, port))
+    .map(([, name]) => name);
+  if (exposedServices.length > 0) {
+    checks.push({
+      id: "external-redirect-admin-service:" + redirect.name,
+      title: "External redirect maps to an administrative or data service port",
+      scope: "Redirect " + redirect.name,
+      status: "review",
+      detail: "The reported destination-port mapping includes " + exposedServices.join(", ") +
+        ". Confirm that remote access is required, source addresses are constrained, and the service itself is hardened. A port match is a review signal, not proof that a service is listening or exploitable.",
+    });
+  }
+
+  if (!redirect.source_ip_match && !redirect.source_zone.trim()) {
+    checks.push({
+      id: "external-redirect-unrestricted-source:" + redirect.name,
+      title: "External redirect has no reported source restriction",
+      scope: "Redirect " + redirect.name,
+      status: "review",
+      detail: "No source IP restriction or explicit source zone was reported. Check the native UCI section and active firewall rules before assuming the forward is restricted.",
+    });
+  }
+  return checks;
 }
 
 function policyCheck(
@@ -180,6 +255,30 @@ export function auditFirewallPosture(
     });
   }
 
+  const broadExternalAllowRules = (security.rules ?? []).filter((rule) => {
+    const protocol = rule.protocol.trim().toLowerCase();
+    const broadProtocol = !protocol || protocol === "all" || protocol === "0";
+    const hasPortScope = Boolean(rule.source_port.trim() || rule.destination_port.trim());
+    const hasAddressScope = rule.source_ip_match || rule.destination_ip_match || rule.source_mac_match;
+    return rule.enabled === true &&
+      rule.target.trim().toUpperCase() === "ACCEPT" &&
+      hasPotentialExternalSource(rule.source_zone) &&
+      broadProtocol && !hasPortScope && !hasAddressScope;
+  });
+  for (const rule of broadExternalAllowRules) {
+    checks.push({
+      id: "unconstrained-external-allow:" + rule.name,
+      title: "Broad external ACCEPT rule",
+      scope: "Rule " + rule.name,
+      status: "review",
+      detail: "This enabled ACCEPT rule has a WAN/WWAN or unrestricted source selector, no reported port constraint and no reported source/destination IP or source MAC match. Verify the full UCI rule and runtime packet path; the summary deliberately omits raw addresses.",
+    });
+  }
+
+  for (const redirect of security.redirects ?? []) {
+    checks.push(...redirectReviewChecks(redirect));
+  }
+
   if (!security.firewall_config_readable) {
     checks.push({
       id: "external-zones",
@@ -210,10 +309,10 @@ export function auditFirewallPosture(
 
   checks.push({
     id: "rule-evaluation",
-    title: "Individual firewall rules",
-    scope: "Rules / redirects",
+    title: "Firewall rule and redirect evaluation",
+    scope: "Rules / NAT redirects",
     status: "unknown",
-    detail: "Only configuration counts are available here. Rule order, address/port scope, NAT behaviour, IPv6 policy and actual packet paths have not been evaluated.",
+    detail: "Configuration summaries are available, but rule order, complete address/port scope, NAT behaviour, IPv6 policy and actual packet paths have not been evaluated. Redirect risk checks are manual-review signals only.",
   });
 
   return report(checks);
