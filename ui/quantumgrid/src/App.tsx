@@ -5319,6 +5319,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
   useEffect(() => {
     if (!networks.some((item) => item.name === network)) {
       setNetwork(networks[0]?.name ?? "");
+      setConfirmed(false);
     }
   }, [networks, network]);
 
