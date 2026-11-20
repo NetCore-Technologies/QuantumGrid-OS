@@ -1854,6 +1854,8 @@ local function platform_status(fs)
 		if type(value) ~= "string" or value == "" then return nil end
 		return value:gsub("[%c]", " "):sub(1, limit or 160)
 	end
+	local ath11k_nss_parameter = (read_file("/sys/module/ath11k/parameters/nss_offload") or ""):gsub("%s", ""):lower()
+	local ath11k_nss_enabled = ath11k_nss_parameter == "1" or ath11k_nss_parameter == "y"
 	local acceleration_components = {
 		{
 			name = "EDMA device-tree node",
@@ -1920,6 +1922,12 @@ local function platform_status(fs)
 			kind = "kernel-module",
 			present = fs.access("/sys/module/ath11k") == true,
 			detail = "ath11k loaded; this alone does not prove NSS Wi-Fi hooks are compiled or active"
+		},
+		{
+			name = "ath11k NSS offload parameter",
+			kind = "kernel-module",
+			present = ath11k_nss_enabled,
+			detail = "The driver's nss_offload module parameter must report enabled"
 		}
 	}
 	local acceleration = require("luci.quantumgrid.acceleration").summarize(acceleration_components)
