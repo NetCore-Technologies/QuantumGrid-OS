@@ -159,6 +159,8 @@ jobs:
         run: lua5.1 tests/hardware-io.lua
       - name: Test office VLAN and network segmentation inventory
         run: lua5.1 tests/office-networks.lua
+      - name: Test guarded bridge VLAN API requests and response verification
+        run: node --experimental-strip-types --test tests/office-vlan-api.test.mjs
       - name: Test firewall NAT redirect projection and redaction
         run: lua5.1 tests/firewall-inventory.lua
       - name: Test live fw4 chain inventory and redaction
