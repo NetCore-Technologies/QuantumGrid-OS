@@ -6597,6 +6597,35 @@ input::placeholder {
   grid-template-columns: repeat(5, minmax(0, 1fr));
   margin-bottom: 12px;
 }
+.dhcp-client-tools {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.2fr) minmax(170px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.dhcp-client-tools input,
+.dhcp-client-tools select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font: inherit;
+  font-size: 8px;
+}
+.dhcp-client-tools span {
+  color: var(--muted2);
+  font-size: 7px;
+  white-space: nowrap;
+}
+.dhcp-client-tools .hero-button {
+  padding: 8px 10px;
+  font-size: 8px;
+}
 .network-interface-tools {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.2fr) auto auto;
@@ -6875,6 +6904,12 @@ input::placeholder {
   }
   .network-interface-tools {
     grid-template-columns: 1fr 1fr;
+  }
+  .dhcp-client-tools {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dhcp-client-tools span {
+    white-space: normal;
   }
   .network-interface-tools span {
     white-space: normal;
