@@ -145,6 +145,7 @@ assert(result.static_leases[1].section == "cfg0001", "static lease UCI section s
 assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" and result.forwardings[1].destination == "printers", "explicit firewall zone forwarding should be inventoried")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
+assert(result.dhcp_scopes[1].section == "lan_dhcp", "DHCP scopes must retain stable UCI section IDs")
 assert(result.dhcp_scopes[1].range_valid)
 assert(result.dhcp_scopes[1].pool_start_ip == "192.168.10.100" and result.dhcp_scopes[1].pool_end_ip == "192.168.10.219")
 assert(not result.dhcp_scopes[2].range_valid and result.dhcp_scopes[2].range_error == "DHCP scope is disabled.")
