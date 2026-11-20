@@ -150,6 +150,44 @@ local gateway_scope = office.validate_dhcp_scope_update(
   "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
 
+local forwarding_zones = {
+  { name = "lan", networks = { "lan" } },
+  { name = "corp", networks = { "corp" } },
+  { name = "guest", networks = { "guest" } },
+  { name = "wan", networks = { "wan", "wan6" } },
+  { name = "custom-internet", networks = { "wwan" } },
+}
+local valid_forward = office.validate_office_forwarding("corp", "wan", forwarding_zones, {})
+assert(valid_forward and valid_forward.source == "corp" and valid_forward.destination == "wan")
+local function reject_forward(source, destination, existing, label)
+  local value, err = office.validate_office_forwarding(source, destination, forwarding_zones, existing or {})
+  assert(value == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain why it was rejected")
+end
+reject_forward("wan", "corp", {}, "external zone as forwarding source")
+reject_forward("custom-internet", "corp", {}, "custom external network as forwarding source")
+reject_forward("corp", "corp", {}, "same source and destination")
+reject_forward("unknown", "wan", {}, "unknown source zone")
+reject_forward("corp", "missing", {}, "unknown destination zone")
+reject_forward("corp", "wan", {
+  { section = "cfg01", source = "corp", destination = "wan" }
+}, "duplicate source-to-destination forwarding")
+
+local forwarding_snapshot = office.snapshot_firewall_forwarding_section({
+  [".name"] = "cfg0042",
+  [".type"] = "forwarding",
+  src = "corp",
+  dest = "wan",
+  family = "ipv4",
+  enabled = "1",
+})
+assert(forwarding_snapshot and forwarding_snapshot.name == "cfg0042")
+assert(forwarding_snapshot.values.src == "corp" and forwarding_snapshot.values.dest == "wan")
+assert(forwarding_snapshot.values.family == "ipv4" and forwarding_snapshot.values.enabled == "1")
+assert(forwarding_snapshot.values[".type"] == nil and forwarding_snapshot.values[".name"] == nil)
+assert(office.snapshot_firewall_forwarding_section({ [".type"] = "zone", [".name"] = "wan" }) == nil,
+  "firewall zones must not be snapshotted as forwarding sections")
+
 local valid_bridge_vlan, vlan_error = office.validate_bridge_vlan(
   "br-lan", "20", { "lan1:t", "lan2:u*", "lan3:u" },
   { "lan1", "lan2", "lan3", "lan4" }, {
@@ -224,8 +262,8 @@ local result = office.build_inventory({
     { name = "Bad-IP", mac = "aa:bb:cc:dd:ee:03", ipv4 = "300.1.2.3" },
   },
   forwardings = {
-    { name = "corp_to_printers", source = "corp", destination = "printers" },
-    { name = "guest_to_lan", source = "guest", destination = "lan" },
+    { section = "cfg-corp-printers", name = "corp_to_printers", source = "corp", destination = "printers" },
+    { section = "cfg-guest-lan", name = "guest_to_lan", source = "guest", destination = "lan" },
     { name = "../unsafe", source = "corp", destination = "lan" },
   },
   zones = {
@@ -254,6 +292,7 @@ assert(result.static_lease_count == 2, "invalid MAC and IPv4 static leases must 
 assert(result.static_leases[1].mac == "aa:bb:cc:dd:ee:01", "MAC addresses should be normalized")
 assert(result.static_leases[1].section == "cfg0001", "static lease UCI section should be preserved for safe removal")
 assert(result.forwarding_count == 2 and result.forwardings[1].source == "corp" and result.forwardings[1].destination == "printers", "explicit firewall zone forwarding should be inventoried")
+assert(result.forwardings[1].section == "cfg-corp-printers", "firewall forwarding UCI section IDs must be preserved for safe removal")
 assert(result.dhcp_scopes[1].limit == 120 and result.dhcp_scopes[1].lease_time == "12h")
 assert(result.dhcp_scopes[2].ignore == true and result.dhcp_scopes[2].interface == "guest")
 assert(result.dhcp_scopes[1].section == "lan_dhcp", "DHCP scopes must retain stable UCI section IDs")
