@@ -702,7 +702,7 @@ export async function updateRouterWirelessConfig(input: {
       /[\u0000-\u001f\u007f]/.test(input.ssid)) {
     throw new Error("SSID must be 1–32 bytes and cannot contain control characters.");
   }
-  if (input.encryption !== "none" &&
+  if (input.key.length > 0 &&
       (input.key.length < 8 || new TextEncoder().encode(input.key).length > 63 ||
        /[\u0000-\u001f\u007f]/.test(input.key))) {
     throw new Error("The wireless passphrase must be 8–63 bytes and cannot contain control characters.");
