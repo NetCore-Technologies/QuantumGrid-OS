@@ -103,8 +103,3 @@ function parse_dump(output, now)
 	return result
 end
 
-return {
-	parse_dump = parse_dump,
-	MAX_PEERS = MAX_PEERS,
-	MAX_ALLOWED_IPS = MAX_ALLOWED_IPS
-}
