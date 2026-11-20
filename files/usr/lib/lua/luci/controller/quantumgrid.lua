@@ -2537,9 +2537,20 @@ end
 
 function action_audit_log()
 	local http = require "luci.http"
-	local fs = require "nixio.fs"
 	local jsonc = require "luci.jsonc"
 	local audit = require "luci.quantumgrid.audit"
+	local MAX_SOURCE_BYTES = 512 * 1024
+
+	local function read_audit_tail(path)
+		local file = io.open(path, "r")
+		if not file then return "", false end
+		local size = file:seek("end") or 0
+		local truncated = size > MAX_SOURCE_BYTES
+		if truncated then file:seek("set", size - MAX_SOURCE_BYTES) end
+		local contents = file:read("*a") or ""
+		file:close()
+		return contents, truncated
+	end
 
 	if http.getenv("REQUEST_METHOD") ~= "GET" then
 		http.status(405, "Method Not Allowed")
@@ -2550,9 +2561,8 @@ function action_audit_log()
 	end
 
 	local path = audit.log_path()
-	local rotated_path = path .. ".1"
-	local rotated = fs.access(rotated_path) == true and (read_file(rotated_path) or "") or ""
-	local current = fs.access(path) == true and (read_file(path) or "") or ""
+	local rotated, rotated_truncated = read_audit_tail(path .. ".1")
+	local current, current_truncated = read_audit_tail(path)
 	local available = rotated ~= "" or current ~= ""
 	local parsed = audit.parse_log(rotated .. "\n" .. current, function(line)
 		return jsonc.parse(line)
@@ -2564,11 +2574,10 @@ function action_audit_log()
 		available = available,
 		events = parsed.events,
 		count = parsed.count,
-		truncated = parsed.truncated,
+		truncated = parsed.truncated or rotated_truncated or current_truncated,
 		sampled_at = os.time()
 	})
 end
-
 
 function action_api()
 	local http = require "luci.http"
