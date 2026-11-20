@@ -1275,6 +1275,10 @@ function action_wireless_update()
 			respond(409, { ok = false, error = route_error .. " Use an out-of-band management path to change this SSID's VLAN binding." })
 			return
 		end
+		if update.network == management_network and current_network ~= management_network then
+			respond(409, { ok = false, error = "This operation would move a different SSID onto the administrator's management network. Use an out-of-band path to make that change." })
+			return
+		end
 		for _, attached in ipairs(current_networks) do
 			if attached == management_network and update.network ~= management_network then
 				respond(409, { ok = false, error = "This AP currently carries the administrator's management network. Keep that network attached or use a separate/out-of-band management connection before moving the SSID." })
