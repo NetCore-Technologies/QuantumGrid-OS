@@ -57,7 +57,7 @@ end
 local inventory = firewall.summarize_redirects(sections, 64)
 assert(inventory.count == 70)
 assert(#inventory.redirects == 64 and inventory.truncated)
-assert(inventory.redirects[64].name == "unnamed-redirect-64")
+assert(inventory.redirects[64].name == "cfg64")
 assert(firewall.summarize_redirects(sections, 0).truncated == true or
   #firewall.summarize_redirects(sections, 0).redirects == 64)
 assert(#firewall.summarize_redirects(nil).redirects == 0)
