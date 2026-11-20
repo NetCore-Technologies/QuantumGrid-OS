@@ -143,9 +143,9 @@ fi
 
 for tool in ubiformat sha256sum od; do
   if has_binary "$tool"; then
-    printf 'Required tool %-10s available\n' "$tool"
+    printf 'Required tool %s available\n' "$tool"
   else
-    printf 'Required tool %-10s MISSING\n' "$tool"
+    printf 'Required tool %s MISSING\n' "$tool"
   fi
 done
 
