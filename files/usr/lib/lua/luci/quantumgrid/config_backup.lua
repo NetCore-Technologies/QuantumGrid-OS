@@ -10,9 +10,9 @@ function validate_confirmation(value)
 end
 
 function validate_temp_path(path)
-	if type(path) ~= "string" or #path < 6 or #path > 128
-		or not path:match("^/tmp/[%w_.%-]+$") then
-		return nil, "The temporary backup path is not a safe local /tmp file name."
+	if type(path) ~= "string" or #path > 128
+		or not path:match("^/tmp/quantumgrid%-config%-backup%.[%w]+$") then
+		return nil, "The temporary backup path is not a reserved QuantumGrid /tmp file name."
 	end
 	return path
 end
