@@ -4175,9 +4175,9 @@ function WirelessConfigEditor({
   refresh: () => void;
 }) {
   const [ssid, setSsid] = useState(config.ssid);
-  const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed" | "wpa2" | "none">(
+  const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed" | "wpa2" | "wpa3" | "none">(
     config.encryption === "sae" || config.encryption === "sae-mixed" ||
-    config.encryption === "wpa2" || config.encryption === "none"
+    config.encryption === "wpa2" || config.encryption === "wpa3" || config.encryption === "none"
       ? config.encryption
       : "psk2",
   );
@@ -4211,7 +4211,8 @@ function WirelessConfigEditor({
   const supportedTxPower = [...new Set((config.txpower_levels ?? []).map((item) => item.dbm))].sort((left, right) => left - right);
   const txpowerSupported = txpower === "auto" || supportedTxPower.includes(Number(txpower)) || txpower === currentTxpower;
   const encryptionChanged = encryption !== config.encryption;
-  const passphraseRequired = encryption !== "none" && encryption !== "wpa2" &&
+  const enterpriseMode = encryption === "wpa2" || encryption === "wpa3";
+  const passphraseRequired = encryption !== "none" && !enterpriseMode &&
     (encryptionChanged || !config.key_set) && passphrase.length === 0;
   const radiusLabels = radiusServer.split(".");
   const radiusServerValid = radiusServer.length >= 1 && radiusServer.length <= 253 &&
@@ -4224,10 +4225,11 @@ function WirelessConfigEditor({
   const radiusPortValid = /^[0-9]{1,5}$/.test(radiusPort) &&
     Number(radiusPort) >= 1 && Number(radiusPort) <= 65535;
   const radiusSecretBytes = new TextEncoder().encode(radiusSecret).length;
-  const radiusSecretRequired = encryption === "wpa2" &&
-    (encryptionChanged || radiusServer !== config.radius_auth_server ||
+  const currentEnterpriseMode = config.encryption === "wpa2" || config.encryption === "wpa3";
+  const radiusSecretRequired = enterpriseMode &&
+    (!currentEnterpriseMode || radiusServer !== config.radius_auth_server ||
       !config.radius_secret_set) && radiusSecret.length === 0;
-  const radiusReady = encryption !== "wpa2" ||
+  const radiusReady = !enterpriseMode ||
     (radiusServerValid && radiusPortValid && !radiusSecretRequired &&
       (radiusSecret.length === 0 || (radiusSecretBytes >= 16 && radiusSecretBytes <= 128 &&
         !/[\u0000-\u001f\u007f]/.test(radiusSecret))));
@@ -4243,15 +4245,15 @@ function WirelessConfigEditor({
   const accountingPortValid = /^[0-9]{1,5}$/.test(accountingPort) &&
     Number(accountingPort) >= 1 && Number(accountingPort) <= 65535;
   const accountingSecretBytes = new TextEncoder().encode(accountingSecret).length;
-  const accountingSecretRequired = encryption === "wpa2" && accountingEnabled &&
+  const accountingSecretRequired = enterpriseMode && accountingEnabled &&
     (!config.accounting_secret_set || accountingServerValue !== config.accounting_server) &&
     accountingSecret.length === 0;
-  const accountingReady = encryption !== "wpa2" || !accountingEnabled ||
+  const accountingReady = !enterpriseMode || !accountingEnabled ||
     (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
       (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
         !/[\u0000-\u001f\u007f]/.test(accountingSecret))));
   const changed = ssid !== config.ssid || encryptionChanged || passphrase.length > 0 ||
-    (encryption === "wpa2" && (radiusServer !== config.radius_auth_server ||
+    (enterpriseMode && (radiusServer !== config.radius_auth_server ||
       radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0 ||
       accountingEnabled !== Boolean(config.accounting_server) ||
       (accountingEnabled && (accountingServerValue !== config.accounting_server ||
@@ -4275,7 +4277,7 @@ function WirelessConfigEditor({
         radiusServer,
         radiusPort,
         radiusSecret,
-        accountingServer: encryption === "wpa2" && accountingEnabled ? accountingServerValue : "",
+        accountingServer: enterpriseMode && accountingEnabled ? accountingServerValue : "",
         accountingPort,
         accountingSecret,
         hidden,
@@ -4309,7 +4311,7 @@ function WirelessConfigEditor({
       <div className="wireless-config-heading">
         <div>
           <strong>{config.ssid || "Hidden / unnamed network"}</strong>
-          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {config.encryption === "wpa2"
+          <span>{config.radio} · {config.section} · {config.interface_disabled || config.radio_disabled ? "DISABLED" : "AP CONFIGURED"} · {(config.encryption === "wpa2" || config.encryption === "wpa3")
             ? (config.radius_secret_set
               ? (config.accounting_secret_set ? "RADIUS AUTH + ACCOUNTING SET" : "RADIUS AUTH SET")
               : "RADIUS NOT CONFIGURED")
@@ -4327,7 +4329,7 @@ function WirelessConfigEditor({
         <label className="wireless-config-field">
           <span>SECURITY</span>
           <select value={encryption} onChange={(event) => {
-            setEncryption(event.target.value as "psk2" | "sae" | "sae-mixed" | "wpa2" | "none");
+            setEncryption(event.target.value as "psk2" | "sae" | "sae-mixed" | "wpa2" | "wpa3" | "none");
             setPassphrase("");
             setRadiusSecret("");
             setAllowOpen(false);
@@ -4336,6 +4338,7 @@ function WirelessConfigEditor({
             <option value="sae">WPA3-Personal (SAE)</option>
             <option value="sae-mixed">WPA2 / WPA3 transition</option>
             <option value="wpa2">WPA2-Enterprise (RADIUS)</option>
+            <option value="wpa3">WPA3-Enterprise (RADIUS · PMF required)</option>
             <option value="none">Open (no encryption)</option>
           </select>
         </label>
@@ -4345,13 +4348,13 @@ function WirelessConfigEditor({
             type="password"
             value={passphrase}
             onChange={(event) => setPassphrase(event.target.value)}
-            placeholder={encryption === "wpa2" ? "Not used with WPA2-Enterprise" :
+            placeholder={enterpriseMode ? "Not used with Enterprise security" :
               config.key_set && !encryptionChanged ? "Leave blank to keep the current key" : "Enter 8–63 characters"}
             autoComplete="new-password"
-            disabled={encryption === "none" || encryption === "wpa2"}
+            disabled={encryption === "none" || enterpriseMode}
           />
         </label>
-        {encryption === "wpa2" ? (
+        {enterpriseMode ? (
           <>
             <label className="wireless-config-field">
               <span>RADIUS AUTHENTICATION SERVER</span>
@@ -4490,7 +4493,7 @@ function WirelessConfigEditor({
         ) : null}
       </div>
       <div className="module-message wireless-config-note">
-        The existing AP is edited in place; no new SSID or radio is created. Personal passphrases and RADIUS shared secrets are never returned by the router API. A blank existing secret is preserved only when its RADIUS server is unchanged. Enterprise mode uses the router’s current AP network; RADIUS dynamic VLAN assignment and accounting are not configured here. Channel, width and transmit power are radio-wide and may affect every SSID on this radio. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
+        The existing AP is edited in place; no new SSID or radio is created. Personal passphrases and RADIUS shared secrets are never returned by the router API. A blank existing secret is preserved only when its RADIUS server is unchanged. WPA3-Enterprise forces 802.11w Protected Management Frames to required; clients that do not support PMF cannot connect. Enterprise mode uses the router’s current AP network; RADIUS dynamic VLAN assignment is not configured here. Channel, width and transmit power are radio-wide and may affect every SSID on this radio. Applying changes reloads Wi-Fi and can disconnect this browser and every client on the radio.
       </div>
       <label className="wireless-config-confirm">
         <input type="checkbox" checked={confirmDisconnect} onChange={(event) => setConfirmDisconnect(event.target.checked)} />
@@ -4501,7 +4504,7 @@ function WirelessConfigEditor({
         <button className="hero-button" onClick={() => {
           setSsid(config.ssid);
           setEncryption(config.encryption === "sae" || config.encryption === "sae-mixed" ||
-            config.encryption === "wpa2" || config.encryption === "none" ? config.encryption : "psk2");
+            config.encryption === "wpa2" || config.encryption === "wpa3" || config.encryption === "none" ? config.encryption : "psk2");
           setPassphrase("");
           setRadiusServer(config.radius_auth_server || "");
           setRadiusPort(String(config.radius_auth_port || 1812));
@@ -4526,16 +4529,17 @@ function WirelessConfigEditor({
       {!htmodeSupported ? <div className="module-message">Choose Auto or a width/PHY mode reported by the radio driver.</div> : null}
       {!txpowerSupported ? <div className="module-message">Choose Auto or a transmit-power level reported by the radio driver.</div> : null}
       {passphraseRequired ? <div className="module-message">A new passphrase is required when enabling personal security or changing the personal security mode.</div> : null}
-      {encryption === "wpa2" && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
-      {encryption === "wpa2" && !radiusPortValid ? <div className="module-message">Enter a RADIUS authentication port from 1 to 65535.</div> : null}
+      {enterpriseMode && encryption === "wpa3" ? <div className="module-message">WPA3-Enterprise enforces Protected Management Frames (802.11w) as required.</div> : null}
+      {enterpriseMode && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
+      {enterpriseMode && !radiusPortValid ? <div className="module-message">Enter a RADIUS authentication port from 1 to 65535.</div> : null}
       {radiusSecretRequired ? <div className="module-message">A new RADIUS shared secret is required when enabling enterprise security or changing its server.</div> : null}
-      {encryption === "wpa2" && accountingEnabled && !accountingServerValid ? <div className="module-message">Enter a valid accounting server or authentication server fallback.</div> : null}
-      {encryption === "wpa2" && accountingEnabled && !accountingPortValid ? <div className="module-message">Enter a RADIUS accounting port from 1 to 65535.</div> : null}
+      {enterpriseMode && accountingEnabled && !accountingServerValid ? <div className="module-message">Enter a valid accounting server or authentication server fallback.</div> : null}
+      {enterpriseMode && accountingEnabled && !accountingPortValid ? <div className="module-message">Enter a RADIUS accounting port from 1 to 65535.</div> : null}
       {accountingSecretRequired ? <div className="module-message">A new accounting shared secret is required when enabling accounting or changing its server.</div> : null}
-      {encryption === "wpa2" && accountingEnabled && accountingSecret.length > 0 &&
+      {enterpriseMode && accountingEnabled && accountingSecret.length > 0 &&
         (accountingSecretBytes < 16 || accountingSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(accountingSecret))
         ? <div className="module-message">Accounting shared secret must be 16–128 bytes and contain no control characters.</div> : null}
-      {encryption === "wpa2" && radiusSecret.length > 0 &&
+      {enterpriseMode && radiusSecret.length > 0 &&
         (radiusSecretBytes < 16 || radiusSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(radiusSecret))
         ? <div className="module-message">RADIUS shared secret must be 16–128 bytes and contain no control characters.</div> : null}
     </div>
