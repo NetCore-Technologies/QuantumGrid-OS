@@ -2658,9 +2658,13 @@ function action_dhcp_scope_add()
 				table.insert(other_ranges, { start = scope.pool_start_ip, finish = scope.pool_end_ip })
 			else
 				local scope_network_ok, scope_network = pcall(uci.get_all, uci, "network", scope.interface)
+				local scope_address = type(scope_network) == "table" and
+					(type(scope_network.ipaddr) == "string" and scope_network.ipaddr or
+					 type(scope_network.ipaddr) == "table" and scope_network.ipaddr[1]) or nil
+				local scope_mask = type(scope_network) == "table" and scope_network.netmask or nil
 				if scope_network_ok and type(scope_network) == "table" and scope_network[".type"] == "interface"
-					and scope_network.proto == "static" and scope_network.ipaddr == interface_address
-					and scope_network.netmask == netmask then
+					and scope_network.proto == "static" and scope_address == interface_address
+					and scope_mask == netmask then
 					respond(409, { ok = false, error = "Another enabled DHCP scope on this same subnet has an uncalculable range. Resolve it before creating a new pool." })
 					return
 				end
