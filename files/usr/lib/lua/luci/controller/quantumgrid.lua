@@ -375,6 +375,9 @@ local function wireless_config_inventory(uci, radios)
 						radius_auth_server = tostring(section.auth_server or ""),
 						radius_auth_port = tonumber(section.auth_port) or 1812,
 						radius_secret_set = type(section.auth_secret) == "string" and section.auth_secret ~= "",
+						accounting_server = tostring(section.acct_server or ""),
+						accounting_port = tonumber(section.acct_port) or 1813,
+						accounting_secret_set = type(section.acct_secret) == "string" and section.acct_secret ~= "",
 						interface_disabled = section.disabled == "1",
 						radio_disabled = uci:get("wireless", radio, "disabled") == "1",
 						channel = type(channel) == "string" and channel ~= "" and channel or "auto",
@@ -1093,7 +1096,10 @@ function action_wireless_update()
 		http.formvalue("confirmed", true),
 		http.formvalue("radius_server", true),
 		http.formvalue("radius_port", true),
-		http.formvalue("radius_secret", true) or ""
+		http.formvalue("radius_secret", true) or "",
+		http.formvalue("accounting_server", true),
+		http.formvalue("accounting_port", true),
+		http.formvalue("accounting_secret", true) or ""
 	)
 	if not update then
 		respond(400, { ok = false, error = validation_error })
@@ -1155,6 +1161,14 @@ function action_wireless_update()
 		respond(400, { ok = false, error = "Enter a new RADIUS shared secret when enabling enterprise security or changing its server." })
 		return
 	end
+	local current_accounting_server = uci:get("wireless", update.section, "acct_server") or ""
+	local current_accounting_secret = uci:get("wireless", update.section, "acct_secret")
+	if update.encryption == "wpa2" and update.accounting_server ~= "" and not update.accounting_secret_supplied
+		and (current_encryption ~= "wpa2" or current_accounting_server ~= update.accounting_server
+			or type(current_accounting_secret) ~= "string" or current_accounting_secret == "") then
+		respond(400, { ok = false, error = "Enter a new RADIUS accounting shared secret when enabling accounting or changing its server." })
+		return
+	end
 
 	local snapshot = { radio = {}, interface = {} }
 	for _, option in ipairs({ "channel", "htmode", "txpower" }) do
@@ -1165,7 +1179,7 @@ function action_wireless_update()
 		end
 		snapshot.radio[option] = value or false
 	end
-	for _, option in ipairs({ "ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret" }) do
+	for _, option in ipairs({ "ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
@@ -1200,6 +1214,17 @@ function action_wireless_update()
 		interface_updates.auth_server = false
 		interface_updates.auth_port = false
 		interface_updates.auth_secret = false
+	end
+	if update.encryption == "wpa2" and update.accounting_server ~= "" then
+		interface_updates.acct_server = update.accounting_server
+		interface_updates.acct_port = update.accounting_port
+		if update.accounting_secret_supplied then
+			interface_updates.acct_secret = update.accounting_secret
+		end
+	else
+		interface_updates.acct_server = false
+		interface_updates.acct_port = false
+		interface_updates.acct_secret = false
 	end
 	if update.encryption == "none" then
 		interface_updates.key = false
@@ -1268,6 +1293,9 @@ function action_wireless_update()
 		radius_auth_server = update.encryption == "wpa2" and update.radius_server or nil,
 		radius_auth_port = update.encryption == "wpa2" and tonumber(update.radius_port) or nil,
 		radius_secret_set = update.encryption == "wpa2",
+		accounting_server = update.encryption == "wpa2" and update.accounting_server ~= "" and update.accounting_server or nil,
+		accounting_port = update.encryption == "wpa2" and update.accounting_server ~= "" and tonumber(update.accounting_port) or nil,
+		accounting_secret_set = update.encryption == "wpa2" and update.accounting_server ~= "",
 		reloaded = true,
 		rolled_back = false
 	})
