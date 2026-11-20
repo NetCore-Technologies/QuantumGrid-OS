@@ -25,6 +25,48 @@ local open = wireless.validate_update(
 )
 assert(open ~= nil and open.allow_open == true, "explicit open-network confirmation should pass")
 
+local enterprise = wireless.validate_update(
+	"radio0", "default_radio0", "Staff", "wpa2", "",
+	"0", "auto", "auto", "auto", "0", "1",
+	"radius.example.com", "1812", "a-strong-radius-shared-secret"
+)
+assert(enterprise ~= nil, "WPA2-Enterprise with an external RADIUS server should pass")
+assert(enterprise.encryption == "wpa2" and enterprise.key_supplied == false)
+assert(enterprise.radius_server == "radius.example.com" and enterprise.radius_port == "1812")
+assert(enterprise.radius_secret_supplied == true and enterprise.radius_secret == "a-strong-radius-shared-secret")
+
+local enterprise_preserve = wireless.validate_update(
+	"radio0", "default_radio0", "Staff", "wpa2", "",
+	"0", "auto", "auto", "auto", "0", "1",
+	"192.0.2.10", "1812", ""
+)
+assert(enterprise_preserve ~= nil and enterprise_preserve.radius_secret_supplied == false,
+	"blank RADIUS secret must be representable so an existing secret can be preserved")
+
+local function rejected_enterprise(server, port, secret, label)
+	local result, err = wireless.validate_update(
+		"radio0", "default_radio0", "Staff", "wpa2", "",
+		"0", "auto", "auto", "auto", "0", "1", server, port, secret
+	)
+	assert(result == nil, label .. " should be rejected")
+	assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
+end
+rejected_enterprise("https://radius.example.com", "1812", "a-strong-radius-shared-secret", "RADIUS URL instead of hostname")
+rejected_enterprise("999.1.1.1", "1812", "a-strong-radius-shared-secret", "invalid IPv4 RADIUS address")
+rejected_enterprise("radius.example.com", "0", "a-strong-radius-shared-secret", "zero RADIUS port")
+rejected_enterprise("radius.example.com", "65536", "a-strong-radius-shared-secret", "out-of-range RADIUS port")
+rejected_enterprise("radius.example.com", "1812;uci", "a-strong-radius-shared-secret", "injected RADIUS port")
+rejected_enterprise("radius.example.com", "1812", "short", "weak RADIUS shared secret")
+rejected_enterprise("radius.example.com", "1812", string.rep("s", 129), "oversized RADIUS shared secret")
+rejected_enterprise("radius.example.com", "1812", "a-strong-radius-secret\n", "control character in RADIUS shared secret")
+
+local enterprise_with_psk = wireless.validate_update(
+	"radio0", "default_radio0", "Staff", "wpa2", "personal-password-123",
+	"0", "auto", "auto", "auto", "0", "1",
+	"radius.example.com", "1812", "a-strong-radius-shared-secret"
+)
+assert(enterprise_with_psk == nil, "WPA2-Enterprise must not accept a personal passphrase as a RADIUS secret")
+
 local function rejected(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, label)
 	local result, err = wireless.validate_update(
 		radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed
