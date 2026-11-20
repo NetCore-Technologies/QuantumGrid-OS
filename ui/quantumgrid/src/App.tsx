@@ -2264,6 +2264,42 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const activeWireGuard = security?.vpn.wireguard_interfaces.filter((item) => item.up) ?? [];
+  const exportSecurityInventory = () => {
+    if (!security) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Exported at (UTC)", "Category", "Item", "Status", "Details"],
+      [exportedAt, "Firewall", "Init service", security.firewall_installed ? "INSTALLED" : "MISSING", ""],
+      [exportedAt, "Firewall", "Configuration", security.firewall_config_readable ? "READABLE" : "UNAVAILABLE", ""],
+      [exportedAt, "Firewall", "Rules", "REPORTED", security.rules_count],
+      [exportedAt, "Firewall", "Redirects", "REPORTED", security.redirects_count],
+      [exportedAt, "Firewall", "fw4 table", fw4Present ? "PRESENT" : "NOT FOUND", "inet/fw4"],
+      ...zones.map((zone) => [
+        exportedAt, "Firewall zone", zone.name, "REPORTED",
+        "networks=" + zone.networks.join(" ") + "; input=" + zone.input + "; output=" + zone.output +
+          "; forward=" + zone.forward + "; masquerade=" + (zone.masquerade ? "on" : "off"),
+      ]),
+      ...security.nft_tables.map((table) => [exportedAt, "nftables table", table, table === "inet/fw4" ? "FIREWALL4" : "PRESENT", ""]),
+      [exportedAt, "Adblock Fast", "Init service", security.adblock_fast.installed ? "INSTALLED" : "MISSING", ""],
+      [exportedAt, "Adblock Fast", "Configuration file", security.adblock_fast.config_available ? "PRESENT" : "MISSING", ""],
+      [exportedAt, "Adblock Fast", "Configured enabled", security.adblock_fast.configured_enabled ? "YES" : "NO", "Configuration state only; not a live blocking test"],
+      [exportedAt, "VPN", "WireGuard tool", security.vpn.wireguard_tool_installed ? "INSTALLED" : "MISSING", ""],
+      [exportedAt, "VPN", "OpenVPN service", security.vpn.openvpn_service_installed ? "INSTALLED" : "MISSING", ""],
+      [exportedAt, "VPN", "OpenVPN enabled instances", "REPORTED", security.vpn.openvpn_enabled_instances],
+      ...security.vpn.wireguard_interfaces.map((iface) => [
+        exportedAt, "WireGuard interface", iface.name, iface.up ? "UP" : "DOWN", iface.device,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-security-inventory-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
 
   return (
     <div className="module-page">
@@ -2273,6 +2309,7 @@ function SecurityControlPage({ routerOverview }: { routerOverview: RouterOvervie
           <div className="setup-kicker">FIREWALL · DNS FILTERING · VPN</div>
           <h1>Security Center</h1>
           <p>Read-only firewall zone policy, nftables table presence, Adblock Fast configuration and VPN interface status from the authenticated router API.</p>
+          <button className="hero-button security-export-button" onClick={exportSecurityInventory} disabled={!security}>Export security inventory CSV</button>
         </div>
       </section>
 
