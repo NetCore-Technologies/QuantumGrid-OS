@@ -26,6 +26,30 @@ not interchangeable merely because it has the same SoC family.
    manifest with `sha256sum -c SHA256SUMS`.
 5. Have a working serial console and a tested recovery path before changing persistent flash.
 
+## Read-only inspection on the currently installed router
+
+Before preparing a flash, inspect the router while it is still running its current firmware.
+Copy `scripts/inspect-aw1000-install-target.sh` from this repository to the router (for example
+with `scp` to `/tmp`), then run:
+
+```sh
+sh /tmp/inspect-aw1000-install-target.sh
+```
+
+The script only reads the board identity, root mount and `/proc/mtd` partition geometry. It
+does not write flash, change UCI settings, restart services or change bootloader variables.
+It reports whether the exact standard `mtd18` / `mtd20` geometry is present and whether the
+current root looks like the required temporary initramfs environment. Running it from an
+installed NoobWRT/OpenWrt system is expected to report **INSPECTION ONLY**; that does not mean
+the MTD layout is incompatible. Save its output and compare the complete partition map before
+proceeding.
+
+A geometry mismatch, duplicate/missing partition, unknown board identity or unexpected layout
+is a hard stop for the existing installer. Do not edit the installer or substitute another
+flash command to bypass that result. After a supported initramfs is booted, run the inspector
+again, then run the official UBI install script without `--write` to validate the image,
+manifest and all device checks.
+
 ## Temporary recovery boot
 
 The AW1000 initramfs `.itb` is intended for a supported temporary RAM-boot path. Use the
