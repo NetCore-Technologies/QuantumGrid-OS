@@ -18,14 +18,19 @@ export type WifiClientHistorySample = {
 
 export const WIFI_CLIENT_HISTORY_KEY = "quantumgrid-wifi-client-history-v1";
 export const WIFI_CLIENT_HISTORY_SETTINGS_KEY = "quantumgrid-wifi-client-history-settings-v1";
-export const WIFI_CLIENT_HISTORY_SAMPLE_INTERVAL_SECONDS = 900;
 export const WIFI_CLIENT_HISTORY_MAX_SAMPLES = 10000;
 
 const MAC_PATTERN = /^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i;
 
 function cleanText(value: unknown, limit: number): string {
   if (typeof value !== "string") return "";
-  return value.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, limit);
+  let cleaned = "";
+  for (const character of value) {
+    const code = character.charCodeAt(0);
+    cleaned += code < 32 || code === 127 ? " " : character;
+    if (cleaned.length >= limit) break;
+  }
+  return cleaned.slice(0, limit);
 }
 
 function cleanMeasurement(value: unknown, minimum: number, maximum: number): number | null {
