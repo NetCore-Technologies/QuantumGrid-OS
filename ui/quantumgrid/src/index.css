@@ -8913,3 +8913,86 @@ input::placeholder {
     align-items: stretch;
   }
 }
+
+
+/* Office static DHCP reservation form */
+.office-reservation-form {
+  display: grid;
+  gap: 14px;
+}
+.office-reservation-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.office-reservation-grid label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.office-reservation-grid label > span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.office-reservation-grid input,
+.office-reservation-grid select {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  outline: none;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font-size: 11px;
+}
+.office-reservation-grid select option {
+  color: #111;
+}
+.office-reservation-grid input:focus,
+.office-reservation-grid select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(71,121,255,.12);
+}
+.office-reservation-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 0 3px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.office-reservation-confirm input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--blue);
+}
+.office-reservation-actions {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  flex-wrap: wrap;
+}
+.office-reservation-actions > span {
+  max-width: 490px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+.office-reservation-success {
+  border-color: rgba(66,223,157,.25);
+  color: #9cecc9;
+}
+.office-reservation-error {
+  border-color: rgba(219,40,95,.3);
+  color: #ff9ab3;
+}
+@media (max-width: 650px) {
+  .office-reservation-grid {
+    grid-template-columns: 1fr;
+  }
+}
