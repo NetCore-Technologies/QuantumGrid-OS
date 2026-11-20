@@ -37,6 +37,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/wifi-client-history.test.mjs
       - name: Test firewall posture review
         run: node --experimental-strip-types --test ../../tests/firewall-posture.test.mjs
+      - name: Test policy routing table coverage analysis
+        run: node --experimental-strip-types --test ../../tests/policy-routing-analysis.test.mjs
       - name: Audit npm dependency advisories
         shell: bash
         run: |
