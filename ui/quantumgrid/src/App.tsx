@@ -3044,6 +3044,7 @@ const nativeOpenWrtApps: NativeOpenWrtApp[] = [
   { title: "Processes", description: "Inspect running processes and resource consumption.", section: "Status", href: "/cgi-bin/luci/admin/status/processes", packageName: "luci-mod-status" },
   { title: "Network Interfaces", description: "Configure WAN, LAN, VLAN interfaces and devices.", section: "Network", href: "/cgi-bin/luci/admin/network/network", packageName: "luci-mod-network" },
   { title: "Wireless", description: "Native radio, access-point and client configuration.", section: "Network", href: "/cgi-bin/luci/admin/network/wireless", packageName: "luci-mod-network" },
+  { title: "Wi-Fi Roaming (uSteer)", description: "Configure multi-AP neighbor reporting and opt-in client steering policies.", section: "Network", href: "/cgi-bin/luci/admin/network/usteer", packageName: "luci-app-usteer" },
   { title: "DHCP & DNS", description: "DHCP leases, static assignments and DNS settings.", section: "Network", href: "/cgi-bin/luci/admin/network/dhcp", packageName: "luci-mod-network" },
   { title: "Firewall", description: "Firewall zones, traffic rules, NAT and port forwards.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall", packageName: "luci-app-firewall" },
   { title: "Multi-WAN", description: "WAN failover, tracking, policies and traffic rules.", section: "Network", href: "/cgi-bin/luci/admin/network/mwan", packageName: "luci-app-mwan3" },
