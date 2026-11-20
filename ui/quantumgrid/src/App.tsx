@@ -5304,6 +5304,32 @@ function AuditLogPage() {
 }
 
 
+function ipv4ToUint32(value: string): number | null {
+  const parts = value.split(".");
+  if (parts.length !== 4) return null;
+  const octets = parts.map((part) => Number(part));
+  if (octets.some((part, index) =>
+    !/^(0|[1-9][0-9]{0,2})$/.test(parts[index]) ||
+    !Number.isInteger(part) || part < 0 || part > 255
+  )) return null;
+  return (((octets[0] * 256 + octets[1]) * 256 + octets[2]) * 256 + octets[3]);
+}
+
+function ipv4SubnetContainsHost(address: string, interfaceAddress: string, netmask: string): boolean {
+  const ip = ipv4ToUint32(address);
+  const router = ipv4ToUint32(interfaceAddress);
+  const mask = ipv4ToUint32(netmask);
+  if (ip === null || router === null || mask === null || mask === 0 || mask === 0xffffffff) return false;
+  const inverse = (~mask) >>> 0;
+  if (((inverse & (inverse + 1)) >>> 0) !== 0) return false;
+  const prefix = mask.toString(2).replace(/0/g, "").length;
+  if (prefix < 1 || prefix > 30) return false;
+  const network = (router & mask) >>> 0;
+  const broadcast = (network | inverse) >>> 0;
+  return ((ip & mask) >>> 0) === network && ip > network && ip < broadcast;
+}
+
+
 function DhcpScopeCreateForm({ networks, refresh }: {
   networks: RouterOfficeInterface[];
   refresh: () => void;
@@ -5807,6 +5833,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
     !existingDhcpNetworks.has(item.name)
   );
   const enabledDhcpScopes = inventory?.dhcp_scopes.filter((scope) => !scope.ignore) ?? [];
+  const liveDhcpClients = routerOverview?.clients ?? [];
   const reservationNetworks = (inventory?.interfaces ?? []).filter((item) =>
     item.protocol === "static" && item.ipv4.length > 0 && Boolean(item.netmask) &&
     enabledDhcpScopes.some((scope) => scope.interface === item.name)
@@ -6080,6 +6107,54 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           <div className="module-message">No enabled DHCP scope is attached to a static IPv4 interface with a readable subnet mask. Configure an appropriate LAN interface and DHCP scope before creating reservations.</div>
         ) : (
           <form className="office-reservation-form" onSubmit={saveReservation}>
+            {liveDhcpClients.length > 0 && (
+              <div className="office-live-lease-list">
+                <div className="office-live-lease-heading">
+                  <strong>Prefill from a live DHCP lease</strong>
+                  <span>{liveDhcpClients.length} active lease record(s) reported by dnsmasq</span>
+                </div>
+                {liveDhcpClients.map((client) => {
+                  const matchingNetwork = reservationNetworks.find((item) =>
+                    ipv4SubnetContainsHost(client.ip, item.ipv4[0] ?? "", item.netmask)
+                  );
+                  const safeHost = /^[A-Za-z0-9][A-Za-z0-9-]{0,62}$/.test(client.hostname)
+                    ? client.hostname
+                    : "Client-" + client.mac.replace(/:/g, "").slice(-8);
+                  const remaining = client.lease_remaining_seconds === null
+                    ? "No expiry reported"
+                    : client.lease_remaining_seconds <= 0
+                      ? "Expiring"
+                      : client.lease_remaining_seconds < 3600
+                        ? Math.ceil(client.lease_remaining_seconds / 60) + " min left"
+                        : Math.floor(client.lease_remaining_seconds / 3600) + " h " + Math.ceil((client.lease_remaining_seconds % 3600) / 60) + " min left";
+                  return (
+                    <div className="office-live-lease-row" key={client.mac + "-" + client.ip}>
+                      <div>
+                        <strong>{client.hostname || "Unknown client"}</strong>
+                        <span>{client.mac} · {client.ip} · {remaining}</span>
+                      </div>
+                      <button
+                        className="office-remove-start"
+                        type="button"
+                        onClick={() => {
+                          setReservationName(safeHost);
+                          setReservationMac(client.mac);
+                          setReservationIp(client.ip);
+                          setReservationNetwork(matchingNetwork?.name ?? reservationNetworks[0]?.name ?? "");
+                          setReservationConfirmed(false);
+                          setReservationNotice({
+                            success: true,
+                            message: matchingNetwork
+                              ? "Details prefilled from this lease. Verify the LAN and confirm to create the reservation."
+                              : "Details prefilled, but no eligible LAN subnet matched this lease IP. Select and verify the correct LAN before saving.",
+                          });
+                        }}
+                      >Use lease</button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <div className="office-reservation-grid">
               <label>
                 <span>Host name</span>
