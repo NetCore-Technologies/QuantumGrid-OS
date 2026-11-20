@@ -2169,17 +2169,17 @@ export async function createRouterOfficeForwarding(input: {
 
 export async function updateRouterOfficeZonePolicy(input: {
   section: string;
-  output: "ACCEPT" | "REJECT" | "DROP";
-  forward: "ACCEPT" | "REJECT" | "DROP";
+  output: "UNCHANGED" | "INHERIT" | "ACCEPT" | "REJECT" | "DROP";
+  forward: "UNCHANGED" | "INHERIT" | "ACCEPT" | "REJECT" | "DROP";
   masquerade: boolean;
 }): Promise<RouterOfficeFirewallZoneUpdateResult> {
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) ||
       input.section === "." || input.section === "..") {
     throw new Error("Invalid firewall zone section identifier.");
   }
-  const allowed = new Set(["ACCEPT", "REJECT", "DROP"]);
+  const allowed = new Set(["UNCHANGED", "INHERIT", "ACCEPT", "REJECT", "DROP"]);
   if (!allowed.has(input.output) || !allowed.has(input.forward)) {
-    throw new Error("Zone output and forward policies must be ACCEPT, REJECT or DROP.");
+    throw new Error("Zone output and forward policies must be unchanged, inherited, ACCEPT, REJECT or DROP.");
   }
   if (typeof input.masquerade !== "boolean") {
     throw new Error("Masquerading must be explicitly enabled or disabled.");
@@ -2216,8 +2216,12 @@ export async function updateRouterOfficeZonePolicy(input: {
     !("section" in payload) || payload.section !== input.section ||
     !("name" in payload) || typeof payload.name !== "string" ||
     !("input" in payload) || typeof payload.input !== "string" ||
-    !("output" in payload) || payload.output !== input.output ||
-    !("forward" in payload) || payload.forward !== input.forward ||
+    !("output" in payload) || typeof payload.output !== "string" ||
+      (input.output !== "UNCHANGED" && payload.output !== (input.output === "INHERIT" ? "" : input.output)) ||
+      !["", "ACCEPT", "REJECT", "DROP"].includes(payload.output) ||
+    !("forward" in payload) || typeof payload.forward !== "string" ||
+      (input.forward !== "UNCHANGED" && payload.forward !== (input.forward === "INHERIT" ? "" : input.forward)) ||
+      !["", "ACCEPT", "REJECT", "DROP"].includes(payload.forward) ||
     !("masquerade" in payload) || payload.masquerade !== input.masquerade ||
     !("input_unchanged" in payload) || payload.input_unchanged !== true ||
     !("reloaded" in payload) || payload.reloaded !== true ||
