@@ -1,4 +1,4 @@
-import { calculateCounterRateMbps } from "./interfaceRates";
+import { calculateCounterRateMbps } from "./interfaceRates.ts";
 
 export interface WireGuardPeerCounterInput {
   interface: string;
