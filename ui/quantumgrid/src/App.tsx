@@ -1855,12 +1855,12 @@ function NetworkControlPage({
     if (visibleInterfaces.length === 0) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Scope filter", "Sort order", "Interface", "Device", "Class", "State", "IPv4 addresses", "IPv6 addresses", "RX bytes", "RX packets", "RX errors", "RX dropped", "TX bytes", "TX packets", "TX errors", "TX dropped", "RX error delta", "RX drop delta", "TX error delta", "TX drop delta"],
+      ["Exported at (UTC)", "Scope filter", "Sort order", "Interface", "Device", "Class", "State", "IPv4 addresses", "IPv6 addresses", "Assigned DNS servers", "RX bytes", "RX packets", "RX errors", "RX dropped", "TX bytes", "TX packets", "TX errors", "TX dropped", "RX error delta", "RX drop delta", "TX error delta", "TX drop delta"],
       ...visibleInterfaces.map((item) => {
         const delta = interfaceCounterDeltas.get(item.name);
         return [
           exportedAt, interfaceScope, interfaceSort, item.name, item.device, item.is_wan ? "WAN" : "LAN / other",
-          item.up ? "UP" : "DOWN", item.ipv4.join(" "), (item.ipv6 ?? []).join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
+          item.up ? "UP" : "DOWN", item.ipv4.join(" "), (item.ipv6 ?? []).join(" "), (item.dns_servers ?? []).join(" "), item.rx_bytes, item.rx_packets, item.rx_errors,
           item.rx_dropped, item.tx_bytes, item.tx_packets, item.tx_errors, item.tx_dropped,
           delta?.rxErrors, delta?.rxDropped, delta?.txErrors, delta?.txDropped,
         ];
@@ -1892,7 +1892,7 @@ function NetworkControlPage({
         <div>
           <div className="setup-kicker">LIVE ROUTER INTERFACES</div>
           <h1>Network</h1>
-          <p>WAN/LAN interface telemetry, IPv4/IPv6 addresses, default routes across kernel policy tables, kernel counters and wireless radio status from the authenticated router API.</p>
+          <p>WAN/LAN interface telemetry, IPv4/IPv6 addresses, assigned DNS servers, default routes across kernel policy tables, kernel counters and wireless radio status from the authenticated router API.</p>
         </div>
       </section>
 
@@ -1938,6 +1938,7 @@ function NetworkControlPage({
                 <div><small>STATE</small><b>{item.up ? "UP" : "DOWN"}</b></div>
                 <div><small>IPV4</small><b>{item.ipv4.length > 0 ? item.ipv4.join(", ") : "—"}</b></div>
                 <div><small>IPV6</small><b>{(item.ipv6 ?? []).length > 0 ? item.ipv6?.join(", ") : "—"}</b></div>
+                <div><small>ASSIGNED DNS</small><b>{(item.dns_servers ?? []).length > 0 ? item.dns_servers?.join(", ") : "—"}</b></div>
                 <div>
                   <small>RX TOTAL</small>
                   <b>{formatTrafficBytes(item.rx_bytes)}</b>
