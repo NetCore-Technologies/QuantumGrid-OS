@@ -6795,6 +6795,78 @@ input::placeholder {
   gap: 8px;
 }
 .rf-history-actions .hero-button { padding: 8px 10px; font-size: 8px; }
+.mwan3-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 9px;
+  margin: 10px 0 14px;
+}
+.mwan3-summary > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+}
+.mwan3-summary small {
+  display: block;
+  color: var(--muted2);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .1em;
+}
+.mwan3-summary strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--text);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.mwan3-interface-row {
+  grid-template-columns: minmax(150px, 1.3fr) repeat(5, minmax(95px, 1fr));
+}
+.mwan3-state.online { color: #67d8ad; }
+.mwan3-state.offline { color: #f08b8b; }
+.mwan3-state.disabled,
+.mwan3-state.unknown { color: var(--muted2); }
+.mwan3-targets {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.mwan3-track-target {
+  display: grid;
+  gap: 4px;
+  min-width: min(220px, 100%);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(255,255,255,.02);
+}
+.mwan3-track-target strong {
+  color: var(--text);
+  font-size: 8px;
+  overflow-wrap: anywhere;
+}
+.mwan3-track-target span,
+.mwan3-no-targets {
+  color: var(--muted2);
+  font-size: 7px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 900px) {
+  .mwan3-interface-row { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .mwan3-interface-row .device-title { grid-column: 1 / -1; }
+}
+@media (max-width: 560px) {
+  .mwan3-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mwan3-interface-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mwan3-interface-row .device-title { grid-column: 1 / -1; }
+  .mwan3-targets { grid-column: 1 / -1; }
+}
+
 .network-interface-tools {
   display: grid;
   grid-template-columns: minmax(150px, 1fr) minmax(180px, 1.2fr) auto auto;
