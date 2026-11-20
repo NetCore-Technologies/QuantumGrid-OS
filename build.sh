@@ -89,5 +89,5 @@ printf '==============================================\n'
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 printf '\nFirmware outputs:\n'
 find "$OPENWRT_DIR/bin/targets/qualcommax/ipq807x" -maxdepth 1 -type f \
-    \( -name '*arcadyan_aw1000*.bin' -o -name '*arcadyan_aw1000*.ubi' -o -name '*arcadyan_aw1000*.itb' \) \
+    \( -name '*arcadyan_aw1000-squashfs-factory.ubi' -o -name '*arcadyan_aw1000-initramfs-uImage.itb' \) \
     -print | sort
