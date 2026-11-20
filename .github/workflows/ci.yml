@@ -31,6 +31,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Test guarded IPv4 office segment provisioning API requests
+        run: node --experimental-strip-types --test ../../tests/office-segment-api.test.mjs
       - name: Test guarded bridge VLAN API requests and response verification
         run: node --experimental-strip-types --test ../../tests/office-vlan-api.test.mjs
       - name: Test guarded inter-zone forwarding API requests and response verification
