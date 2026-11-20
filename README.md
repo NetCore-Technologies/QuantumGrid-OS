@@ -301,13 +301,30 @@ by the software tests. The firmware also includes a read-only command-line inspe
 run `sh /usr/bin/quantumgrid-hardware-io` on the router, or pass `gpio`, `buttons` or `leds`
 to focus the inventory.
 
+## Office network inventory
+
+The authenticated **Office Networks** page provides a read-only correlation of the configured
+network interfaces, bridge devices, bridge VLAN IDs and tagged/untagged/PVID port membership,
+firewall zones and their input/output/forward policies, and wireless AP sections mapped to network
+names. Interface link state is queried from the router's network-interface status API. It supports
+office network design reviews and CSV inventory hand-off without inventing missing VLANs or
+claiming isolation from names alone.
+
+This inventory does not configure VLANs, DHCP pools, firewall rules, RADIUS/802.1X, VPN tunnels,
+switch ports or AP uplinks. It does not inspect downstream managed switches or verify inter-VLAN
+packet paths. A configured VLAN or a restrictive-looking firewall zone is not a security test or
+a compliance result. Write-capable office provisioning remains gated on transaction/rollback
+handling, management-plane lockout protection, and device-specific bridge/switch validation.
+The parser and correlation rules are covered by `tests/office-networks.lua` in the normal CI gate.
+
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
-  settings with restart and rollback handling, plus the Hardware I/O page, read-only GPIO/button
-  inventory, and authenticated runtime LED brightness control with trigger checks and verification.
+  settings with restart and rollback handling, Hardware I/O with read-only GPIO/button inventory
+  and guarded runtime LED brightness, and the Office Networks read-only VLAN/bridge/firewall/SSID
+  correlation page with CSV export.
 - **Active development:** wider UI-to-ubus control wiring, radio intelligence, CAKE tuning,
   traffic classification, per-client priority, controlled-load bufferbloat testing and modem
   observability.
