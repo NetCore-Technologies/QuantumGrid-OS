@@ -153,7 +153,8 @@ WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi 
 data is read from OpenWrt's iwinfo ubus API; the client inventory can filter and sort stations by
 reported TX retries and failed packets, and exports the active diagnostic filters with each row.
 Missing driver counters remain unavailable rather than being inferred; retry/failure counts are
-cumulative station counters, not a measured packet-loss percentage. A single ICMP probe is
+cumulative station counters, not a measured packet-loss percentage. The Security Center exports a
+read-only firewall, nftables, Adblock Fast and VPN inventory without including keys or credentials. A single ICMP probe is
 shown as a reachability/latency sample, not as a long-running packet-loss benchmark.
 
 The custom API route is protected by LuCI's authenticated administrator tree and accepts no
