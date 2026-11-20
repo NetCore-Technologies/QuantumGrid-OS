@@ -1297,6 +1297,7 @@ function action_wireless_update()
 		htmode = update.htmode,
 		txpower = update.txpower,
 		key_set = update.encryption ~= "none" and not enterprise_encryption,
+		ieee80211w = update.encryption == "wpa3" and "2" or nil,
 		radius_auth_server = enterprise_encryption and update.radius_server or nil,
 		radius_auth_port = enterprise_encryption and tonumber(update.radius_port) or nil,
 		radius_secret_set = enterprise_encryption,
