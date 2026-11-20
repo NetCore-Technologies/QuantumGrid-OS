@@ -85,4 +85,16 @@ local zone_event = audit.encode_event({
 assert(type(zone_event) == "string" and zone_event:find('"action":"office.zone.update"', 1, true),
   "firewall zone policy updates should be allowlisted and auditable")
 
+local wifi_binding_event = audit.encode_event({
+  timestamp = 1700000003,
+  actor = "root",
+  remote_ip = "192.0.2.10",
+  action = "office.wifi.network.update",
+  target = "corp_ap",
+  outcome = "success",
+})
+assert(type(wifi_binding_event) == "string" and
+  wifi_binding_event:find('"action":"office.wifi.network.update"', 1, true),
+  "SSID-to-network binding events must be accepted by the redacted audit log")
+
 print("audit: allowlist, secret exclusion, escaping, validation and bounded parsing passed")
