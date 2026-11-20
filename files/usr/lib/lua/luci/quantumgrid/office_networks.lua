@@ -77,6 +77,77 @@ local function valid_mac(value)
 		and value:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") ~= nil
 end
 
+local function ipv4_number(value)
+	if type(value) ~= "string" then return nil end
+	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then return nil end
+	local octets = { tonumber(a), tonumber(b), tonumber(c), tonumber(d) }
+	for _, octet in ipairs(octets) do
+		if not octet or octet < 0 or octet > 255 or octet ~= math.floor(octet) then
+			return nil
+		end
+	end
+	return octets[1] * 16777216 + octets[2] * 65536 + octets[3] * 256 + octets[4]
+end
+
+local function ipv4_prefix(netmask)
+	local address = ipv4_number(netmask)
+	if not address then return nil end
+	local prefix, zero_seen = 0, false
+	local octets = {
+		math.floor(address / 16777216) % 256,
+		math.floor(address / 65536) % 256,
+		math.floor(address / 256) % 256,
+		address % 256
+	}
+	local bit_counts = { [255] = 8, [254] = 7, [252] = 6, [248] = 5, [240] = 4, [224] = 3, [192] = 2, [128] = 1, [0] = 0 }
+	for _, octet in ipairs(octets) do
+		local count = bit_counts[octet]
+		if count == nil or (zero_seen and count ~= 0) then return nil end
+		if count < 8 then zero_seen = true end
+		prefix = prefix + count
+	end
+	if prefix < 1 or prefix > 30 then return nil end
+	return prefix
+end
+
+function validate_reservation(name, mac, ipv4)
+	if type(name) ~= "string" or #name < 1 or #name > 63
+		or not name:match("^[A-Za-z0-9][A-Za-z0-9%-]*$") then
+		return nil, "Host name must be 1–63 letters, digits or hyphens and start with a letter or digit."
+	end
+	if not valid_mac(mac) then
+		return nil, "A six-octet MAC address is required."
+	end
+	local normalized_mac = mac:lower()
+	local first_octet = tonumber(normalized_mac:sub(1, 2), 16)
+	if first_octet % 2 ~= 0 or normalized_mac == "00:00:00:00:00:00"
+		or normalized_mac == "ff:ff:ff:ff:ff:ff" then
+		return nil, "A unicast, non-zero MAC address is required."
+	end
+	local ip_number = ipv4_number(ipv4)
+	if not ip_number then
+		return nil, "A valid dotted-decimal IPv4 address is required."
+	end
+	local first_octet_ip = math.floor(ip_number / 16777216)
+	if ip_number == 0 or ip_number == 4294967295 or first_octet_ip == 127
+		or first_octet_ip >= 224 then
+		return nil, "The IPv4 address must be a usable unicast host address."
+	end
+	return { name = name, mac = normalized_mac, ipv4 = ipv4, ipv4_number = ip_number }
+end
+
+function ipv4_in_subnet(address, interface_address, netmask)
+	local host = ipv4_number(address)
+	local router = ipv4_number(interface_address)
+	local prefix = ipv4_prefix(netmask)
+	if not host or not router or not prefix then return false end
+	local size = 2 ^ (32 - prefix)
+	local host_network = math.floor(host / size) * size
+	local router_network = math.floor(router / size) * size
+	return host_network == router_network and host > host_network and host < host_network + size - 1
+end
+
 local function parse_vlan_id(value)
 	local id = tonumber(value)
 	if not id or id ~= math.floor(id) or id < 1 or id > 4094 then return nil end
