@@ -2987,6 +2987,9 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   refresh: () => void;
 }) {
   const platform = routerOverview?.platform;
+  const system = routerOverview?.system;
+  const memory = system?.memory;
+  const load = system?.load_avg ?? [];
   const modules = platform?.modules ?? [];
   const tools = platform?.tools ?? [];
   const services = platform?.services ?? [];
@@ -2994,24 +2997,34 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   const exportPlatformInventory = () => {
     if (!platform?.available) return;
     const generatedAt = new Date().toISOString();
+    const runtimeRows: Array<Array<string | number | null | undefined>> = [
+      [generatedAt, platform.hostname, "Runtime", "Uptime", system ? "REPORTED" : "UNAVAILABLE", "Since last boot", "", "", "", formatUptime(system?.uptime_seconds)],
+      [generatedAt, platform.hostname, "Runtime", "CPU utilization", system?.cpu_percent == null ? "UNAVAILABLE" : "REPORTED", "Percent of total CPU time", "", "", system?.cpu_percent ?? "", system?.cpu_percent == null ? "" : fmt(system.cpu_percent, 1) + "%"],
+      [generatedAt, platform.hostname, "Runtime", "Memory", memory ? "REPORTED" : "UNAVAILABLE", "MemTotal / MemAvailable from /proc/meminfo", memory ? memory.total_kib * 1024 : "", memory ? memory.available_kib * 1024 : "", memory?.used_percent ?? "", memory ? fmt(memory.total_kib / 1024, 0) + " MiB total" : ""],
+      [generatedAt, platform.hostname, "Runtime", "Temperature", system?.temperature_c == null ? "UNAVAILABLE" : "REPORTED", "First available thermal zone", "", "", "", system?.temperature_c == null ? "" : fmt(system.temperature_c, 1) + " °C"],
+      [generatedAt, platform.hostname, "Runtime", "Load average (1m)", load[0] === undefined ? "UNAVAILABLE" : "REPORTED", "Linux /proc/loadavg", "", "", "", load[0] === undefined ? "" : fmt(load[0], 2)],
+      [generatedAt, platform.hostname, "Runtime", "Load average (5m)", load[1] === undefined ? "UNAVAILABLE" : "REPORTED", "Linux /proc/loadavg", "", "", "", load[1] === undefined ? "" : fmt(load[1], 2)],
+      [generatedAt, platform.hostname, "Runtime", "Load average (15m)", load[2] === undefined ? "UNAVAILABLE" : "REPORTED", "Linux /proc/loadavg", "", "", "", load[2] === undefined ? "" : fmt(load[2], 2)],
+    ];
     const rows: Array<Array<string | number | null | undefined>> = [
-      ["Generated at (UTC)", "Hostname", "Section", "Item", "Status", "Detail", "Total bytes", "Available bytes", "Used percent"],
+      ["Generated at (UTC)", "Hostname", "Section", "Item", "Status", "Detail", "Total bytes", "Available bytes", "Used percent", "Value"],
       [generatedAt, platform.hostname, "Platform", "Firmware identity", "AVAILABLE",
         [platform.model, platform.board_name, platform.distribution, platform.version, platform.revision,
-          platform.target, platform.kernel, platform.description].filter(Boolean).join(" | "), "", "", ""],
-      [generatedAt, platform.hostname, "Package manager", platform.package_manager, "DETECTED", "", "", "", ""],
-      ...modules.map((item) => [generatedAt, platform.hostname, "Kernel module", item.name, item.loaded ? "LOADED" : "NOT LOADED", "", "", "", ""]),
-      ...tools.map((item) => [generatedAt, platform.hostname, "Diagnostic tool", item.name, item.available ? "AVAILABLE" : "MISSING", "", "", "", ""]),
-      ...services.map((item) => [generatedAt, platform.hostname, "Init script", item.name, item.installed ? "PRESENT" : "MISSING", "Presence is not runtime health", "", "", ""]),
-      ...storage.map((item) => [generatedAt, platform.hostname, "MTD partition", item.device, item.name, `erase block ${item.erase_size_bytes} bytes`, item.size_bytes, "", ""]),
-      ...(platform.block_devices ?? []).map((item) => [generatedAt, platform.hostname, "Block device", item.name, "REPORTED", `major:minor ${item.major}:${item.minor}`, item.size_bytes, "", ""]),
-      ...(platform.mounts ?? []).map((item) => [generatedAt, platform.hostname, "Mount", item.mountpoint, item.read_only ? "READ ONLY" : "READ / WRITE", `${item.source} · ${item.filesystem}`, item.total_bytes, item.available_bytes, item.used_percent]),
+          platform.target, platform.kernel, platform.description].filter(Boolean).join(" | "), "", "", "", ""],
+      [generatedAt, platform.hostname, "Package manager", platform.package_manager, "DETECTED", "", "", "", "", ""],
+      ...runtimeRows,
+      ...modules.map((item) => [generatedAt, platform.hostname, "Kernel module", item.name, item.loaded ? "LOADED" : "NOT LOADED", "", "", "", "", ""]),
+      ...tools.map((item) => [generatedAt, platform.hostname, "Diagnostic tool", item.name, item.available ? "AVAILABLE" : "MISSING", "", "", "", "", ""]),
+      ...services.map((item) => [generatedAt, platform.hostname, "Init script", item.name, item.installed ? "PRESENT" : "MISSING", "Presence is not runtime health", "", "", "", ""]),
+      ...storage.map((item) => [generatedAt, platform.hostname, "MTD partition", item.device, item.name, "erase block " + item.erase_size_bytes + " bytes", item.size_bytes, "", "", ""]),
+      ...(platform.block_devices ?? []).map((item) => [generatedAt, platform.hostname, "Block device", item.name, "REPORTED", "major:minor " + item.major + ":" + item.minor, item.size_bytes, "", "", ""]),
+      ...(platform.mounts ?? []).map((item) => [generatedAt, platform.hostname, "Mount", item.mountpoint, item.read_only ? "READ ONLY" : "READ / WRITE", item.source + " · " + item.filesystem, item.total_bytes, item.available_bytes, item.used_percent, ""]),
     ];
     const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
     const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = objectUrl;
-    link.download = `quantumgrid-platform-inventory-${generatedAt.replace(/[:.]/g, "-")}.csv`;
+    link.download = "quantumgrid-platform-inventory-" + generatedAt.replace(/[:.]/g, "-") + ".csv";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -3051,6 +3064,16 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               <div><small>TARGET</small><strong>{platform.target || "N/A"}</strong></div>
               <div className="platform-detail-wide"><small>BUILD DESCRIPTION</small><strong>{platform.description || "N/A"}</strong></div>
             </div>
+          </Panel>
+          <Panel title="Runtime health snapshot" eyebrow="READ-ONLY · LIVE SYSTEM TELEMETRY">
+            <div className="platform-detail-grid">
+              <div><small>UPTIME</small><strong>{formatUptime(system?.uptime_seconds)}</strong></div>
+              <div><small>CPU UTILIZATION</small><strong>{system?.cpu_percent == null ? "N/A" : fmt(system.cpu_percent, 1) + "%"}</strong></div>
+              <div><small>MEMORY UTILIZATION</small><strong>{memory?.used_percent == null ? "N/A" : fmt(memory.used_percent, 1) + "%"}</strong></div>
+              <div><small>TEMPERATURE</small><strong>{system?.temperature_c == null ? "N/A" : fmt(system.temperature_c, 1) + " °C"}</strong></div>
+              <div className="platform-detail-wide"><small>LOAD AVERAGE · 1 / 5 / 15 MIN</small><strong>{load.length === 0 ? "N/A" : load.slice(0, 3).map((value) => fmt(value, 2)).join(" / ")}</strong></div>
+            </div>
+            <div className="module-message">Values come from the authenticated router telemetry sample. Unavailable CPU or thermal readings stay marked N/A; this panel does not estimate missing values.</div>
           </Panel>
           <div className="module-grid">
             <Panel title="Loaded kernel modules" eyebrow="SYSFS · /SYS/MODULE">
