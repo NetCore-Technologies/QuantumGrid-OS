@@ -58,4 +58,6 @@ installation path before any persistent flash write.
 
 The FXS phone service ships disabled by default and needs a compatible kernel, VoLTE service
 and user-supplied Skyworks patch. Never claim emergency-call certification without dedicated
-testing. The base OpenWrt build does not claim NSS acceleration.
+testing. The base OpenWrt build does not claim NSS acceleration; a loaded `qca-nss-dp` or `qca-ssdk`
+module alone does not establish that NSS firmware, core drivers, ECM, PPE/EDMA integration, Wi-Fi
+offload and required device-tree wiring are present or functional.
