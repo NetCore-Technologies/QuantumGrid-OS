@@ -3,7 +3,7 @@ local acceleration = require "luci.quantumgrid.acceleration"
 
 local none = acceleration.summarize({})
 assert(none.status == "not-detected")
-assert(none.present_components == 0 and none.required_components == 11)
+assert(none.present_components == 0 and none.required_components == 12)
 assert(none.offload_verified == false)
 assert(#none.components == 0)
 
@@ -14,7 +14,7 @@ local partial = acceleration.summarize({
 	{ name = "NSS firmware core 1", kind = "firmware", present = false, detail = "missing" }
 })
 assert(partial.status == "partial")
-assert(partial.present_components == 3 and partial.required_components == 11)
+assert(partial.present_components == 3 and partial.required_components == 12)
 assert(partial.offload_verified == false)
 assert(#partial.components == 4)
 
@@ -30,14 +30,15 @@ local names = {
 	{ "NSS Enhanced Connection Manager", "kernel-module" },
 	{ "NSS firmware core 0", "firmware" },
 	{ "NSS firmware core 1", "firmware" },
-	{ "Wi-Fi driver", "kernel-module" }
+	{ "Wi-Fi driver", "kernel-module" },
+	{ "ath11k NSS offload parameter", "kernel-module" }
 }
 for _, item in ipairs(names) do
 	table.insert(complete, { name = item[1], kind = item[2], present = true, detail = "present" })
 end
 local ready = acceleration.summarize(complete)
 assert(ready.status == "components-present-unverified")
-assert(ready.present_components == 11 and ready.required_components == 11)
+assert(ready.present_components == 12 and ready.required_components == 12)
 assert(ready.offload_verified == false, "component presence must never be reported as verified traffic offload")
 
 local untrusted = acceleration.summarize({
