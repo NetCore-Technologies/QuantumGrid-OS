@@ -483,11 +483,19 @@ PUBLISHED_UBI="$UBI_TEST_DIR/QuantumGrid-OS-test-AW1000-squashfs-factory.ubi"
 cp "$VALID_UBI" "$PUBLISHED_UBI"
 bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$PUBLISHED_UBI"
 
-INVALID_UBI="$UBI_TEST_DIR/openwrt-arcadyan_aw1000-squashfs-factory-bad.ubi"
+INVALID_UBI="$UBI_TEST_DIR/broken-openwrt-arcadyan_aw1000-squashfs-factory.ubi"
 printf 'NOPE' > "$INVALID_UBI"
 truncate -s 1048576 "$INVALID_UBI"
 if bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$INVALID_UBI"; then
     echo "ERROR: UBI verifier accepted an invalid header." >&2
+    exit 1
+fi
+
+OVERSIZED_UBI="$UBI_TEST_DIR/openwrt-arcadyan_aw1000-squashfs-factory-large.ubi"
+cp "$VALID_UBI" "$OVERSIZED_UBI"
+truncate -s 104857601 "$OVERSIZED_UBI"
+if bash "$ROOT/scripts/verify-aw1000-ubi.sh" "$OVERSIZED_UBI"; then
+    echo "ERROR: UBI verifier accepted an image larger than the standard rootfs partition." >&2
     exit 1
 fi
 
