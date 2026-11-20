@@ -8277,3 +8277,45 @@ input::placeholder {
     max-width: none;
   }
 }
+
+
+.hardware-button-status {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.hardware-button-status > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.02);
+}
+.hardware-button-status > div > span:first-child {
+  color: var(--muted);
+  font-size: 10px;
+}
+.hardware-button-handlers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.hardware-button-handlers > span {
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255,255,255,.025);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+@media (max-width: 600px) {
+  .hardware-button-status {
+    grid-template-columns: 1fr;
+  }
+}
