@@ -711,6 +711,26 @@ export interface RouterOfficeVlan {
   ports: RouterOfficeVlanPort[];
 }
 
+export interface RouterOfficeVlanUpdateResult {
+  ok: true;
+  section: string;
+  device: string;
+  vlan_id: number;
+  ports: string[];
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficeVlanRemoveResult {
+  ok: true;
+  section: string;
+  device: string;
+  vlan_id: number;
+  removed: true;
+  reloaded: true;
+  rolled_back: false;
+}
+
 export interface RouterOfficeWifiAp {
   ssid: string;
   section: string;
@@ -976,6 +996,8 @@ const DHCP_SCOPE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-sco
 const DHCP_SCOPE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-toggle";
 const DHCP_SCOPE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-add";
 const DHCP_SCOPE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-scope-remove";
+const BRIDGE_VLAN_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-update";
+const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-remove";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
@@ -1981,6 +2003,125 @@ export async function createRouterDhcpScope(input: {
   }
   return payload as RouterDhcpScopeCreateResult;
 }
+export async function updateRouterOfficeVlan(input: {
+  section?: string;
+  device: string;
+  vlanId: string;
+  ports: RouterOfficeVlanPort[];
+}): Promise<RouterOfficeVlanUpdateResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.device) || input.device === "." || input.device === "..") {
+    throw new Error("Select an existing bridge device.");
+  }
+  if (!/^[1-9][0-9]{0,3}$/.test(input.vlanId) ||
+      Number(input.vlanId) < 1 || Number(input.vlanId) > 4094) {
+    throw new Error("VLAN ID must be a whole number from 1 to 4094.");
+  }
+  if (input.section && (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) ||
+      input.section === "." || input.section === "..")) {
+    throw new Error("Invalid bridge VLAN section identifier.");
+  }
+  if (!Array.isArray(input.ports) || input.ports.length < 1 || input.ports.length > 32) {
+    throw new Error("Choose between 1 and 32 explicit bridge port memberships.");
+  }
+  const seen = new Set<string>();
+  const portValues = input.ports.map((port) => {
+    if (!/^[A-Za-z0-9_.-]{1,64}$/.test(port.name) || seen.has(port.name)) {
+      throw new Error("Bridge port names must be valid and unique.");
+    }
+    seen.add(port.name);
+    if (port.mode !== "tagged" && port.mode !== "untagged") {
+      throw new Error("Every selected bridge port must be tagged or untagged.");
+    }
+    if (port.pvid && port.mode !== "untagged") {
+      throw new Error("A PVID can only be assigned to an untagged bridge port.");
+    }
+    return port.name + (port.mode === "tagged" ? ":t" : port.pvid ? ":u*" : ":u");
+  });
+  const form = new URLSearchParams();
+  form.set("section", input.section || "");
+  form.set("device", input.device);
+  form.set("vlan", String(Number(input.vlanId)));
+  form.set("ports", portValues.join(" "));
+  form.set("confirmed", "1");
+  const response = await fetch(BRIDGE_VLAN_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Bridge VLAN changes require an active router administrator session."
+      : "The router returned an invalid bridge VLAN update response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid bridge VLAN update response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || typeof payload.section !== "string" || payload.section.length === 0 ||
+    !("device" in payload) || payload.device !== input.device ||
+    !("vlan_id" in payload) || payload.vlan_id !== Number(input.vlanId) ||
+    !("ports" in payload) || !Array.isArray(payload.ports) ||
+    payload.ports.length !== portValues.length ||
+    payload.ports.some((port, index) => port !== portValues[index]) ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the bridge VLAN configuration and network reload.");
+  }
+  return payload as RouterOfficeVlanUpdateResult;
+}
+
+export async function removeRouterOfficeVlan(section: string): Promise<RouterOfficeVlanRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid bridge VLAN section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(BRIDGE_VLAN_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Bridge VLAN removal requires an active router administrator session."
+      : "The router returned an invalid bridge VLAN removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid bridge VLAN removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("device" in payload) || typeof payload.device !== "string" ||
+    !("vlan_id" in payload) || typeof payload.vlan_id !== "number" ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm bridge VLAN removal and network reload.");
+  }
+  return payload as RouterOfficeVlanRemoveResult;
+}
+
 export async function removeRouterDhcpScope(section: string): Promise<RouterDhcpScopeRemoveResult> {
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
     throw new Error("Invalid DHCP scope section identifier.");
