@@ -9128,3 +9128,104 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+/* Native remote syslog forwarding */
+.remote-syslog-form {
+  display: grid;
+  gap: 13px;
+}
+.remote-syslog-warning {
+  display: grid;
+  gap: 6px;
+  padding: 12px 13px;
+  border: 1px solid rgba(219,145,40,.3);
+  border-radius: 9px;
+  background: rgba(219,145,40,.055);
+}
+.remote-syslog-warning strong {
+  color: #f4c37c;
+  font-size: 10px;
+}
+.remote-syslog-warning span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+.remote-syslog-enabled,
+.remote-syslog-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  color: var(--text);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.remote-syslog-enabled input,
+.remote-syslog-confirm input {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--blue);
+}
+.remote-syslog-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.remote-syslog-fields label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.remote-syslog-fields label > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+.remote-syslog-fields input,
+.remote-syslog-fields select {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  outline: none;
+  color: var(--text);
+  background: rgba(255,255,255,.035);
+  font-size: 10px;
+}
+.remote-syslog-fields input:focus,
+.remote-syslog-fields select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 2px rgba(71,121,255,.12);
+}
+.remote-syslog-fields select option {
+  color: #111;
+}
+.remote-syslog-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.remote-syslog-actions > span {
+  max-width: 460px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.55;
+}
+.remote-syslog-success {
+  border-color: rgba(66,223,157,.25);
+  color: #9cecc9;
+}
+.remote-syslog-error {
+  border-color: rgba(219,40,95,.3);
+  color: #ff9ab3;
+}
+@media (max-width: 760px) {
+  .remote-syslog-fields {
+    grid-template-columns: 1fr;
+  }
+}
