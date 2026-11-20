@@ -92,7 +92,7 @@ unrestricted channels returned by the radio driver, comparing nearby BSSID signa
 channel-width overlap within each radio/band. The router's own BSSID is excluded when reported.
 Scores are relative to that shortlist, not measured airtime, CCA busy time, noise or guaranteed
 interference; unavailable widths are marked and use a 20 MHz fallback. No channel settings are
-changed. The page keeps the last ten distinct manual scan
+changed. Opt-in, browser-local Wi-Fi client history is also available: an administrator can manually save snapshots of currently associated stations, retain 1, 7 or 30 days (up to 10,000 observations), export CSV and clear the history. It is disabled by default, stores MAC addresses and available DHCP hostname/IP details only in that browser's local storage, and is not uploaded, encrypted or synced. A snapshot is written only after the explicit Save snapshot action; it is not an automatic monitor. The page keeps the last ten distinct manual scan
 summaries plus the minimal BSSID/SSID/band/channel/signal fields needed to compare newly observed,
 not-observed and signal-changing access points. This comparison is page-memory-only: it is cleared
 when the Wi-Fi page is left, reloaded or its history is cleared, and is never written to browser
