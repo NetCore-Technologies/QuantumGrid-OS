@@ -146,10 +146,15 @@ Custom external-zone names and unavailable telemetry remain unknown. Security Ce
 redirect inventory includes source/destination zones, protocol, target and external/internal ports;
 internal destination IPs and raw IP/MAC selector values are deliberately omitted. It flags enabled
 external forwards, forwards with no external source-port constraint, and mappings to common
-administrative/data-service ports for manual review. Summaries can be searched and exported. These
-are configuration review signals only: QuantumGrid does not evaluate rule order, fully resolve
-address sets, test public reachability, confirm a service is listening, or inspect live nftables
-packet paths. This is not a vulnerability scan and it does not prove that a router is exposed or secure. The Advanced page reports system.board firmware identity, a bounded installed-module inventory parsed from the running kernel's `modules.dep` and compared with live `/proc/modules` state, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
+administrative/data-service ports for manual review. The Security Center also reads a bounded JSON snapshot of the running `inet/fw4` table when
+the nft binary and table are available. It reports chain name, hook, policy, type, priority, device
+and rule count, without returning raw nft expressions or address values. The JSON input is capped
+at 512 KiB and the page displays at most 64 chains; malformed, oversized or unavailable snapshots
+remain explicitly unavailable rather than being treated as complete. Summaries can be searched
+and exported. These are configuration/runtime inventory signals only: QuantumGrid does not evaluate
+rule order, fully resolve address sets, test public reachability, confirm a service is listening, or
+prove actual packet paths. This is not a vulnerability scan and it does not prove that a router is
+exposed or secure. The Advanced page reports system.board firmware identity, a bounded installed-module inventory parsed from the running kernel's `modules.dep` and compared with live `/proc/modules` state, init-script and diagnostic-tool presence, package-manager detection, read-only Netfilter
 connection-tracking count, configured maximum, free capacity and 75%/90% warning thresholds, plus a
 30-sample session-only occupancy trend and CSV export, MTD partitions,
 block devices and important system mounts, including total/available capacity and usage where
