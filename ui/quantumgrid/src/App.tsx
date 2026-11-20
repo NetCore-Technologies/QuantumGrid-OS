@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5304,6 +5304,68 @@ function AuditLogPage() {
 }
 
 
+function DhcpScopeToggle({ scope, refresh }: {
+  scope: RouterOfficeDhcpScope;
+  refresh: () => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const enable = scope.ignore;
+
+  const apply = async () => {
+    if (!confirmed || busy) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterDhcpScopeEnabled(scope.section, enable);
+      setNotice({
+        success: true,
+        message: result.changed
+          ? (enable ? "DHCP scope enabled and dnsmasq restarted." : "DHCP scope disabled and dnsmasq restarted.")
+          : (enable ? "DHCP scope was already enabled." : "DHCP scope was already disabled."),
+      });
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The DHCP scope state could not be changed.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="office-dhcp-toggle">
+      <label className="office-reservation-confirm">
+        <input
+          type="checkbox"
+          checked={confirmed}
+          disabled={busy}
+          onChange={(event) => setConfirmed(event.target.checked)}
+        />
+        <span>{enable
+          ? "I confirm this DHCP server scope may be enabled on its existing LAN. QuantumGrid will validate its pool and restart dnsmasq."
+          : "I understand disabling this DHCP scope may stop new clients on this LAN from receiving addresses. Existing clients may continue until their leases expire."
+        }</span>
+      </label>
+      <div className="office-dhcp-editor-actions">
+        <button className="hero-button" type="button" onClick={() => { void apply(); }} disabled={!confirmed || busy}>
+          <Check size={14} /> {busy ? "Applying…" : enable ? "Enable DHCP scope" : "Disable DHCP scope"}
+        </button>
+      </div>
+      {notice && (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function DhcpScopeEditor({ scope, refresh }: {
   scope: RouterOfficeDhcpScope;
   refresh: () => void;
@@ -5743,6 +5805,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                     </div>
                     <Status active={scope.range_valid && !scope.overlap}>{scope.ignore ? "DISABLED" : scope.overlap ? "OVERLAP" : scope.range_valid ? "RANGE VALID" : "RANGE INVALID"}</Status>
                   </div>
+                  <DhcpScopeToggle scope={scope} refresh={refresh} />
                   <DhcpScopeEditor scope={scope} refresh={refresh} />
                 </div>
               ))}
