@@ -33,7 +33,8 @@ jobs:
     env:
       QG_OPENWRT_REF: ${{ inputs.openwrt_ref || 'v25.12.6' }}
       QG_ENABLE_NSS: ${{ inputs.enable_nss && '1' || '0' }}
-      QG_NSS_OPENWRT_REF: "d6848fa2ea00193b5b7d3973e3990da7f608027c"
+      QG_NSS_OPENWRT_REF: "25.12-nss"
+      QG_NSS_EXPECTED_SHA: "d6848fa2ea00193b5b7d3973e3990da7f608027c"
       QG_BUILD_JOBS: "2"
     steps:
       - name: Checkout QuantumGrid source
@@ -138,11 +139,13 @@ jobs:
             BUILD_PROFILE="AW1000 experimental NSS"
             OPENWRT_REQUESTED_REPO="${QG_NSS_OPENWRT_REPO:-https://github.com/qosmio/openwrt-ipq.git}"
             OPENWRT_REQUESTED_REF="$QG_NSS_OPENWRT_REF"
+            OPENWRT_EXPECTED_SHA="$QG_NSS_EXPECTED_SHA"
             NSS_FRAGMENT_SHA="$(sha256sum configs/aw1000-nss.fragment | cut -d' ' -f1)"
           else
             BUILD_PROFILE="AW1000 stable upstream OpenWrt"
             OPENWRT_REQUESTED_REPO="${QG_OPENWRT_REPO:-https://github.com/openwrt/openwrt.git}"
             OPENWRT_REQUESTED_REF="$QG_OPENWRT_REF"
+            OPENWRT_EXPECTED_SHA="not-pinned-by-QuantumGrid"
           fi
 
           {
@@ -153,6 +156,7 @@ jobs:
             echo "NSS enabled: $QG_ENABLE_NSS"
             echo "OpenWrt requested repository: $OPENWRT_REQUESTED_REPO"
             echo "OpenWrt requested ref: $OPENWRT_REQUESTED_REF"
+            echo "OpenWrt expected commit: $OPENWRT_EXPECTED_SHA"
             echo "OpenWrt resolved commit: $OPENWRT_SHA"
             echo "AW1000 phone source commit: $PHONE_SHA"
             echo "AW1000 config SHA-256: $CONFIG_SHA"
