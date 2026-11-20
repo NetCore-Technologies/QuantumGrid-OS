@@ -1210,6 +1210,7 @@ function action_wireless_update()
 			rollback_ok, rollback_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
 		end
 		local rolled_back = rollback_saved and rollback_ok and rollback_status == 0
+		record_audit(http, "wireless.update", update.section, "failed")
 		respond(502, {
 			ok = false,
 			error = rolled_back
@@ -1220,6 +1221,7 @@ function action_wireless_update()
 		return
 	end
 
+	record_audit(http, "wireless.update", update.section, "success")
 	respond(nil, {
 		ok = true,
 		radio = update.radio,
@@ -1323,6 +1325,7 @@ function action_sqm_update()
 	if not sqm_restart(sys) then
 		local rollback_saved = restore_sqm_queue(uci, update.section, snapshot)
 		local rollback_restarted = rollback_saved and sqm_restart(sys)
+		record_audit(http, "sqm.update", update.section, "failed")
 		respond(502, {
 			ok = false,
 			error = rollback_restarted
@@ -1333,6 +1336,7 @@ function action_sqm_update()
 		return
 	end
 
+	record_audit(http, "sqm.update", update.section, "success")
 	respond(nil, {
 		ok = true,
 		section = update.section,
@@ -1391,6 +1395,7 @@ function action_set_password()
 		return
 	end
 
+	record_audit(http, "admin.password.setup", "root", "success")
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({ ok = true })
 end
@@ -1479,7 +1484,11 @@ function action_package_operation()
 	os.remove(log_path)
 	output = output:gsub("\r", "\n"):gsub("[%z\1-\9\11\12\14-\31\127]", " "):sub(1, 6000)
 
+	local audit_action = operation == "install" and "package.install"
+		or operation == "remove" and "package.remove" or "package.feed.update"
+	local audit_target = package ~= "" and package or manager
 	if not call_ok or exit_code ~= 0 then
+		record_audit(http, audit_action, audit_target, "failed")
 		respond(502, {
 			ok = false,
 			manager = manager,
@@ -1492,6 +1501,7 @@ function action_package_operation()
 		return
 	end
 
+	record_audit(http, audit_action, audit_target, "success")
 	respond(nil, {
 		ok = true,
 		manager = manager,
@@ -2384,11 +2394,13 @@ function action_led_update()
 	end
 
 	if not write_brightness(update.brightness) then
+		record_audit(http, "hardware.led.update", update.name, "failed")
 		respond(503, { ok = false, error = "The kernel LED brightness attribute rejected the write." })
 		return
 	end
 	local confirmed = read_number(base .. "/brightness")
 	if confirmed ~= update.brightness then
+		record_audit(http, "hardware.led.update", update.name, "failed")
 		local rollback = write_brightness(previous)
 		local restored = rollback and read_number(base .. "/brightness") == previous
 		respond(502, {
@@ -2400,6 +2412,7 @@ function action_led_update()
 		return
 	end
 
+	record_audit(http, "hardware.led.update", update.name, "success")
 	respond(nil, {
 		ok = true,
 		name = update.name,
@@ -2476,6 +2489,7 @@ function action_config_backup()
 	local command_ok, command_status = pcall(sys.call,
 		"/sbin/sysupgrade -b " .. backup_path .. " >/dev/null 2>&1")
 	if not command_ok or command_status ~= 0 then
+		record_audit(http, "system.config.backup", "sysupgrade", "failed")
 		os.remove(backup_path)
 		respond(503, { ok = false, error = "The router could not create a configuration backup archive." })
 		return
@@ -2510,6 +2524,7 @@ function action_config_backup()
 		return
 	end
 
+	record_audit(http, "system.config.backup", "sysupgrade", "success")
 	local filename = "quantumgrid-config-backup-" .. tostring(os.date("!%Y%m%dT%H%M%SZ")) .. ".tar.gz"
 	http.header("Cache-Control", "no-store")
 	http.header("X-Content-Type-Options", "nosniff")
