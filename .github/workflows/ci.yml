@@ -124,6 +124,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireless.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/packages.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/package_operations.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/kernel_modules.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/hardware_io.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/office_networks.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
@@ -143,6 +144,8 @@ jobs:
         run: lua5.1 tests/packages-inventory.lua
       - name: Test safe APK and OPKG package operations
         run: lua5.1 tests/package-operations.lua
+      - name: Test installed and loaded kernel module inventory
+        run: lua5.1 tests/kernel-modules.lua
       - name: Test GPIO inventory and guarded LED controls
         run: lua5.1 tests/hardware-io.lua
       - name: Test office VLAN and network segmentation inventory
