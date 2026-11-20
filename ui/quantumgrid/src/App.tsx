@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterLatencyTest, scanRouterWifi, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterClient, type RouterLatencyTest, type RouterOverview, type RouterPackageInventory, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -64,7 +64,8 @@ type Page =
   | "diagnostics"
   | "analytics"
   | "system"
-  | "advanced";
+  | "advanced"
+  | "apps";
 
 type SetupStep = "welcome" | "account" | "wifi" | "wan";
 
@@ -101,6 +102,7 @@ const nav = [
   ["analytics", "Analytics", Database],
   ["system", "System", Cpu],
   ["advanced", "Advanced", Settings],
+  ["apps", "OpenWrt Apps", Monitor],
 ] as const;
 
 function fmt(value: number, digits = 0) {
@@ -3028,6 +3030,162 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   );
 }
 
+type NativeOpenWrtApp = {
+  title: string;
+  description: string;
+  section: "Status" | "Network" | "Security" | "Services" | "System";
+  href: string;
+  packageName: string;
+};
+
+const nativeOpenWrtApps: NativeOpenWrtApp[] = [
+  { title: "System Overview", description: "OpenWrt status, board identity, uptime and health.", section: "Status", href: "/cgi-bin/luci/admin/status/overview", packageName: "luci-mod-status" },
+  { title: "Realtime Bandwidth", description: "Native LuCI interface throughput graphs.", section: "Status", href: "/cgi-bin/luci/admin/status/realtime/bandwidth", packageName: "luci-mod-status" },
+  { title: "Processes", description: "Inspect running processes and resource consumption.", section: "Status", href: "/cgi-bin/luci/admin/status/processes", packageName: "luci-mod-status" },
+  { title: "Network Interfaces", description: "Configure WAN, LAN, VLAN interfaces and devices.", section: "Network", href: "/cgi-bin/luci/admin/network/network", packageName: "luci-mod-network" },
+  { title: "Wireless", description: "Native radio, access-point and client configuration.", section: "Network", href: "/cgi-bin/luci/admin/network/wireless", packageName: "luci-mod-network" },
+  { title: "DHCP & DNS", description: "DHCP leases, static assignments and DNS settings.", section: "Network", href: "/cgi-bin/luci/admin/network/dhcp", packageName: "luci-mod-network" },
+  { title: "Firewall", description: "Firewall zones, traffic rules, NAT and port forwards.", section: "Security", href: "/cgi-bin/luci/admin/network/firewall", packageName: "luci-app-firewall" },
+  { title: "Multi-WAN", description: "WAN failover, tracking, policies and traffic rules.", section: "Network", href: "/cgi-bin/luci/admin/network/mwan", packageName: "luci-app-mwan3" },
+  { title: "Smart Queue Management", description: "Native SQM queue configuration and queue scripts.", section: "Services", href: "/cgi-bin/luci/admin/network/sqm", packageName: "luci-app-sqm" },
+  { title: "Adblock Fast", description: "DNS-based domain blocking and block-list services.", section: "Security", href: "/cgi-bin/luci/admin/services/adblock-fast", packageName: "luci-app-adblock-fast" },
+  { title: "Dynamic DNS", description: "Maintain a hostname against changing WAN addresses.", section: "Services", href: "/cgi-bin/luci/admin/services/ddns", packageName: "luci-app-ddns" },
+  { title: "OpenVPN", description: "Manage OpenVPN instances and configuration files.", section: "Security", href: "/cgi-bin/luci/admin/vpn/openvpn", packageName: "luci-app-openvpn" },
+  { title: "Unbound DNS", description: "Recursive DNS resolver configuration and status.", section: "Services", href: "/cgi-bin/luci/admin/services/unbound", packageName: "luci-app-unbound" },
+  { title: "UPnP", description: "Manage UPnP and NAT-PMP service settings.", section: "Services", href: "/cgi-bin/luci/admin/services/upnp", packageName: "luci-app-upnp" },
+  { title: "Administrator", description: "Root password, SSH access and system settings.", section: "System", href: "/cgi-bin/luci/admin/system/admin", packageName: "luci-mod-system" },
+  { title: "Startup & Services", description: "Init scripts, enabled services and scheduled tasks.", section: "System", href: "/cgi-bin/luci/admin/system/startup", packageName: "luci-mod-system" },
+  { title: "Software & APK", description: "Install, remove and update native OpenWrt packages.", section: "System", href: "/cgi-bin/luci/admin/system/package-manager", packageName: "luci-app-package-manager" },
+  { title: "Backup & Flash", description: "Back up configuration and inspect native firmware actions. Do not use generic flash actions for QuantumGrid AW1000 UBI images.", section: "System", href: "/cgi-bin/luci/admin/system/flash", packageName: "luci-mod-system" },
+  { title: "FXS / RJ11 Phone", description: "AW1000 analogue phone service and line controls.", section: "Services", href: "/cgi-bin/luci/admin/services/fxs/status", packageName: "luci-app-fxs" },
+];
+
+function OpenWrtAppsPage() {
+  const [inventory, setInventory] = useState<RouterPackageInventory | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [packageSearch, setPackageSearch] = useState("");
+  const [appSection, setAppSection] = useState<"All" | NativeOpenWrtApp["section"]>("All");
+
+  const loadPackages = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      setInventory(await fetchRouterPackages());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The installed package inventory is unavailable.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPackages();
+  }, [loadPackages]);
+
+  const installed = new Set(inventory?.packages.map((item) => item.name) ?? []);
+  const visiblePackages = (inventory?.packages ?? []).filter((item) =>
+    (item.name + " " + item.version).toLocaleLowerCase().includes(packageSearch.trim().toLocaleLowerCase())
+  );
+  const appsInSection = nativeOpenWrtApps.filter((app) =>
+    appSection === "All" || app.section === appSection
+  );
+  const installedAppCount = nativeOpenWrtApps.filter((app) => installed.has(app.packageName)).length;
+
+  return (
+    <div className="module-page openwrt-apps-page">
+      <section className="module-hero">
+        <div className="module-icon"><Monitor size={25} /></div>
+        <div>
+          <div className="setup-kicker">NATIVE LUCI · OPENWRT APPLICATIONS</div>
+          <h1>OpenWrt Apps</h1>
+          <p>Launch the router’s native OpenWrt configuration pages. QuantumGrid remains the control centre; LuCI apps provide the existing package-maintained interfaces for advanced administration.</p>
+          <div className="openwrt-app-actions">
+            <a className="hero-button" href="/cgi-bin/luci/admin/status/overview">Open native LuCI <ChevronRight size={15} /></a>
+            <button className="hero-button" onClick={() => void loadPackages()} disabled={loading}>
+              <RefreshCw size={15} /> {loading ? "Reading packages…" : "Refresh package inventory"}
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <div className="metrics">
+        <Metric title="Package Manager" value={inventory?.manager.toUpperCase() ?? "N/A"} unit="" detail="Detected from the authenticated router" icon={Settings} />
+        <Metric title="Installed Packages" value={inventory ? fmt(inventory.count) : "N/A"} unit="" detail={inventory?.truncated ? "Inventory is capped at 1,500 entries" : "Read from the local package database"} icon={HardDrive} />
+        <Metric title="Native App Modules" value={inventory ? fmt(installedAppCount) : "N/A"} unit="" detail={nativeOpenWrtApps.length + " launcher entries"} icon={Monitor} />
+      </div>
+
+      <Panel title="Native OpenWrt applications" eyebrow="SAME-ROUTER LUCI LINKS">
+        <div className="openwrt-app-filter">
+          {(["All", "Status", "Network", "Security", "Services", "System"] as const).map((section) => (
+            <button
+              key={section}
+              className={appSection === section ? "openwrt-app-filter-button active" : "openwrt-app-filter-button"}
+              onClick={() => setAppSection(section)}
+            >
+              {section}
+            </button>
+          ))}
+        </div>
+        <div className="openwrt-app-grid">
+          {appsInSection.map((app) => {
+            const available = installed.has(app.packageName);
+            return (
+              <a
+                className={available ? "openwrt-app-card" : "openwrt-app-card unavailable"}
+                href={app.href}
+                key={app.title}
+                aria-label={app.title + (available ? "" : " (package not found in inventory)")}
+              >
+                <div className="openwrt-app-card-top">
+                  <span>{app.section.toUpperCase()}</span>
+                  <Status active={available}>{available ? "INSTALLED" : inventory ? "NOT FOUND" : "CHECKING"}</Status>
+                </div>
+                <strong>{app.title}</strong>
+                <p>{app.description}</p>
+                <small>{app.packageName}</small>
+              </a>
+            );
+          })}
+        </div>
+        <div className="module-message">App links open the router’s native LuCI pages in this browser session. “Not found” means the package inventory did not contain the expected package name; a menu entry may still be provided by a related LuCI module. The Backup & Flash link opens standard LuCI only—never upload QuantumGrid’s factory UBI image through a generic sysupgrade form.</div>
+      </Panel>
+
+      <Panel title="Installed package inventory" eyebrow={inventory ? inventory.manager.toUpperCase() + " · " + new Date(inventory.sampled_at * 1000).toLocaleString() : "READ-ONLY LOCAL DATABASE"}>
+        <div className="openwrt-package-toolbar">
+          <input
+            type="search"
+            value={packageSearch}
+            onChange={(event) => setPackageSearch(event.target.value)}
+            placeholder="Search installed packages or versions"
+            aria-label="Search installed packages"
+          />
+          <span>{loading ? "Loading…" : visiblePackages.length + " shown"}</span>
+        </div>
+        {error ? <div className="module-message" role="alert">{error}</div> : null}
+        {!inventory && !loading ? (
+          <div className="module-message">No package inventory has been read yet. Refresh the inventory to query APK or OPKG.</div>
+        ) : visiblePackages.length === 0 ? (
+          <div className="module-message">{inventory ? "No installed packages match this search." : "Reading the router package database…"}</div>
+        ) : (
+          <div className="openwrt-package-table">
+            <div className="openwrt-package-row header"><span>PACKAGE</span><span>VERSION</span><span>MANAGER</span></div>
+            {visiblePackages.slice(0, 500).map((item) => (
+              <div className="openwrt-package-row" key={item.name}>
+                <strong>{item.name}</strong>
+                <span>{item.version}</span>
+                <small>{item.manager.toUpperCase()}</small>
+              </div>
+            ))}
+          </div>
+        )}
+        {inventory?.truncated ? <div className="module-message">The router has {inventory.count.toLocaleString()} installed packages. The API returned the first 1,500; the displayed list is further limited to 500 rows for browser performance.</div> : null}
+      </Panel>
+    </div>
+  );
+}
+
+
 function DashboardPage({
   stats,
   refresh,
@@ -3202,6 +3360,7 @@ function DashboardPage({
     analytics: ["Analytics", "Network Analytics", Database],
     system: ["System", "System Control", Cpu],
     advanced: ["Advanced", "Advanced Control", Settings],
+    apps: ["OpenWrt Apps", "Native LuCI & APK", Monitor],
   };
 
   if (page === "gaming") {
@@ -3222,6 +3381,10 @@ function DashboardPage({
 
   if (page === "advanced") {
     return <AdvancedControlPage routerOverview={routerOverview} refresh={refresh} />;
+  }
+
+  if (page === "apps") {
+    return <OpenWrtAppsPage />;
   }
 
   const [title, eyebrow, Icon] =
