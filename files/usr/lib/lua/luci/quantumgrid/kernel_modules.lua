@@ -4,7 +4,7 @@ local function safe_path(value)
 	return type(value) == "string" and #value <= 240
 		and value:match("^[%w_./+%-]+$") ~= nil
 		and value:sub(1, 1) ~= "/"
-		and value:find("%.%.", 1, true) == nil
+		and value:find("..", 1, true) == nil
 end
 
 local function module_name(path)
@@ -39,14 +39,16 @@ function parse(modules_dep, proc_modules, maximum)
 
 	local result = {}
 	local by_name = {}
+	local seen = {}
 	local total = 0
 	local function add(name, path)
 		if type(name) ~= "string" or not name:match("^[%w_]+$") then return end
-		local existing = by_name[name]
-		if existing then
-			if path and path ~= "" and existing.path == "" then existing.path = path end
+		if seen[name] then
+			local existing = by_name[name]
+			if existing and path and path ~= "" and existing.path == "" then existing.path = path end
 			return
 		end
+		seen[name] = true
 		total = total + 1
 		if #result < limit then
 			local item = {
