@@ -7,6 +7,10 @@ INSPECTOR="$ROOT/scripts/inspect-aw1000-install-target.sh"
 test -s "$INSPECTOR"
 sh -n "$INSPECTOR"
 bash -n "$INSPECTOR"
+if grep -Eq '^[[:space:]]*(ubiformat|flash_erase|nandwrite|fw_setenv|uci[[:space:]]+(set|commit|delete))([[:space:]]|$)' "$INSPECTOR"; then
+  echo "ERROR: read-only inspector contains a direct flash or UCI write command." >&2
+  exit 1
+fi
 
 TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TEST_ROOT"' EXIT
