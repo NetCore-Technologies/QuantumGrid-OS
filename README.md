@@ -343,8 +343,10 @@ VPN private keys, package command output and arbitrary configuration values are 
 event schema.
 
 The log is stored under `/etc/quantumgrid` with restrictive directory/file permissions. It rotates
-one previous file when the active log exceeds 512 KiB; the API returns at most the newest 200 valid
-events. CSV export follows the visible search/filter results. It is a local operational aid, not a
+one previous file when the active log exceeds 512 KiB; the API reads no more than the last 512 KiB
+of each log file and returns at most the newest 200 valid events. Oversized source files are marked
+as truncated instead of being loaded wholesale into router memory. CSV export follows the visible
+search/filter results. It is a local operational aid, not a
 tamper-proof accounting system or a compliance certification: root access can change it, some
 rejected/pre-validation requests are not recorded, and it is not a remote immutable log collector.
 For production deployments, forward system logs to a separately managed, access-controlled log
