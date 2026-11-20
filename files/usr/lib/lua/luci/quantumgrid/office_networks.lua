@@ -50,6 +50,9 @@ local function parse_port(value)
 	if bare then
 		return { name = bare, mode = "unspecified", pvid = false }
 	end
+	-- A tagged member cannot carry the untagged/PVID marker. Reject it
+	-- explicitly before parsing the normal tagged/untagged forms.
+	if value:match("^[%w_.%-]+:t%*$") then return nil end
 	local name, mode, primary = value:match("^([%w_.%-]+):([ut])(%*?)$")
 	if not name or (mode == "t" and primary == "*") then return nil end
 	return {

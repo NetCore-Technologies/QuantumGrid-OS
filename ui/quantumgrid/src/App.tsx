@@ -5690,7 +5690,7 @@ function DhcpScopeToggle({ scope, refresh }: {
           ? (enable ? "DHCP scope enabled and dnsmasq restarted." : "DHCP scope disabled and dnsmasq restarted.")
           : (enable ? "DHCP scope was already enabled." : "DHCP scope was already disabled."),
       });
-      setConfirmedNetwork(null);
+      setConfirmed(false);
       refresh();
     } catch (cause) {
       setNotice({
@@ -5729,7 +5729,7 @@ function DhcpScopeToggle({ scope, refresh }: {
             onClick={() => {
               setDeletePending(true);
               setDeleteConfirmed(false);
-              setConfirmedNetwork(null);
+              setConfirmed(false);
             }}
             disabled={busy || deleteBusy}
           >Delete DHCP scope</button>
