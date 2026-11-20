@@ -5230,7 +5230,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         ) : (
           <div className="sqm-policy-list">
             {queues.map((queue) => (
-              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} />
+              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "") + "-" + queue.linklayer + "-" + (queue.overhead ?? "") + "-" + (queue.tc_mpu ?? "")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} />
             ))}
           </div>
         )}
