@@ -9284,3 +9284,23 @@ input::placeholder {
     flex-direction: column;
   }
 }
+
+
+/* Existing DHCP scope enable / disable controls */
+.office-dhcp-toggle {
+  display: grid;
+  gap: 8px;
+  padding: 10px 2px;
+  border-bottom: 1px solid var(--line);
+}
+.office-dhcp-toggle .office-reservation-confirm {
+  padding: 4px 0;
+}
+.office-dhcp-toggle .office-dhcp-editor-actions {
+  padding-left: 25px;
+}
+@media (max-width: 650px) {
+  .office-dhcp-toggle .office-dhcp-editor-actions {
+    padding-left: 0;
+  }
+}
