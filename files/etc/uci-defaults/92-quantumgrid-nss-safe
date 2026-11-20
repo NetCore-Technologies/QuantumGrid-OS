@@ -1,0 +1,25 @@
+#!/bin/sh
+# QuantumGrid NSS profile only. The script is harmless on the stable image.
+# Keep Qualcomm NSS as the single flow-offload path: the 25.12-nss project
+# explicitly advises disabling generic OpenWrt packet steering and flow offload.
+
+[ -x /etc/init.d/qca-nss-drv ] || exit 0
+[ -x /sbin/uci ] || exit 0
+
+/etc/init.d/qca-nss-drv enable || logger -t quantumgrid-nss "Could not enable qca-nss-drv at boot"
+if [ -x /etc/init.d/qca-nss-ecm ]; then
+	/etc/init.d/qca-nss-ecm enable || logger -t quantumgrid-nss "Could not enable qca-nss-ecm at boot"
+fi
+
+failed=0
+for option in packet_steering flow_offloading flow_offloading_hw; do
+	uci -q set "network.@device[0].$option=0" || failed=1
+done
+
+if [ "$failed" -eq 0 ]; then
+	uci -q commit network || logger -t quantumgrid-nss "Could not commit disabled generic offload settings"
+else
+	logger -t quantumgrid-nss "Generic offload options could not all be written; check the network device UCI section before relying on NSS"
+fi
+
+exit 0
