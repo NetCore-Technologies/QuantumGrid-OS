@@ -1806,6 +1806,11 @@ function NetworkControlPage({
   const interfaces = routerOverview?.interfaces ?? [];
   const routes = routerOverview?.routes ?? [];
   const policyRules = routerOverview?.policy_rules ?? [];
+  const mwan3 = routerOverview?.mwan3;
+  const mwan3Interfaces = mwan3?.interfaces ?? [];
+  const [mwanSearch, setMwanSearch] = useState("");
+  const [mwanStateFilter, setMwanStateFilter] = useState<"all" | "online" | "offline" | "disabled" | "tracker-down">("all");
+  const [mwanSort, setMwanSort] = useState<"name" | "status" | "tracking">("name");
   const [ruleFamily, setRuleFamily] = useState<"all" | "IPv4" | "IPv6">("all");
   const [ruleSearch, setRuleSearch] = useState("");
   const [routeFamily, setRouteFamily] = useState<"all" | "IPv4" | "IPv6">("all");
@@ -1845,6 +1850,53 @@ function NetworkControlPage({
     .slice()
     .sort((left, right) => left.family.localeCompare(right.family) ||
       left.priority - right.priority || left.selectors.localeCompare(right.selectors));
+
+  const mwanQuery = mwanSearch.trim().toLocaleLowerCase();
+  const visibleMwanInterfaces = mwan3Interfaces
+    .filter((iface) => {
+      const online = iface.status === "online" && iface.up;
+      const stateMatches = mwanStateFilter === "all" ||
+        (mwanStateFilter === "online" && online) ||
+        (mwanStateFilter === "offline" && iface.status === "offline") ||
+        (mwanStateFilter === "disabled" && !iface.enabled) ||
+        (mwanStateFilter === "tracker-down" && iface.enabled && iface.tracking !== "active");
+      const searchable = [
+        iface.name, iface.status, iface.tracking,
+        ...iface.track_targets.map((target) => [target.ip, target.status].join(" ")),
+      ].join(" ").toLocaleLowerCase();
+      return stateMatches && searchable.includes(mwanQuery);
+    })
+    .slice()
+    .sort((left, right) => {
+      if (mwanSort === "status") return left.status.localeCompare(right.status) || left.name.localeCompare(right.name);
+      if (mwanSort === "tracking") return left.tracking.localeCompare(right.tracking) || left.name.localeCompare(right.name);
+      return left.name.localeCompare(right.name);
+    });
+
+  const exportMwan3 = () => {
+    if (!mwan3?.available || visibleMwanInterfaces.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Exported at (UTC)", "State filter", "Search filter", "Sort order", "Interface", "Enabled", "Netifd up", "mwan3 status", "Tracker state", "Tracker running", "Age seconds", "Online seconds", "Offline seconds", "Interface uptime seconds", "Score", "Lost", "Turn", "Tracking targets"],
+      ...visibleMwanInterfaces.map((iface) => [
+        exportedAt, mwanStateFilter, mwanSearch, mwanSort, iface.name, iface.enabled, iface.up,
+        iface.status, iface.tracking, iface.running, iface.age_seconds, iface.online_seconds,
+        iface.offline_seconds, iface.interface_uptime_seconds, iface.score, iface.lost, iface.turn,
+        iface.track_targets.map((target) =>
+          [target.ip, target.status, target.latency_ms, target.packet_loss_percent].join("/")
+        ).join(" | "),
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-mwan3-health-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
 
   const exportRoutes = () => {
     if (!routerOverview?.routes_available || visibleRoutes.length === 0) return;
@@ -2125,6 +2177,93 @@ function NetworkControlPage({
           </>
         )}
         <div className="module-message">This cross-reference compares address family and table name only. A lookup table with no default route may still contain specific routes or serve non-default traffic; an unreferenced default route is not automatically unused. No rule priority, fwmark, connection-tracking or packet path is simulated.</div>
+      </Panel>
+
+      <Panel
+        title="Multi-WAN health"
+        eyebrow="MWAN3 TRACKING · READ-ONLY"
+        action={<Status active={Boolean(mwan3?.available)}>{!mwan3?.installed ? "NOT INSTALLED" : mwan3.available ? "LIVE" : "UNAVAILABLE"}</Status>}
+      >
+        {!routerOverview ? (
+          <div className="module-message">Waiting for authenticated router telemetry.</div>
+        ) : !mwan3?.installed ? (
+          <div className="module-message">The mwan3 service is not installed in this firmware.</div>
+        ) : !mwan3.available ? (
+          <div className="module-message">The mwan3 tracking API is unavailable. This is unknown state, not proof that a WAN link is down.</div>
+        ) : mwan3Interfaces.length === 0 ? (
+          <div className="module-message">mwan3 is available but has no configured interface sections.</div>
+        ) : (
+          <>
+            <div className="network-interface-tools mwan3-tools">
+              <select aria-label="Filter Multi-WAN state" value={mwanStateFilter} onChange={(event) => setMwanStateFilter(event.target.value as "all" | "online" | "offline" | "disabled" | "tracker-down")}>
+                <option value="all">All links</option>
+                <option value="online">Online and netifd up</option>
+                <option value="offline">mwan3 offline</option>
+                <option value="disabled">Disabled in config</option>
+                <option value="tracker-down">Tracker not active</option>
+              </select>
+              <input type="search" aria-label="Search Multi-WAN interfaces and targets" placeholder="Search interface or tracking target" value={mwanSearch} onChange={(event) => setMwanSearch(event.target.value)} />
+              <select aria-label="Sort Multi-WAN interfaces" value={mwanSort} onChange={(event) => setMwanSort(event.target.value as "name" | "status" | "tracking")}>
+                <option value="name">Name A–Z</option>
+                <option value="status">Status</option>
+                <option value="tracking">Tracker state</option>
+              </select>
+              <span>{visibleMwanInterfaces.length} of {mwan3.count} links</span>
+              <button className="hero-button wifi-export-button" onClick={exportMwan3} disabled={visibleMwanInterfaces.length === 0}>Export Multi-WAN CSV</button>
+            </div>
+            {mwan3.truncated ? <div className="module-message">The interface inventory is capped at 16 entries. The CSV contains the visible subset only.</div> : null}
+            {visibleMwanInterfaces.length === 0 ? (
+              <div className="module-message">No Multi-WAN interfaces match the current filter.</div>
+            ) : (
+              <div className="device-list">
+                {visibleMwanInterfaces.map((iface) => {
+                  const online = iface.status === "online" && iface.up;
+                  const label = !iface.enabled ? "DISABLED" : iface.status.toUpperCase();
+                  return (
+                    <div className="device-row mwan3-interface-row" key={iface.name}>
+                      <div className="device-title">
+                        <div className="device-icon"><Globe2 size={17} /></div>
+                        <div><strong>{iface.name}</strong><span>{iface.enabled ? "Enabled in mwan3" : "Disabled in mwan3"} · netifd {iface.up ? "up" : "down"}</span></div>
+                      </div>
+                      <div>
+                        <small>LINK HEALTH</small>
+                        <Status active={online}>{label}</Status>
+                        <small>mwan3 status is separate from the netifd interface-up flag.</small>
+                      </div>
+                      <div>
+                        <small>TRACKER</small>
+                        <b>{iface.tracking.toUpperCase()}</b>
+                        <small>{iface.running ? "Tracker process running" : "Tracker process not running"}</small>
+                      </div>
+                      <div>
+                        <small>LAST TRANSITION</small>
+                        <b>{iface.age_seconds === undefined ? "N/A" : formatUptime(iface.age_seconds)}</b>
+                        <small>Online {iface.online_seconds === undefined ? "N/A" : formatUptime(iface.online_seconds)} · offline {iface.offline_seconds === undefined ? "N/A" : formatUptime(iface.offline_seconds)}</small>
+                      </div>
+                      <div>
+                        <small>TRACK COUNTERS</small>
+                        <b>Score {iface.score === undefined ? "N/A" : fmt(iface.score)}</b>
+                        <small>Lost {iface.lost === undefined ? "N/A" : fmt(iface.lost)} · turn {iface.turn === undefined ? "N/A" : fmt(iface.turn)}</small>
+                      </div>
+                      <div className="mwan3-targets">
+                        <small>TRACKING TARGETS ({iface.track_targets.length})</small>
+                        {iface.track_targets.length === 0 ? (
+                          <b>No tracking targets reported</b>
+                        ) : iface.track_targets.map((target) => (
+                          <div key={target.ip}>
+                            <b>{target.ip} · {target.status}</b>
+                            <small>Latency {target.latency_ms === undefined ? "N/A" : fmt(target.latency_ms) + " ms"} · loss {target.packet_loss_percent === undefined ? "N/A" : fmt(target.packet_loss_percent) + "%"}</small>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        )}
+        <div className="module-message">This inventory is read-only. “Online” requires both mwan3's online state and netifd's up flag; tracker-process state and per-target latency/loss are displayed separately. It does not change failover policy, route metrics, marks or interface configuration.</div>
       </Panel>
 
       <div className="module-grid">
