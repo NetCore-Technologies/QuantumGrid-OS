@@ -3,6 +3,7 @@ import { fetchRouterOverview, loginToRouter, runRouterLatencyTest, scanRouterWif
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
+import { appendConntrackSample, summarizeConntrackHistory, type ConntrackHistorySample } from "./conntrackHistory";
 import { calculateCounterRateMbps } from "./interfaceRates";
 import { sampleWireGuardPeerRates, wireGuardPeerCounterKey, type WireGuardPeerCounterSnapshot, type WireGuardPeerMeasuredRate } from "./wireGuardPeerRates";
 import {
@@ -4425,6 +4426,38 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   const tools = platform?.tools ?? [];
   const services = platform?.services ?? [];
   const storage = platform?.storage ?? [];
+  const [conntrackHistory, setConntrackHistory] = useState<ConntrackHistorySample[]>([]);
+  useEffect(() => {
+    if (!routerOverview) return;
+    setConntrackHistory((previous) =>
+      appendConntrackSample(previous, routerOverview.conntrack, routerOverview.timestamp),
+    );
+  }, [routerOverview?.timestamp, routerOverview?.conntrack?.available, routerOverview?.conntrack?.count, routerOverview?.conntrack?.maximum]);
+  const conntrackSummary = summarizeConntrackHistory(conntrackHistory);
+  const exportConntrackHistory = () => {
+    if (conntrackHistory.length === 0) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number>> = [
+      ["Exported at (UTC)", "Sampled at (UTC)", "Current entries", "Configured maximum", "Free entries", "Utilization percent"],
+      ...conntrackHistory.map((sample) => [
+        exportedAt,
+        new Date(sample.sampledAt * 1000).toISOString(),
+        sample.count,
+        sample.maximum,
+        sample.free,
+        sample.usedPercent,
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\\r\\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-conntrack-history-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
   const exportPlatformInventory = () => {
     if (!platform?.available) return;
     const generatedAt = new Date().toISOString();
@@ -4521,6 +4554,42 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               </>
             ) : (
               <div className="module-message">Kernel connection-tracking counters are unavailable on this build or are not exposed by the running kernel. QuantumGrid leaves the reading unavailable instead of assuming the table is empty.</div>
+            )}
+          </Panel>
+          <Panel
+            title="Connection tracking history"
+            eyebrow="LAST 30 VALID KERNEL SAMPLES · SESSION ONLY"
+            action={
+              <button className="hero-button wifi-export-button" onClick={exportConntrackHistory} disabled={conntrackHistory.length === 0}>
+                Export history CSV
+              </button>
+            }
+          >
+            {conntrackHistory.length === 0 ? (
+              <div className="module-message">Waiting for the first valid connection-tracking sample. History is kept in this page session only and is not stored in browser or router configuration.</div>
+            ) : (
+              <>
+                <div className="conntrack-history-summary">
+                  <div><small>SAMPLES</small><strong>{fmt(conntrackSummary?.samples ?? 0)}</strong></div>
+                  <div><small>OBSERVED WINDOW</small><strong>{formatDurationSeconds(conntrackSummary?.durationSeconds)}</strong></div>
+                  <div><small>ENTRY DELTA</small><strong>{conntrackSummary && conntrackSummary.entryDelta > 0 ? "+" : ""}{fmt(conntrackSummary?.entryDelta ?? 0)}</strong></div>
+                  <div><small>UTILIZATION RANGE</small><strong>{conntrackSummary ? `${fmt(conntrackSummary.minimumUsedPercent, 1)}–${fmt(conntrackSummary.maximumUsedPercent, 1)}%` : "N/A"}</strong></div>
+                </div>
+                <div className="conntrack-history-chart" role="img" aria-label="Connection tracking table utilization over the last valid samples">
+                  {conntrackHistory.map((sample, index) => {
+                    const maxPercent = Math.max(100, conntrackSummary?.maximumUsedPercent ?? 100);
+                    const height = Math.max(2, sample.usedPercent / maxPercent * 100);
+                    return (
+                      <div className="conntrack-history-point" key={sample.sampledAt + "-" + index} title={`${new Date(sample.sampledAt * 1000).toLocaleTimeString()} · ${fmt(sample.count)} / ${fmt(sample.maximum)} entries · ${fmt(sample.usedPercent, 1)}%`}>
+                        <div className="conntrack-history-track">
+                          <div className="conntrack-history-bar" style={{ height: `${height}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="module-message">Each bar is one valid authenticated telemetry sample. The trend shows table occupancy, not dropped packets or connection quality. Samples replace duplicate timestamps, are capped at 30 and disappear when this page session ends.</div>
+              </>
             )}
           </Panel>
           <div className="module-grid">
