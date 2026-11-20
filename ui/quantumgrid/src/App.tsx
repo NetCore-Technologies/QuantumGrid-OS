@@ -5366,7 +5366,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
       <div className="office-reservation-grid">
         <label>
           <span>Existing static LAN</span>
-          <select value={network} onChange={(event) => setNetwork(event.target.value)} required>
+          <select value={network} onChange={(event) => { setNetwork(event.target.value); setConfirmed(false); }} required>
             {networks.map((item) => (
               <option key={item.name} value={item.name}>{item.name} · {item.ipv4[0]} / {item.netmask}</option>
             ))}
@@ -5377,7 +5377,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
           <input
             type="text"
             value={leaseTime}
-            onChange={(event) => setLeaseTime(event.target.value)}
+            onChange={(event) => { setLeaseTime(event.target.value); setConfirmed(false); }}
             placeholder="12h"
             maxLength={16}
             pattern="[1-9][0-9]{0,8}[smhdw]?"
@@ -5392,7 +5392,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
             max={4294967294}
             step={1}
             value={start}
-            onChange={(event) => setStart(event.target.value)}
+            onChange={(event) => { setStart(event.target.value); setConfirmed(false); }}
             placeholder="100"
             required
           />
@@ -5405,7 +5405,7 @@ function DhcpScopeCreateForm({ networks, refresh }: {
             max={4294967294}
             step={1}
             value={limit}
-            onChange={(event) => setLimit(event.target.value)}
+            onChange={(event) => { setLimit(event.target.value); setConfirmed(false); }}
             placeholder="120"
             required
           />
@@ -5554,18 +5554,18 @@ function DhcpScopeEditor({ scope, refresh }: {
           <div className="office-dhcp-editor-fields">
             <label>
               <span>Start offset</span>
-              <input type="number" min={1} step={1} value={start} onChange={(event) => setStart(event.target.value)} required />
+              <input type="number" min={1} step={1} value={start} onChange={(event) => { setStart(event.target.value); setConfirmed(false); }} required />
             </label>
             <label>
               <span>Pool size (addresses)</span>
-              <input type="number" min={1} step={1} value={limit} onChange={(event) => setLimit(event.target.value)} required />
+              <input type="number" min={1} step={1} value={limit} onChange={(event) => { setLimit(event.target.value); setConfirmed(false); }} required />
             </label>
             <label>
               <span>Lease time</span>
               <input
                 type="text"
                 value={leaseTime}
-                onChange={(event) => setLeaseTime(event.target.value)}
+                onChange={(event) => { setLeaseTime(event.target.value); setConfirmed(false); }}
                 placeholder="12h"
                 maxLength={16}
                 pattern="[1-9][0-9]{0,8}[smhdw]?"
@@ -5661,7 +5661,7 @@ function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
           <input
             type="text"
             value={name}
-            onChange={(event) => setName(event.target.value)}
+            onChange={(event) => { setName(event.target.value); setConfirmed(false); }}
             maxLength={63}
             pattern="[A-Za-z0-9][A-Za-z0-9-]*"
             autoComplete="off"
@@ -5673,7 +5673,7 @@ function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
           <input
             type="text"
             value={mac}
-            onChange={(event) => setMac(event.target.value)}
+            onChange={(event) => { setMac(event.target.value); setConfirmed(false); }}
             maxLength={17}
             pattern="[A-Fa-f0-9]{2}(:[A-Fa-f0-9]{2}){5}"
             autoComplete="off"
@@ -5686,7 +5686,7 @@ function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
             type="text"
             inputMode="decimal"
             value={ipv4}
-            onChange={(event) => setIpv4(event.target.value)}
+            onChange={(event) => { setIpv4(event.target.value); setConfirmed(false); }}
             maxLength={15}
             pattern="[0-9]{1,3}(\.[0-9]{1,3}){3}"
             autoComplete="off"
@@ -5695,7 +5695,7 @@ function DhcpReservationEditor({ lease, networks, onCancel, onComplete }: {
         </label>
         <label>
           <span>Subnet validation LAN</span>
-          <select value={network} onChange={(event) => setNetwork(event.target.value)} required>
+          <select value={network} onChange={(event) => { setNetwork(event.target.value); setConfirmed(false); }} required>
             {networks.map((item) => (
               <option key={item.name} value={item.name}>{item.name} · {item.ipv4[0]} / {item.netmask}</option>
             ))}
@@ -6024,7 +6024,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                 <input
                   type="text"
                   value={reservationName}
-                  onChange={(event) => setReservationName(event.target.value)}
+                  onChange={(event) => { setReservationName(event.target.value); setReservationConfirmed(false); }}
                   placeholder="Office-Printer"
                   maxLength={63}
                   pattern="[A-Za-z0-9][A-Za-z0-9-]*"
@@ -6037,7 +6037,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                 <input
                   type="text"
                   value={reservationMac}
-                  onChange={(event) => setReservationMac(event.target.value)}
+                  onChange={(event) => { setReservationMac(event.target.value); setReservationConfirmed(false); }}
                   placeholder="AA:BB:CC:DD:EE:FF"
                   maxLength={17}
                   pattern="[A-Fa-f0-9]{2}(:[A-Fa-f0-9]{2}){5}"
@@ -6051,7 +6051,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                   type="text"
                   inputMode="decimal"
                   value={reservationIp}
-                  onChange={(event) => setReservationIp(event.target.value)}
+                  onChange={(event) => { setReservationIp(event.target.value); setReservationConfirmed(false); }}
                   placeholder="192.168.20.30"
                   maxLength={15}
                   pattern="[0-9]{1,3}(\.[0-9]{1,3}){3}"
@@ -6063,7 +6063,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                 <span>LAN / DHCP scope</span>
                 <select
                   value={selectedReservationNetwork}
-                  onChange={(event) => setReservationNetwork(event.target.value)}
+                  onChange={(event) => { setReservationNetwork(event.target.value); setReservationConfirmed(false); }}
                   required
                 >
                   {reservationNetworks.map((item) => (
