@@ -84,6 +84,16 @@ assert(host_snapshot[3].name == "ip" and not host_snapshot[3].present and host_s
 assert(office.snapshot_dhcp_host_options({ [".type"] = "dhcp" }) == nil,
   "DHCP scope sections cannot be edited as static hosts")
 
+local enabled_pool_only, enabled_pool_error = office.validate_dhcp_pool_range(
+  "100", "120", "192.168.10.1", "255.255.255.0", {})
+assert(enabled_pool_only and enabled_pool_only.pool_start_ip == "192.168.10.100"
+  and enabled_pool_only.pool_end_ip == "192.168.10.219",
+  "enabling a disabled scope must validate its pool without requiring an explicit lease duration")
+local invalid_enabled_pool = office.validate_dhcp_pool_range(
+  "100", "120", "192.168.10.1", "255.255.255.0",
+  { { start = "192.168.10.150", finish = "192.168.10.180" } })
+assert(invalid_enabled_pool == nil, "a disabled scope must not be enabled if its range overlaps another active pool")
+
 local valid_scope, scope_error = office.validate_dhcp_scope_update(
   "100", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(valid_scope and valid_scope.pool_start_ip == "192.168.10.100")
