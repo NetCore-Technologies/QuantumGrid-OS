@@ -9813,3 +9813,70 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+.office-forwarding-manager {
+  display: grid;
+  gap: 14px;
+}
+.office-forwarding-editor {
+  display: grid;
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.office-forwarding-editor > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.office-forwarding-editor > div:first-child strong {
+  color: var(--text);
+  font-size: 11px;
+}
+.office-forwarding-editor > div:first-child span {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.office-forwarding-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.office-forwarding-fields label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.office-forwarding-fields label > span {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+.office-forwarding-fields select {
+  width: 100%;
+  min-width: 0;
+  min-height: 36px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+}
+.office-forwarding-remove-confirm {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 9px;
+}
+@media (max-width: 640px) {
+  .office-forwarding-fields {
+    grid-template-columns: 1fr;
+  }
+}
