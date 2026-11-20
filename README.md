@@ -401,6 +401,23 @@ does not yet edit firewall zone input/output/forward defaults, individual rule o
 redirects, traffic shaping, address sets or policy-routing. Review the complete fw4 ruleset and
 test the actual path between clients before deploying segmentation to a production office.
 
+## Managed firewall zone policy
+
+Office Networks can now update the **output** and **forward** policies and masquerading state
+of an existing firewall zone. Each change uses native UCI, explicit operator confirmation,
+firewall reload and a rollback attempt. Existing inherited/global defaults are preserved as
+distinct states: the editor can leave an option unchanged or deliberately remove its explicit
+override to inherit the global default. The zone's **input** policy is intentionally not exposed
+for editing; it is displayed read-only because it governs access to the router itself.
+
+For an output policy that would become restrictive or inherit an unknown default, QuantumGrid
+checks the current administrator's IPv4 route. The change is blocked when the selected zone
+carries that route, or when the route cannot be proven. This is a management-plane safeguard,
+not a substitute for an out-of-band recovery path. Masquerading changes source-NAT behaviour
+and can alter connectivity; review the zone's networks and test real client traffic after
+applying changes. The UI and API do not edit individual firewall rules, NAT redirects, address
+sets or policy-routing entries through this zone editor.
+
 ## Office network inventory
 
 The authenticated **Office Networks** page provides a read-only correlation of configured
