@@ -106,6 +106,5 @@ jobs:
         run: lua5.1 tests/sqm-controls.lua
       - name: Test bounded mwan3 tracker telemetry
         run: lua5.1 tests/mwan3-status.lua
-      - name: Test Multi-WAN health normalization
       - name: Check AW1000 profile, RJ11 safety and UI telemetry
         run: bash tests/firmware-smoke.sh
