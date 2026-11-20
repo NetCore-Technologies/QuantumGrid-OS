@@ -218,8 +218,28 @@ export interface RouterCellularStatus {
   data_status?: string;
 }
 
+export interface RouterPlatformStatus {
+  available: boolean;
+  hostname?: string;
+  model?: string;
+  board_name?: string;
+  system?: string;
+  kernel?: string;
+  distribution?: string;
+  version?: string;
+  revision?: string;
+  target?: string;
+  description?: string;
+  package_manager: string;
+  modules: Array<{ name: string; loaded: boolean }>;
+  tools: Array<{ name: string; available: boolean }>;
+  services: Array<{ name: string; installed: boolean }>;
+  storage: Array<{ device: string; name: string; size_bytes: number; erase_size_bytes: number }>;
+}
+
 export interface RouterOverview {
   ok: true;
+  platform?: RouterPlatformStatus;
   timestamp: number;
   system: {
     uptime_seconds: number;

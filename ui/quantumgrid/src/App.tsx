@@ -2371,6 +2371,10 @@ function DashboardPage({
     return <DevicesControlPage routerOverview={routerOverview} />;
   }
 
+  if (page === "advanced") {
+    return <AdvancedControlPage routerOverview={routerOverview} refresh={refresh} />;
+  }
+
   const [title, eyebrow, Icon] =
     titles[page as Exclude<Page, "dashboard">];
 
@@ -2973,6 +2977,90 @@ function GamingControlPage({ routerOverview }: { routerOverview: RouterOverview 
           <div className="module-message">Gaming profiles, CAKE options, bandwidth changes, traffic classes and per-client priority are not writable through this API. No changes are made to the router from this page.</div>
         </Panel>
       </div>
+    </div>
+  );
+}
+
+
+function AdvancedControlPage({ routerOverview, refresh }: {
+  routerOverview: RouterOverview | null;
+  refresh: () => void;
+}) {
+  const platform = routerOverview?.platform;
+  const modules = platform?.modules ?? [];
+  const tools = platform?.tools ?? [];
+  const services = platform?.services ?? [];
+  const storage = platform?.storage ?? [];
+  return (
+    <div className="module-page">
+      <section className="module-hero">
+        <div className="module-icon"><Settings size={25} /></div>
+        <div>
+          <div className="setup-kicker">READ-ONLY PLATFORM INVENTORY</div>
+          <h1>Advanced</h1>
+          <p>Firmware identity, target platform, loaded kernel modules, installed service scripts, diagnostic tools and flash partitions reported by the running router.</p>
+          <button className="hero-button" onClick={refresh}><RefreshCw size={16} /> Refresh platform inventory</button>
+        </div>
+      </section>
+      {!platform?.available ? (
+        <div className="module-message">Waiting for the authenticated system.board response. No platform identity is inferred from the device name.</div>
+      ) : (
+        <>
+          <div className="metrics">
+            <Metric title="Hardware Model" value={platform.model || "N/A"} unit="" detail={platform.board_name || "Board identifier unavailable"} icon={Router} />
+            <Metric title="OpenWrt Release" value={platform.version || "N/A"} unit="" detail={platform.distribution || "Distribution unavailable"} icon={HardDrive} />
+            <Metric title="Kernel" value={platform.kernel || "N/A"} unit="" detail={platform.target || "Build target unavailable"} icon={Cpu} />
+            <Metric title="Package Manager" value={platform.package_manager} unit="" detail="Detected executable on router" icon={Settings} />
+          </div>
+          <Panel title="Firmware and board identity" eyebrow="UBUS · SYSTEM.BOARD">
+            <div className="platform-detail-grid">
+              <div><small>HOSTNAME</small><strong>{platform.hostname || "N/A"}</strong></div>
+              <div><small>BOARD NAME</small><strong>{platform.board_name || "N/A"}</strong></div>
+              <div><small>SYSTEM</small><strong>{platform.system || "N/A"}</strong></div>
+              <div><small>RELEASE VERSION</small><strong>{platform.version || "N/A"}</strong></div>
+              <div><small>REVISION</small><strong>{platform.revision || "N/A"}</strong></div>
+              <div><small>TARGET</small><strong>{platform.target || "N/A"}</strong></div>
+              <div className="platform-detail-wide"><small>BUILD DESCRIPTION</small><strong>{platform.description || "N/A"}</strong></div>
+            </div>
+          </Panel>
+          <div className="module-grid">
+            <Panel title="Loaded kernel modules" eyebrow="SYSFS · /SYS/MODULE">
+              {modules.length === 0 ? <div className="module-message">No module inventory was returned.</div> : (
+                <div className="platform-check-list">
+                  {modules.map((module) => <div className="platform-check-row" key={module.name}><span>{module.name}</span><Status active={module.loaded}>{module.loaded ? "LOADED" : "NOT LOADED"}</Status></div>)}
+                </div>
+              )}
+            </Panel>
+            <Panel title="Router diagnostic tools" eyebrow="EXECUTABLE PRESENCE">
+              {tools.length === 0 ? <div className="module-message">No tool inventory was returned.</div> : (
+                <div className="platform-check-list">
+                  {tools.map((tool) => <div className="platform-check-row" key={tool.name}><span>{tool.name}</span><Status active={tool.available}>{tool.available ? "AVAILABLE" : "MISSING"}</Status></div>)}
+                </div>
+              )}
+            </Panel>
+          </div>
+          <Panel title="Service integration inventory" eyebrow="INIT SCRIPT PRESENCE">
+            <div className="platform-check-list">
+              {services.map((service) => <div className="platform-check-row" key={service.name}><span>{service.name}</span><Status active={service.installed}>{service.installed ? "INSTALLED" : "NOT INSTALLED"}</Status></div>)}
+            </div>
+            <div className="module-message">Presence means the init script exists; it does not mean the service is enabled, running, healthy or configured.</div>
+          </Panel>
+          <Panel title="Flash partition inventory" eyebrow="READ-ONLY · /PROC/MTD">
+            {storage.length === 0 ? (
+              <div className="module-message">This device did not expose MTD partitions through /proc/mtd. eMMC/UFS and overlay space are not inferred from this table.</div>
+            ) : (
+              <div className="device-list">
+                {storage.map((partition) => <div className="device-row platform-storage-row" key={partition.device}>
+                  <div className="device-title"><div className="device-icon"><HardDrive size={17} /></div><div><strong>{partition.name}</strong><span>{partition.device}</span></div></div>
+                  <div><small>CAPACITY</small><b>{fmt(partition.size_bytes / 1048576, 2)} MiB</b></div>
+                  <div><small>ERASE BLOCK</small><b>{fmt(partition.erase_size_bytes / 1024, 0)} KiB</b></div>
+                </div>)}
+              </div>
+            )}
+          </Panel>
+        </>
+      )}
+      <div className="module-message">This page is read-only. It does not install packages, load/unload modules, change service state or write firmware. Module and service presence are reported separately from operational status.</div>
     </div>
   );
 }

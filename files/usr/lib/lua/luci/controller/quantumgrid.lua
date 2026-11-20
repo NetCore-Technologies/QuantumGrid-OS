@@ -875,6 +875,91 @@ local function cellular_status(fs)
 	return result
 end
 
+
+local function platform_status(fs)
+	local board = ubus_call("system", "board", {}) or {}
+	local release = type(board.release) == "table" and board.release or {}
+	local modules = {
+		{ name = "ath11k Wi-Fi driver", path = "/sys/module/ath11k" },
+		{ name = "mac80211 wireless stack", path = "/sys/module/mac80211" },
+		{ name = "Qualcomm NSS data path", path = "/sys/module/qca_nss_dp" },
+		{ name = "Qualcomm switch SDK", path = "/sys/module/qca_ssdk" },
+		{ name = "WireGuard", path = "/sys/module/wireguard" },
+		{ name = "CAKE scheduler", path = "/sys/module/sch_cake" }
+	}
+	local tools = {
+		{ name = "ubus", paths = { "/sbin/ubus", "/usr/bin/ubus" } },
+		{ name = "uci", paths = { "/sbin/uci", "/bin/uci" } },
+		{ name = "iwinfo", paths = { "/sbin/iwinfo", "/usr/bin/iwinfo" } },
+		{ name = "uqmi", paths = { "/sbin/uqmi", "/usr/bin/uqmi" } },
+		{ name = "nft", paths = { "/usr/sbin/nft", "/sbin/nft" } },
+		{ name = "tc", paths = { "/sbin/tc", "/usr/sbin/tc" } }
+	}
+	local services = {
+		{ name = "Network manager", path = "/etc/init.d/network" },
+		{ name = "Firewall", path = "/etc/init.d/firewall" },
+		{ name = "DNS and DHCP", path = "/etc/init.d/dnsmasq" },
+		{ name = "Smart Queue Management", path = "/etc/init.d/sqm" },
+		{ name = "Adblock Fast", path = "/etc/init.d/adblock-fast" },
+		{ name = "FXS voice daemon", path = "/etc/init.d/fxsd" }
+	}
+	for _, item in ipairs(modules) do
+		item.loaded = fs.access(item.path) == true
+		item.path = nil
+	end
+	for _, item in ipairs(tools) do
+		item.available = false
+		for _, path in ipairs(item.paths) do
+			if fs.access(path) == true then item.available = true break end
+		end
+		item.paths = nil
+	end
+	for _, item in ipairs(services) do
+		item.installed = fs.access(item.path) == true
+		item.path = nil
+	end
+	local storage = {}
+	local mtd = read_file("/proc/mtd") or ""
+	for line in mtd:gmatch("[^\r\n]+") do
+		if #storage >= 32 then break end
+		local device, size_hex, erase_hex, name =
+			line:match("^(mtd%d+):%s+(%x+)%s+(%x+)%s+\"([^\"]+)\"")
+		local size = size_hex and tonumber(size_hex, 16) or nil
+		local erase = erase_hex and tonumber(erase_hex, 16) or nil
+		if device and size and erase then
+			table.insert(storage, {
+				device = device, name = name:sub(1, 80),
+				size_bytes = size, erase_size_bytes = erase
+			})
+		end
+	end
+	local package_manager = "Not detected"
+	if fs.access("/sbin/apk") == true or fs.access("/usr/bin/apk") == true then
+		package_manager = "apk"
+	elseif fs.access("/bin/opkg") == true or fs.access("/usr/bin/opkg") == true then
+		package_manager = "opkg"
+	end
+	local field = function(value, limit)
+		if type(value) ~= "string" or value == "" then return nil end
+		return value:gsub("[%c]", " "):sub(1, limit or 160)
+	end
+	return {
+		available = next(board) ~= nil,
+		hostname = field(board.hostname, 64),
+		model = field(board.model, 128),
+		board_name = field(board.board_name, 128),
+		system = field(board.system, 128),
+		kernel = field(board.kernel, 96) or field(read_file("/proc/sys/kernel/osrelease"), 96),
+		distribution = field(release.distribution, 96),
+		version = field(release.version, 64),
+		revision = field(release.revision, 96),
+		target = field(release.target, 128),
+		description = field(release.description, 192),
+		package_manager = package_manager,
+		modules = modules, tools = tools, services = services, storage = storage
+	}
+end
+
 function action_api()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
@@ -891,6 +976,7 @@ function action_api()
 	local wireless = wireless_status()
 	local sqm = sqm_status(uci, fs)
 	local security = security_status(uci, fs)
+	local platform = platform_status(fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -911,6 +997,7 @@ function action_api()
 		wireless_clients = wireless_clients(wireless),
 		sqm = sqm,
 		security = security,
+		platform = platform,
 		cellular = cellular,
 		phone = {
 			service_installed = phone_service,
