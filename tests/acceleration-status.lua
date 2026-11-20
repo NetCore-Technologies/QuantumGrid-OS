@@ -46,7 +46,7 @@ local untrusted = acceleration.summarize({
 	{ name = "NSS core driver", kind = "kernel-module", present = "yes", detail = "untrusted truthy value" },
 	{ name = "NSS core driver", kind = "kernel-module", present = true, detail = "duplicate" }
 })
-assert(untrusted.present_components == 1, "only exact boolean true counts as present")
+assert(untrusted.present_components == 0, "unknown names and truthy non-booleans must not count as required components")
 assert(#untrusted.components == 2, "duplicate names are removed and invalid kinds are rejected")
 assert(not untrusted.components[1].detail:find("[\r\n]"), "control characters are removed")
 
