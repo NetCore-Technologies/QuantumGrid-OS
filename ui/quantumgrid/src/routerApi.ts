@@ -402,6 +402,22 @@ export interface RouterConntrackStatus {
   status?: "normal" | "warning" | "critical";
 }
 
+export interface RouterAccelerationComponent {
+  name: string;
+  kind: "device-tree" | "kernel-module" | "firmware";
+  present: boolean;
+  detail: string;
+}
+
+export interface RouterAccelerationStatus {
+  status: "not-detected" | "partial" | "components-present-unverified";
+  present_components: number;
+  required_components: number;
+  offload_verified: false;
+  components: RouterAccelerationComponent[];
+  note: string;
+}
+
 export interface RouterPlatformStatus {
   available: boolean;
   hostname?: string;
@@ -415,6 +431,7 @@ export interface RouterPlatformStatus {
   target?: string;
   description?: string;
   package_manager: string;
+  acceleration?: RouterAccelerationStatus;
   modules: Array<{ name: string; loaded: boolean }>;
   tools: Array<{ name: string; available: boolean }>;
   services: Array<{ name: string; installed: boolean }>;
