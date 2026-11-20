@@ -651,4 +651,7 @@ grep -Fq 'validate_led_update' "$ROOT/files/usr/lib/lua/luci/controller/quantumg
 grep -Fq 'HardwareIoControlPage' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'updateRouterLedBrightness' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'hardware-io-row' "$ROOT/ui/quantumgrid/src/index.css"
+test -f "$ROOT/files/usr/bin/quantumgrid-hardware-io"
+grep -Fq "read-only" "$ROOT/files/usr/bin/quantumgrid-hardware-io"
+grep -Fq "show_buttons" "$ROOT/files/usr/bin/quantumgrid-hardware-io"
 echo "QuantumGrid AW1000 target, UBI-only release validation, guarded installer, RJ11, QMI, Wi-Fi scan and hardware I/O checks passed."
