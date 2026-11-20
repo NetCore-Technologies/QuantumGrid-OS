@@ -66,6 +66,7 @@ type Page =
   | "system"
   | "advanced"
   | "hardware"
+  | "office"
   | "apps";
 
 type SetupStep = "welcome" | "account" | "wifi" | "wan";
@@ -100,6 +101,7 @@ const nav = [
   ["network", "Network", Network],
   ["security", "Security", Shield],
   ["diagnostics", "Diagnostics", Activity],
+  ["office", "Office Networks", Network],
   ["analytics", "Analytics", Database],
   ["system", "System", Cpu],
   ["advanced", "Advanced", Settings],
@@ -1260,8 +1262,24 @@ function Dashboard({
             ))}
           </NavSection>
 
+          <NavSection title="Office" collapsed={collapsed}>
+            {nav.slice(9, 10).map(([id, label, Icon]) => (
+              <NavButton
+                key={id}
+                label={label}
+                Icon={Icon}
+                active={page === id}
+                collapsed={collapsed}
+                onClick={() => {
+                  setPage(id);
+                  setMobile(false);
+                }}
+              />
+            ))}
+          </NavSection>
+
           <NavSection title="System" collapsed={collapsed}>
-            {nav.slice(9).map(([id, label, Icon]) => (
+            {nav.slice(10).map(([id, label, Icon]) => (
               <NavButton
                 key={id}
                 label={label}
@@ -3496,6 +3514,7 @@ function DashboardPage({
     system: ["System", "System Control", Cpu],
     advanced: ["Advanced", "Advanced Control", Settings],
     hardware: ["Hardware I/O", "GPIO, Buttons & LEDs", Cpu],
+    office: ["Office Networks", "VLAN & Network Segmentation", Network],
     apps: ["OpenWrt Apps", "Native LuCI & APK", Monitor],
   };
 
@@ -3521,6 +3540,10 @@ function DashboardPage({
 
   if (page === "hardware") {
     return <HardwareIoControlPage routerOverview={routerOverview} refresh={refresh} />;
+  }
+
+  if (page === "office") {
+    return <OfficeNetworksPage routerOverview={routerOverview} />;
   }
 
   if (page === "apps") {
@@ -4937,6 +4960,194 @@ function GamingControlPage({ routerOverview, refresh }: {
           <div className="module-message">This first write-capable SQM control changes only existing queue enable state and rate limits. CAKE tuning, firewall marks, per-client priority and traffic classification remain locked until their packet-path and rollback behaviour can be tested.</div>
         </Panel>
       </div>
+    </div>
+  );
+}
+
+
+function OfficeNetworksPage({ routerOverview }: {
+  routerOverview: RouterOverview | null;
+}) {
+  const inventory = routerOverview?.office_networks;
+  const interfaces = inventory?.interfaces ?? [];
+  const bridges = inventory?.bridges ?? [];
+  const vlans = inventory?.vlans ?? [];
+  const zones = inventory?.zones ?? [];
+  const exportInventory = () => {
+    if (!inventory) return;
+    const exportedAt = new Date().toISOString();
+    const rows: Array<Array<string | number | boolean | null | undefined>> = [
+      ["Exported at (UTC)", "Category", "Name", "Device / Bridge", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "IPv6"],
+      ...interfaces.map((item) => [
+        exportedAt, "Network interface", item.name, item.device, item.protocol,
+        item.up ? "UP" : "DOWN", item.firewall_zones.join(" "),
+        item.wifi_aps.map((ap) => ap.ssid + (ap.disabled ? " (disabled)" : "")).join(" "),
+        item.ipv4.join(" "), item.ipv6.join(" "),
+      ]),
+      ...bridges.map((item) => [
+        exportedAt, "Bridge", item.name, item.name, item.type,
+        item.ports.join(" ") + "; vlan_filtering=" + item.vlan_filtering, "", "", "", "",
+      ]),
+      ...vlans.map((item) => [
+        exportedAt, "Bridge VLAN", item.name, item.device, item.vlan_id,
+        item.ports.map((port) => port.name + ":" + (port.mode === "tagged" ? "t" : "u") + (port.pvid ? "*" : "")).join(" "),
+        "", "", "", "",
+      ]),
+      ...zones.map((item) => [
+        exportedAt, "Firewall zone", item.name, "", "input=" + item.input,
+        "output=" + item.output + "; forward=" + item.forward + "; masquerade=" + item.masquerade,
+        item.networks.join(" "), "", "", "",
+      ]),
+    ];
+    const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+    const objectUrl = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = "quantumgrid-office-network-inventory-" + exportedAt.replace(/[:.]/g, "-") + ".csv";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+  };
+  const zoneByNetwork = new Map<string, string[]>();
+  for (const zone of zones) {
+    for (const network of zone.networks) {
+      const names = zoneByNetwork.get(network) ?? [];
+      names.push(zone.name);
+      zoneByNetwork.set(network, names);
+    }
+  }
+
+  return (
+    <div className="module-page office-networks-page">
+      <section className="module-hero">
+        <div className="module-icon"><Network size={25} /></div>
+        <div>
+          <div className="setup-kicker">OFFICE LAN · VLAN SEGMENTATION · FIREWALL ZONES</div>
+          <h1>Office Networks</h1>
+          <p>Map configured LAN interfaces to bridge VLANs, switch ports, wireless access points and firewall zones. This is a live configuration inventory, not a simulated office template or a security certification.</p>
+          <button className="hero-button office-export-button" onClick={exportInventory} disabled={!inventory?.available}>
+            <Download size={15} /> Export network inventory CSV
+          </button>
+        </div>
+      </section>
+
+      {!routerOverview ? (
+        <div className="module-message">Waiting for authenticated router telemetry.</div>
+      ) : !inventory?.available ? (
+        <div className="module-message" role="alert">The router could not read its network UCI inventory. Refresh router telemetry or inspect native LuCI before making network changes.</div>
+      ) : null}
+
+      <div className="metrics">
+        <Metric title="LAN Interfaces" value={inventory?.available ? fmt(inventory.interface_count) : "N/A"} unit="" detail="Network UCI interface sections" icon={Network} />
+        <Metric title="Bridge Devices" value={inventory?.available ? fmt(inventory.bridge_count) : "N/A"} unit="" detail={inventory?.vlan_filtering_bridge_count + " with VLAN filtering"} icon={Database} />
+        <Metric title="Bridge VLANs" value={inventory?.available ? fmt(inventory.vlan_count) : "N/A"} unit="" detail={inventory?.segmented_interface_count + " L3 interfaces linked to a VLAN"} icon={SlidersHorizontal} />
+        <Metric title="Wi-Fi Access Points" value={inventory?.available ? fmt(inventory.wifi_ap_count) : "N/A"} unit="" detail="Configured AP sections, including disabled entries" icon={Wifi} />
+      </div>
+
+      {inventory && (
+        <Panel title="Inventory source status" eyebrow={new Date(inventory.sampled_at * 1000).toLocaleString()}>
+          <div className="office-source-status">
+            <div><span>Network interfaces / bridges / VLANs</span><Status active={inventory.available}>{inventory.available ? "READABLE" : "UNAVAILABLE"}</Status></div>
+            <div><span>Firewall zones</span><Status active={inventory.firewall_available}>{inventory.firewall_available ? "READABLE" : "UNAVAILABLE"}</Status></div>
+            <div><span>Wireless AP configuration</span><Status active={inventory.wireless_available}>{inventory.wireless_available ? "READABLE" : "UNAVAILABLE"}</Status></div>
+          </div>
+          {inventory.truncated && <div className="module-message">One or more inventories exceeded the API display limit. Exported data is also limited to the returned entries.</div>}
+        </Panel>
+      )}
+
+      <Panel title="Network interface map" eyebrow="NETWORK UCI · UBUs LIVE LINK STATE">
+        {!inventory?.available ? (
+          <div className="module-message">No network interface inventory is available yet.</div>
+        ) : interfaces.length === 0 ? (
+          <div className="module-message">No network interface sections were returned.</div>
+        ) : (
+          <div className="office-network-table">
+            <div className="office-network-row header"><span>NETWORK</span><span>DEVICE / VLAN</span><span>ADDRESSING</span><span>FIREWALL ZONE</span><span>WI-FI SSIDS</span><span>STATE</span></div>
+            {interfaces.map((item) => (
+              <div className="office-network-row" key={item.name}>
+                <div><strong>{item.name}</strong><small>{item.protocol || "Protocol not set"}</small></div>
+                <div><b>{item.device || "Device not set"}</b><small>{item.vlan_ids.length ? "VLAN " + item.vlan_ids.join(", ") : "No direct bridge-VLAN match"}</small></div>
+                <div><b>{item.ipv4.join(", ") || "No IPv4 address"}</b><small>{item.ipv6.join(", ") || "No IPv6 address reported"}</small></div>
+                <div>{item.firewall_zones.length ? item.firewall_zones.map((zone) => <span className="office-chip" key={zone}>{zone}</span>) : <small>Not mapped to a reported zone</small>}</div>
+                <div>{item.wifi_aps.length ? item.wifi_aps.map((ap) => <span className={ap.disabled ? "office-chip disabled" : "office-chip"} key={ap.section}>{ap.ssid || ap.section}{ap.disabled ? " · OFF" : ""}</span>) : <small>No AP mapped</small>}</div>
+                <Status active={item.up}>{item.up ? "UP" : "DOWN"}</Status>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">Zone and SSID associations are correlated by their configured network names. Device names and VLAN matches are derived from the configured L3 device (for example, br-lan.20). No firewall packet-flow, switch hardware forwarding or client isolation test is performed here.</div>
+      </Panel>
+
+      <Panel title="Bridge VLAN membership" eyebrow="TAGGED / UNTAGGED SWITCH PORT INVENTORY">
+        {!inventory?.available ? (
+          <div className="module-message">Bridge configuration is unavailable.</div>
+        ) : vlans.length === 0 ? (
+          <div className="module-message">No network bridge-vlan sections were detected. This can be normal for an untagged single-LAN setup; it does not prove that the switch has no VLAN capability.</div>
+        ) : (
+          <div className="office-vlan-list">
+            {vlans.map((vlan) => (
+              <div className="office-vlan-card" key={vlan.name}>
+                <div className="office-vlan-heading"><div><strong>VLAN {vlan.vlan_id}</strong><span>{vlan.name} · {vlan.device}</span></div><Status active={bridges.some((bridge) => bridge.name === vlan.device && bridge.vlan_filtering)}>BRIDGE FILTERING {bridges.some((bridge) => bridge.name === vlan.device && bridge.vlan_filtering) ? "ON" : "NOT CONFIRMED"}</Status></div>
+                <div className="office-vlan-ports">
+                  {vlan.ports.map((port) => (
+                    <div className="office-vlan-port" key={port.name}>
+                      <strong>{port.name}</strong><span>{port.mode.toUpperCase()}</span>{port.pvid ? <small>PVID</small> : null}
+                    </div>
+                  ))}
+                  {vlan.ports.length === 0 && <small>No parseable switch ports were reported.</small>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="module-message">Tagged/untagged/PVID markers reflect the bridge-vlan UCI port suffixes. A bridge VLAN entry alone does not prove that a managed switch or downstream access point is configured correctly.</div>
+      </Panel>
+
+      <div className="office-two-column">
+        <Panel title="Bridge devices" eyebrow="NETWORK DEVICE SECTIONS">
+          {!inventory?.available || bridges.length === 0 ? (
+            <div className="module-message">No bridge device sections were returned.</div>
+          ) : (
+            <div className="office-bridge-list">
+              {bridges.map((bridge) => (
+                <div className="office-bridge-row" key={bridge.name}>
+                  <div><strong>{bridge.name}</strong><span>{bridge.type || "Device"}</span></div>
+                  <div><small>PORTS</small><b>{bridge.ports.join(" · ") || "No ports reported"}</b></div>
+                  <Status active={bridge.vlan_filtering}>{bridge.vlan_filtering ? "VLAN FILTERING ON" : "VLAN FILTERING OFF"}</Status>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+        <Panel title="Firewall zone policy" eyebrow="UCI INPUT / OUTPUT / FORWARD">
+          {!inventory?.firewall_available ? (
+            <div className="module-message">Firewall zone configuration could not be read.</div>
+          ) : zones.length === 0 ? (
+            <div className="module-message">No firewall zones were returned.</div>
+          ) : (
+            <div className="office-zone-list">
+              {zones.map((zone) => (
+                <div className="office-zone-row" key={zone.name}>
+                  <div><strong>{zone.name}</strong><small>{zone.networks.join(", ") || "No networks listed"}</small></div>
+                  <div><small>INPUT / OUTPUT / FORWARD</small><b>{zone.input} / {zone.output} / {zone.forward}</b></div>
+                  <Status active={zone.forward !== "ACCEPT"}>{zone.masquerade ? "MASQUERADE" : "NO MASQUERADE"}</Status>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <Panel title="Office deployment readiness" eyebrow="CONFIGURATION INVENTORY · NOT A COMPLIANCE RESULT">
+        <div className="office-readiness-list">
+          <div><strong>Separate L3 networks</strong><span>{inventory?.interface_count ?? 0} network interface(s) found. Review the interface map to identify corporate, guest, IoT and management networks.</span></div>
+          <div><strong>VLAN-aware bridges</strong><span>{inventory?.vlan_filtering_bridge_count ?? 0} bridge(s) report VLAN filtering enabled, with {inventory?.vlan_count ?? 0} bridge VLAN section(s).</span></div>
+          <div><strong>Firewall segmentation</strong><span>{inventory?.firewall_available ? zones.length + " firewall zone(s) correlated by network name." : "Firewall configuration inventory unavailable."} Actual rule evaluation and inter-VLAN traffic tests are not performed.</span></div>
+          <div><strong>Wireless mapping</strong><span>{inventory?.wireless_available ? (inventory.wifi_ap_count + " configured AP section(s); inspect the SSID-to-network associations above.") : "Wireless configuration inventory unavailable."}</span></div>
+        </div>
+        <div className="module-message">This release provides visibility only. VLAN creation, DHCP pool provisioning, firewall isolation, RADIUS/802.1X, site-to-site VPN policy and switch-port changes are not yet exposed as write controls. Do not treat this inventory as proof that a network is safe for production office deployment.</div>
+      </Panel>
     </div>
   );
 }
