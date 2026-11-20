@@ -6,7 +6,7 @@ local function safe_text(value, limit)
 end
 
 local function parse_apk_line(line)
-	local name, version = line:match("^([%w%+_.%-]+)%-(%d[%w%.%+~:_%-]*)$")
+	local name, version = line:match("^([%w%+_.%-]+)%-(%d[%w%.%+~:_%-]*)%s*")
 	if not name or not version then return nil end
 	return { name = name, version = version, manager = "apk" }
 end
