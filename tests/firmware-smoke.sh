@@ -354,6 +354,8 @@ grep -Fq 'export interface RouterDefaultRoute' "$ROOT/ui/quantumgrid/src/routerA
 grep -Fq 'title="Default routes"' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'Priority order is reported by the kernel, but a rule listing is not a packet-by-packet route simulation' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'policy_rules_truncated = rule_inventory.truncated' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+! grep -Fq 'join("\\\\r\\\\n")' "$ROOT/ui/quantumgrid/src/App.tsx"
+! grep -Fq 'Blob(["\\\\uFEFF", csv]' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'run: lua5.1 tests/policy-routing.lua' "$ROOT/.github/workflows/ci.yml"
 grep -Fq 'CONFIG_PACKAGE_ip-full=y' "$CONFIG"
 grep -Fq 'local function policy_rule_inventory(fs)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
