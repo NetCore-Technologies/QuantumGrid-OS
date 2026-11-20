@@ -502,6 +502,9 @@ export interface RouterHardwareIoStatus {
   gpio: RouterGpioInventory;
   leds_available: boolean;
   leds: RouterLedDevice[];
+  button_driver_loaded: boolean;
+  button_hooks_available: boolean;
+  button_handlers: string[];
   sampled_at: number;
 }
 
