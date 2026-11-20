@@ -8996,3 +8996,52 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+.office-reservation-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.office-reservation-remove-confirm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.office-remove-start,
+.office-remove-confirm,
+.office-remove-cancel {
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(255,255,255,.025);
+  font-size: 9px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.office-remove-start:hover,
+.office-remove-cancel:hover {
+  border-color: var(--blue);
+  color: var(--text);
+}
+.office-remove-confirm {
+  border-color: rgba(219,40,95,.35);
+  color: #ffadc1;
+  background: rgba(219,40,95,.07);
+}
+.office-remove-confirm:disabled,
+.office-remove-cancel:disabled,
+.office-remove-start:disabled {
+  opacity: .45;
+  cursor: not-allowed;
+}
+@media (max-width: 650px) {
+  .office-reservation-row-actions {
+    justify-content: flex-start;
+  }
+}
