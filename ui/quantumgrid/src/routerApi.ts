@@ -649,12 +649,12 @@ export async function updateRouterWirelessConfig(input: {
     throw new Error("Invalid wireless radio or interface section.");
   }
   if (input.ssid.length < 1 || new TextEncoder().encode(input.ssid).length > 32 ||
-      /[\\u0000-\\u001f\\u007f]/.test(input.ssid)) {
+      /[\u0000-\u001f\u007f]/.test(input.ssid)) {
     throw new Error("SSID must be 1–32 bytes and cannot contain control characters.");
   }
   if (input.encryption !== "none" &&
       (input.key.length < 8 || new TextEncoder().encode(input.key).length > 63 ||
-       /[\\u0000-\\u001f\\u007f]/.test(input.key))) {
+       /[\u0000-\u001f\u007f]/.test(input.key))) {
     throw new Error("The wireless passphrase must be 8–63 bytes and cannot contain control characters.");
   }
   if (input.encryption === "none" && (!input.allowOpen || input.key !== "")) {
