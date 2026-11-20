@@ -21,7 +21,8 @@ end
 
 function summarize_redirect(section, index)
 	if type(section) ~= "table" then return nil end
-	local name = rule_value(section.name or section[".name"], 64)
+	-- Keep the private UCI section identifier separate from the display name.
+	local name = rule_value(section.name, 64)
 	if name == "" then name = "unnamed-redirect-" .. tostring(index or 1) end
 	return {
 		section = rule_value(section[".name"], 64),
