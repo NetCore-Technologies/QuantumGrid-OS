@@ -3155,7 +3155,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
             ) : (
               <div className="firewall-redirect-list">
                 {visibleFirewallRedirects.map((redirect, index) => (
-                  <div className="firewall-redirect-row" key={redirect.name + "-" + index}>
+                  <div className="firewall-redirect-row" key={(redirect.section || redirect.name) + "-" + index}>
                     <div className="firewall-redirect-heading">
                       <strong>{redirect.name}</strong>
                       <span>{redirect.enabled ? "Enabled" : "Disabled"} · {redirect.family || "Any IP family"} · {redirect.target || "Target unspecified"}</span>
@@ -3180,9 +3180,9 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
                     </div>
                     <div className="firewall-redirect-flags">
                       <Status active={redirect.enabled}>{redirect.enabled ? "ENABLED" : "DISABLED"}</Status>
-                      {reviewedRedirectNames.has(redirect.name) ? <span className="office-chip warning">EXTERNAL REVIEW</span> : null}
-                      {wideRedirectNames.has(redirect.name) ? <span className="office-chip warning">NO EXTERNAL PORT LIMIT</span> : null}
-                      {adminRedirectNames.has(redirect.name) ? <span className="office-chip warning">ADMIN / DATA PORT</span> : null}
+                      {reviewedRedirectNames.has(redirect.section || redirect.name) ? <span className="office-chip warning">EXTERNAL REVIEW</span> : null}
+                      {wideRedirectNames.has(redirect.section || redirect.name) ? <span className="office-chip warning">NO EXTERNAL PORT LIMIT</span> : null}
+                      {adminRedirectNames.has(redirect.section || redirect.name) ? <span className="office-chip warning">ADMIN / DATA PORT</span> : null}
                     </div>
                   </div>
                 ))}
