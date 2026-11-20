@@ -321,6 +321,47 @@ test("unconstrained WAN ACCEPT rules are separately highlighted", () => {
   assert.equal(result.checks.find((item) => item.id === "unconstrained-external-allow:wide-wan-accept")?.status, "review");
 });
 
+test("duplicate display names retain distinct UCI redirect finding identifiers", () => {
+  const result = auditFirewallPosture(security({
+    redirects: [
+      {
+        section: "cfg1001",
+        name: "remote-admin",
+        source_zone: "wan",
+        destination_zone: "lan",
+        protocol: "tcp",
+        target: "DNAT",
+        family: "ipv4",
+        external_port: "2222",
+        internal_port: "22",
+        enabled: true,
+        source_ip_match: false,
+        source_mac_match: false,
+        destination_ip_match: true,
+        source_destination_ip_match: false,
+      },
+      {
+        section: "cfg1002",
+        name: "remote-admin",
+        source_zone: "wan6",
+        destination_zone: "lan",
+        protocol: "tcp",
+        target: "DNAT",
+        family: "ipv6",
+        external_port: "2223",
+        internal_port: "22",
+        enabled: true,
+        source_ip_match: true,
+        source_mac_match: false,
+        destination_ip_match: true,
+        source_destination_ip_match: false,
+      },
+    ],
+  }));
+  assert.equal(result.checks.find((item) => item.id === "external-redirect:cfg1001")?.status, "review");
+  assert.equal(result.checks.find((item) => item.id === "external-redirect:cfg1002")?.status, "review");
+});
+
 test("truncated NAT redirect inventories remain unknown and cannot imply complete review", () => {
   const result = auditFirewallPosture(security({
     redirects_truncated: true,
