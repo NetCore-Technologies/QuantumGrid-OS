@@ -64,6 +64,13 @@ printf 'other_device\n' > "$TEST_ROOT/tmp/sysinfo/board_name"
 OUTPUT="$(QG_INSPECT_ROOT="$TEST_ROOT" sh "$INSPECTOR")"
 contains "$OUTPUT" "RESULT: STOP — board identity" "wrong board"
 
+# Restore the supported MTD fixture before checking the mounted-ubiblock guard.
+cat > "$TEST_ROOT/proc/mtd" <<'MTD'
+dev:    size   erasesize  name
+mtd18: 06400000 00040000 "rootfs"
+mtd20: 06400000 00040000 "rootfs_1"
+MTD
+
 # A squashfs /rom or mounted ubiblock is not accepted as a RAM initramfs root.
 printf 'arcadyan_aw1000\n' > "$TEST_ROOT/tmp/sysinfo/board_name"
 sed 's#rootfs / rootfs rw 0 0#rootfs / rootfs rw 0 0\n/dev/ubiblock0_0 /rom squashfs ro 0 0#' \
