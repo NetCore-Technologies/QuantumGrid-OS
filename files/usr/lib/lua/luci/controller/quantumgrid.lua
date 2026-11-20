@@ -3525,8 +3525,13 @@ function action_office_zone_update()
 		respond(500, { ok = false, error = snapshot_error or "The current firewall zone policy could not be snapshotted." })
 		return
 	end
+
 	local current_output = type(snapshot.output) == "string" and snapshot.output or "ACCEPT"
-	if update.output ~= "ACCEPT" and update.output ~= current_output then
+	local output_changes = update.output_write and
+		((update.output == "INHERIT" and snapshot.output ~= nil)
+			or (update.output ~= "INHERIT" and update.output ~= current_output))
+	local output_tightening = update.output == "REJECT" or update.output == "DROP" or update.output == "INHERIT"
+	if output_changes and output_tightening then
 		local target_zone = nil
 		for _, zone in ipairs(inventory.zones or {}) do
 			if zone.section == update.section then target_zone = zone break end
@@ -3534,18 +3539,29 @@ function action_office_zone_update()
 		local management_match = target_zone and office_zone_matches_management_route(
 			target_zone, inventory, http.getenv("REMOTE_ADDR")) or nil
 		if management_match == nil then
-			respond(409, { ok = false, error = "QuantumGrid cannot prove that a restrictive output policy will preserve the current administrator's return route. Use a verified out-of-band session or retain ACCEPT." })
+			respond(409, { ok = false, error = "QuantumGrid cannot prove that a restrictive output policy will preserve the current administrator's return route. Use a verified out-of-band session or leave the output policy unchanged." })
 			return
 		elseif management_match then
-			respond(409, { ok = false, error = "The selected zone carries the current administrator's IPv4 session. Its output policy cannot be tightened from that session." })
+			respond(409, { ok = false, error = "The selected zone carries the current administrator's IPv4 session. Its output policy cannot be tightened or reset to an unknown default from that session." })
 			return
 		end
 	end
 
-	local output_ok, output_set = pcall(uci.set, uci, "firewall", update.section, "output", update.output)
-	local forward_ok, forward_set = pcall(uci.set, uci, "firewall", update.section, "forward", update.forward)
-	local masq_ok, masq_set = pcall(uci.set, uci, "firewall", update.section, "masq", update.masquerade and "1" or "0")
-	if not output_ok or output_set ~= true or not forward_ok or forward_set ~= true or not masq_ok or masq_set ~= true then
+	local function stage_policy(option, value, write_option, current_value)
+		if not write_option or value == "UNCHANGED" then return true end
+		if value == "INHERIT" then
+			if current_value == nil then return true end
+			local ok, result = pcall(uci.delete, uci, "firewall", update.section, option)
+			return ok and result == true
+		end
+		local ok, result = pcall(uci.set, uci, "firewall", update.section, option, value)
+		return ok and result == true
+	end
+
+	local output_ok = stage_policy("output", update.output, update.output_write, snapshot.output)
+	local forward_ok = stage_policy("forward", update.forward, update.forward_write, snapshot.forward)
+	local masq_ok, masq_set = pcall(uci.set, uci, "firewall", update.section, "masq", update.masq_value)
+	if not output_ok or not forward_ok or not masq_ok or masq_set ~= true then
 		pcall(uci.revert, uci, "firewall")
 		respond(500, { ok = false, error = "The firewall zone policy could not be staged safely." })
 		return
@@ -3578,14 +3594,16 @@ function action_office_zone_update()
 		return
 	end
 
+	local applied_output = uci:get("firewall", update.section, "output") or ""
+	local applied_forward = uci:get("firewall", update.section, "forward") or ""
 	record_audit(http, "office.zone.update", update.section, "success")
 	respond(nil, {
 		ok = true,
 		section = update.section,
 		name = snapshot.name or update.section,
 		input = snapshot.input or "ACCEPT",
-		output = update.output,
-		forward = update.forward,
+		output = applied_output,
+		forward = applied_forward,
 		masquerade = update.masquerade,
 		input_unchanged = true,
 		reloaded = true,
