@@ -480,6 +480,63 @@ local function is_external_zone(zone)
 	return false
 end
 
+function validate_wireless_network_binding(network_name, interfaces, zones)
+	if type(network_name) ~= "string" or #network_name < 1 or #network_name > 64
+		or not network_name:match("^[%w_.%-]+$") or network_name == "." or network_name == ".." then
+		return nil, "Select one existing routed network interface."
+	end
+
+	local selected_interface = nil
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and iface.name == network_name then
+			if selected_interface then
+				return nil, "The selected network interface is ambiguous in the current inventory."
+			end
+			selected_interface = iface
+		end
+	end
+	if not selected_interface then
+		return nil, "The selected network interface does not exist."
+	end
+	if selected_interface.protocol ~= "static" or type(selected_interface.device) ~= "string"
+		or not selected_interface.device:match("^[%w_.%-]+$") then
+		return nil, "SSID VLAN binding requires an existing static L3 network with a validated device."
+	end
+
+	local selected_zone = nil
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			local attached = false
+			for _, item in ipairs(zone_networks(zone.networks)) do
+				if item == network_name then attached = true break end
+			end
+			if attached then
+				if selected_zone then
+					return nil, "The network belongs to multiple firewall zones; resolve the ambiguous zone mapping before binding an SSID."
+				end
+				selected_zone = zone
+			end
+		end
+	end
+	if not selected_zone then
+		return nil, "The selected network must belong to an existing firewall zone before an SSID can be bound to it."
+	end
+	if is_external_zone(selected_zone) then
+		return nil, "An AP SSID cannot be bridged directly into an external WAN/WWAN firewall zone."
+	end
+	if type(selected_zone.section) ~= "string" or selected_zone.section == ""
+		or type(selected_zone.name) ~= "string" or selected_zone.name == "" then
+		return nil, "The selected network's firewall-zone mapping is incomplete."
+	end
+
+	return {
+		network = network_name,
+		device = selected_interface.device,
+		zone_section = selected_zone.section,
+		zone_name = selected_zone.name
+	}
+end
+
 local ALLOWED_ZONE_POLICIES = {
 	ACCEPT = true,
 	REJECT = true,
