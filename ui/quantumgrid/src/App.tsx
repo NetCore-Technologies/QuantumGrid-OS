@@ -5009,15 +5009,6 @@ function OfficeNetworksPage({ routerOverview }: {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
   };
-  const zoneByNetwork = new Map<string, string[]>();
-  for (const zone of zones) {
-    for (const network of zone.networks) {
-      const names = zoneByNetwork.get(network) ?? [];
-      names.push(zone.name);
-      zoneByNetwork.set(network, names);
-    }
-  }
-
   return (
     <div className="module-page office-networks-page">
       <section className="module-hero">
