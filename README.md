@@ -192,8 +192,11 @@ allocation, not current reachability or wireless association.
 The Network page also lists ordered IPv4/IPv6 policy-routing rules from the kernel, including
 priorities, source/destination selectors, firewall marks, interfaces and lookup tables. A separate
 table-coverage view cross-references lookup rules with default routes by address family and table;
-it reports missing and unreferenced tables without claiming they are invalid or unused. This is
-read-only inventory, not a simulation of packet routing or a check of Multi-WAN health.
+it reports missing and unreferenced tables without claiming they are invalid or unused. The
+Multi-WAN panel reads mwan3 tracking state, logical interface state, tracked-target latency/loss
+and elapsed online/offline time, with search and spreadsheet-safe CSV export. The tracker result
+and netifd interface state are deliberately shown separately. These are read-only views, not a
+simulation of packet routing or a change to Multi-WAN policy.
 WAN throughput is calculated from successive kernel byte-counter samples. Wi-Fi association
 data is read from OpenWrt's iwinfo ubus API; the client inventory can filter and sort stations by
 reported TX retries and failed packets, and exports the active diagnostic filters with each row.
