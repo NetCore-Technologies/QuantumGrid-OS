@@ -75,7 +75,7 @@ function build_inventory(source)
 		available = source.available == true,
 		firewall_available = source.firewall_available == true,
 		wireless_available = source.wireless_available == true,
-		truncated = false,
+		truncated = source.truncated == true,
 		interfaces = {},
 		bridges = {},
 		vlans = {},
