@@ -31,15 +31,33 @@ show_gpio() {
 }
 
 show_buttons() {
-  if [ ! -r /sys/kernel/debug/gpio ]; then
-    echo "Button inventory unavailable: GPIO debugfs is not readable."
-    return 0
+  echo "=== Native GPIO button event support (read-only) ==="
+  if [ -d /sys/module/gpio_button_hotplug ]; then
+    echo "gpio-button-hotplug driver: present"
+  else
+    echo "gpio-button-hotplug driver: not detected (it may be built in or unavailable)"
   fi
-  echo "=== Button-like GPIO labels/consumers (name hints only) ==="
-  if ! grep -Ei 'button|reset|wps|power|key|wlan' /sys/kernel/debug/gpio; then
-    echo "No button-like labels were reported by the kernel."
+  if [ -d /etc/rc.button ]; then
+    echo "Native /etc/rc.button handlers:"
+    found=0
+    for handler in /etc/rc.button/*; do
+      [ -f "$handler" ] || continue
+      found=1
+      printf '  %s\n' "${handler##*/}"
+    done
+    [ "$found" -eq 1 ] || echo "  no named handlers found"
+  else
+    echo "Native /etc/rc.button directory is unavailable."
   fi
-  echo "A matching label is not proof of a physical button mapping or event stream."
+  if [ -r /sys/kernel/debug/gpio ]; then
+    echo "=== Button-like GPIO labels/consumers (name hints only) ==="
+    if ! grep -Ei 'button|reset|wps|power|key|wlan' /sys/kernel/debug/gpio; then
+      echo "No button-like labels were reported by the kernel."
+    fi
+  else
+    echo "GPIO debugfs is not readable; button-like GPIO labels are unavailable."
+  fi
+  echo "Native hotplug handlers are listed, not intercepted; a label is not a verified physical mapping."
 }
 
 show_leds() {
