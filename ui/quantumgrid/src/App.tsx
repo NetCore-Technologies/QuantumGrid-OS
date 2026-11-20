@@ -1539,6 +1539,9 @@ function WirelessClientList({
               : `${fmt(client.rx_rate_mbps, 1)} / ${fmt(client.tx_rate_mbps, 1)} Mbps`}</b>
             <small>RX {formatWifiRateDetails(client.rx_details)}</small>
             <small>TX {formatWifiRateDetails(client.tx_details)}</small>
+            <small>Measured RX/TX {wirelessThroughput[client.ifname + "-" + client.mac.toLowerCase()]
+              ? `${fmt(wirelessThroughput[client.ifname + "-" + client.mac.toLowerCase()].rx_mbps, 2)} / ${fmt(wirelessThroughput[client.ifname + "-" + client.mac.toLowerCase()].tx_mbps, 2)} Mbps`
+              : "Collecting two counter samples"}</small>
             <small>RX total {formatTrafficBytes(client.rx_bytes)} · {client.rx_packets === undefined ? "N/A" : fmt(client.rx_packets)} packets</small>
             <small>TX total {formatTrafficBytes(client.tx_bytes)} · {client.tx_packets === undefined ? "N/A" : fmt(client.tx_packets)} packets</small>
           </div>
@@ -2461,18 +2464,48 @@ function describeScanOperation(network: RouterWifiScan["results"][number]): stri
   return details.join(" · ");
 }
 
+type WirelessTrafficSample = {
+  rx_mbps: number;
+  tx_mbps: number;
+};
+
 function WifiControlPage({ routerOverview }: { routerOverview: RouterOverview | null }) {
   const radios = routerOverview?.wireless ?? [];
   const clients = routerOverview?.clients ?? [];
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
   const wirelessClients = routerOverview?.wireless_clients ?? [];
   const wirelessInventoryAvailable = Array.isArray(routerOverview?.wireless_clients);
+  const previousWirelessCounters = useRef(new Map<string, { rx: number; tx: number; sampledAt: number }>());
+  const [wirelessThroughput, setWirelessThroughput] = useState<Record<string, WirelessTrafficSample>>({});
   const [scan, setScan] = useState<RouterWifiScan | null>(null);
   const [scanLoading, setScanLoading] = useState(false);
   const [scanError, setScanError] = useState("");
   const [scanHistory, setScanHistory] = useState<WifiScanHistorySample[]>([]);
   const [scanFilter, setScanFilter] = useState("");
   const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
+  useEffect(() => {
+    const sampledAt = Date.now();
+    const previous = previousWirelessCounters.current;
+    const next = new Map<string, { rx: number; tx: number; sampledAt: number }>();
+    const rates: Record<string, WirelessTrafficSample> = {};
+    for (const client of wirelessClients) {
+      const key = client.ifname + "-" + client.mac.toLowerCase();
+      const rx = client.rx_bytes;
+      const tx = client.tx_bytes;
+      if (rx === undefined || tx === undefined || !Number.isFinite(rx) || !Number.isFinite(tx) || rx < 0 || tx < 0) continue;
+      const prior = previous.get(key);
+      if (prior && sampledAt > prior.sampledAt && rx >= prior.rx && tx >= prior.tx) {
+        const seconds = (sampledAt - prior.sampledAt) / 1000;
+        rates[key] = {
+          rx_mbps: ((rx - prior.rx) * 8) / seconds / 1_000_000,
+          tx_mbps: ((tx - prior.tx) * 8) / seconds / 1_000_000,
+        };
+      }
+      next.set(key, { rx, tx, sampledAt });
+    }
+    previousWirelessCounters.current = next;
+    setWirelessThroughput(rates);
+  }, [wirelessClients]);
   const visibleScanResults = scan
     ? scan.results
       .filter((network) => {
