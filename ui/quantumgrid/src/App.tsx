@@ -6117,6 +6117,11 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                   const matchingNetwork = reservationNetworks.find((item) =>
                     ipv4SubnetContainsHost(client.ip, item.ipv4[0] ?? "", item.netmask)
                   );
+                  const existingReservation = inventory?.static_leases.find((lease) =>
+                    lease.mac.toLowerCase() === client.mac.toLowerCase() || lease.ipv4 === client.ip
+                  );
+                  const exactReservation = existingReservation?.mac.toLowerCase() === client.mac.toLowerCase()
+                    && existingReservation?.ipv4 === client.ip;
                   const safeHost = /^[A-Za-z0-9][A-Za-z0-9-]{0,62}$/.test(client.hostname)
                     ? client.hostname
                     : "Client-" + client.mac.replace(/:/g, "").slice(-8);
@@ -6132,24 +6137,34 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
                       <div>
                         <strong>{client.hostname || "Unknown client"}</strong>
                         <span>{client.mac} · {client.ip} · {remaining}</span>
+                        {existingReservation ? (
+                          <span className="office-live-lease-reservation">
+                            {exactReservation ? "Already has static reservation: " : "Reservation conflict: "}
+                            {existingReservation.name} · {existingReservation.ipv4}
+                          </span>
+                        ) : null}
                       </div>
-                      <button
-                        className="office-remove-start"
-                        type="button"
-                        onClick={() => {
-                          setReservationName(safeHost);
-                          setReservationMac(client.mac);
-                          setReservationIp(client.ip);
-                          setReservationNetwork(matchingNetwork?.name ?? reservationNetworks[0]?.name ?? "");
-                          setReservationConfirmed(false);
-                          setReservationNotice({
-                            success: true,
-                            message: matchingNetwork
-                              ? "Details prefilled from this lease. Verify the LAN and confirm to create the reservation."
-                              : "Details prefilled, but no eligible LAN subnet matched this lease IP. Select and verify the correct LAN before saving.",
-                          });
-                        }}
-                      >Use lease</button>
+                      {existingReservation ? (
+                        <Status active={exactReservation}>{exactReservation ? "RESERVED" : "CONFLICT"}</Status>
+                      ) : (
+                        <button
+                          className="office-remove-start"
+                          type="button"
+                          onClick={() => {
+                            setReservationName(safeHost);
+                            setReservationMac(client.mac);
+                            setReservationIp(client.ip);
+                            setReservationNetwork(matchingNetwork?.name ?? reservationNetworks[0]?.name ?? "");
+                            setReservationConfirmed(false);
+                            setReservationNotice({
+                              success: true,
+                              message: matchingNetwork
+                                ? "Details prefilled from this lease. Verify the LAN and confirm to create the reservation."
+                                : "Details prefilled, but no eligible LAN subnet matched this lease IP. Select and verify the correct LAN before saving.",
+                            });
+                          }}
+                        >Use lease</button>
+                      )}
                     </div>
                   );
                 })}
