@@ -7634,6 +7634,16 @@ input::placeholder {
   font-size: 9px;
   overflow-wrap: anywhere;
 }
+.wireguard-peer-row .wireguard-peer-rate {
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 14px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.wireguard-peer-row .wireguard-peer-rate > small {
+  grid-column: 1 / -1;
+}
 .wireguard-peer-row .wireguard-peer-allowed span {
   color: var(--muted);
   font-size: 8px;
