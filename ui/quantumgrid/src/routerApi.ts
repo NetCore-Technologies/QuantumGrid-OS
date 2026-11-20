@@ -23,6 +23,7 @@ export interface RouterInterface {
   tx_dropped?: number;
   ipv4: string[];
   ipv6?: string[];
+  dns_servers?: string[];
 }
 
 export interface RouterWirelessInterface {
