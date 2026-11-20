@@ -853,7 +853,8 @@ function build_inventory(source)
 					lease_time = clean(item.lease_time, 32),
 					ignore = item.ignore == true,
 					dhcpv6 = clean(item.dhcpv6, 16),
-					ra = clean(item.ra, 16)
+					ra = clean(item.ra, 16),
+					ndp = clean(item.ndp, 16)
 				})
 			end
 		end
