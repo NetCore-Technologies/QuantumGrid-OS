@@ -9406,3 +9406,11 @@ input::placeholder {
     align-items: flex-start;
   }
 }
+
+
+.office-live-lease-reservation {
+  color: #f2bf75 !important;
+}
+.office-live-lease-row .status {
+  flex: 0 0 auto;
+}
