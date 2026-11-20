@@ -45,12 +45,15 @@ end
 
 local function parse_port(value)
 	if type(value) ~= "string" then return nil end
-	local name, mode, primary = value:match("^([%w_.%-]+):?([ut]?)(%*?)$")
-	if not name then return nil end
-	local tagged = mode == "t"
+	local bare = value:match("^([%w_.%-]+)$")
+	if bare then
+		return { name = bare, mode = "unspecified", pvid = false }
+	end
+	local name, mode, primary = value:match("^([%w_.%-]+):([ut])(%*?)$")
+	if not name or (mode == "t" and primary == "*") then return nil end
 	return {
 		name = name,
-		mode = tagged and "tagged" or "untagged",
+		mode = mode == "t" and "tagged" or "untagged",
 		pvid = mode == "u" and primary == "*"
 	}
 end
