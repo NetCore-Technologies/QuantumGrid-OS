@@ -254,6 +254,26 @@ local function policy_rule_inventory(fs)
 	return result
 end
 
+local function mwan3_status(fs)
+	local result = {
+		installed = fs.access("/etc/init.d/mwan3") == true,
+		available = false,
+		count = 0,
+		truncated = false,
+		interfaces = {}
+	}
+	if not result.installed then return result end
+
+	local response = ubus_call("mwan3", "status", { section = "interfaces" })
+	local normalizer = require "luci.quantumgrid.mwan3"
+	local inventory = normalizer.normalize_status(response)
+	result.available = inventory.available
+	result.count = inventory.count
+	result.truncated = inventory.truncated
+	result.interfaces = inventory.interfaces
+	return result
+end
+
 local function wireless_survey(ifname, frequency)
 	local response = ubus_call("iwinfo", "survey", { device = ifname }) or {}
 	local entries = type(response.results) == "table" and response.results or {}
@@ -1434,6 +1454,7 @@ function action_api()
 	local cellular = cellular_status(fs)
 	local wireless = wireless_status()
 	local sqm = sqm_status(uci, fs)
+	local mwan3 = mwan3_status(fs)
 	local security = security_status(uci, fs)
 	local platform = platform_status(fs)
 	local route_inventory = default_route_inventory(fs)
@@ -1463,6 +1484,7 @@ function action_api()
 		wireless = wireless,
 		wireless_clients = wireless_clients(wireless),
 		sqm = sqm,
+		mwan3 = mwan3,
 		security = security,
 		platform = platform,
 		cellular = cellular,
