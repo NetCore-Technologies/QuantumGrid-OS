@@ -939,6 +939,8 @@ grep -Fq 'accounting_secret_set = update.encryption == "wpa2" and update.account
 grep -Fq 'restore_wireless_snapshot(uci, update.radio, update.section, snapshot)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'accounting_server = tostring(section.acct_server or "")' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'accounting_secret_supplied' "$ROOT/tests/wireless-controls.lua"
+grep -Fq 'enterprise_missing_accounting_field' "$ROOT/tests/wireless-controls.lua"
+grep -Fq 'use an empty value to disable accounting' "$ROOT/files/usr/lib/lua/luci/quantumgrid/wireless.lua"
 grep -Fq 'Enable RADIUS accounting (optional)' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'acct_server", "acct_port", "acct_secret"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq '"ssid", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
