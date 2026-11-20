@@ -185,6 +185,9 @@ reject_bridge_vlan("br-lan", "20", { "lan1:t", "lan2:u*" }, { "lan1", "lan2" }, 
 reject_bridge_vlan("br-lan", "20", { "lan1:t", "lan2:u*" }, { "lan1", "lan2" }, {
   { section = "other", device = "br-lan", vlan = "30", ports = { "lan2:u*" } }
 }, nil, "duplicate PVID across VLANs")
+reject_bridge_vlan("br-lan", "20", { "lan1:t", "lan2:u" }, { "lan1", "lan2" }, {
+  { section = "other", device = "br-lan", vlan = "30", ports = { "lan2:u" } }
+}, nil, "duplicate untagged VLAN membership")
 reject_bridge_vlan("br-lan", "20", { "lan1:t" }, {}, {}, nil, "bridge without declared ports")
 
 local result = office.build_inventory({
