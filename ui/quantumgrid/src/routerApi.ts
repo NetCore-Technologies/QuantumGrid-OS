@@ -827,6 +827,7 @@ export interface RouterOfficeDhcpScope {
   ignore: boolean;
   dhcpv6: string;
   ra: string;
+  ndp: string;
   range_valid: boolean;
   pool_start_ip: string;
   pool_end_ip: string;
@@ -906,7 +907,12 @@ export interface RouterDhcpScopeUpdateResult {
   lease_time: string;
   pool_start_ip: string;
   pool_end_ip: string;
+  dhcpv6: string;
+  ra: string;
+  ndp: string;
   restarted: true;
+  dnsmasq_restarted: true;
+  odhcpd_restarted: boolean;
   rolled_back: false;
 }
 
@@ -1765,6 +1771,9 @@ export async function updateRouterDhcpScope(input: {
   start: string;
   limit: string;
   lease_time: string;
+  dhcpv6: "UNCHANGED" | "disabled" | "server";
+  ra: "UNCHANGED" | "disabled" | "server";
+  ndp: "UNCHANGED" | "disabled";
 }): Promise<RouterDhcpScopeUpdateResult> {
   if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) || input.section === "." || input.section === "..") {
     throw new Error("Invalid DHCP scope section identifier.");
@@ -1775,11 +1784,20 @@ export async function updateRouterDhcpScope(input: {
   if (!/^[1-9][0-9]{0,8}[smhdw]?$/.test(input.lease_time)) {
     throw new Error("DHCP lease time must be a positive duration such as 12h, 30m or 86400s.");
   }
+  const validDhcpv6 = new Set(["UNCHANGED", "disabled", "server"]);
+  const validRa = new Set(["UNCHANGED", "disabled", "server"]);
+  const validNdp = new Set(["UNCHANGED", "disabled"]);
+  if (!validDhcpv6.has(input.dhcpv6) || !validRa.has(input.ra) || !validNdp.has(input.ndp)) {
+    throw new Error("DHCPv6 and RA must be unchanged, disabled or server; NDP must be unchanged or disabled. Relay/hybrid requires native odhcpd master configuration.");
+  }
   const form = new URLSearchParams();
   form.set("section", input.section);
   form.set("start", input.start);
   form.set("limit", input.limit);
   form.set("leasetime", input.lease_time);
+  form.set("dhcpv6", input.dhcpv6);
+  form.set("ra", input.ra);
+  form.set("ndp", input.ndp);
   form.set("confirmed", "1");
   const response = await fetch(DHCP_SCOPE_UPDATE_URL, {
     method: "POST",
@@ -1812,13 +1830,23 @@ export async function updateRouterDhcpScope(input: {
     !("lease_time" in payload) || payload.lease_time !== input.lease_time ||
     !("pool_start_ip" in payload) || typeof payload.pool_start_ip !== "string" ||
     !("pool_end_ip" in payload) || typeof payload.pool_end_ip !== "string" ||
+    !("dhcpv6" in payload) || typeof payload.dhcpv6 !== "string" ||
+      (input.dhcpv6 !== "UNCHANGED" && payload.dhcpv6 !== input.dhcpv6) ||
+    !("ra" in payload) || typeof payload.ra !== "string" ||
+      (input.ra !== "UNCHANGED" && payload.ra !== input.ra) ||
+    !("ndp" in payload) || typeof payload.ndp !== "string" ||
+      (input.ndp !== "UNCHANGED" && payload.ndp !== input.ndp) ||
     !("restarted" in payload) || payload.restarted !== true ||
+    !("dnsmasq_restarted" in payload) || payload.dnsmasq_restarted !== true ||
+    !("odhcpd_restarted" in payload) || typeof payload.odhcpd_restarted !== "boolean" ||
+      payload.odhcpd_restarted !== (input.dhcpv6 !== "UNCHANGED" || input.ra !== "UNCHANGED" || input.ndp !== "UNCHANGED") ||
     !("rolled_back" in payload) || payload.rolled_back !== false
   ) {
-    throw new Error("The router did not confirm the DHCP scope update and dnsmasq restart.");
+    throw new Error("The router did not confirm the DHCP, DHCPv6/RA/NDP settings and required service restarts.");
   }
   return payload as RouterDhcpScopeUpdateResult;
 }
+
 export async function updateRouterRemoteSyslog(input: {
   enabled: boolean;
   host: string;
