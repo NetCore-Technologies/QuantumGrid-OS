@@ -1592,7 +1592,9 @@ local function security_status(uci, fs)
 		zones = {},
 		rules = {},
 		rules_count = 0,
+		redirects = {},
 		redirects_count = 0,
+		redirects_truncated = false,
 		nft_available = false,
 		nft_tables = {},
 		adblock_fast = {
@@ -1669,7 +1671,30 @@ local function security_status(uci, fs)
 				})
 			end
 		end)
-		uci:foreach("firewall", "redirect", function() result.redirects_count = result.redirects_count + 1 end)
+		uci:foreach("firewall", "redirect", function(section)
+			result.redirects_count = result.redirects_count + 1
+			if #result.redirects < 64 then
+				local name = rule_value(section.name or section[".name"], 64)
+				if name == "" then name = "unnamed-redirect-" .. tostring(result.redirects_count) end
+				table.insert(result.redirects, {
+					name = name,
+					source_zone = rule_value(section.src, 48),
+					destination_zone = rule_value(section.dest, 48),
+					protocol = rule_value(section.proto, 48),
+					target = rule_value(section.target, 24):upper(),
+					family = rule_value(section.family, 16),
+					external_port = rule_value(section.src_dport, 64),
+					internal_port = rule_value(section.dest_port, 64),
+					enabled = section.enabled ~= "0",
+					source_ip_match = has_rule_value(section.src_ip),
+					source_mac_match = has_rule_value(section.src_mac),
+					destination_ip_match = has_rule_value(section.dest_ip),
+					source_destination_ip_match = has_rule_value(section.src_dip)
+				})
+			else
+				result.redirects_truncated = true
+			end
+		end)
 	end)
 	result.firewall_config_readable = config_ok
 
