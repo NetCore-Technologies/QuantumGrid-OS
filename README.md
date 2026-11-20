@@ -75,7 +75,7 @@ The build also compiles the existing React control centre with Node.js 22/npm an
 its Vite output into the firmware root filesystem at `/www/quantumgrid`. After boot it is served
 at `http://<router-address>/quantumgrid/`. The dashboard, Network, Diagnostics, System and Analytics views use live router API data for
 system metrics, WAN counters and a short rolling throughput window. Wi-Fi and Network show
-iwinfo radio channel/frequency, driver-reported regulatory country and channel mode/width,
+iwinfo radio channel/frequency, driver-reported regulatory country, supported 802.11 PHY generations and channel widths, current channel centers,
 AP signal/noise, bitrate, quality and transmit power where the wireless driver reports them. Current-channel busy airtime is calculated from successive
 read-only iwinfo survey counters where the driver supports them; unsupported radios remain N/A.
 The Wi-Fi page also provides an authenticated, manual iwinfo scan of nearby access points,

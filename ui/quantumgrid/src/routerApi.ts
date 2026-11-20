@@ -18,6 +18,8 @@ export interface RouterWirelessInterface {
   country?: string;
   hwmode?: string;
   htmode?: string;
+  hardware_modes?: string[];
+  ht_modes?: string[];
   center_channel_1?: number;
   center_channel_2?: number;
   txpower_dbm?: number;

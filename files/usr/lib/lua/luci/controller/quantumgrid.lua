@@ -227,6 +227,22 @@ local function wireless_status()
 				local info = valid_ifname and (ubus_call("iwinfo", "info", { device = ifname }) or {}) or {}
 				local interface_up = valid_ifname and iface.config ~= nil and radio.up == true
 				local survey = interface_up and wireless_survey(ifname, tonumber(info.frequency)) or { supported = false }
+				local hardware_modes = {}
+				if type(info.hwmodes) == "table" then
+					for _, mode in ipairs(info.hwmodes) do
+						if type(mode) == "string" and #hardware_modes < 16 then
+							table.insert(hardware_modes, mode)
+						end
+					end
+				end
+				local ht_modes = {}
+				if type(info.htmodes) == "table" then
+					for _, mode in ipairs(info.htmodes) do
+						if type(mode) == "string" and #ht_modes < 32 then
+							table.insert(ht_modes, mode)
+						end
+					end
+				end
 				table.insert(item.interfaces, {
 					ifname = ifname or "",
 					ssid = config.ssid or info.ssid or "",
@@ -240,6 +256,8 @@ local function wireless_status()
 					country = type(info.country) == "string" and info.country or nil,
 					hwmode = type(info.hwmode) == "string" and info.hwmode or nil,
 					htmode = type(info.htmode) == "string" and info.htmode or nil,
+					hardware_modes = hardware_modes,
+					ht_modes = ht_modes,
 					center_channel_1 = tonumber(info.center_chan1),
 					center_channel_2 = tonumber(info.center_chan2),
 					txpower_dbm = tonumber(info.txpower),

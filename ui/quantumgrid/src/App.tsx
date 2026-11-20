@@ -2276,9 +2276,10 @@ function WirelessRadioInventory({
             <div>
               <strong>{iface.ssid || iface.ifname || radio.name}</strong>
               <span>{radio.name} · {iface.ifname || "No interface"} · {iface.mode || "mode N/A"} · {iface.up ? "UP" : "DOWN"} · {iface.country || "Region N/A"} · {iface.htmode || "Width N/A"}</span>
+              <span className="wireless-mode-capabilities">PHY: {iface.hardware_modes?.join(" / ") || iface.hwmode || "N/A"} · Widths: {iface.ht_modes?.join(" / ") || iface.htmode || "N/A"}</span>
             </div>
           </div>
-          <div><small>CHANNEL / FREQ</small><b>{iface.channel === undefined ? "N/A" : fmt(iface.channel)}{iface.frequency_mhz === undefined ? "" : ` · ${fmt(iface.frequency_mhz)} MHz`}</b></div>
+          <div><small>CHANNEL / FREQ</small><b>{iface.channel === undefined ? "N/A" : fmt(iface.channel)}{iface.frequency_mhz === undefined ? "" : ` · ${fmt(iface.frequency_mhz)} MHz`}{iface.center_channel_1 === undefined ? "" : ` · Center ${iface.center_channel_1}`}{iface.center_channel_2 === undefined || iface.center_channel_2 === 0 ? "" : `/${iface.center_channel_2}`}</b></div>
           <div><small>AP SIGNAL / NOISE</small><b>{iface.signal_dbm === undefined ? "N/A" : `${fmt(iface.signal_dbm)} dBm`}{iface.noise_dbm === undefined ? "" : ` / ${fmt(iface.noise_dbm)} dBm`}</b></div>
           <div><small>BITRATE</small><b>{formatKbps(iface.bitrate_kbps)}</b></div>
           <div><small>QUALITY / TX POWER</small><b>{iface.quality === undefined ? "N/A" : `${fmt(iface.quality)}/${fmt(iface.quality_max ?? 0)}`}{iface.txpower_dbm === undefined ? "" : ` · ${fmt(iface.txpower_dbm)} dBm`}</b></div>
