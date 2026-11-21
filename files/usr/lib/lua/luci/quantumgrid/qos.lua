@@ -195,6 +195,23 @@ function validate_client_download_policy(mac, destination_ip, source_zone, desti
 	}
 end
 
+local MANAGED_UPLOAD_OPTIONS = {
+	name = true, src = true, dest = true, proto = true, src_mac = true,
+	target = true, set_dscp = true, enabled = true
+}
+local MANAGED_DOWNLOAD_OPTIONS = {
+	name = true, src = true, dest = true, proto = true, dest_ip = true,
+	target = true, set_dscp = true, enabled = true
+}
+
+local function has_only_managed_policy_options(section, allowed)
+	for option in pairs(section) do
+		if type(option) ~= "string" then return false end
+		if option:sub(1, 1) ~= "." and not allowed[option] then return false end
+	end
+	return true
+end
+
 function summarize_client_policy(section)
 	if type(section) ~= "table" or type(section.name) ~= "string" or section.target ~= "dscp" then return nil end
 	if section[".type"] ~= nil and section[".type"] ~= "rule" then return nil end
@@ -207,7 +224,8 @@ function summarize_client_policy(section)
 	local upload_mac = section.name:sub(1, #POLICY_PREFIX) == POLICY_PREFIX
 		and normalize_unicast_mac(section.src_mac) or nil
 	if upload_mac and section.name == POLICY_PREFIX .. upload_mac and
-		valid_token(section.src) and valid_token(section.dest) and section.dest_ip == nil then
+		has_only_managed_policy_options(section, MANAGED_UPLOAD_OPTIONS) and
+		valid_token(section.src) and valid_token(section.dest) then
 		return {
 			section = section_name, name = "Client " .. upload_mac, mac = upload_mac,
 			source_zone = section.src, destination_zone = section.dest,
@@ -218,8 +236,8 @@ function summarize_client_policy(section)
 	local download_mac = section.name:sub(1, #DOWNLOAD_POLICY_PREFIX) == DOWNLOAD_POLICY_PREFIX
 		and normalize_unicast_mac(section.name:sub(#DOWNLOAD_POLICY_PREFIX + 1)) or nil
 	if download_mac and section.name == DOWNLOAD_POLICY_PREFIX .. download_mac and
-		normalize_unicast_mac(section.src_mac) == nil and valid_token(section.src) and
-		valid_token(section.dest) and valid_ipv4_host(section.dest_ip) then
+		section.src_mac == nil and has_only_managed_policy_options(section, MANAGED_DOWNLOAD_OPTIONS) and
+		valid_token(section.src) and valid_token(section.dest) and valid_ipv4_host(section.dest_ip) then
 		return {
 			section = section_name, name = "Client " .. download_mac, mac = download_mac,
 			destination_ip = section.dest_ip, source_zone = section.src, destination_zone = section.dest,
