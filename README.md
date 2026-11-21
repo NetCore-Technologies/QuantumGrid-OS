@@ -100,6 +100,13 @@ a telephone line is operational, or physical validation has passed. Missing or m
 capability declarations remain `unknown`; they are never silently treated as unsupported or
 operational.
 
+Each first boot also creates a 128-bit random device inventory identifier at
+`/etc/quantumgrid/device-id`. It is stable across normal reboots and is exposed only through
+the authenticated platform inventory API. The ID is public metadata for distinguishing routers;
+it is not a password, TLS certificate, cryptographic attestation or fleet-enrollment credential.
+A factory reset or replacement of the writable overlay can create a new ID. A future central
+management service must authenticate routers with a separate per-device key or certificate.
+
 The AW1000 remains the **only supported hardware profile** today. Its manifest is the first
 profile contract, not a claim of multi-vendor support. Select it explicitly with
 `QG_DEVICE_PROFILE=profiles/arcadyan-aw1000.json ./build.sh`; this is also the default.
