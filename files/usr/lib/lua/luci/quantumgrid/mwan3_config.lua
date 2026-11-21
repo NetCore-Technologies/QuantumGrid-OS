@@ -161,25 +161,28 @@ function M.project_section(name, section)
   end
 
   local function projected_integer(value, minimum, maximum, fallback)
-    return bounded_integer(value, minimum, maximum) or fallback
+    if value == nil or value == "" then return fallback, true end
+    local number = bounded_integer(value, minimum, maximum)
+    return number or fallback, number ~= nil
   end
 
   local enabled = section.enabled
   if enabled == nil then enabled = "1" end
   local enabled_valid = enabled == "0" or enabled == "1"
 
-  local reliability = projected_integer(section.reliability, 1, MAX_TRACK_TARGETS, 1)
-  local count = projected_integer(section.count, 1, 10, 1)
-  local timeout = projected_integer(section.timeout, 1, 10, 2)
-  local interval = projected_integer(section.interval, 1, 60, 5)
-  local down = projected_integer(section.down, 1, 20, 3)
-  local up = projected_integer(section.up, 1, 20, 3)
+  local reliability, reliability_valid = projected_integer(section.reliability, 1, MAX_TRACK_TARGETS, 1)
+  local count, count_valid = projected_integer(section.count, 1, 10, 1)
+  local timeout, timeout_valid = projected_integer(section.timeout, 1, 10, 2)
+  local interval, interval_valid = projected_integer(section.interval, 1, 60, 5)
+  local down, down_valid = projected_integer(section.down, 1, 20, 3)
+  local up, up_valid = projected_integer(section.up, 1, 20, 3)
   local initial_state = section.initial_state
   if initial_state == nil or initial_state == "" then initial_state = "online" end
   local initial_state_valid = initial_state == "online" or initial_state == "offline"
 
-  local valid = enabled_valid and targets_valid and reliability <= #track_ips
-    and initial_state_valid
+  local valid = enabled_valid and targets_valid and reliability_valid and
+    reliability <= #track_ips and count_valid and timeout_valid and
+    interval_valid and down_valid and up_valid and initial_state_valid
   return {
     section = name,
     enabled = enabled == "1",
