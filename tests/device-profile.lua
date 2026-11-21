@@ -11,6 +11,10 @@ local aw1000 = {
     openwrt_target = "qualcommax",
     openwrt_subtarget = "ipq807x",
     board_compatible = { "arcadyan,aw1000" }
+  },
+  capabilities = {
+    nss = { supported = true },
+    fxs = { supported = true }
   }
 }
 
@@ -22,6 +26,46 @@ assert(matched.model == "AW1000")
 assert(matched.openwrt_device == "arcadyan_aw1000")
 assert(matched.observed_board_name == "arcadyan,aw1000")
 assert(#matched.board_compatible == 1)
+assert(matched.capabilities.available)
+assert(matched.capabilities.nss == "declared-supported")
+assert(matched.capabilities.fxs == "declared-supported")
+
+local unsupported_capabilities = {
+  schema_version = 1,
+  platform = aw1000.platform,
+  capabilities = {
+    nss = { supported = false },
+    fxs = { supported = false }
+  }
+}
+local unsupported = profile.inspect(unsupported_capabilities, "arcadyan,aw1000")
+assert(unsupported.available and unsupported.status == "matched")
+assert(unsupported.capabilities.available)
+assert(unsupported.capabilities.nss == "not-declared")
+assert(unsupported.capabilities.fxs == "not-declared")
+
+local malformed_capabilities = {
+  schema_version = 1,
+  platform = aw1000.platform,
+  capabilities = {
+    nss = { supported = "true" },
+    fxs = { supported = false }
+  }
+}
+local malformed = profile.inspect(malformed_capabilities, "arcadyan,aw1000")
+assert(malformed.available and malformed.status == "matched")
+assert(not malformed.capabilities.available)
+assert(malformed.capabilities.nss == "unknown")
+assert(malformed.capabilities.fxs == "not-declared")
+
+local missing_capabilities = profile.inspect({
+  schema_version = 1,
+  platform = aw1000.platform
+}, "arcadyan,aw1000")
+assert(missing_capabilities.available and missing_capabilities.status == "matched")
+assert(not missing_capabilities.capabilities.available)
+assert(missing_capabilities.capabilities.nss == "unknown")
+assert(missing_capabilities.capabilities.fxs == "unknown")
 
 local mismatch = profile.inspect(aw1000, "vendor,other-board")
 assert(mismatch.available)
@@ -94,4 +138,4 @@ local too_many_ids = {
 }
 assert(profile.inspect(too_many_ids, "vendor,board1").status == "unavailable")
 
-print("device-profile: runtime identity checks passed")
+print("device-profile: identity and declared-capability checks passed")
