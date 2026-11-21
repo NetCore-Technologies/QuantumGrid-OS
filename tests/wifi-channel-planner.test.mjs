@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planWifiChannels } from "../ui/quantumgrid/src/wifiChannelPlanner.ts";
+import { planWifiChannels, recommendWifiChannel } from "../ui/quantumgrid/src/wifiChannelPlanner.ts";
 
 const channel = (number, band, restricted = false) => ({
   channel: number,
@@ -161,4 +161,60 @@ test("missing signal is reported instead of silently counted as a measurement", 
 
   assert.equal(plans[0].options[0].knownSignalAccessPoints, 0);
   assert.equal(plans[0].options[0].unknownSignalAccessPoints, 1);
+});
+
+test("recommends a materially cleaner channel only with measured interference and safe flags", () => {
+  const plans = planWifiChannels([
+    ap({ bssid: "aa:00:00:00:09:01", channel: 1, signal: -35 }),
+    ap({ bssid: "aa:00:00:00:09:02", channel: 2, signal: -45 }),
+  ], [radio({
+    channels: [channel(1, "2.4 GHz"), channel(2, "2.4 GHz"), channel(11, "2.4 GHz")],
+  })]);
+  const recommendation = recommendWifiChannel(plans[0]);
+  assert.ok(recommendation);
+  assert.equal(recommendation.channel, 11);
+  assert.equal(recommendation.current, false);
+});
+
+test("does not recommend a change when the current channel is already clear", () => {
+  const plans = planWifiChannels([], [radio({
+    channels: [channel(1, "2.4 GHz"), channel(6, "2.4 GHz"), channel(11, "2.4 GHz")],
+  })]);
+  assert.equal(recommendWifiChannel(plans[0]), null);
+});
+
+test("does not auto-recommend when radio width or observed signal confidence is unknown", () => {
+  const unknownWidth = planWifiChannels([
+    ap({ bssid: "aa:00:00:00:09:03", channel: 1, signal: -45 }),
+  ], [radio({
+    interfaces: [{
+      ifname: "wlan0", ssid: "QG", bssid: "02:00:00:00:00:01", mode: "ap",
+      up: true, channel: 1, frequency_mhz: 2412,
+    }],
+    channels: [channel(1, "2.4 GHz"), channel(11, "2.4 GHz")],
+  })]);
+  assert.equal(recommendWifiChannel(unknownWidth[0]), null);
+  const missingSignal = ap({ bssid: "aa:00:00:00:09:04", channel: 1 });
+  delete missingSignal.signal_dbm;
+  const uncertainSignal = planWifiChannels([missingSignal], [radio({
+    channels: [channel(1, "2.4 GHz"), channel(11, "2.4 GHz")],
+  })]);
+  assert.equal(recommendWifiChannel(uncertainSignal[0]), null);
+});
+
+test("does not recommend DFS, radar, passive or no-IR candidate channels", () => {
+  const plans = planWifiChannels([
+    ap({ bssid: "aa:00:00:00:09:05", channel: 36, band: "5 GHz", signal: -35 }),
+  ], [radio({
+    interfaces: [{
+      ifname: "wlan0", ssid: "QG", bssid: "02:00:00:00:00:01", mode: "ap",
+      up: true, channel: 36, frequency_mhz: 5180, htmode: "VHT20",
+    }],
+    channels: [
+      { ...channel(36, "5 GHz"), frequency_mhz: 5180 },
+      { ...channel(149, "5 GHz"), frequency_mhz: 5745, flags: ["radar"] },
+      { ...channel(157, "5 GHz"), frequency_mhz: 5785, flags: ["no-IR"] },
+    ],
+  })]);
+  assert.equal(recommendWifiChannel(plans[0]), null);
 });
