@@ -857,6 +857,30 @@ export interface RouterOfficeForwardingRemoveResult {
   rolled_back: false;
 }
 
+export type RouterOfficePortForwardProtocol = "tcp" | "udp" | "tcp udp";
+
+export interface RouterOfficePortForwardCreateResult {
+  ok: true;
+  section: string;
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficePortForwardProtocol;
+  source_port: number;
+  destination_ip: string;
+  destination_port: number;
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficePortForwardRemoveResult {
+  ok: true;
+  section: string;
+  removed: true;
+  reloaded: true;
+  rolled_back: false;
+}
+
 export interface RouterOfficeDhcpScope {
   section: string;
   name: string;
@@ -1116,6 +1140,8 @@ const BRIDGE_VLAN_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-
 const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-remove";
 const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-add";
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
+const OFFICE_PORT_FORWARD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-add";
+const OFFICE_PORT_FORWARD_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-remove";
 const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-zone-update";
 const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-wifi-network-update";
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
@@ -2498,6 +2524,132 @@ export async function createRouterOfficeSegment(input: {
     throw new Error("The router did not confirm the complete office network, firewall and DHCP transaction.");
   }
   return payload as RouterOfficeSegmentCreateResult;
+}
+
+
+export async function createRouterOfficePortForward(input: {
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficePortForwardProtocol;
+  sourcePort: string;
+  destinationIp: string;
+  destinationPort: string;
+}): Promise<RouterOfficePortForwardCreateResult> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(input.name)) {
+    throw new Error("Enter a valid rule name using 1–64 letters, digits, dots, underscores or hyphens.");
+  }
+  const validZone = (value: string) =>
+    /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
+  if (!validZone(input.source) || !validZone(input.destination)) {
+    throw new Error("Select a valid existing firewall zone for the port-forward.");
+  }
+  if (input.source === input.destination) {
+    throw new Error("Source and destination firewall zones must be different.");
+  }
+  if (input.protocol !== "tcp" && input.protocol !== "udp" && input.protocol !== "tcp udp") {
+    throw new Error("Protocol must be TCP, UDP or TCP + UDP.");
+  }
+  const validPort = (value: string) =>
+    /^[0-9]{1,5}$/.test(value) && Number(value) >= 1 && Number(value) <= 65535;
+  if (!validPort(input.sourcePort) || !validPort(input.destinationPort)) {
+    throw new Error("Ports must be whole numbers from 1 to 65535.");
+  }
+  const octets = input.destinationIp.split(".");
+  if (
+    octets.length !== 4 ||
+    octets.some((part) => !/^(0|[1-9][0-9]{0,2})$/.test(part) || Number(part) > 255)
+  ) {
+    throw new Error("Destination must be a valid dotted-decimal IPv4 address.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("name", input.name);
+  form.set("source", input.source);
+  form.set("destination", input.destination);
+  form.set("protocol", input.protocol);
+  form.set("source_port", String(Number(input.sourcePort)));
+  form.set("destination_ip", input.destinationIp);
+  form.set("destination_port", String(Number(input.destinationPort)));
+  form.set("confirmed", "1");
+
+  const response = await fetch(OFFICE_PORT_FORWARD_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "WAN port-forward changes require an active router administrator session."
+      : "The router returned an invalid WAN port-forward response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid WAN port-forward response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || typeof payload.section !== "string" || payload.section.length === 0 ||
+    !("name" in payload) || payload.name !== input.name ||
+    !("source" in payload) || payload.source !== input.source ||
+    !("destination" in payload) || payload.destination !== input.destination ||
+    !("protocol" in payload) || payload.protocol !== input.protocol ||
+    !("source_port" in payload) || payload.source_port !== Number(input.sourcePort) ||
+    !("destination_ip" in payload) || payload.destination_ip !== input.destinationIp ||
+    !("destination_port" in payload) || payload.destination_port !== Number(input.destinationPort) ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the WAN port-forward configuration and firewall reload.");
+  }
+  return payload as RouterOfficePortForwardCreateResult;
+}
+
+export async function removeRouterOfficePortForward(section: string): Promise<RouterOfficePortForwardRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid firewall redirect section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_PORT_FORWARD_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "WAN port-forward removal requires an active router administrator session."
+      : "The router returned an invalid WAN port-forward removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid WAN port-forward removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm port-forward removal and firewall reload.");
+  }
+  return payload as RouterOfficePortForwardRemoveResult;
 }
 
 export async function createRouterOfficeForwarding(input: {
