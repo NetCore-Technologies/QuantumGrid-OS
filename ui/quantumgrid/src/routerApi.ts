@@ -1602,6 +1602,42 @@ function normalizeGlobalUnicastIpv6(value: string): string | null {
   return groups.map((part) => part.toString(16).padStart(4, "0")).join(":");
 }
 
+function normalizeRemoteSyslogIpv6(value: string): string | null {
+  if (value.length < 2 || value.length > 39 || value.includes("%") || value.includes(".")) return null;
+  if (!/^[0-9a-fA-F:]+$/.test(value) || value.includes(":::")) return null;
+  const compression = value.indexOf("::");
+  if (compression !== -1 && value.indexOf("::", compression + 2) !== -1) return null;
+  const parseSide = (side: string): number[] | null => {
+    if (!side) return [];
+    if (side.startsWith(":") || side.endsWith(":")) return null;
+    const parts = side.split(":");
+    if (parts.some((part) => !/^[0-9a-fA-F]{1,4}$/.test(part))) return null;
+    return parts.map((part) => Number.parseInt(part, 16));
+  };
+  let groups: number[];
+  if (compression !== -1) {
+    const left = parseSide(value.slice(0, compression));
+    const right = parseSide(value.slice(compression + 2));
+    if (!left || !right || left.length + right.length >= 8) return null;
+    groups = [...left, ...Array<number>(8 - left.length - right.length).fill(0), ...right];
+  } else {
+    const parsed = parseSide(value);
+    if (!parsed || parsed.length !== 8) return null;
+    groups = parsed;
+  }
+  if (groups.length !== 8) return null;
+  const allZero = groups.every((part) => part === 0);
+  const loopback = groups.slice(0, 7).every((part) => part === 0) && groups[7] === 1;
+  if (allZero || loopback) return null;
+  const globalUnicast = groups[0] >= 0x2000 && groups[0] <= 0x3fff;
+  const uniqueLocal = groups[0] >= 0xfc00 && groups[0] <= 0xfdff;
+  if (!globalUnicast && !uniqueLocal) return null;
+  if (groups[0] === 0x2001 && (groups[1] < 0x0200 || groups[1] === 0x0db8)) return null;
+  if (groups[0] === 0x2002 || (groups[0] === 0x3fff && groups[1] < 0x1000)) return null;
+  if (groups.slice(0, 5).every((part) => part === 0) && groups[5] === 0xffff) return null;
+  return groups.map((part) => part.toString(16).padStart(4, "0")).join(":");
+}
+
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!response.ok || !contentType.includes("application/json")) {
@@ -3121,9 +3157,12 @@ export async function updateRouterRemoteSyslog(input: {
   hostname: string;
   prefix: string;
 }): Promise<RouterRemoteSyslogUpdateResult> {
+  const trimmedHost = input.host.trim();
+  const normalizedIpv6Host = normalizeRemoteSyslogIpv6(trimmedHost);
+  const normalizedHost = normalizedIpv6Host ?? trimmedHost;
   if (input.enabled) {
-    if (!isRemoteSyslogIpv4(input.host) && !isRemoteSyslogHostname(input.host)) {
-      throw new Error("Enter a valid IPv4 address or DNS host name for the remote syslog server.");
+    if (!isRemoteSyslogIpv4(trimmedHost) && !isRemoteSyslogHostname(trimmedHost) && !normalizedIpv6Host) {
+      throw new Error("Enter a valid IPv4 address, unicast IPv6 address or DNS host name for the remote syslog server.");
     }
     if (!Number.isSafeInteger(input.port) || input.port < 1 || input.port > 65535) {
       throw new Error("Remote syslog port must be a whole number from 1 to 65,535.");
@@ -3141,7 +3180,7 @@ export async function updateRouterRemoteSyslog(input: {
   const form = new URLSearchParams();
   form.set("confirmed", "1");
   form.set("enabled", input.enabled ? "1" : "0");
-  form.set("host", input.host);
+  form.set("host", normalizedHost);
   form.set("port", String(input.port));
   form.set("protocol", input.protocol);
   form.set("hostname", input.hostname);
@@ -3177,7 +3216,7 @@ export async function updateRouterRemoteSyslog(input: {
     !("host" in payload) || typeof payload.host !== "string" ||
     !("port" in payload) || typeof payload.port !== "number" ||
     !("protocol" in payload) || (payload.protocol !== "tcp" && payload.protocol !== "udp" && payload.protocol !== "tls") ||
-    (input.enabled && (payload.host !== input.host.trim() || payload.port !== input.port || payload.protocol !== input.protocol)) ||
+    (input.enabled && (payload.host !== normalizedHost || payload.port !== input.port || payload.protocol !== input.protocol)) ||
     (input.enabled && input.protocol === "tls" && (!("tls_status" in payload) || payload.tls_status !== "ready"))
   ) {
     throw new Error("The router did not confirm the remote syslog update and log-service restart.");
