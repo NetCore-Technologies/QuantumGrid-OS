@@ -183,7 +183,7 @@ assert(oversized_key.private_key.status == "review")
 -- Fingerprints expose only a normalized SHA-256 digest, never certificate or key contents.
 local expected_fingerprint = string.rep("AA:", 31) .. "AA"
 local parsed_fingerprint = transport.parse_certificate_fingerprint(
-  "sha256 Fingerprint=" .. expected_fingerprint .. "\\n")
+  "sha256 Fingerprint=" .. expected_fingerprint .. "\n")
 assert(parsed_fingerprint.available)
 assert(parsed_fingerprint.algorithm == "SHA-256")
 assert(parsed_fingerprint.value == expected_fingerprint)
