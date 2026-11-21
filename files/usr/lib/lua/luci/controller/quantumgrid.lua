@@ -1464,19 +1464,12 @@ function action_wireless_update()
 	end
 
 	local current_channel = uci:get("wireless", update.radio, "channel") or "auto"
-	local expected_current_channel = http.formvalue("expected_current_channel", true)
-	if expected_current_channel ~= nil then
-		local expected_valid = expected_current_channel == "auto" or
-			type(expected_current_channel) == "string" and expected_current_channel:match("^[1-9]%d?%d?$") ~= nil and
-			tonumber(expected_current_channel) >= 1 and tonumber(expected_current_channel) <= 233
-		if not expected_valid then
-			respond(400, { ok = false, error = "The expected current radio channel must be Auto or a valid channel number." })
-			return
-		end
-		if expected_current_channel ~= current_channel then
-			respond(409, { ok = false, error = "The radio channel changed after the scan. Re-scan and review a fresh recommendation before applying it." })
-			return
-		end
+	local expected_channel_ok, expected_channel_error, expected_channel_status =
+		validator.validate_expected_current_channel(
+			http.formvalue("expected_current_channel", true), current_channel)
+	if not expected_channel_ok then
+		respond(expected_channel_status or 400, { ok = false, error = expected_channel_error })
+		return
 	end
 	if update.channel ~= current_channel and not wireless_channel_allowed(update.radio, update.channel) then
 		respond(400, { ok = false, error = "That channel is not reported as available and unrestricted by the radio driver." })
