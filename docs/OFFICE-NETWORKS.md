@@ -29,8 +29,9 @@ Enable **Enable IPv6 on this VLAN** only when the upstream WAN is configured to 
 
 The provisioner requests a separate /64 from OpenWrt prefix delegation by setting ip6assign=64 on the VLAN interface and enabling prefix delegation on that interface. It configures the DHCP scope with:
 
-- DHCPv6 server mode.
-- Router Advertisement server mode.
+- DHCPv6 server mode, with managed-address and other-configuration flags advertised in Router Advertisements.
+- SLAAC prefix advertisements enabled for clients such as Android that do not use DHCPv6 for address assignment.
+- Router Advertisement DNS announcements enabled.
 - NDP proxy disabled.
 
 It also creates four additional IPv6-scoped firewall input rules: DHCPv6 client-to-server traffic (UDP 546 to 547), DNS over UDP/TCP 53, and the ICMPv6 router-solicitation/neighbour-solicitation/neighbour-advertisement messages required for local IPv6 control-plane operation. No IPv6 WAN forwarding, permissive INPUT policy, or inter-zone forwarding is added.
