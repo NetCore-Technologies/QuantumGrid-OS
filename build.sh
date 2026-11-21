@@ -154,7 +154,7 @@ grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}_DEVICE_${OPENWRT
 if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     [[ "$NSS_REQUIRED_CONFIG_SYMBOLS" != "-" ]] || die "Device profile $DEVICE_PROFILE_ID declares no NSS config requirements"
     IFS=';' read -r -a REQUIRED_NSS_SYMBOLS <<< "$NSS_REQUIRED_CONFIG_SYMBOLS"
-    (("${#REQUIRED_NSS_SYMBOLS[@]} > 0")) || die "NSS configuration requirements are empty"
+    ((${#REQUIRED_NSS_SYMBOLS[@]} > 0)) || die "NSS configuration requirements are empty"
     for symbol in "${REQUIRED_NSS_SYMBOLS[@]}"; do
         [[ "$symbol" =~ ^CONFIG_[A-Z0-9_]+=[A-Za-z0-9_.+-]+$ ]] || die "Device profile contains an invalid NSS config symbol"
         grep -Fqx "$symbol" .config || die "Required NSS configuration was not selected: $symbol"
