@@ -1066,6 +1066,16 @@ export interface RouterOfficePortForward {
   destination_port: number;
 }
 
+export interface RouterOfficeIpv6Pinhole {
+  section: string;
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficePortForwardProtocol;
+  destination_ip: string;
+  destination_port: number;
+}
+
 export interface RouterOfficeForwardingCreateResult {
   ok: true;
   section: string;
@@ -1102,6 +1112,28 @@ export interface RouterOfficePortForwardCreateResult {
 }
 
 export interface RouterOfficePortForwardRemoveResult {
+  ok: true;
+  section: string;
+  removed: true;
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficeIpv6PinholeCreateResult {
+  ok: true;
+  section: string;
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficePortForwardProtocol;
+  destination_ip: string;
+  destination_port: number;
+  family: "ipv6";
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficeIpv6PinholeRemoveResult {
   ok: true;
   section: string;
   removed: true;
@@ -1162,6 +1194,8 @@ export interface RouterOfficeNetworks {
   forwarding_count: number;
   redirects: RouterOfficePortForward[];
   redirect_count: number;
+  ipv6_pinholes: RouterOfficeIpv6Pinhole[];
+  ipv6_pinhole_count: number;
   interface_count: number;
   bridge_count: number;
   vlan_count: number;
@@ -1383,10 +1417,40 @@ const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/offi
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
 const OFFICE_PORT_FORWARD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-add";
 const OFFICE_PORT_FORWARD_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-remove";
+const OFFICE_IPV6_PINHOLE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-add";
+const OFFICE_IPV6_PINHOLE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-remove";
 const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-zone-update";
 const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-wifi-network-update";
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
+
+function normalizeGlobalUnicastIpv6(value: string): string | null {
+  if (value.length === 0 || value.length > 45 || value.includes("%") || value.includes(".")) return null;
+  if (!/^[0-9a-fA-F:]+$/.test(value) || value.includes(":::")) return null;
+  const compression = value.indexOf("::");
+  if (compression !== -1 && value.indexOf("::", compression + 2) !== -1) return null;
+  const parseSide = (side: string): number[] | null => {
+    if (!side) return [];
+    if (side.startsWith(":") || side.endsWith(":")) return null;
+    const parts = side.split(":");
+    if (parts.some((part) => !/^[0-9a-fA-F]{1,4}$/.test(part))) return null;
+    return parts.map((part) => Number.parseInt(part, 16));
+  };
+  let groups: number[];
+  if (compression !== -1) {
+    const left = parseSide(value.slice(0, compression));
+    const right = parseSide(value.slice(compression + 2));
+    if (!left || !right || left.length + right.length >= 8) return null;
+    groups = [...left, ...Array<number>(8 - left.length - right.length).fill(0), ...right];
+  } else {
+    const parsed = parseSide(value);
+    if (!parsed || parsed.length !== 8) return null;
+    groups = parsed;
+  }
+  if (groups.length !== 8 || groups[0] < 0x2000 || groups[0] > 0x3fff) return null;
+  if (groups[0] === 0x2001 && groups[1] === 0x0db8) return null;
+  return groups.map((part) => part.toString(16).padStart(4, "0")).join(":");
+}
 
 async function decodeOverview(response: Response): Promise<RouterOverview> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -3116,6 +3180,121 @@ export async function removeRouterOfficePortForward(section: string): Promise<Ro
     throw new Error("The router did not confirm port-forward removal and firewall reload.");
   }
   return payload as RouterOfficePortForwardRemoveResult;
+}
+
+export async function createRouterOfficeIpv6Pinhole(input: {
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficePortForwardProtocol;
+  destinationIp: string;
+  destinationPort: string;
+}): Promise<RouterOfficeIpv6PinholeCreateResult> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(input.name)) {
+    throw new Error("Enter a valid IPv6 pinhole name using 1–64 letters, digits, dots, underscores or hyphens.");
+  }
+  const validZone = (value: string) =>
+    /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
+  if (!validZone(input.source) || !validZone(input.destination) || input.source === input.destination) {
+    throw new Error("Select two different existing firewall zones.");
+  }
+  if (input.protocol !== "tcp" && input.protocol !== "udp" && input.protocol !== "tcp udp") {
+    throw new Error("Protocol must be TCP, UDP or TCP + UDP.");
+  }
+  const destinationIp = normalizeGlobalUnicastIpv6(input.destinationIp.trim());
+  if (!destinationIp) {
+    throw new Error("Destination must be a global-unicast IPv6 host address, not a private, link-local, multicast, documentation or unspecified address.");
+  }
+  if (!/^[0-9]{1,5}$/.test(input.destinationPort) ||
+      Number(input.destinationPort) < 1 || Number(input.destinationPort) > 65535) {
+    throw new Error("Destination port must be a whole number from 1 to 65535.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("name", input.name);
+  form.set("source", input.source);
+  form.set("destination", input.destination);
+  form.set("protocol", input.protocol);
+  form.set("destination_ip", destinationIp);
+  form.set("destination_port", String(Number(input.destinationPort)));
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_IPV6_PINHOLE_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "IPv6 firewall changes require an active router administrator session."
+      : "The router returned an invalid IPv6 pinhole response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid IPv6 pinhole response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || typeof payload.section !== "string" || !/^[A-Za-z0-9_.-]{1,64}$/.test(payload.section) ||
+    !("name" in payload) || payload.name !== input.name ||
+    !("source" in payload) || payload.source !== input.source ||
+    !("destination" in payload) || payload.destination !== input.destination ||
+    !("protocol" in payload) || payload.protocol !== input.protocol ||
+    !("destination_ip" in payload) || payload.destination_ip !== destinationIp ||
+    !("destination_port" in payload) || payload.destination_port !== Number(input.destinationPort) ||
+    !("family" in payload) || payload.family !== "ipv6" ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the exact IPv6 pinhole and firewall reload.");
+  }
+  return payload as RouterOfficeIpv6PinholeCreateResult;
+}
+
+export async function removeRouterOfficeIpv6Pinhole(section: string): Promise<RouterOfficeIpv6PinholeRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid firewall IPv6 pinhole section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_IPV6_PINHOLE_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "IPv6 firewall changes require an active router administrator session."
+      : "The router returned an invalid IPv6 pinhole removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid IPv6 pinhole removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm IPv6 pinhole removal and firewall reload.");
+  }
+  return payload as RouterOfficeIpv6PinholeRemoveResult;
 }
 
 export async function createRouterOfficeForwarding(input: {
