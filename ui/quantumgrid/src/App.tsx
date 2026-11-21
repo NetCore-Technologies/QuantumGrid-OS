@@ -5578,7 +5578,8 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
               <strong>Live service view</strong>
               <div>{status.running ? "Daemon responds over ubus." : status.status === "disabled" ? "Daemon is stopped or disabled at boot." : "Daemon runtime is not currently observable."}</div>
               <div>{status.local_node_count} local BSS · {status.associated_clients} associated client(s) · {status.remote_host_count} remote AP peer(s)</div>
-              <div>Load kicks: {status.load_kick_enabled ? "enabled · review required" : "off"} · per-client overrides: {status.aggressiveness_override_count}</div>
+              <div>Load kicks: {status.load_kick_enabled ? "enabled · review required" : "off"} · SNR kick thresholds: {status.min_snr}/{status.min_connect_snr} dBm · per-client overrides: {status.aggressiveness_override_count}</div>
+              <div>Roam scan/trigger thresholds: {status.roam_scan_snr}/{status.roam_trigger_snr} dBm · probe/association steering: {status.probe_steering || status.assoc_steering ? "enabled · review required" : "off"}</div>
               {status.local_nodes_truncated || status.remote_hosts_truncated
                 ? <div>Runtime inventory is truncated; counts are upper-bounded samples.</div>
                 : null}
