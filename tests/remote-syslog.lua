@@ -191,7 +191,7 @@ local unsafe_globals = remote.inspect_status(unsafe_globals_uci, unsafe_globals_
 assert(unsafe_globals.tls_status == "review" and not unsafe_globals.tls_privilege_drop_configured)
 assert(not unsafe_globals.enabled)
 
-local wrong_tls_version = status_fixture({
+local weak_tls_uci, weak_tls_fs = status_fixture({
   tunnel = {
     [".name"] = "quantumgrid_syslog", [".type"] = "service",
     enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
@@ -200,15 +200,7 @@ local wrong_tls_version = status_fixture({
     checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
   },
 })
-local weak_tls_status = remote.inspect_status(wrong_tls_version, select(2, status_fixture({
-  tunnel = {
-    [".name"] = "quantumgrid_syslog", [".type"] = "service",
-    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
-    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1",
-    sslVersion = "TLSv1.1", connect = { "logs.corp.example:6514" },
-    checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
-  },
-})), 2)
+local weak_tls_status = remote.inspect_status(weak_tls_uci, weak_tls_fs, 2)
 assert(weak_tls_status.tls_status == "review" and not weak_tls_status.enabled)
 
 local unverified_identity_uci, unverified_identity_fs = status_fixture({
