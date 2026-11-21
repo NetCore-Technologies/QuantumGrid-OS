@@ -129,7 +129,7 @@ local function status_fixture(options)
     log_prefix = "office-site1",
   }}
   local sections = {
-    globals = options.globals or {
+    globals = options.globals == false and nil or options.globals or {
       [".name"] = "globals",
       [".type"] = "globals",
       setuid = "nobody",
@@ -186,10 +186,10 @@ assert(unencrypted_status.tls_privilege_drop_configured,
   "TLS service prerequisites must be detected even before the administrator enables TLS")
 assert(unencrypted_status.tls_status == "unavailable", "plain UDP must not be reported as TLS")
 
-local missing_stunnel_globals_uci, missing_stunnel_globals_fs = status_fixture({ globals = nil })
+local missing_stunnel_globals_uci, missing_stunnel_globals_fs = status_fixture({ globals = false })
 local missing_stunnel_globals = remote.inspect_status(missing_stunnel_globals_uci, missing_stunnel_globals_fs, 457)
-assert(missing_stunnel_globals.tls_privilege_drop_configured,
-  "status_fixture provides the default non-root stunnel globals unless explicitly overridden")
+assert(not missing_stunnel_globals.tls_privilege_drop_configured,
+  "a missing stunnel globals section must not be presented as TLS-ready")
 
 local unsafe_globals_uci, unsafe_globals_fs = status_fixture({
   globals = { [".name"] = "globals", [".type"] = "globals", setuid = "root", setgid = "nogroup" },
