@@ -41,12 +41,12 @@ class DeviceProfileTests(unittest.TestCase):
 
     def test_aw1000_profile_matches_its_pinned_openwrt_config(self) -> None:
         fields = VALIDATOR.validate(PROFILE)
-        self.assertEqual(len(fields), 16)
+        self.assertEqual(len(fields), 17)
         self.assertEqual(fields[0], "arcadyan-aw1000")
         self.assertEqual(fields[3:6], ["qualcommax", "ipq807x", "arcadyan_aw1000"])
         self.assertEqual(fields[7], "1")
-        self.assertEqual(fields[11], "1")
-        self.assertEqual(fields[14], "*arcadyan_aw1000-squashfs-factory.ubi")
+        self.assertEqual(fields[12], "1")
+        self.assertEqual(fields[15], "*arcadyan_aw1000-squashfs-factory.ubi")
 
     def test_line_output_is_a_fixed_sixteen_field_contract(self) -> None:
         result = subprocess.run(
@@ -55,7 +55,7 @@ class DeviceProfileTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 16)
+        self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 17)
 
     def test_tab_output_is_a_fixed_sixteen_field_contract(self) -> None:
         result = subprocess.run(
@@ -64,7 +64,7 @@ class DeviceProfileTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(len(result.stdout.rstrip("\n").split("\t")), 16)
+        self.assertEqual(len(result.stdout.rstrip("\n").split("\t")), 17)
 
     def test_device_must_be_selected_by_the_profile_config(self) -> None:
         profile = self.profile()
@@ -97,9 +97,30 @@ class DeviceProfileTests(unittest.TestCase):
             "config_fragment": None,
             "feed_pins": None,
             "pin_script": None,
+            "required_config_symbols": [],
         }
         fields = VALIDATOR.validate(self.write_profile(profile))
-        self.assertEqual(fields[7:11], ["0", "-", "-", "-"])
+        self.assertEqual(fields[7:12], ["0", "-", "-", "-", "-"])
+
+    def test_enabled_nss_must_declare_required_config_symbols(self) -> None:
+        profile = self.profile()
+        profile["capabilities"]["nss"]["required_config_symbols"] = []
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "must declare at least one"):
+            VALIDATOR.validate(self.write_profile(profile))
+
+    def test_nss_config_symbols_reject_shell_metacharacters(self) -> None:
+        profile = self.profile()
+        profile["capabilities"]["nss"]["required_config_symbols"][0] = "CONFIG_BAD=y;touch /tmp/pwned"
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "invalid value"):
+            VALIDATOR.validate(self.write_profile(profile))
+
+    def test_duplicate_nss_config_symbols_are_rejected(self) -> None:
+        profile = self.profile()
+        profile["capabilities"]["nss"]["required_config_symbols"].append(
+            profile["capabilities"]["nss"]["required_config_symbols"][0]
+        )
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "contains duplicates"):
+            VALIDATOR.validate(self.write_profile(profile))
 
     def test_nss_capability_requires_a_boolean(self) -> None:
         profile = self.profile()
