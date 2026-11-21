@@ -55,21 +55,24 @@ local function fixture(redirect, overrides)
       for _, section in ipairs(dropbear_sections) do callback(section) end
     end
   end
+  local function stat(path)
+    if files[path] ~= true then return nil end
+    local override = stat_overrides[path]
+    if override then return override end
+    if path == "/etc/dropbear" or path == "/root/.ssh" then
+      return { size = 0, uid = 0, mode = 16832, type = "dir" }
+    end
+    return {
+      size = empty_files[path] and 0 or 128,
+      uid = 0,
+      mode = 33152,
+      type = "reg"
+    }
+  end
   local fs = {
     access = function(path) return files[path] == true end,
-    stat = function(path)
-      if files[path] ~= true then return nil end
-      local override = stat_overrides[path]
-      if override then return override end
-      if path == "/etc/dropbear" or path == "/root/.ssh" then
-        return { size = 0, uid = 0, mode = 16832 }
-      end
-      return {
-        size = empty_files[path] and 0 or 128,
-        uid = 0,
-        mode = 33152
-      }
-    end
+    stat = stat,
+    lstat = stat
   }
   return uci, fs
 end
@@ -119,6 +122,26 @@ local private_key = https_only.private_key
 assert(private_key.available and private_key.status == "present")
 assert(private_key.root_owned and private_key.regular_file and private_key.owner_readable)
 assert(not private_key.group_access and not private_key.other_access)
+
+-- lstat must reject a symlink even when its target metadata appears private.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/uhttpd.key"] = { size = 512, uid = 0, mode = 33152, type = "lnk" }
+  }
+})
+local symlink_key = transport.inspect(uci, fs)
+assert(symlink_key.private_key.regular_file == false)
+assert(symlink_key.private_key.status == "review")
+
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 33152, type = "lnk" }
+  }
+})
+local symlink_authorized_keys = transport.inspect(uci, fs)
+assert(symlink_authorized_keys.ssh_authorized_keys.regular_file == false)
+assert(symlink_authorized_keys.ssh_authorized_keys.status == "review")
+assert(symlink_authorized_keys.ssh_status == "review")
 
 uci, fs = fixture("1", {
   stat_overrides = {
