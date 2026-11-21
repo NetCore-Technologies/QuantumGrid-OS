@@ -8221,6 +8221,7 @@ function action_api()
 	local hardware_io = hardware_io_status(fs)
 	local office_networks = office_network_status(uci, fs)
 	local remote_syslog = remote_syslog_status(uci, fs)
+	local usteer = usteer_status(uci, fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
@@ -8259,6 +8260,7 @@ function action_api()
 		hardware_io = hardware_io,
 		office_networks = office_networks,
 		remote_syslog = remote_syslog,
+		usteer = usteer,
 		conntrack = conntrack,
 		cellular = cellular,
 		phone = {
