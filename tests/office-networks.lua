@@ -861,6 +861,9 @@ assert(#parsed_neighbors == 2
 assert(#office.parse_ipv6_neighbor_inventory(
   "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:01 REACHABLE", "br-other") == 0,
   "NDP parser must not cross a VLAN device boundary")
+assert(#office.parse_ipv6_neighbor_inventory(
+  "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:01 REACHABLE", "-rf") == 0,
+  "NDP parser must reject option-like device names")
 assert(#office.parse_ipv6_neighbor_inventory(string.rep("x", 65537), "br-lan.20") == 0,
   "NDP parser must reject oversized neighbour input")
 
