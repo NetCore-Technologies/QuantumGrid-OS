@@ -46,7 +46,7 @@ local oversized_listing = table.concat({
 assert(backup.validate_archive_listing(oversized_listing) == nil,
   "expanded archive size must be bounded before restore")
 assert(backup.validate_archive_listing(
-  "-rw------- root/root 128 unknown-date etc/config/network\\n-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id"
+  "-rw------- root/root 128 unknown-date etc/config/network\n-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id"
 ) == nil, "unrecognised tar listing formats must fail closed")
 
 local rejected_listings = {
