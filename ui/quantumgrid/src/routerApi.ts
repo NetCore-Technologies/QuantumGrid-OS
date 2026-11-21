@@ -2921,6 +2921,14 @@ export async function createRouterOfficeSegment(input: {
     !("ipv6_assign" in payload) || payload.ipv6_assign !== (ipv6Enabled ? "64" : "") ||
     !("dhcpv6" in payload) || payload.dhcpv6 !== (ipv6Enabled ? "server" : "disabled") ||
     !("ra" in payload) || payload.ra !== (ipv6Enabled ? "server" : "disabled") ||
+    !("ra_flags" in payload) || !Array.isArray(payload.ra_flags) ||
+      payload.ra_flags.length !== (ipv6Enabled ? 2 : 0) ||
+      (ipv6Enabled && (
+        payload.ra_flags[0] !== "managed-config" ||
+        payload.ra_flags[1] !== "other-config"
+      )) ||
+    !("ra_slaac" in payload) || payload.ra_slaac !== (ipv6Enabled ? "1" : "0") ||
+    !("ra_dns" in payload) || payload.ra_dns !== (ipv6Enabled ? "1" : "0") ||
     !("ndp" in payload) || payload.ndp !== "disabled" ||
     !("network_reloaded" in payload) || payload.network_reloaded !== true ||
     !("firewall_reloaded" in payload) || payload.firewall_reloaded !== true ||
