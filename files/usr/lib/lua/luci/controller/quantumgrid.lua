@@ -1140,6 +1140,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "mwan3-interface-update"}, call("action_mwan3_interface_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-cake-profile"}, call("action_sqm_cake_profile")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-add"}, call("action_sqm_client_qos_add")).leaf = true
+	entry({"admin", "services", "quantumgrid", "sqm-client-qos-download-add"}, call("action_sqm_client_qos_download_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
@@ -4979,6 +4980,120 @@ function action_sqm_client_qos_add()
 		dscp_class = update.dscp_class, reloaded = true, rolled_back = false
 	})
 end
+
+function action_sqm_client_qos_download_add()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	local function respond(status, payload)
+		if status then http.status(status, status == 400 and "Bad Request" or
+			status == 403 and "Forbidden" or status == 404 and "Not Found" or
+			status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+			status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+			"Internal Server Error") end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." }); return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." }); return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before adding a per-client download DSCP policy." }); return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true or
+		fs.access("/etc/config/dhcp") ~= true then
+		respond(503, { ok = false, error = "Firewall, DHCP reservation configuration or native firewall reload service is unavailable." }); return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.available or not inventory.firewall_available or not inventory.dhcp_available or
+		inventory.truncated then
+		respond(409, {
+			ok = false,
+			error = "Network, firewall or static DHCP reservation inventory is unavailable or truncated. Resolve inventory errors before adding download marking."
+		}); return
+	end
+	local qos = require "luci.quantumgrid.qos"
+	local update, validation_error = qos.validate_client_download_policy(
+		http.formvalue("mac", true),
+		http.formvalue("destination_ip", true),
+		http.formvalue("source_zone", true),
+		http.formvalue("destination_zone", true),
+		http.formvalue("dscp_class", true),
+		inventory.zones,
+		inventory.interfaces,
+		inventory.static_leases)
+	if not update then
+		respond(400, { ok = false, error = validation_error }); return
+	end
+
+	local existing, policies_truncated, policies_error = qos.read_client_policies(uci, 32)
+	if not existing then
+		respond(500, { ok = false, error = policies_error or "Existing client QoS policies could not be read safely." }); return
+	end
+	if policies_truncated or #existing >= 32 then
+		respond(409, { ok = false, error = "The client QoS policy inventory is full or truncated. Remove an existing QuantumGrid policy before adding another." }); return
+	end
+	if qos.has_duplicate_client_policy(existing, update) then
+		respond(409, { ok = false, error = "A QuantumGrid policy already exists for this client and zone pair. Remove it before creating a replacement." }); return
+	end
+
+	local section_ok, section = pcall(uci.section, uci, "firewall", "rule", nil, {
+		name = update.name,
+		src = update.source_zone,
+		dest = update.destination_zone,
+		dest_ip = update.destination_ip,
+		target = "dscp",
+		set_dscp = update.dscp_class,
+		enabled = "1"
+	})
+	if not section_ok or type(section) ~= "string" or section == "" then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The client download DSCP policy could not be staged in UCI." }); return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The client download DSCP policy could not be committed; firewall reload was not attempted." }); return
+	end
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local delete_ok, deleted = pcall(uci.delete, uci, "firewall", section)
+		local rollback_commit_ok, rollback_committed = false, false
+		if delete_ok and deleted == true then rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "firewall") end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local rolled_back = delete_ok and deleted == true and rollback_commit_ok and
+			rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "sqm.client-qos.download.add", section, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back and
+				"Firewall reload failed. The new client download DSCP rule was removed."
+				or "Firewall reload failed and the new client download DSCP rule rollback could not be confirmed. Inspect firewall configuration locally.",
+			rolled_back = rolled_back
+		}); return
+	end
+	record_audit(http, "sqm.client-qos.download.add", section, "success")
+	respond(nil, {
+		ok = true, section = section, direction = "download",
+		mac = update.mac, destination_ip = update.destination_ip,
+		source_zone = update.source_zone, destination_zone = update.destination_zone,
+		dscp_class = update.dscp_class, reloaded = true, rolled_back = false
+	})
+end
+
 
 function action_sqm_client_qos_remove()
 	local http = require "luci.http"
