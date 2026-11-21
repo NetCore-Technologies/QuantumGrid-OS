@@ -3140,7 +3140,8 @@ local function office_network_status(uci, fs)
 					protocol = protocol,
 					source_port = source_port,
 					destination_ip = destination_ip,
-					destination_port = destination_port
+					destination_port = destination_port,
+					enabled = section.enabled ~= "0"
 				})
 			end
 		end)
