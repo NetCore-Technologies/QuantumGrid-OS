@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -1848,6 +1848,130 @@ function formatTrafficBytes(bytes: number | undefined): string {
   return `${fmt(value, 1)} ${units[unit]}`;
 }
 
+function Mwan3HealthEditor({ config, refresh }: {
+  config: RouterMwan3InterfaceConfig;
+  refresh: () => void;
+}) {
+  const [enabled, setEnabled] = useState(config.enabled);
+  const [trackTargets, setTrackTargets] = useState(config.track_ips.join("\\n"));
+  const [reliability, setReliability] = useState(config.reliability);
+  const [count, setCount] = useState(config.count);
+  const [timeout, setTimeoutValue] = useState(config.timeout);
+  const [interval, setIntervalValue] = useState(config.interval);
+  const [down, setDown] = useState(config.down);
+  const [up, setUp] = useState(config.up);
+  const [initialState, setInitialState] = useState<"online" | "offline">(
+    config.initial_state === "offline" ? "offline" : "online",
+  );
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const targets = trackTargets.split(/\\r?\\n/).map((value) => value.trim()).filter(Boolean);
+    setSaving(true);
+    setNotice(null);
+    try {
+      await updateRouterMwan3Interface(
+        config.section,
+        enabled,
+        targets,
+        reliability,
+        count,
+        timeout,
+        interval,
+        down,
+        up,
+        initialState,
+        confirmed,
+      );
+      setNotice({ success: true, message: "Health checks were saved and mwan3 restarted." });
+      setConfirmed(false);
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "Multi-WAN health-check update failed.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <details className="mwan3-health-editor">
+      <summary>Configure health checks · {config.section}</summary>
+      {!config.valid ? (
+        <div className="module-message">
+          Existing health-check configuration has invalid or incomplete values. Review every field below before saving.
+        </div>
+      ) : null}
+      <form onSubmit={save}>
+        <div className="mwan3-health-editor-grid">
+          <label className="mwan3-editor-enabled">
+            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+            Enable this mwan3 interface
+          </label>
+          <label className="mwan3-editor-targets">
+            Tracking target IP addresses
+            <textarea rows={3} value={trackTargets} onChange={(event) => setTrackTargets(event.target.value)}
+              placeholder={"1.1.1.1\\n9.9.9.9"} spellCheck={false} />
+            <small>One IPv4 or IPv6 address per line; up to 8. Hostnames and CIDR prefixes are not accepted.</small>
+          </label>
+          <label>
+            Required successful targets
+            <input type="number" min={1} max={8} step={1} value={reliability}
+              onChange={(event) => setReliability(Number(event.target.value))} />
+          </label>
+          <label>
+            Probe count
+            <input type="number" min={1} max={10} step={1} value={count}
+              onChange={(event) => setCount(Number(event.target.value))} />
+          </label>
+          <label>
+            Probe timeout (seconds)
+            <input type="number" min={1} max={10} step={1} value={timeout}
+              onChange={(event) => setTimeoutValue(Number(event.target.value))} />
+          </label>
+          <label>
+            Probe interval (seconds)
+            <input type="number" min={1} max={60} step={1} value={interval}
+              onChange={(event) => setIntervalValue(Number(event.target.value))} />
+          </label>
+          <label>
+            Failures before offline
+            <input type="number" min={1} max={20} step={1} value={down}
+              onChange={(event) => setDown(Number(event.target.value))} />
+          </label>
+          <label>
+            Successes before online
+            <input type="number" min={1} max={20} step={1} value={up}
+              onChange={(event) => setUp(Number(event.target.value))} />
+          </label>
+          <label>
+            Initial state
+            <select value={initialState} onChange={(event) => setInitialState(event.target.value as "online" | "offline")}>
+              <option value="online">Online</option>
+              <option value="offline">Offline</option>
+            </select>
+          </label>
+        </div>
+        <label className="mwan3-editor-confirm">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+          I understand this restarts mwan3 and may briefly interrupt failover and existing routed sessions.
+        </label>
+        <div className="mwan3-editor-actions">
+          <button className="hero-button" type="submit" disabled={!confirmed || saving}>
+            {saving ? "Saving and restarting…" : "Save health checks"}
+          </button>
+          {notice ? <span className={notice.success ? "mwan3-editor-notice success" : "mwan3-editor-notice error"}>{notice.message}</span> : null}
+        </div>
+      </form>
+    </details>
+  );
+}
+
 function NetworkControlPage({
   routerOverview,
   stats,
@@ -2328,6 +2452,28 @@ function NetworkControlPage({
           </>
         )}
         <div className="module-message">This inventory is read-only. “Online” requires both mwan3's online state and netifd's up flag; tracker-process state and per-target latency/loss are displayed separately. It does not change failover policy, route metrics, marks or interface configuration.</div>
+      </Panel>
+
+      <Panel title="Multi-WAN health-check configuration" eyebrow="GUARDED · EXISTING INTERFACES ONLY">
+        {!mwan3 ? (
+          <div className="module-message">Multi-WAN configuration telemetry is unavailable.</div>
+        ) : !mwan3.config_available ? (
+          <div className="module-message">The mwan3 configuration inventory is unavailable. No write controls are exposed.</div>
+        ) : mwan3.config_interfaces.length === 0 ? (
+          <div className="module-message">No existing mwan3 interface sections were found. QuantumGrid does not create interfaces here.</div>
+        ) : (
+          <div className="mwan3-config-list">
+            {mwan3.config_interfaces.map((config) => (
+              <Mwan3HealthEditor key={config.section} config={config} refresh={refresh} />
+            ))}
+          </div>
+        )}
+        {mwan3?.config_truncated ? (
+          <div className="module-message">The configuration inventory is capped at 16 sections. Only the displayed subset can be edited here.</div>
+        ) : null}
+        <div className="module-message">
+          These controls edit only health-check options on an existing mwan3 interface. They do not create WAN interfaces, change firewall policy rules, alter load-balancing weights, or configure network devices. The mwan3 service is restarted after a successful commit; keep local or out-of-band access available when changing the active management WAN.
+        </div>
       </Panel>
 
       <div className="module-grid mwan3-secondary-grid">
