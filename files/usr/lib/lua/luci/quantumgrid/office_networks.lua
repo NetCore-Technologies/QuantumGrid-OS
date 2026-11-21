@@ -1619,7 +1619,10 @@ function build_inventory(source)
 			local source_port = tonumber(item.source_port)
 			local destination_port = tonumber(item.destination_port)
 			local destination_ip = type(item.destination_ip) == "string" and item.destination_ip or ""
+			local target = type(item.target) == "string" and item.target:upper() or "DNAT"
+			local family = type(item.family) == "string" and item.family:lower() or ""
 			if section and name and source_zone and destination_zone and protocol
+				and target == "DNAT" and (family == "" or family == "ipv4")
 				and source_port and source_port >= 1 and source_port <= 65535
 				and destination_port and destination_port >= 1 and destination_port <= 65535
 				and valid_ipv4(destination_ip) then
