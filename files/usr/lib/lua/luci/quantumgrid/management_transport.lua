@@ -62,6 +62,8 @@ local function authorized_keys_status(fs)
     path = "",
     size_bytes = nil,
     root_owned = nil,
+    regular_file = nil,
+    owner_readable = nil,
     group_writable = nil,
     other_writable = nil,
     status = "missing"
@@ -107,15 +109,20 @@ local function authorized_keys_status(fs)
   end
   if type(stat.mode) == "number" then
     local permissions = stat.mode % 512
+    local file_type = math.floor(stat.mode / 4096) % 16
+    result.regular_file = file_type == 8
+    result.owner_readable = math.floor(permissions / 256) % 2 == 1
     result.group_writable = math.floor(permissions / 16) % 2 == 1
     result.other_writable = math.floor(permissions / 2) % 2 == 1
   end
 
   if result.size_bytes == nil or result.root_owned == nil or
+    result.regular_file == nil or result.owner_readable == nil or
     result.group_writable == nil or result.other_writable == nil then
     result.status = "unknown"
   elseif result.size_bytes == 0 or result.size_bytes > 65536 or
-    not result.root_owned or result.group_writable or result.other_writable then
+    not result.root_owned or not result.regular_file or not result.owner_readable or
+    result.group_writable or result.other_writable then
     result.status = "review"
   else
     result.status = "present"
