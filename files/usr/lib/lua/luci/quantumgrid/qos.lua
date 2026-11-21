@@ -91,6 +91,17 @@ end
 
 local DOWNLOAD_POLICY_PREFIX = "QuantumGrid client QoS download: "
 
+local function normalized_qos_protocol(value)
+	if value == nil or value == "" then return "tcpudp" end
+	if value == "all" or value == "tcpudp" then return value end
+	if type(value) == "table" and #value == 2 and
+		((value[1] == "tcp" and value[2] == "udp") or
+		(value[1] == "udp" and value[2] == "tcp")) then
+		return "tcpudp"
+	end
+	return nil
+end
+
 local function valid_ipv4_host(value)
 	if type(value) ~= "string" or #value > 15 then return false end
 	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
@@ -187,6 +198,8 @@ function summarize_client_policy(section)
 	local section_name = type(section[".name"]) == "string" and section[".name"] or ""
 	if not valid_token(section_name) then return nil end
 	if type(section.set_dscp) ~= "string" or not ALLOWED_DSCP[section.set_dscp] then return nil end
+	local protocol = normalized_qos_protocol(section.proto)
+	if not protocol then return nil end
 
 	local upload_mac = section.name:sub(1, #POLICY_PREFIX) == POLICY_PREFIX
 		and normalize_unicast_mac(section.src_mac) or nil
@@ -195,7 +208,7 @@ function summarize_client_policy(section)
 		return {
 			section = section_name, name = "Client " .. upload_mac, mac = upload_mac,
 			source_zone = section.src, destination_zone = section.dest,
-			dscp_class = section.set_dscp, direction = "upload", enabled = section.enabled ~= "0"
+			dscp_class = section.set_dscp, direction = "upload", protocol = protocol, enabled = section.enabled ~= "0"
 		}
 	end
 
@@ -207,7 +220,7 @@ function summarize_client_policy(section)
 		return {
 			section = section_name, name = "Client " .. download_mac, mac = download_mac,
 			destination_ip = section.dest_ip, source_zone = section.src, destination_zone = section.dest,
-			dscp_class = section.set_dscp, direction = "download", enabled = section.enabled ~= "0"
+			dscp_class = section.set_dscp, direction = "download", protocol = protocol, enabled = section.enabled ~= "0"
 		}
 	end
 	return nil
@@ -247,7 +260,7 @@ function find_download_reservation_policy(policies, mac, ipv4)
 	if not normalized_mac or not valid_ipv4_host(ipv4) then return nil end
 	for _, policy in ipairs(type(policies) == "table" and policies or {}) do
 		if type(policy) == "table" and policy.direction == "download" and
-			policy.mac == normalized_mac and policy.destination_ip == ipv4 then
+			(policy.mac == normalized_mac or policy.destination_ip == ipv4) then
 			return policy
 		end
 	end
