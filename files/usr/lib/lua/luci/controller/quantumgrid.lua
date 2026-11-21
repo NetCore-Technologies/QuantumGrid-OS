@@ -3767,6 +3767,12 @@ local function usteer_status(uci, fs)
 		band_steering_min_snr = tonumber(section and section.band_steering_min_snr) or -60,
 		band_steering_threshold = tonumber(section and section.band_steering_threshold) or 5,
 		load_balancing_threshold = tonumber(section and section.load_balancing_threshold) or 0,
+		load_kick_enabled = section and section.load_kick_enabled == "1" or false,
+		min_snr = tonumber(section and section.min_snr) or 0,
+		min_connect_snr = tonumber(section and section.min_connect_snr) or 0,
+		roam_scan_snr = tonumber(section and section.roam_scan_snr) or 0,
+		roam_trigger_snr = tonumber(section and section.roam_trigger_snr) or 0,
+		aggressiveness_override_count = #wireless_option_list(section and section.aggressiveness_mac_list),
 		local_node_count = 0,
 		local_nodes_truncated = false,
 		remote_host_count = 0,
@@ -3818,6 +3824,7 @@ local function usteer_status(uci, fs)
 	end
 	local runtime_matches = tonumber(runtime_config.aggressiveness) == result.aggressiveness and
 		runtime_config.load_kick_enabled == false and result.load_kick_enabled == false and
+		not result.probe_steering and result.aggressiveness_override_count == 0 and
 		tostring(runtime_config.min_snr or 0) == "0" and tostring(runtime_config.min_connect_snr or 0) == "0" and
 		tostring(runtime_config.roam_scan_snr or 0) == "0" and tostring(runtime_config.roam_trigger_snr or 0) == "0" and
 		type(runtime_config.aggressiveness_mac_list) == "table" and #runtime_config.aggressiveness_mac_list == 0 and
