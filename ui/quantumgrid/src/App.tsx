@@ -2955,6 +2955,10 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const sshPasswordAuth = summarizeSshOption(sshPasswordAuthValues);
   const sshRootPasswordAuth = summarizeSshOption(sshRootPasswordAuthValues);
   const sshGatewayPorts = summarizeSshOption(sshGatewayPortsValues);
+  const sshAuthorizedKeys = managementTransport?.ssh_authorized_keys;
+  const sshAuthorizedKeysPermissions = sshAuthorizedKeys?.status === "present"
+    ? "ROOT-OWNED · NOT GROUP/WORLD-WRITABLE"
+    : sshAuthorizedKeys?.status?.toUpperCase() ?? "UNKNOWN";
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const nftRuntime = security?.nft_runtime;
@@ -3024,6 +3028,11 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Management transport", "SSH password authentication", sshPasswordAuth, ""],
       [exportedAt, "Management transport", "SSH root password authentication", sshRootPasswordAuth, ""],
       [exportedAt, "Management transport", "SSH gateway port forwarding", sshGatewayPorts, ""],
+      [exportedAt, "Management transport", "Authorized keys metadata", sshAuthorizedKeysPermissions, sshAuthorizedKeys?.path ?? ""],
+      [exportedAt, "Management transport", "Authorized keys file bytes", sshAuthorizedKeys?.size_bytes ?? "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys root owned", sshAuthorizedKeys?.root_owned === true ? "YES" : sshAuthorizedKeys?.root_owned === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys group writable", sshAuthorizedKeys?.group_writable === true ? "YES" : sshAuthorizedKeys?.group_writable === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys other writable", sshAuthorizedKeys?.other_writable === true ? "YES" : sshAuthorizedKeys?.other_writable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "SSH inventory truncated", managementTransport?.ssh_truncated ? "YES" : managementTransport?.ssh_truncated === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Firewall", "Configuration", security.firewall_config_readable ? "READABLE" : "UNAVAILABLE", ""],
       [exportedAt, "Firewall", "Rules", "REPORTED", security.rules_count],
@@ -3159,13 +3168,17 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["SSH password authentication", sshPasswordAuth],
               ["SSH root password authentication", sshRootPasswordAuth],
               ["SSH gateway port forwarding", sshGatewayPorts],
+              ["Authorized keys file", sshAuthorizedKeys?.status?.toUpperCase() ?? "NOT REPORTED"],
+              ["Authorized keys file location", sshAuthorizedKeys?.path || "UNKNOWN"],
+              ["Authorized keys ownership and write permissions", sshAuthorizedKeysPermissions],
+              ["Authorized keys file size", sshAuthorizedKeys?.size_bytes == null ? "UNKNOWN" : fmt(sshAuthorizedKeys.size_bytes) + " bytes"],
               ["SSH inventory truncated", managementTransport.ssh_truncated === true ? "YES" : managementTransport.ssh_truncated === false ? "NO" : "UNKNOWN"],
             ]} />
             <div className="module-message">
               {managementTransport.plaintext_http_unredirected
                 ? "HTTP listeners are active without an HTTPS redirect. Credentials and session traffic may travel in plaintext; do not use the HTTP address for administration."
                 : managementTransport.ssh_status === "review"
-                  ? "SSH management needs review. Bind every enabled Dropbear instance to an explicit trusted management interface, use key-only authentication and keep gateway port forwarding disabled. Do not disable password access until a working SSH key has been installed and an independent recovery path has been tested."
+                  ? "SSH management needs review. Bind every enabled Dropbear instance to an explicit trusted management interface, use key-only authentication and keep gateway port forwarding disabled. Confirm the authorized-keys file is root-owned and not group/world-writable. Do not disable password access until a working SSH key has been installed and an independent recovery path has been tested."
                   : managementTransport.ssh_status === "unavailable"
                     ? "Dropbear configuration could not be fully inspected. Treat SSH exposure as unknown and review the native SSH configuration before production deployment."
                     : managementTransport.ssh_status === undefined
