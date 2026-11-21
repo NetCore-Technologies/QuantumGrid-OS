@@ -44,6 +44,22 @@ local function valid_radius_host(value)
 	return #labels > 0
 end
 
+function validate_roaming_features(encryption, ieee80211k, ieee80211v)
+	if ieee80211k ~= "0" and ieee80211k ~= "1" then
+		return nil, "802.11k neighbor-report support must be exactly 0 or 1."
+	end
+	if ieee80211v ~= "0" and ieee80211v ~= "1" then
+		return nil, "802.11v BSS-transition support must be exactly 0 or 1."
+	end
+	if ieee80211v == "1" and ieee80211k ~= "1" then
+		return nil, "802.11v BSS transitions require 802.11k neighbor reports."
+	end
+	if (ieee80211k == "1" or ieee80211v == "1") and encryption == "none" then
+		return nil, "802.11k/v roaming features require an encrypted Wi-Fi network."
+	end
+	return { ieee80211k = ieee80211k, ieee80211v = ieee80211v }
+end
+
 function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, radius_server, radius_port, radius_secret, accounting_server, accounting_port, accounting_secret)
 	if not valid_section(radio) then
 		return nil, "Invalid radio section name."
