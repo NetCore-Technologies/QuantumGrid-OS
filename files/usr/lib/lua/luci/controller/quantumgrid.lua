@@ -1847,21 +1847,40 @@ function action_sqm_cake_profile()
 	if type(qdisc) ~= "string" or qdisc:lower() ~= "cake" then
 		respond(409, { ok = false, error = "CAKE profiles can only be applied to an existing CAKE queue." }); return
 	end
-	local snapshot_ok, previous = pcall(uci.get, uci, "sqm", update.section, "qdisc_opts")
-	if not snapshot_ok then respond(500, { ok = false, error = "Could not snapshot the existing CAKE options." }); return end
-	local options, options_error = validator.build_cake_profile_options(previous, update.profile)
-	if options == nil then respond(400, { ok = false, error = options_error }); return end
-	local snapshot = {}
-	if previous == nil then snapshot.qdisc_opts = false else snapshot.qdisc_opts = previous end
-	local write_ok, written = true, true
-	if options == "" then
-		if previous ~= nil then write_ok, written = pcall(uci.delete, uci, "sqm", update.section, "qdisc_opts") end
-	else
-		write_ok, written = pcall(uci.set, uci, "sqm", update.section, "qdisc_opts", options)
+	-- SQM-scripts applies ingress and egress CAKE arguments independently.
+	-- Snapshot and compose both sides before staging either mutation.
+	local option_names = { "iqdisc_opts", "eqdisc_opts" }
+	local snapshot, staged = {}, {}
+	for _, option in ipairs(option_names) do
+		local snapshot_ok, previous = pcall(uci.get, uci, "sqm", update.section, option)
+		if not snapshot_ok then
+			respond(500, { ok = false, error = "Could not snapshot the existing ingress and egress CAKE options." })
+			return
+		end
+		local options, options_error = validator.build_cake_profile_options(previous, update.profile)
+		if options == nil then
+			respond(400, { ok = false, error = options_error })
+			return
+		end
+		if previous == nil then snapshot[option] = false else snapshot[option] = previous end
+		staged[option] = options
 	end
-	if not write_ok or written ~= true then
-		pcall(uci.revert, uci, "sqm")
-		respond(500, { ok = false, error = "CAKE options could not be staged; no restart was attempted." }); return
+
+	for _, option in ipairs(option_names) do
+		local options = staged[option]
+		local write_ok, written = true, true
+		if options == "" then
+			if snapshot[option] ~= false then
+				write_ok, written = pcall(uci.delete, uci, "sqm", update.section, option)
+			end
+		else
+			write_ok, written = pcall(uci.set, uci, "sqm", update.section, option, options)
+		end
+		if not write_ok or written ~= true then
+			pcall(uci.revert, uci, "sqm")
+			respond(500, { ok = false, error = "Ingress and egress CAKE options could not be staged; no restart was attempted." })
+			return
+		end
 	end
 	local commit_ok, committed = pcall(uci.commit, uci, "sqm")
 	if not commit_ok or committed ~= true then
@@ -2317,7 +2336,11 @@ local function sqm_status(uci, fs)
 					overhead = tonumber(section.overhead),
 					tc_mpu = tonumber(section.tcMPU)
 				}
-				if queue.qdisc:lower() == "cake" then queue.cake_profile = sqm_validator.detect_cake_profile(section.qdisc_opts) end
+				if queue.qdisc:lower() == "cake" then
+					local ingress_profile = sqm_validator.detect_cake_profile(section.iqdisc_opts)
+					local egress_profile = sqm_validator.detect_cake_profile(section.eqdisc_opts)
+					queue.cake_profile = ingress_profile == egress_profile and ingress_profile or "custom"
+				end
 				table.insert(result.queues, queue)
 			end
 		end)
