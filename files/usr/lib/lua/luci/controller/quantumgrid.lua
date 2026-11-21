@@ -1149,6 +1149,8 @@ function index()
 	entry({"admin", "services", "quantumgrid", "office-port-forward-add"}, call("action_office_port_forward_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-port-forward-remove"}, call("action_office_port_forward_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-segment-add"}, call("action_office_segment_add")).leaf = true
+	entry({"admin", "services", "quantumgrid", "static-route-add"}, call("action_static_route_add")).leaf = true
+	entry({"admin", "services", "quantumgrid", "static-route-remove"}, call("action_static_route_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
