@@ -4102,7 +4102,7 @@ local function ensure_sysupgrade_backup_paths()
 	local current = io.open("/etc/sysupgrade.conf", "r")
 	if current then
 		for line in current:lines() do
-			present[line:gsub("\\r$", "")] = true
+			present[line:gsub("\r$", "")] = true
 		end
 		local close_ok = pcall(current.close, current)
 		if not close_ok then return nil, "The existing sysupgrade backup list could not be closed safely." end
@@ -4115,8 +4115,8 @@ local function ensure_sysupgrade_backup_paths()
 		local append, append_error = io.open("/etc/sysupgrade.conf", "a")
 		if not append then return nil, "The native sysupgrade backup list could not be updated: " .. tostring(append_error or "unknown error") end
 		local write_ok, write_error = pcall(function()
-			append:write("\\n")
-			for _, path in ipairs(missing) do append:write(path, "\\n") end
+			append:write("\n")
+			for _, path in ipairs(missing) do append:write(path, "\n") end
 			append:flush()
 		end)
 		local close_ok = pcall(append.close, append)
