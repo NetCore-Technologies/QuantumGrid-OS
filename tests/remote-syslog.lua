@@ -182,7 +182,14 @@ local unencrypted_uci, unencrypted_fs = status_fixture({
 local unencrypted_status = remote.inspect_status(unencrypted_uci, unencrypted_fs, 456)
 assert(unencrypted_status.available and unencrypted_status.enabled)
 assert(unencrypted_status.protocol == "udp" and unencrypted_status.host == "192.0.2.20")
+assert(unencrypted_status.tls_privilege_drop_configured,
+  "TLS service prerequisites must be detected even before the administrator enables TLS")
 assert(unencrypted_status.tls_status == "unavailable", "plain UDP must not be reported as TLS")
+
+local missing_stunnel_globals_uci, missing_stunnel_globals_fs = status_fixture({ globals = nil })
+local missing_stunnel_globals = remote.inspect_status(missing_stunnel_globals_uci, missing_stunnel_globals_fs, 457)
+assert(missing_stunnel_globals.tls_privilege_drop_configured,
+  "status_fixture provides the default non-root stunnel globals unless explicitly overridden")
 
 local unsafe_globals_uci, unsafe_globals_fs = status_fixture({
   globals = { [".name"] = "globals", [".type"] = "globals", setuid = "root", setgid = "nogroup" },
