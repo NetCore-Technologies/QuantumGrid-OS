@@ -3261,7 +3261,14 @@ end
 
 local function remote_syslog_status(uci, fs)
 	local remote_syslog = require "luci.quantumgrid.remote_syslog"
-	return remote_syslog.inspect_status(uci, fs, os.time())
+	local pid_contents = read_file("/var/run/stunnel/stunnel.pid")
+	local pid = type(pid_contents) == "string" and pid_contents:match("^%s*(%d+)%s*$") or nil
+	local process = {
+		pid = pid_contents,
+		comm = pid and read_file("/proc/" .. pid .. "/comm") or nil,
+		cmdline = pid and read_file("/proc/" .. pid .. "/cmdline") or nil
+	}
+	return remote_syslog.inspect_status(uci, fs, os.time(), process)
 end
 
 
