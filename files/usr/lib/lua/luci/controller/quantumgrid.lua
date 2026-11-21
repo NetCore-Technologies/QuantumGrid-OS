@@ -4267,6 +4267,14 @@ function action_config_backup()
 		respond(503, { ok = false, error = "The router could not create a configuration backup archive." })
 		return
 	end
+	local archive_listing, archive_error = inspect_quantumgrid_config_archive(
+		backup_path, context, validator, util, sys)
+	if not archive_listing then
+		record_audit(http, "system.config.backup", "sysupgrade", "failed")
+		os.remove(backup_path)
+		respond(503, { ok = false, error = "The native backup did not contain a complete, compatible recovery manifest: " .. tostring(archive_error) })
+		return
+	end
 
 	local archive, open_error = io.open(backup_path, "rb")
 	if not archive then
