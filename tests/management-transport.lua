@@ -30,6 +30,10 @@ local function fixture(redirect, overrides)
       GatewayPorts = "off"
     }
   }
+  local firewall_zones = {
+    { [".name"] = "lan", network = { "lan" } },
+    { [".name"] = "wan", network = { "wan", "wan6" } }
+  }
   local empty_files = {}
   for key, value in pairs(overrides or {}) do
     if key == "lists" then lists = value
@@ -38,6 +42,7 @@ local function fixture(redirect, overrides)
     elseif key == "empty_files" then empty_files = value
     elseif key == "stat_overrides" then stat_overrides = value
     elseif key == "dropbear_sections" then dropbear_sections = value
+    elseif key == "firewall_zones" then firewall_zones = value
     end
   end
 
@@ -53,6 +58,8 @@ local function fixture(redirect, overrides)
   function uci:foreach(package, section_type, callback)
     if package == "dropbear" and section_type == "dropbear" then
       for _, section in ipairs(dropbear_sections) do callback(section) end
+    elseif package == "firewall" and section_type == "zone" then
+      for _, section in ipairs(firewall_zones) do callback(section) end
     end
   end
   local function stat(path)
@@ -103,6 +110,7 @@ assert(https_only.ssh_instance_count == 1 and https_only.ssh_enabled_instance_co
 assert(https_only.ssh_status == "ready")
 assert(https_only.ssh_instances[1].interface == "lan")
 assert(https_only.ssh_instances[1].interface_bound)
+assert(https_only.ssh_instances[1].interface_zone_status == "internal")
 assert(not https_only.ssh_instances[1].password_auth_enabled)
 assert(not https_only.ssh_instances[1].root_password_auth_enabled)
 assert(https_only.ssh_authorized_keys.available)
@@ -661,5 +669,56 @@ assert(response.status == 403 and response.reason == "Forbidden")
 assert(response.headers["Cache-Control"] == "no-store")
 assert(response.content_type == "application/json; charset=UTF-8")
 assert(response.body.ok == false and response.body.error:find("HTTPS", 1, true))
+
+-- SSH must not be considered hardened when bound to an external firewall zone.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "wan-ssh",
+    enable = "1",
+    Interface = "wan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local external_ssh = transport.inspect(uci, fs)
+assert(external_ssh.ssh_instances[1].interface_zone_status == "external")
+assert(external_ssh.ssh_status == "review", "SSH bound to the WAN zone must require review")
+assert(external_ssh.status == "review")
+
+-- Custom zone names are not assumed to be trusted merely because they are not named WAN.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "uplink-ssh",
+    enable = "1",
+    Interface = "uplink",
+    Port = "2222",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }},
+  firewall_zones = {{ [".name"] = "internet-edge", network = { "uplink" } }}
+})
+local custom_zone_ssh = transport.inspect(uci, fs)
+assert(custom_zone_ssh.ssh_instances[1].interface_zone_status == "unknown")
+assert(custom_zone_ssh.ssh_status == "review", "unrecognised SSH firewall zones must fail closed")
+
+-- Missing or ambiguous firewall bindings cannot be interpreted as a trusted management network.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "unmapped-ssh",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }},
+  firewall_zones = {}
+})
+local unmapped_zone_ssh = transport.inspect(uci, fs)
+assert(unmapped_zone_ssh.ssh_instances[1].interface_zone_status == "unknown")
+assert(unmapped_zone_ssh.ssh_status == "review")
 
 print("management-transport: HTTPS and SSH management-plane posture tests passed")
