@@ -985,6 +985,7 @@ export interface RouterOfficeInterface {
   name: string;
   protocol: string;
   device: string;
+  l3_device?: string;
   up: boolean;
   ipv4: string[];
   netmask: string;
