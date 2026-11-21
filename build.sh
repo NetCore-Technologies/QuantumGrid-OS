@@ -38,6 +38,9 @@ for command in git make python3; do
 done
 
 DEVICE_PROFILE="${QG_DEVICE_PROFILE:-${PROJECT_ROOT}/profiles/arcadyan-aw1000.json}"
+if [[ "$DEVICE_PROFILE" != /* ]]; then
+    DEVICE_PROFILE="$PROJECT_ROOT/$DEVICE_PROFILE"
+fi
 PROFILE_FIELDS_FILE="$(mktemp "${TMPDIR:-/tmp}/qg-device-profile.XXXXXX")" || die "Could not create temporary device-profile field file"
 if ! python3 "$PROJECT_ROOT/scripts/verify-device-profile.py" "$DEVICE_PROFILE" --lines > "$PROFILE_FIELDS_FILE"; then
     rm -f "$PROFILE_FIELDS_FILE"
@@ -129,6 +132,9 @@ mkdir -p "$OPENWRT_DIR/files"
 if [[ -d "$PROJECT_ROOT/files" ]]; then
     cp -a "$PROJECT_ROOT/files/." "$OPENWRT_DIR/files/"
 fi
+mkdir -p "$OPENWRT_DIR/files/etc/quantumgrid"
+cp "$DEVICE_PROFILE" "$OPENWRT_DIR/files/etc/quantumgrid/device-profile.json"
+chmod 0644 "$OPENWRT_DIR/files/etc/quantumgrid/device-profile.json"
 
 printf '\n[7/10] Applying validated %s firmware configuration...\n' "$DEVICE_PROFILE_ID"
 [[ -s "$CONFIG_FILE" ]] || die "Device profile configuration not found: $CONFIG_FILE"
