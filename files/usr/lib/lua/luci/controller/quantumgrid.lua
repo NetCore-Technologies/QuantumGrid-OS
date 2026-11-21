@@ -2819,12 +2819,22 @@ local function office_network_status(uci, fs)
 			if #source.wifi_aps >= 32 then source.truncated = true return end
 			local name = tostring(section[".name"] or "")
 			if name:match("^[%w_.%-]+$") then
+				local networks = {}
+				if type(section.network) == "string" then
+					if section.network:match("^[%w_.%-]+$") then table.insert(networks, section.network) end
+				elseif type(section.network) == "table" then
+					for _, network in ipairs(section.network) do
+						if type(network) == "string" and network:match("^[%w_.%-]+$") then
+							table.insert(networks, network)
+						end
+					end
+				end
 				table.insert(source.wifi_aps, {
 					section = name,
 					mode = section.mode,
 					ssid = section.ssid,
 					device = section.device,
-					networks = section.network,
+					networks = networks,
 					disabled = section.disabled == "1"
 				})
 			end

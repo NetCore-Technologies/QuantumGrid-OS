@@ -338,8 +338,7 @@ local wifi_interfaces = {
 }
 local wifi_zones = {
   { name = "corp", networks = { "corp" } },
-  { name = "guest", networks = { "guest" } },
-  { name = "wan", networks = { "wan" } },
+  { name = "wan", networks = { "wan", "guest" } },
 }
 local valid_wifi_binding = office.validate_office_wifi_ap_network(
   "corp_ap", "corp", wifi_aps, wifi_interfaces, wifi_zones)

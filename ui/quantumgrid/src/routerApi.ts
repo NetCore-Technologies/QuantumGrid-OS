@@ -774,6 +774,7 @@ export interface RouterOfficeWifiAp {
   ssid: string;
   section: string;
   device: string;
+  networks: string[];
   disabled: boolean;
 }
 
