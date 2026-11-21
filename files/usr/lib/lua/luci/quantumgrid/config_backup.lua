@@ -62,7 +62,8 @@ function validate_archive_listing(listing)
 	local has_config = false
 	local device_id_path = nil
 	local count = 0
-	for line in listing:gmatch("[^\r\n]+") do
+	local expanded_size = 0
+	for line in listing:gmatch("[^\\r\\n]+") do
 		count = count + 1
 		if count > 8192 then
 			return nil, "The archive contains too many entries for a safe configuration restore."
@@ -70,6 +71,25 @@ function validate_archive_listing(listing)
 		local kind = line:sub(1, 1)
 		if kind ~= "-" and kind ~= "d" then
 			return nil, "The archive contains a link or special file; only regular files and directories can be restored."
+		end
+		local tokens = {}
+		for token in line:gmatch("%S+") do tokens[#tokens + 1] = token end
+		local entry_size = nil
+		for index, token in ipairs(tokens) do
+			if token:match("^%d%d%d%d%-%d%d%-%d%d$") then
+				local candidate = tokens[index - 1]
+				if candidate and candidate:match("^%d+$") then entry_size = tonumber(candidate) end
+				break
+			end
+		end
+		if entry_size == nil or entry_size < 0 then
+			return nil, "The archive listing format is not recognised; restore was refused."
+		end
+		if kind == "-" then
+			expanded_size = expanded_size + entry_size
+			if expanded_size > 128 * 1024 * 1024 then
+				return nil, "The uncompressed archive exceeds the 128 MiB restore safety limit."
+			end
 		end
 		local raw_path = line:match("%s([^%s]+)$")
 		local path = valid_archive_path(raw_path)
@@ -83,7 +103,7 @@ function validate_archive_listing(listing)
 			if kind ~= "-" then return nil, "The device identity in the archive must be a regular file." end
 			device_id_path = raw_path
 		end
-		entries[#entries + 1] = { path = path, kind = kind }
+		entries[#entries + 1] = { path = path, kind = kind, size = entry_size }
 	end
 	if count == 0 or not has_config then
 		return nil, "The archive does not contain a native /etc/config backup."
@@ -91,7 +111,7 @@ function validate_archive_listing(listing)
 	if not device_id_path then
 		return nil, "The archive has no QuantumGrid device identity; create a fresh backup with this firmware before restoring."
 	end
-	return { entries = entries, count = count, device_id_path = device_id_path }
+	return { entries = entries, count = count, expanded_size = expanded_size, device_id_path = device_id_path }
 end
 
 function validate_device_identity(archive_id, current_id)
