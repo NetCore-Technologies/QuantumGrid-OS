@@ -133,6 +133,9 @@ jobs:
           bash -n tests/install-aw1000-target-inspector-smoke.sh
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
+          sh -n scripts/verify-openwrt-source.sh
+          bash -n tests/openwrt-source-pin-smoke.sh
+          bash tests/openwrt-source-pin-smoke.sh
           sh -n files/usr/bin/quantumgrid-hardware-io
           sh -n files/usr/bin/quantumgrid-button-events
           sh -n files/etc/init.d/quantumgrid-button-events
