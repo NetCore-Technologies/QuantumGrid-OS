@@ -56,6 +56,65 @@ local function boolean_option(value, default)
   return nil
 end
 
+local EXTERNAL_MANAGEMENT_ZONES = {
+  wan = true, wan6 = true, wwan = true, cellular = true, lte = true, ["5g"] = true
+}
+
+local INTERNAL_MANAGEMENT_ZONES = {
+  lan = true, mgmt = true, management = true, corp = true,
+  office = true, home = true, trusted = true, internal = true
+}
+
+local function normalized_name(value)
+  return type(value) == "string" and value:lower():match("^%s*(.-)%s*$") or ""
+end
+
+local function management_zone_kind(name)
+  local normalized = normalized_name(name)
+  if EXTERNAL_MANAGEMENT_ZONES[normalized] or
+    normalized:match("^wan%d+$") or normalized:match("^wwan%d+$") then
+    return "external"
+  end
+  if INTERNAL_MANAGEMENT_ZONES[normalized] then return "internal" end
+  return "unknown"
+end
+
+local function section_contains_network(value, wanted)
+  if type(value) == "string" then
+    for token in value:gmatch("%S+") do
+      if token == wanted then return true end
+    end
+    return false
+  end
+  if type(value) ~= "table" then return false end
+  for _, network in ipairs(value) do
+    if type(network) == "string" and network == wanted then return true end
+  end
+  return false
+end
+
+local function management_interface_zone(uci, interface)
+  local direct_kind = management_zone_kind(interface)
+  if direct_kind == "external" then return direct_kind end
+  if type(uci) ~= "table" or type(uci.foreach) ~= "function" or interface == "" then
+    return "unknown"
+  end
+
+  local matches = 0
+  local matched_kind = "unknown"
+  local ok = pcall(function()
+    uci:foreach("firewall", "zone", function(zone)
+      if type(zone) == "table" and section_contains_network(zone.network or zone.networks, interface) then
+        matches = matches + 1
+        local name = zone.name or zone[".name"]
+        matched_kind = management_zone_kind(name)
+      end
+    end)
+  end)
+  if not ok or matches ~= 1 then return "unknown" end
+  return matched_kind
+end
+
 local function permission_bits(stat)
   local mode = type(stat) == "table" and tonumber(stat.modedec or stat.mode) or nil
   if not mode then return nil end
@@ -298,10 +357,11 @@ local function dropbear_status(uci, fs)
         local password_auth_enabled = boolean_option(section.PasswordAuth, true)
         local root_password_auth_enabled = boolean_option(section.RootPasswordAuth, true)
         local gateway_ports_enabled = boolean_option(section.GatewayPorts, false)
+        local interface_zone_status = management_interface_zone(uci, interface)
 
         if enabled == true then
           result.ssh_enabled_instance_count = result.ssh_enabled_instance_count + 1
-          if not interface_valid or not port_valid or
+          if not interface_valid or not port_valid or interface_zone_status ~= "internal" or
             password_auth_enabled ~= false or
             root_password_auth_enabled ~= false or
             gateway_ports_enabled == true or
@@ -320,6 +380,7 @@ local function dropbear_status(uci, fs)
             enabled = enabled,
             interface = interface,
             interface_bound = interface_valid,
+            interface_zone_status = interface_zone_status,
             port = port,
             port_valid = port_valid,
             password_auth_enabled = password_auth_enabled,
