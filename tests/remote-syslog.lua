@@ -191,8 +191,8 @@ local function status_fixture(options)
   local fs = { access = function(path) return files[path] == true end }
   local process = options.process or {
     pid = "1234",
-    comm = "stunnel\\n",
-    cmdline = "/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0",
+    comm = "stunnel\n",
+    cmdline = "/usr/bin/stunnel\0/var/etc/stunnel.conf\0",
   }
   return uci, fs, process
 end
@@ -206,16 +206,16 @@ assert(tls_status.tls_configured and tls_status.tls_identity_verified and tls_st
 assert(tls_status.tls_status == "ready" and tls_status.enabled)
 assert(tls_status.sampled_at == 123)
 
-assert(remote.stunnel_process_running("1234\\n", "stunnel\\n", "/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0"))
+assert(remote.stunnel_process_running("1234\n", "stunnel\n", "/usr/bin/stunnel\0/var/etc/stunnel.conf\0"))
 for _, process in ipairs({
   { pid = nil, comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
   { pid = "0", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
   { pid = "1", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
   { pid = "1.2", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
   { pid = "1234", comm = "dropbear", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
-  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel\\0/etc/stunnel/other.conf\\0" },
-  { pid = "1234", comm = "stunnel", cmdline = "wrapper\\0/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0" },
-  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0--unsafe-option\\0" },
+  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel\0/etc/stunnel/other.conf\0" },
+  { pid = "1234", comm = "stunnel", cmdline = "wrapper\0/usr/bin/stunnel\0/var/etc/stunnel.conf\0" },
+  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel\0/var/etc/stunnel.conf\0--unsafe-option\0" },
   { pid = "1234", comm = "stunnel", cmdline = nil },
 }) do
   assert(not remote.stunnel_process_running(process.pid, process.comm, process.cmdline),
@@ -309,10 +309,10 @@ assert(ip_tls_status.tls_status == "ready" and ip_tls_status.tls_identity_verifi
 assert(ip_tls_status.host == "192.0.2.15" and ip_tls_status.port == 6514)
 
 local stopped_tunnel_uci, stopped_tunnel_fs = status_fixture({ process = {
-  pid = "1234", comm = "dropbear\\n", cmdline = "/usr/bin/dropbear\\0",
+  pid = "1234", comm = "dropbear\n", cmdline = "/usr/bin/dropbear\0",
 } })
 local stopped_tunnel_process = remote.inspect_status(stopped_tunnel_uci, stopped_tunnel_fs, 7, {
-  pid = "1234", comm = "dropbear\\n", cmdline = "/usr/bin/dropbear\\0",
+  pid = "1234", comm = "dropbear\n", cmdline = "/usr/bin/dropbear\0",
 })
 assert(stopped_tunnel_process.tls_status == "review" and not stopped_tunnel_process.enabled)
 assert(stopped_tunnel_process.tls_error ~= nil)
