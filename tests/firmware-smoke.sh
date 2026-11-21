@@ -1018,6 +1018,8 @@ grep -Fq 'checkHost' "$ROOT/files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua
 grep -Fq 'checkIP' "$ROOT/files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua"
 grep -Fq 'stunnel_options' "$ROOT/files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua"
 grep -Fq 'has_non_root_privilege_drop' "$ROOT/files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua"
+grep -Fq 'function inspect_status(uci, fs, sampled_at)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua"
+grep -Fq 'return remote_syslog.inspect_status(uci, fs, os.time())' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'sslVersion = "TLSv1.2"' "$ROOT/files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua"
 grep -Fq 'tls_privilege_drop_configured' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq '127.0.0.1' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
