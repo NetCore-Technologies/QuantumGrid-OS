@@ -182,6 +182,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/firewall_runtime.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/management_transport.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/device_profile.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/device_identity.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/config_backup.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/audit.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua
