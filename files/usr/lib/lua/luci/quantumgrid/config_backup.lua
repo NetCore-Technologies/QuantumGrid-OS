@@ -39,6 +39,7 @@ local function valid_archive_path(path)
 		return nil
 	end
 	if path:sub(1, 2) == "./" then path = path:sub(3) end
+	if path:sub(-1) == "/" then path = path:sub(1, -2) end
 	if path == "" or path:sub(1, 1) == "/" then return nil end
 	local count = 0
 	for component in path:gmatch("[^/]+") do
@@ -97,8 +98,8 @@ function validate_device_identity(archive_id, current_id)
 	if type(archive_id) ~= "string" or type(current_id) ~= "string" then
 		return nil, "The current or archived QuantumGrid device identity is unavailable."
 	end
-	archive_id = archive_id:gsub("\\n$", "")
-	current_id = current_id:gsub("\\n$", "")
+	archive_id = archive_id:gsub("\n$", "")
+	current_id = current_id:gsub("\n$", "")
 	if #archive_id ~= 32 or #current_id ~= 32 or
 		not archive_id:match("^[0-9a-f]+$") or not current_id:match("^[0-9a-f]+$") then
 		return nil, "The archive or router device identity is malformed."
