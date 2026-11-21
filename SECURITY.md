@@ -108,9 +108,13 @@ not configured to listen on WAN or all interfaces. Keep SSH port-forwarding and 
 WAN firewall exposure disabled.
 
 The default device certificate is self-signed. HTTPS encrypts the management session,
-but it does not provide a publicly trusted device identity. Administrators should verify
-the certificate fingerprint over a trusted channel and restrict management to trusted
-networks. Do not expose the router's administration service to the public Internet.
+but it does not provide a publicly trusted device identity. The Security Center now reports
+the certificate's SHA-256 fingerprint, which administrators must compare with a fingerprint
+obtained through a separate trusted channel before trusting a device. This is a presentation
+of the digest, not automatic certificate-chain, hostname, expiry or peer validation.
+The same panel audits the HTTPS private-key file's type, root ownership and group/other
+permission bits; the key contents are never returned. Restrict management to trusted networks.
+Do not expose the router's administration service to the public Internet.
 
 QuantumGrid also provisions a random 128-bit device inventory ID in the writable
 `/etc/quantumgrid/device-id` path. This ID is intentionally public and is only a stable
