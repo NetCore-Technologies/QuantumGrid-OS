@@ -14,14 +14,14 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     OPENWRT_REPO="${QG_NSS_OPENWRT_REPO:-https://github.com/qosmio/openwrt-ipq.git}"
     OPENWRT_REF="${QG_NSS_OPENWRT_REF:-25.12-nss}"
     OPENWRT_EXPECTED_SHA="${QG_NSS_EXPECTED_SHA:-d6848fa2ea00193b5b7d3973e3990da7f608027c}"
-    BUILD_PROFILE="AW1000 NSS (experimental)"
+    BUILD_PROFILE=""
 else
     OPENWRT_REPO="${QG_OPENWRT_REPO:-https://github.com/openwrt/openwrt.git}"
     OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"
     # The default v25.12.6 annotated tag is GPG-verified upstream and is
     # pinned here to its reviewed commit. Custom refs must supply their own SHA.
     OPENWRT_EXPECTED_SHA="${QG_OPENWRT_EXPECTED_SHA:-64900e756efa667774214f9c6b17c113222e01f7}"
-    BUILD_PROFILE="AW1000 stable OpenWrt"
+    BUILD_PROFILE=""
 fi
 BUILD_JOBS="${QG_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)}"
 
@@ -37,6 +37,10 @@ for command in git make python3; do
     command -v "$command" >/dev/null 2>&1 || die "$command is required"
 done
 
+DEVICE_PROFILE="${QG_DEVICE_PROFILE:-${PROJECT_ROOT}/profiles/arcadyan-aw1000.json}"
+PROFILE_FIELDS="$(python3 "$PROJECT_ROOT/scripts/verify-device-profile.py" "$DEVICE_PROFILE" --fields)" \
+    || die "The selected QuantumGrid device profile failed validation"
+IFS=
 printf '\n==============================================\n'
 printf '        QUANTUMGRID OS BUILD SYSTEM\n'
 printf '==============================================\n'
@@ -63,12 +67,16 @@ git -C "$OPENWRT_DIR" checkout --detach FETCH_HEAD
 OPENWRT_SHA="$(git -C "$OPENWRT_DIR" rev-parse HEAD)"
 sh "$PROJECT_ROOT/scripts/verify-openwrt-source.sh" "$OPENWRT_DIR" "$OPENWRT_EXPECTED_SHA"
 if [[ "$QG_ENABLE_NSS" == "1" ]]; then
-    bash "$PROJECT_ROOT/scripts/pin-aw1000-nss-feeds.sh" "$OPENWRT_DIR" "$PROJECT_ROOT/configs/aw1000-nss-feeds.conf"
+    "$NSS_PIN_SCRIPT_PATH" "$OPENWRT_DIR" "$NSS_FEED_PINS_PATH"
 fi
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 
-printf '\n[3/9] Registering pinned AW1000 RJ11 phone feed...\n'
-"$PROJECT_ROOT/scripts/setup-aw1000-phone-feed.sh" "$PROJECT_ROOT" "$OPENWRT_DIR"
+if [[ "$FXS_SUPPORTED" == "1" ]]; then
+    printf '\\n[3/9] Registering the device profile's pinned FXS phone feed...\\n'
+    "$FXS_SETUP_SCRIPT_PATH" "$PROJECT_ROOT" "$OPENWRT_DIR"
+else
+    printf '\\n[3/9] Skipping FXS integration: this device profile does not declare FXS support.\\n'
+fi
 
 printf '\n[4/9] Updating and installing OpenWrt feeds...\n'
 cd "$OPENWRT_DIR"
@@ -85,12 +93,8 @@ if [[ -d "$PROJECT_ROOT/files" ]]; then
     cp -a "$PROJECT_ROOT/files/." "$OPENWRT_DIR/files/"
 fi
 
-printf '\n[7/10] Applying AW1000 firmware configuration...\n'
-CONFIG_FILE="$PROJECT_ROOT/configs/aw1000-max.config"
-if [[ -f "$PROJECT_ROOT/configs/aw1000.config" ]]; then
-    CONFIG_FILE="$PROJECT_ROOT/configs/aw1000.config"
-fi
-[[ -s "$CONFIG_FILE" ]] || die "AW1000 configuration not found: $CONFIG_FILE"
+printf '\\n[7/10] Applying validated %s firmware configuration...\\n' "$DEVICE_PROFILE_ID"
+[[ -s "$CONFIG_FILE" ]] || die "Device profile configuration not found: $CONFIG_FILE"
 cp "$CONFIG_FILE" "$OPENWRT_DIR/.config"
 if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     NSS_FRAGMENT="$PROJECT_ROOT/configs/aw1000-nss.fragment"
@@ -100,9 +104,9 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
 fi
 cd "$OPENWRT_DIR"
 make defconfig
-grep -qx 'CONFIG_TARGET_qualcommax=y' .config || die "qualcommax target was not selected"
-grep -qx 'CONFIG_TARGET_qualcommax_ipq807x=y' .config || die "ipq807x subtarget was not selected"
-grep -qx 'CONFIG_TARGET_qualcommax_ipq807x_DEVICE_arcadyan_aw1000=y' .config || die "Arcadyan AW1000 profile was not selected"
+grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}=y" .config || die "OpenWrt target $OPENWRT_TARGET was not selected"
+grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}=y" .config || die "OpenWrt subtarget $OPENWRT_SUBTARGET was not selected"
+grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}_DEVICE_${OPENWRT_DEVICE}=y" .config || die "OpenWrt device profile $OPENWRT_DEVICE was not selected"
 if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     grep -qx 'CONFIG_ATH11K_NSS_SUPPORT=y' .config || die "ath11k NSS Wi-Fi support was not selected"
     grep -qx 'CONFIG_PACKAGE_MAC80211_NSS_SUPPORT=y' .config || die "mac80211 NSS support was not selected"
@@ -131,14 +135,15 @@ make prereq
 printf '\n[9/10] Downloading source packages...\n'
 make download -j"$BUILD_JOBS"
 
-printf '\n[10/10] Building QuantumGrid AW1000 firmware...\n'
+printf '\\n[10/10] Building QuantumGrid %s firmware...\\n' "$PLATFORM_MODEL"
 make -j"$BUILD_JOBS" V=s
 
-printf '\n==============================================\n'
-printf '       QUANTUMGRID BUILD COMPLETE\n'
-printf '==============================================\n'
-printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
-printf '\nFirmware outputs:\n'
-find "$OPENWRT_DIR/bin/targets/qualcommax/ipq807x" -maxdepth 1 -type f \
-    \( -name '*arcadyan_aw1000-squashfs-factory.ubi' -o -name '*arcadyan_aw1000-initramfs-uImage.itb' \) \
+printf '\\n==============================================\\n'
+printf '       QUANTUMGRID BUILD COMPLETE\\n'
+printf '==============================================\\n'
+printf 'Device profile: %s (%s)\\n' "$DEVICE_PROFILE_ID" "$OPENWRT_DEVICE"
+printf 'OpenWrt commit: %s\\n' "$OPENWRT_SHA"
+printf '\\nFirmware outputs:\\n'
+find "$OUTPUT_PATH" -maxdepth 1 -type f \\
+    \\( -name "$FACTORY_GLOB" -o -name "$INITRAMFS_GLOB" \\) \\
     -print | sort
