@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { gzipSync } from "node:zlib";
 import {
   decryptRouterConfigBackupBytes,
   encryptRouterConfigBackupBytes,
 } from "../ui/quantumgrid/src/routerApi.ts";
 
 const passphrase = "violet-river-quantum-grid-2026";
+const gzipArchive = (value) => new Uint8Array(gzipSync(value));
 
 test("encrypted backup container round-trips with authenticated AES-GCM encryption", async () => {
-  const plaintext = new TextEncoder().encode("QGOS test archive\0private configuration payload");
+  const plaintext = gzipArchive("QGOS test archive\0private configuration payload");
   const encrypted = await encryptRouterConfigBackupBytes(plaintext, passphrase);
   assert.equal(new TextDecoder().decode(encrypted.slice(0, 8)), "QGOSBK01");
   assert.equal(encrypted.byteLength, plaintext.byteLength + 40 + 16);
@@ -19,7 +21,7 @@ test("encrypted backup container round-trips with authenticated AES-GCM encrypti
 });
 
 test("each backup receives a fresh salt and nonce", async () => {
-  const plaintext = new TextEncoder().encode("same configuration archive");
+  const plaintext = gzipArchive("same configuration archive");
   const first = await encryptRouterConfigBackupBytes(plaintext, passphrase);
   const second = await encryptRouterConfigBackupBytes(plaintext, passphrase);
   assert.notDeepEqual(first.slice(12, 40), second.slice(12, 40));
@@ -28,7 +30,7 @@ test("each backup receives a fresh salt and nonce", async () => {
 
 test("wrong passphrases and modified ciphertext fail authenticated decryption", async () => {
   const encrypted = await encryptRouterConfigBackupBytes(
-    new TextEncoder().encode("sensitive router configuration"),
+    gzipArchive("sensitive router configuration"),
     passphrase,
   );
   await assert.rejects(
@@ -46,7 +48,7 @@ test("wrong passphrases and modified ciphertext fail authenticated decryption", 
 
 test("header metadata is authenticated and unsafe KDF settings are rejected", async () => {
   const encrypted = await encryptRouterConfigBackupBytes(
-    new TextEncoder().encode("private configuration"),
+    gzipArchive("private configuration"),
     passphrase,
   );
 
@@ -66,10 +68,14 @@ test("header metadata is authenticated and unsafe KDF settings are rejected", as
 });
 
 test("backup encryption rejects short passphrases, oversized secrets and invalid containers", async () => {
-  const plaintext = new TextEncoder().encode("config");
+  const plaintext = gzipArchive("config");
   await assert.rejects(
     encryptRouterConfigBackupBytes(plaintext, "too short"),
     /at least 16 characters/,
+  );
+  await assert.rejects(
+    encryptRouterConfigBackupBytes(new TextEncoder().encode("not gzip"), passphrase),
+    /not a valid gzip configuration archive/,
   );
   await assert.rejects(
     decryptRouterConfigBackupBytes(new Uint8Array(56), passphrase),
