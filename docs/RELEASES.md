@@ -34,6 +34,26 @@ The factory `.ubi` is the only persistent AW1000 firmware image published by Qua
 The bundled installer verifies its exact filename and SHA-256 digest against `SHA256SUMS`
 before permitting either preflight completion or a flash write. The manifest is an integrity
 check, not a cryptographic signature or proof of publisher identity.
+
+After creating `SHA256SUMS`, the firmware release workflow creates a GitHub artifact
+attestation for every file in `dist/` using Sigstore-backed SLSA provenance. This binds each
+asset's SHA-256 digest to the repository, source commit, workflow identity and build run.
+The checksum manifest remains useful for transfer-corruption checks, but it is not the
+publisher-authentication mechanism.
+
+Install GitHub CLI and verify the downloaded factory image before transferring it to the router:
+
+```bash
+sha256sum -c SHA256SUMS
+gh attestation verify QuantumGrid-OS-<version>-AW1000-squashfs-factory.ubi \
+  --repo NetCore-Technologies/QuantumGrid-OS \
+  --signer-workflow NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml
+```
+
+Use the exact asset filename from the release. Verification checks the attested digest,
+the QuantumGrid repository and the named firmware workflow. Do not flash an image when
+either the checksum or attestation verification fails. The on-router installer still
+checks SHA-256 only; it does not verify Sigstore attestations itself.
 The initramfs `.itb` is a RAM-boot artifact and does not install persistent firmware.
 The AW1000 profile does not produce or publish a `sysupgrade.bin` image; the release workflow
 must never require, fabricate, rename or advertise one.
