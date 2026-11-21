@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
-import { planWifiChannels } from "./wifiChannelPlanner";
+import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
 import { appendConntrackSample, summarizeConntrackHistory, type ConntrackHistorySample } from "./conntrackHistory";
@@ -5696,6 +5696,13 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
 }
 
 
+type WifiChannelChangeReview = {
+  radio: string;
+  band: string;
+  currentChannel: number;
+  recommendedChannel: number;
+};
+
 function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOverview | null; refresh: () => void }) {
   const radios = routerOverview?.wireless ?? [];
   const wirelessConfigs = routerOverview?.wireless_configs;
@@ -5742,6 +5749,10 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
   const [scanSecurityFilter, setScanSecurityFilter] = useState<"all" | "open" | "encrypted" | "unknown">("all");
   const [scanBandFilter, setScanBandFilter] = useState("all");
   const [scanSort, setScanSort] = useState<"signal" | "channel" | "ssid">("signal");
+  const [pendingChannelChange, setPendingChannelChange] = useState<WifiChannelChangeReview | null>(null);
+  const [channelChangeConfirmed, setChannelChangeConfirmed] = useState(false);
+  const [channelChangeSaving, setChannelChangeSaving] = useState(false);
+  const [channelChangeNotice, setChannelChangeNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const availableScanBands = scan
     ? [...new Set(scan.results.map((network) => network.band || "Unknown"))].sort()
@@ -5964,6 +5975,73 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
     }
     setClientHistoryState((current) => ({ ...current, samples: [], error }));
   };
+  const applyChannelRecommendation = async () => {
+    const review = pendingChannelChange;
+    if (!review || !channelChangeConfirmed || channelChangeSaving) return;
+    const config = wirelessConfigs?.sections.find((item) =>
+      item.radio === review.radio && !item.interface_disabled && !item.radio_disabled &&
+      item.networks.length === 1 && ["psk2", "sae", "sae-mixed", "wpa2", "wpa3"].includes(item.encryption),
+    );
+    if (!config) {
+      setChannelChangeNotice({ success: false, message: "No active encrypted AP with one existing routed network can safely carry this radio change. No settings were changed." });
+      return;
+    }
+    const selectedNetwork = config.networks[0];
+    const network = (routerOverview?.office_networks?.interfaces ?? []).find((item) =>
+      item.name === selectedNetwork && item.protocol === "static" && item.device.length > 0 &&
+      item.firewall_zones.length > 0 && item.firewall_zones.every((zone) =>
+        !["wan", "wan6", "wwan", "cellular"].includes(zone.toLowerCase())),
+    );
+    if (!network) {
+      setChannelChangeNotice({ success: false, message: "The AP's existing routed network cannot be verified as an internal static network. No Wi-Fi settings were changed." });
+      return;
+    }
+    setChannelChangeSaving(true);
+    setChannelChangeNotice(null);
+    try {
+      await updateRouterWirelessConfig({
+        radio: config.radio,
+        section: config.section,
+        ssid: config.ssid,
+        network: selectedNetwork,
+        encryption: config.encryption as "psk2" | "sae" | "sae-mixed" | "wpa2" | "wpa3",
+        key: "",
+        radiusServer: config.radius_auth_server || "",
+        radiusPort: String(config.radius_auth_port || 1812),
+        radiusSecret: "",
+        manageRadiusVlans: !config.radius_vlan_unmanaged,
+        dynamicVlanEnabled: !config.radius_vlan_unmanaged && config.dynamic_vlan === 2,
+        radiusVlans: config.radius_vlan_unmanaged ? [] : config.radius_vlan_mappings
+          .filter((mapping) => mapping.managed)
+          .map((mapping) => ({ vid: String(mapping.vid), network: mapping.network })),
+        accountingServer: config.accounting_server || "",
+        accountingPort: String(config.accounting_port || 1813),
+        accountingSecret: "",
+        hidden: config.hidden,
+        channel: String(review.recommendedChannel),
+        htmode: config.htmode || "auto",
+        txpower: config.txpower === undefined ? "auto" : String(config.txpower),
+        ieee80211k: config.ieee80211k,
+        ieee80211v: config.ieee80211v,
+        allowOpen: false,
+      });
+      setChannelChangeNotice({
+        success: true,
+        message: config.radio + " was moved from channel " + review.currentChannel + " to " + review.recommendedChannel + ". The Wi-Fi service reloaded; associated clients may need to reconnect.",
+      });
+      setPendingChannelChange(null);
+      setChannelChangeConfirmed(false);
+      refresh();
+    } catch (error) {
+      setChannelChangeNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The recommended channel could not be applied.",
+      });
+    } finally {
+      setChannelChangeSaving(false);
+    }
+  };
+
   const runWirelessScan = async () => {
     setScanLoading(true);
     setScanError("");
@@ -6156,7 +6234,10 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
           <div className="module-message">The driver did not provide any unrestricted channel frequencies for an active radio. No channel shortlist can be calculated.</div>
         ) : (
           <div className="wifi-channel-plans">
-            {channelPlans.map((plan) => (
+            {channelPlans.map((plan) => {
+              const recommendation = recommendWifiChannel(plan);
+              const currentOption = plan.options.find((option) => option.current);
+              return (
               <section className="wifi-channel-plan" key={plan.radio + "-" + plan.band}>
                 <div className="wifi-channel-plan-heading">
                   <div>
@@ -6195,8 +6276,52 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
                     ))}
                   </div>
                 )}
+                {recommendation && currentOption && (
+                  <div className="wifi-channel-recommendation">
+                    <div>
+                      <strong>Measured channel recommendation</strong>
+                      <span>Channel {recommendation.channel} has materially lower observed overlap than the current channel {currentOption.channel}. This suggestion is withheld when signal or width observations are incomplete.</span>
+                    </div>
+                    <button
+                      className="hero-button"
+                      disabled={channelChangeSaving}
+                      onClick={() => {
+                        setPendingChannelChange({
+                          radio: plan.radio,
+                          band: plan.band,
+                          currentChannel: currentOption.channel,
+                          recommendedChannel: recommendation.channel,
+                        });
+                        setChannelChangeConfirmed(false);
+                        setChannelChangeNotice(null);
+                      }}
+                    >Review channel change</button>
+                  </div>
+                )}
+                {pendingChannelChange?.radio === plan.radio && pendingChannelChange.band === plan.band && (
+                  <div className="wifi-channel-recommendation-review">
+                    <strong>Confirm radio-wide change</strong>
+                    <span>{plan.radio} · {plan.band} · channel {pendingChannelChange.currentChannel} → {pendingChannelChange.recommendedChannel}</span>
+                    <label>
+                      <input type="checkbox" checked={channelChangeConfirmed} disabled={channelChangeSaving} onChange={(event) => setChannelChangeConfirmed(event.target.checked)} />
+                      I understand this changes the radio for every AP on it, reloads Wi-Fi and temporarily disconnects associated clients.
+                    </label>
+                    <div className="wireless-config-actions">
+                      <button className="hero-button" disabled={!channelChangeConfirmed || channelChangeSaving} onClick={() => void applyChannelRecommendation()}>
+                        {channelChangeSaving ? "Applying channel…" : "Apply channel " + pendingChannelChange.recommendedChannel}
+                      </button>
+                      <button className="hero-button wifi-export-button" disabled={channelChangeSaving} onClick={() => { setPendingChannelChange(null); setChannelChangeConfirmed(false); }}>Cancel</button>
+                    </div>
+                  </div>
+                )}
               </section>
-            ))}
+              );
+            })}
+          </div>
+        )}
+        {channelChangeNotice && (
+          <div className={channelChangeNotice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={channelChangeNotice.success ? "status" : "alert"}>
+            {channelChangeNotice.message}
           </div>
         )}
         <div className="module-message">Candidates come only from the radio driver's frequency list and exclude channels marked restricted. The router's own BSSID is excluded when iwinfo identifies it. The relative score is normalised within each radio/band shortlist: 0 is the lowest estimated overlap and 100 the highest. The estimate uses scanned signal strength, advertised width and channel geometry; it is not airtime, CCA busy time, noise, regulatory approval or a guarantee of better performance. Unknown widths use an explicitly marked 20 MHz fallback. DFS/no-IR and other driver flags still need to be respected. This page does not change any radio setting.</div>
