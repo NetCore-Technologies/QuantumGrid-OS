@@ -249,7 +249,22 @@ local function static_route_inventory(uci, fs)
 		invalid_count = 0
 	}
 	if fs.access("/etc/config/network") ~= true then return result end
-	local ok = pcall(function()
+
+	local interfaces = {}
+	local interface_seen = {}
+	local interface_ok = pcall(function()
+		uci:foreach("network", "interface", function(section)
+			local name = type(section[".name"]) == "string" and section[".name"] or ""
+			if name:match("^[%w_.%-]+$") and name ~= "loopback" and not interface_seen[name] then
+				interface_seen[name] = true
+				table.insert(interfaces, { name = name })
+			end
+		end)
+	end)
+	if not interface_ok then return result end
+
+	local routing = require "luci.quantumgrid.routing"
+	local routes_ok = pcall(function()
 		for _, kind in ipairs({
 			{ section_type = "route", family = "IPv4" },
 			{ section_type = "route6", family = "IPv6" }
@@ -261,26 +276,24 @@ local function static_route_inventory(uci, fs)
 					return
 				end
 				local section_name = type(section[".name"]) == "string" and section[".name"] or ""
-				local interface = type(section.interface) == "string" and section.interface or ""
-				local target = type(section.target) == "string" and section.target or ""
-				local gateway = type(section.gateway) == "string" and section.gateway or ""
-				local metric = tonumber(section.metric)
-				local table_id = type(section.table) == "string" and section.table or ""
-				local valid = section_name:match("^[%w_.%-]+$") ~= nil
-					and interface:match("^[%w_.%-]+$") ~= nil
-					and #target > 0 and #target <= 64
-					and #gateway <= 64 and (gateway == "" or gateway:match("^[%x:%.]+$") ~= nil)
-					and (metric == nil or (metric >= 0 and metric <= 65535 and metric == math.floor(metric)))
-					and (table_id == "" or table_id:match("^%d+$") ~= nil)
-				if valid then
+				local update, validation_error = routing.validate_static_route(
+					kind.family,
+					section.interface,
+					section.target,
+					section.gateway or "",
+					section.metric or "",
+					section.table or "",
+					interfaces,
+					{})
+				if update and section_name:match("^[%w_.%-]+$") then
 					table.insert(result.routes, {
 						section = section_name,
 						family = kind.family,
-						interface = interface,
-						target = target,
-						gateway = gateway,
-						metric = metric,
-						table = table_id,
+						interface = update.interface,
+						target = update.target,
+						gateway = update.gateway,
+						metric = update.metric,
+						table = update.table,
 						enabled = section.disabled ~= "1"
 					})
 				else
@@ -289,8 +302,8 @@ local function static_route_inventory(uci, fs)
 			end)
 		end
 	end)
-	result.available = ok
-	if not ok then
+	result.available = routes_ok
+	if not routes_ok then
 		result.routes = {}
 		result.invalid_count = 0
 		result.truncated = false
@@ -303,7 +316,6 @@ local function static_route_inventory(uci, fs)
 	end)
 	return result
 end
-
 local function policy_rule_inventory(fs)
 	local result = { available = false, rules = {}, count = 0, truncated = false }
 	if fs.access("/sbin/ip") ~= true then return result end
