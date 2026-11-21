@@ -1160,6 +1160,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "office-wifi-network-update"}, call("action_office_wifi_network_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-port-forward-add"}, call("action_office_port_forward_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-port-forward-remove"}, call("action_office_port_forward_remove")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-port-forward-toggle"}, call("action_office_port_forward_toggle")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-add"}, call("action_office_ipv6_pinhole_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-remove"}, call("action_office_ipv6_pinhole_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-toggle"}, call("action_office_ipv6_pinhole_toggle")).leaf = true
@@ -5458,6 +5459,154 @@ function action_office_port_forward_remove()
 	})
 end
 
+
+function action_office_port_forward_toggle()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing an Internet-facing IPv4 port-forward." })
+		return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, { ok = false, error = "Firewall configuration or native reload service is unavailable." })
+		return
+	end
+
+	local section = http.formvalue("section", true)
+	if type(section) ~= "string" or #section < 1 or #section > 64
+		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
+		respond(400, { ok = false, error = "The firewall redirect section identifier is invalid." })
+		return
+	end
+	local requested = http.formvalue("enabled", true)
+	if requested ~= "0" and requested ~= "1" then
+		respond(400, { ok = false, error = "Enabled state must be explicitly selected." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.firewall_available or inventory.truncated then
+		respond(409, { ok = false, error = "The firewall inventory is unavailable or truncated. Resolve it before changing a port-forward." })
+		return
+	end
+	local eligible = false
+	for _, redirect in ipairs(inventory.redirects or {}) do
+		if type(redirect) == "table" and redirect.section == section then
+			eligible = true
+			break
+		end
+	end
+	if not eligible then
+		respond(404, { ok = false, error = "The selected section is not a validated IPv4 DNAT port-forward in the current office inventory." })
+		return
+	end
+
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "firewall", section)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "redirect" then
+		respond(404, { ok = false, error = "The selected firewall redirect no longer exists." })
+		return
+	end
+	local previous, snapshot_error = validator.snapshot_firewall_redirect_section(snapshot)
+	if not previous then
+		respond(500, { ok = false, error = snapshot_error or "The original firewall redirect could not be snapshotted safely." })
+		return
+	end
+	local previous_value = previous.values.enabled
+	local previous_enabled = previous_value ~= "0"
+	local desired_enabled = requested == "1"
+	if previous_enabled == desired_enabled then
+		respond(nil, {
+			ok = true,
+			section = section,
+			enabled = desired_enabled,
+			changed = false,
+			reloaded = false,
+			rolled_back = false
+		})
+		return
+	end
+
+	local stage_ok, staged = pcall(uci.set, uci, "firewall", section, "enabled", requested)
+	if not stage_ok or staged ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The port-forward enabled state could not be staged in UCI." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The port-forward enabled state could not be committed; firewall reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local restore_ok, restored
+		if previous_value == nil then
+			restore_ok, restored = pcall(uci.delete, uci, "firewall", section, "enabled")
+		else
+			restore_ok, restored = pcall(uci.set, uci, "firewall", section, "enabled", previous_value)
+		end
+		local rollback_commit_ok, rollback_committed = false, false
+		if restore_ok and restored == true then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "firewall")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local rolled_back = restore_ok and restored == true and rollback_commit_ok
+			and rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.port-forward.toggle", section, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "Firewall reload failed. The previous port-forward enabled state was restored."
+				or "Firewall reload failed and the previous port-forward state could not be confirmed. Inspect firewall configuration and service state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "office.port-forward.toggle", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		enabled = desired_enabled,
+		changed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
 
 function action_office_ipv6_pinhole_add()
 	local http = require "luci.http"
