@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -8098,7 +8098,9 @@ function OfficeIpv6PinholeManager({
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState("");
+  const [pendingToggle, setPendingToggle] = useState("");
   const [removing, setRemoving] = useState("");
+  const [toggling, setToggling] = useState("");
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const activeSource = sourceZones.some((zone) => zone.name === source)
@@ -8158,6 +8160,30 @@ function OfficeIpv6PinholeManager({
     }
   };
 
+  const toggle = async (pinhole: RouterOfficeIpv6Pinhole) => {
+    if (!pinhole.section || toggling || pendingToggle !== pinhole.section) return;
+    const desired = !pinhole.enabled;
+    setToggling(pinhole.section);
+    setNotice(null);
+    try {
+      const result = await setRouterOfficeIpv6PinholeEnabled(pinhole.section, desired);
+      setPendingToggle("");
+      setNotice({
+        success: true,
+        message: pinhole.name + " is now " + (result.enabled ? "enabled" : "disabled") +
+          (result.reloaded ? "; firewall reload completed." : "; no firewall reload was needed."),
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The IPv6 pinhole state could not be changed.",
+      });
+    } finally {
+      setToggling("");
+    }
+  };
+
   const remove = async (section: string) => {
     if (!section || removing) return;
     setRemoving(section);
@@ -8203,6 +8229,19 @@ function OfficeIpv6PinholeManager({
               <strong>{pinhole.destination_ip}:{pinhole.destination_port}</strong>
             </div>
             <Status active={pinhole.enabled}>{pinhole.enabled ? "ENABLED" : "DISABLED"}</Status>
+            {pendingToggle === pinhole.section ? (
+              <div className="office-port-forward-confirm">
+                <span>{pinhole.enabled ? "Disable" : "Enable"} this inbound IPv6 allowance?</span>
+                <button className="office-remove-start" type="button" onClick={() => void toggle(pinhole)} disabled={Boolean(toggling)}>
+                  {toggling === pinhole.section ? "Applying…" : "Confirm"}
+                </button>
+                <button className="office-remove-start" type="button" onClick={() => setPendingToggle("")} disabled={Boolean(toggling)}>Cancel</button>
+              </div>
+            ) : (
+              <button className="office-remove-start" type="button" onClick={() => setPendingToggle(pinhole.section)} disabled={!available || truncated || Boolean(toggling) || Boolean(removing) || saving}>
+                {pinhole.enabled ? "Disable pinhole" : "Enable pinhole"}
+              </button>
+            )}
             {pendingRemoval === pinhole.section ? (
               <div className="office-port-forward-confirm">
                 <span>Remove this inbound IPv6 allowance?</span>
