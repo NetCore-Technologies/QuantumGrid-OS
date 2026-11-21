@@ -55,7 +55,7 @@ class DeviceProfileTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(len(result.stdout.rstrip("\\n").splitlines()), 16)
+        self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 16)
 
     def test_tab_output_is_a_fixed_sixteen_field_contract(self) -> None:
         result = subprocess.run(
@@ -64,7 +64,7 @@ class DeviceProfileTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(len(result.stdout.rstrip("\\n").split("\\t")), 16)
+        self.assertEqual(len(result.stdout.rstrip("\n").split("\t")), 16)
 
     def test_device_must_be_selected_by_the_profile_config(self) -> None:
         profile = self.profile()
