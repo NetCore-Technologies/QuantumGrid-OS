@@ -108,6 +108,29 @@ assert(backup.validate_platform_compatibility("qualcommax/ipq807x", "mediatek/fi
 assert(backup.validate_platform_compatibility("qualcommax/ipq807x", "qualcommax/ipq807x", "aarch64_cortex-a53", "aarch64_cortex-a72") == nil)
 assert(backup.validate_platform_compatibility(nil, "qualcommax/ipq807x", "aarch64_cortex-a53", "aarch64_cortex-a53") == nil)
 
+assert(backup.validate_restore_temp_path("/tmp/quantumgrid-config-restore.a1B2") == "/tmp/quantumgrid-config-restore.a1B2")
+assert(backup.validate_restore_temp_path("/tmp/other-restore.a1B2") == nil)
+assert(backup.validate_rollback_temp_path("/tmp/quantumgrid-config-rollback.a1B2") == "/tmp/quantumgrid-config-rollback.a1B2")
+assert(backup.validate_rollback_temp_path("/etc/quantumgrid-config-rollback.a1B2") == nil)
+
+local set_id_listing = table.concat({
+  "-rwsr-xr-x root/root 128 2026-11-22 00:00 etc/config/network",
+  "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  "-rw------- root/root 256 2026-11-22 00:00 etc/quantumgrid/device-profile.json",
+  "-rw-r--r-- root/root 128 2026-11-22 00:00 etc/openwrt_release",
+}, "\n")
+assert(backup.validate_archive_listing(set_id_listing) == nil,
+  "setuid/setgid files must never be imported through configuration restore")
+
+local regular_mode_hardlink = table.concat({
+  "-rw-r--r-- root/root 128 2026-11-22 00:00 etc/config/network link to etc/config/other",
+  "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  "-rw------- root/root 256 2026-11-22 00:00 etc/quantumgrid/device-profile.json",
+  "-rw-r--r-- root/root 128 2026-11-22 00:00 etc/openwrt_release",
+}, "\n")
+assert(backup.validate_archive_listing(regular_mode_hardlink) == nil,
+  "BusyBox tar's regular-permission hardlink representation must be rejected")
+
 local device_id = "0123456789abcdef0123456789abcdef"
 assert(backup.validate_device_identity(device_id .. "\n", device_id) == true)
 assert(backup.validate_device_identity(device_id, "fedcba9876543210fedcba9876543210") == nil)
