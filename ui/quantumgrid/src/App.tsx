@@ -9017,6 +9017,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
   refresh: () => void;
 }) {
   const platform = routerOverview?.platform;
+  const profileCapabilities = platform?.device_profile?.capabilities;
   const conntrack = routerOverview?.conntrack;
   const system = routerOverview?.system;
   const memory = system?.memory;
@@ -9099,6 +9100,12 @@ function AdvancedControlPage({ routerOverview, refresh }: {
       [generatedAt, platform.hostname, "Device profile", "Board compatibility", platform.device_profile?.status?.toUpperCase() ?? "NOT REPORTED",
         "observed=" + (platform.device_profile?.observed_board_name ?? platform.board_name ?? "unknown") +
           "; expected=" + (platform.device_profile?.board_compatible?.join(" ") ?? "unknown"), "", "", "", ""],
+      [generatedAt, platform.hostname, "Profile capability declaration", "NSS path",
+        profileCapabilities?.nss === "declared-supported" ? "DECLARED SUPPORTED" : profileCapabilities?.nss === "not-declared" ? "NOT DECLARED" : "UNKNOWN",
+        "Embedded manifest declaration only; not evidence of loaded drivers or end-to-end offload", "", "", "", ""],
+      [generatedAt, platform.hostname, "Profile capability declaration", "FXS voice",
+        profileCapabilities?.fxs === "declared-supported" ? "DECLARED SUPPORTED" : profileCapabilities?.fxs === "not-declared" ? "NOT DECLARED" : "UNKNOWN",
+        "Embedded manifest declaration only; not evidence of a working voice service or physical line", "", "", "", ""],
       [generatedAt, platform.hostname, "Package manager", platform.package_manager, "DETECTED", "", "", "", "", ""],
       ...runtimeRows,
       [generatedAt, platform.hostname, "Kernel networking", "Connection tracking", conntrack?.available ? (conntrack.status?.toUpperCase() ?? "UNKNOWN") : "UNAVAILABLE", "Read-only nf_conntrack_count / nf_conntrack_max; warning at 75%, critical at 90%", "", "", conntrack?.used_percent ?? "", conntrack?.available ? `${conntrack.count?.toLocaleString() ?? "N/A"} / ${conntrack.maximum?.toLocaleString() ?? "N/A"} entries; ${conntrack.free?.toLocaleString() ?? "N/A"} free` : ""],
@@ -9168,6 +9175,11 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               <div><small>DECLARED TARGET</small><strong>{platform.device_profile?.openwrt_target && platform.device_profile?.openwrt_subtarget ? platform.device_profile.openwrt_target + "/" + platform.device_profile.openwrt_subtarget : "N/A"}</strong></div>
               <div><small>OBSERVED BOARD NAME</small><strong>{platform.device_profile?.observed_board_name || platform.board_name || "N/A"}</strong></div>
               <div className="platform-detail-wide"><small>EXPECTED BOARD COMPATIBILITY IDS</small><strong>{platform.device_profile?.board_compatible?.join(", ") || "N/A"}</strong></div>
+              <div><small>NSS PROFILE DECLARATION</small><strong>{profileCapabilities?.nss === "declared-supported" ? "DECLARED SUPPORTED" : profileCapabilities?.nss === "not-declared" ? "NOT DECLARED" : "UNKNOWN"}</strong></div>
+              <div><small>FXS PROFILE DECLARATION</small><strong>{profileCapabilities?.fxs === "declared-supported" ? "DECLARED SUPPORTED" : profileCapabilities?.fxs === "not-declared" ? "NOT DECLARED" : "UNKNOWN"}</strong></div>
+            </div>
+            <div className="module-message">
+              NSS and FXS values are declarations from the embedded firmware manifest. They do not prove that drivers or firmware are loaded, that an NSS packet path is active, that the FXS service is healthy, or that physical hardware has been validated. Runtime component and service inventories remain separate evidence.
             </div>
             <div className="module-message">
               {platform.device_profile?.status === "matched"
