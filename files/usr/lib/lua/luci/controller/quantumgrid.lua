@@ -286,6 +286,7 @@ local function mwan3_status(uci, fs)
 		config_available = fs.access("/etc/config/mwan3") == true,
 		config_count = 0,
 		config_truncated = false,
+		config_invalid_count = 0,
 		config_interfaces = {}
 	}
 	if result.config_available then
@@ -299,7 +300,7 @@ local function mwan3_status(uci, fs)
 					if projected then
 						table.insert(result.config_interfaces, projected)
 					else
-						result.config_truncated = true
+						result.config_invalid_count = result.config_invalid_count + 1
 					end
 				else
 					result.config_truncated = true
