@@ -1825,6 +1825,25 @@ function build_inventory(source)
 						})
 					end
 				end
+				local ipv6_neighbors, neighbor_seen = {}, {}
+				local source_neighbors = type(item.ipv6_neighbors) == "table" and item.ipv6_neighbors or {}
+				for _, neighbor in ipairs(source_neighbors) do
+					if type(neighbor) == "table" and #ipv6_neighbors < 64 then
+						local address = global_unicast_ipv6(neighbor.address, false)
+						local mac = type(neighbor.mac) == "string" and neighbor.mac:lower() or ""
+						local state = neighbor.state
+						if address and not neighbor_seen[address] and valid_unicast_neighbor_mac(mac)
+							and ({ REACHABLE = true, STALE = true, DELAY = true, PROBE = true, PERMANENT = true })[state] then
+							neighbor_seen[address] = true
+							table.insert(ipv6_neighbors, {
+								address = address,
+								mac = mac,
+								state = state
+							})
+						end
+					end
+				end
+				table.sort(ipv6_neighbors, function(left, right) return left.address < right.address end)
 				table.insert(result.interfaces, {
 					name = name,
 					protocol = clean(item.protocol, 24),
@@ -1834,6 +1853,7 @@ function build_inventory(source)
 					netmask = clean(item.netmask, 32),
 					ip6assign = clean(item.ip6assign, 16),
 					ipv6 = values(item.ipv6, 8),
+					ipv6_neighbors = ipv6_neighbors,
 					vlan_ids = vlan_ids,
 					firewall_zones = attached_zones,
 					wifi_aps = ssids
