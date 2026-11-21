@@ -4174,8 +4174,8 @@ local function ensure_sysupgrade_backup_paths()
 		for line in current:lines() do
 			present[line:gsub("\r$", "")] = true
 		end
-		local close_ok = pcall(current.close, current)
-		if not close_ok then return nil, "The existing sysupgrade backup list could not be closed safely." end
+		local close_ok, close_result = pcall(current.close, current)
+		if not close_ok or not close_result then return nil, "The existing sysupgrade backup list could not be closed safely." end
 	end
 	local missing = {}
 	for _, path in ipairs(required) do
@@ -4191,8 +4191,8 @@ local function ensure_sysupgrade_backup_paths()
 			end
 			if not append:flush() then error("flush failed") end
 		end)
-		local close_ok = pcall(append.close, append)
-		if not write_ok or not close_ok then
+		local close_ok, close_result = pcall(append.close, append)
+		if not write_ok or not close_ok or not close_result then
 			return nil, "The required device/profile metadata could not be added to the native sysupgrade backup list."
 		end
 	end
