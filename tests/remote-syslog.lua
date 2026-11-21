@@ -111,6 +111,38 @@ local ip_tunnel_options = remote.stunnel_options(tls_ip)
 assert(ip_tunnel_options.lists.checkIP[1] == "192.0.2.15")
 assert(#ip_tunnel_options.lists.checkHost == 0 and #ip_tunnel_options.lists.sni == 0)
 
+local ipv6_tls = remote.validate({
+  confirmed = "1", enabled = "1", host = "2001:4860:4860::8888",
+  port = "6514", protocol = "tls"
+})
+local ipv6_canonical = "2001:4860:4860:0000:0000:0000:0000:8888"
+assert(ipv6_tls and ipv6_tls.host == ipv6_canonical)
+assert(ipv6_tls.tls.connect == "[" .. ipv6_canonical .. "]:6514")
+assert(ipv6_tls.tls.check_ip == ipv6_canonical and ipv6_tls.tls.check_host == nil and ipv6_tls.tls.sni == nil)
+local ipv6_options = remote.stunnel_options(ipv6_tls)
+assert(ipv6_options.lists.connect[1] == "[" .. ipv6_canonical .. "]:6514")
+assert(ipv6_options.lists.checkIP[1] == ipv6_canonical)
+
+local ula_udp = remote.validate({
+  confirmed = "1", enabled = "1", host = "fd12:3456::10",
+  port = "514", protocol = "udp"
+})
+assert(ula_udp and ula_udp.host == "fd12:3456:0000:0000:0000:0000:0000:0010")
+assert(ula_udp.tls == nil and ula_udp.protocol == "udp")
+
+for _, address in ipairs({
+  "::", "::1", "fe80::1", "ff02::1", "2001:db8::10",
+  "2002:c000:0201::1", "3fff::1", "2001:4860:::8888",
+  "2001:4860::1%wan", "2001:4860:4860::8888/64",
+  "0:0:0:0:0:ffff:c000:0201"
+}) do
+  local result = remote.validate({ confirmed = "1", enabled = "1", host = address, port = "6514", protocol = "tls" })
+  assert(result == nil, "unsafe or malformed IPv6 collector must be rejected: " .. address)
+end
+assert(remote.normalize_ipv6_address("2001:4860:4860::8888") == ipv6_canonical)
+assert(remote.normalize_ipv6_address("fd12:3456::10") == "fd12:3456:0000:0000:0000:0000:0000:0010")
+assert(remote.normalize_ipv6_address("fe80::1") == nil)
+
 local disabled = remote.validate({ confirmed = "1", enabled = "0" })
 assert(remote.validate({ enabled = "0" }) == nil, "missing explicit confirmation must be rejected")
 assert(disabled and disabled.enabled == false, "remote logging may be disabled without a destination")
@@ -324,6 +356,19 @@ local stale_disabled_uci, stale_disabled_fs, stale_disabled_process = status_fix
 local stale_disabled = remote.inspect_status(stale_disabled_uci, stale_disabled_fs, 8, stale_disabled_process)
 assert(stale_disabled.tls_status == "review" and not stale_disabled.enabled,
   "a running tunnel left behind while disabled must be surfaced for review")
+
+local ipv6_tls_uci, ipv6_tls_fs, ipv6_tls_process = status_fixture({
+  tunnel = {
+    [".name"] = "quantumgrid_syslog", [".type"] = "service",
+    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
+    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1", sslVersion = "TLSv1.2",
+    connect = { "[" .. ipv6_canonical .. "]:6514" }, checkIP = { ipv6_canonical },
+  },
+})
+local ipv6_tls_status = remote.inspect_status(ipv6_tls_uci, ipv6_tls_fs, 11, ipv6_tls_process)
+assert(ipv6_tls_status.tls_status == "ready" and ipv6_tls_status.enabled)
+assert(ipv6_tls_status.host == ipv6_canonical and ipv6_tls_status.port == 6514)
+assert(ipv6_tls_status.tls_identity_verified)
 
 local missing_ca_uci, missing_ca_fs, missing_ca_process = status_fixture({
   files = { ["/etc/ssl/certs/ca-certificates.crt"] = false },
