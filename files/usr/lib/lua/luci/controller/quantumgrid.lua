@@ -7246,8 +7246,8 @@ function action_remote_syslog_update()
 			return
 		end
 		if type(tunnel_value) == "table" then
-			if tunnel_value[".type"] ~= "service" then
-				respond(503, { ok = false, error = "The reserved QuantumGrid TLS logging section exists with an incompatible UCI type." })
+			if not validator.has_only_managed_service_options(tunnel_value) then
+				respond(503, { ok = false, error = "The reserved QuantumGrid TLS logging section has an incompatible type or unmanaged directives. No configuration was changed." })
 				return
 			end
 			tunnel_snapshot_exists = true
