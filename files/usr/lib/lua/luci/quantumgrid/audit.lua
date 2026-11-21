@@ -13,6 +13,7 @@ local ALLOWED_ACTIONS = {
 	["sqm.cake-profile"] = true,
 	["mwan3.interface.update"] = true,
 	["sqm.client-qos.add"] = true,
+	["sqm.client-qos.download.add"] = true,
 	["sqm.client-qos.remove"] = true,
 	["dhcp.reservation.add"] = true,
 	["dhcp.reservation.update"] = true,
