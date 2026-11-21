@@ -7949,6 +7949,10 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           <div><strong>Wireless mapping</strong><span>{inventory?.wireless_available ? (inventory.wifi_ap_count + " configured AP section(s); inspect the SSID-to-network associations above.") : "Wireless configuration inventory unavailable."}</span></div>
         </div>
         <div className="module-message">QuantumGrid now provides guarded bridge VLAN membership and explicit inter-zone forwarding controls, with confirmed UCI writes, service reload checks, rollback attempts and audit events. L3 interface/address provisioning, complete firewall zone/rule/NAT management, RADIUS/802.1X, site-to-site VPN policy, Wi-Fi SSID-to-VLAN provisioning and downstream switch configuration remain separate tasks. The inventory and configured rules are not proof that a network is safe for production office deployment.</div>
+      </Panel>
+    </div>
+  );
+}
 function OfficePortForwardManager({
   available,
   truncated,
