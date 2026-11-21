@@ -188,7 +188,9 @@ for _, process in ipairs({
   { pid = "1", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
   { pid = "1.2", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
   { pid = "1234", comm = "dropbear", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
-  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel /etc/stunnel/other.conf" },
+  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel\\0/etc/stunnel/other.conf\\0" },
+  { pid = "1234", comm = "stunnel", cmdline = "wrapper\\0/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0" },
+  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0--unsafe-option\\0" },
   { pid = "1234", comm = "stunnel", cmdline = nil },
 }) do
   assert(not remote.stunnel_process_running(process.pid, process.comm, process.cmdline),
