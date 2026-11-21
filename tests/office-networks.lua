@@ -826,9 +826,61 @@ local pinhole_zones = {
   { section = "cfg_guest", name = "guest", networks = { "guest" } },
 }
 local pinhole_interfaces = {
-  { name = "corp", ipv6 = { "2001:4860:4860::8888/128" } },
-  { name = "guest", ipv6 = { "2001:4860:4860::8844/128" } },
+  {
+    name = "corp",
+    ipv6_neighbors = {
+      { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
+    },
+  },
+  {
+    name = "guest",
+    ipv6_neighbors = {
+      { address = "2001:4860:4860::8844", mac = "aa:bb:cc:dd:ee:02", state = "STALE" },
+    },
+  },
 }
+local parsed_neighbors = office.parse_ipv6_neighbor_inventory(table.concat({
+  "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:01 REACHABLE",
+  "2001:4860:4860::8844 dev br-lan.20 lladdr aa:bb:cc:dd:ee:02 STALE",
+  "2001:4860:4860::9999 dev br-other lladdr aa:bb:cc:dd:ee:03 REACHABLE",
+  "fd00::10 dev br-lan.20 lladdr aa:bb:cc:dd:ee:04 REACHABLE",
+  "fe80::10 dev br-lan.20 lladdr aa:bb:cc:dd:ee:05 REACHABLE",
+  "ff02::1 dev br-lan.20 lladdr aa:bb:cc:dd:ee:06 REACHABLE",
+  "2001:4860:4860::7777 dev br-lan.20 lladdr ff:bb:cc:dd:ee:07 REACHABLE",
+  "2001:4860:4860::6666 dev br-lan.20 lladdr 00:00:00:00:00:00 STALE",
+  "2001:4860:4860::5555 dev br-lan.20 lladdr aa:bb:cc:dd:ee:08 FAILED",
+  "2001:4860:4860::4444 dev br-lan.20 lladdr aa:bb:cc:dd:ee:09 INCOMPLETE",
+  "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:10 REACHABLE",
+}, "\\n"), "br-lan.20")
+assert(#parsed_neighbors == 2
+  and parsed_neighbors[1].address == "2001:4860:4860:0000:0000:0000:0000:8844"
+  and parsed_neighbors[1].state == "STALE"
+  and parsed_neighbors[2].mac == "aa:bb:cc:dd:ee:01",
+  "NDP parser must keep only usable global neighbours on the selected device, with unicast MACs and deduplication")
+assert(#office.parse_ipv6_neighbor_inventory(
+  "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:01 REACHABLE", "br-other") == 0,
+  "NDP parser must not cross a VLAN device boundary")
+assert(#office.parse_ipv6_neighbor_inventory(string.rep("x", 65537), "br-lan.20") == 0,
+  "NDP parser must reject oversized neighbour input")
+
+local normalized_neighbor_inventory = office.build_inventory({
+  available = true,
+  interfaces = {
+    {
+      name = "corp", device = "br-lan.20", up = true,
+      ipv6_neighbors = {
+        { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
+        { address = "2001:4860:4860::9999", mac = "ff:bb:cc:dd:ee:02", state = "REACHABLE" },
+        { address = "2001:4860:4860::7777", mac = "aa:bb:cc:dd:ee:03", state = "FAILED" },
+      },
+    },
+  },
+})
+assert(normalized_neighbor_inventory.interface_count == 1
+  and #normalized_neighbor_inventory.interfaces[1].ipv6_neighbors == 1
+  and normalized_neighbor_inventory.interfaces[1].ipv6_neighbors[1].state == "REACHABLE",
+  "office inventory must revalidate and normalize NDP neighbour MACs and states")
+
 local valid_pinhole, pinhole_error = office.validate_office_ipv6_pinhole(
   "office-https-v6", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
   pinhole_zones, pinhole_interfaces, {})
