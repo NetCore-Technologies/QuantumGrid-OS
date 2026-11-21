@@ -717,18 +717,28 @@ by `tests/remote-syslog-api.test.mjs` in CI.
 
 ## Configuration backup
 
-The authenticated System page can generate a configuration archive using the router's native
-`sysupgrade -b` operation. It requires a same-origin administrator POST and an explicit
-confirmation checkbox, returns a no-store `.tar.gz` download, and caps the archive at 64 MiB.
-The router-side temporary path is validated under `/tmp` and removed after the response is read.
-The action does not reboot the router or modify its configuration.
+The authenticated System page creates a configuration archive using the router's native
+`sysupgrade -b` operation. It requires a same-origin administrator HTTPS POST and explicit
+confirmation, returns a no-store `.tar.gz` response capped at 64 MiB, validates the router-side
+temporary path under `/tmp`, and removes that file after the response is read. It does not reboot
+the router or modify its configuration.
 
-**Treat the archive as a secret.** It may contain administrator credentials, Wi-Fi passphrases,
-VPN private keys, certificates and other sensitive settings. Store it encrypted on a trusted device,
-limit access and keep a separate recovery route. The current feature creates backups only; it does
-not provide an automatic restore/import button. Restoring a backup must be done only with a
-compatible device/firmware and the documented recovery process. Validation rules are covered by
-`tests/config-backup.lua` and the normal firmware CI gate.
+The browser immediately encrypts the archive before offering a download. The versioned `.qgbak`
+container uses PBKDF2-HMAC-SHA-256 with 600,000 iterations and a random 16-byte salt to derive a
+non-exportable 256-bit AES key, then AES-256-GCM with a fresh 12-byte nonce and a 128-bit
+authentication tag. The full 40-byte format header (magic/version, KDF iteration count, salt and
+nonce) is authenticated as additional data, preventing silent header modification or iteration
+downgrades. The passphrase is never sent to the router. A minimum 16-character passphrase is
+required; use a unique high-entropy passphrase and store it separately from the backup.
+
+The System page can decrypt a `.qgbak` file locally in the browser. It verifies the container
+version, fixed KDF policy and AES-GCM authentication before releasing the original gzip archive;
+wrong passphrases and tampered files fail closed. Decryption does not upload the file or restore
+configuration to the router. **Treat both the encrypted backup and decrypted archive as secrets.**
+The feature does not provide one-click restore/import: restore only to compatible hardware and
+firmware using the documented recovery process, and preserve an independent recovery route.
+Cryptographic container tests are covered by `tests/config-backup-crypto.test.mjs`; router-side
+archive validation remains covered by `tests/config-backup.lua` and the normal firmware CI gate.
 
 ## Administrative audit history
 
