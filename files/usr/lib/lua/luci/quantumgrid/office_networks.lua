@@ -1016,6 +1016,33 @@ local function ipv4_overlaps(left, right)
 	return left and right and left.first <= right.last and right.first <= left.last
 end
 
+function validate_office_segment_ipv6(enabled)
+	if enabled == nil then enabled = "0" end
+	if enabled ~= "0" and enabled ~= "1" then
+		return nil, "IPv6 must be explicitly disabled or enabled."
+	end
+
+	if enabled == "0" then
+		return {
+			enabled = false,
+			ip6assign = "",
+			dhcpv6 = "disabled",
+			ra = "disabled",
+			ndp = "disabled"
+		}
+	end
+
+	local modes, mode_error = validate_dhcp_scope_ipv6_modes("server", "server", "disabled")
+	if not modes then return nil, mode_error end
+	return {
+		enabled = true,
+		ip6assign = "64",
+		dhcpv6 = modes.dhcpv6,
+		ra = modes.ra,
+		ndp = modes.ndp
+	}
+end
+
 function validate_office_segment(name, bridge_name, vlan_id, address, netmask,
 	start_value, limit_value, lease_time, interfaces, bridges, vlans, zones, scopes)
 	if type(name) ~= "string" or #name < 1 or #name > 32
