@@ -78,6 +78,9 @@ function validate(input)
 		prefix = prefix
 	}
 	if protocol == "tls" then
+		local server_name = nil
+		local server_ip = nil
+		if valid_ipv4(host) then server_ip = host else server_name = host end
 		result.tls = {
 			section = "quantumgrid_syslog",
 			local_host = "127.0.0.1",
@@ -85,9 +88,9 @@ function validate(input)
 			ca_file = "/etc/ssl/certs/ca-certificates.crt",
 			connect = host .. ":" .. tostring(port),
 			verify_chain = true,
-			check_host = valid_ipv4(host) and nil or host,
-			check_ip = valid_ipv4(host) and host or nil,
-			sni = valid_ipv4(host) and nil or host
+			check_host = server_name,
+			check_ip = server_ip,
+			sni = server_name
 		}
 	end
 	return result
