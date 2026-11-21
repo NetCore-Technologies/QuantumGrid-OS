@@ -29,11 +29,15 @@ local valid_listing = table.concat({
   "drwxr-xr-x root/root 0 2026-11-22 00:00 ./etc/config/",
   "-rw------- root/root 128 2026-11-22 00:00 ./etc/config/network",
   "-rw------- root/root 32 2026-11-22 00:00 ./etc/quantumgrid/device-id",
+  "-rw------- root/root 256 2026-11-22 00:00 ./etc/quantumgrid/device-profile.json",
+  "-rw-r--r-- root/root 128 2026-11-22 00:00 ./etc/openwrt_release",
   "-rw------- root/root 64 2026-11-22 00:00 ./root/.profile",
 }, "\n")
 local listing, listing_error = backup.validate_archive_listing(valid_listing)
 assert(listing ~= nil, listing_error or "valid native backup listing should pass")
-assert(listing.count == 5 and listing.device_id_path == "./etc/quantumgrid/device-id")
+assert(listing.count == 7 and listing.device_id_path == "./etc/quantumgrid/device-id")
+assert(listing.profile_path == "./etc/quantumgrid/device-profile.json")
+assert(listing.release_path == "./etc/openwrt_release")
 
 local oversized_listing = table.concat({
   "-rw------- root/root 200000000 2026-11-22 00:00 etc/config/large",
@@ -82,6 +86,11 @@ for _, invalid_listing in ipairs(rejected_listings) do
 end
 assert(backup.validate_archive_listing("") == nil)
 assert(backup.validate_archive_listing(string.rep("x", 4 * 1024 * 1024 + 1)) == nil)
+
+assert(backup.validate_platform_compatibility("qualcommax/ipq807x", "qualcommax/ipq807x", "aarch64_cortex-a53", "aarch64_cortex-a53") == true)
+assert(backup.validate_platform_compatibility("qualcommax/ipq807x", "mediatek/filogic", "aarch64_cortex-a53", "aarch64_cortex-a53") == nil)
+assert(backup.validate_platform_compatibility("qualcommax/ipq807x", "qualcommax/ipq807x", "aarch64_cortex-a53", "aarch64_cortex-a72") == nil)
+assert(backup.validate_platform_compatibility(nil, "qualcommax/ipq807x", "aarch64_cortex-a53", "aarch64_cortex-a53") == nil)
 
 local device_id = "0123456789abcdef0123456789abcdef"
 assert(backup.validate_device_identity(device_id .. "\n", device_id) == true)
