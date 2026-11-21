@@ -95,6 +95,21 @@ local rejected_listings = {
     "-rwq------ root/root 128 2026-11-22 00:00 etc/config/network",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
   }, "\n"),
+  table.concat({
+    "-rw------- root/root 0 2026-11-22 00:00 etc/config",
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+    "-rw------- root/root 0 2026-11-22 00:00 etc/config",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\n"),
+  table.concat({
+    "drwxr-xr-x root/root 1 2026-11-22 00:00 etc/config/",
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\n"),
 }
 for _, invalid_listing in ipairs(rejected_listings) do
   assert(backup.validate_archive_listing(invalid_listing) == nil,
