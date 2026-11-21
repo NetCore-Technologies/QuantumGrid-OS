@@ -8124,10 +8124,17 @@ function OfficeIpv6PinholeManager({
       !(firstGroup === 0x3fff && secondGroup < 0x1000);
   };
   const destinationAddresses = interfaces
-    .filter((iface) => destinationNetworks.includes(iface.name))
-    .flatMap((iface) => iface.ipv6
-      .filter(isGlobalUnicast)
-      .map((raw) => ({ network: iface.name, address: raw.split("/")[0].trim() })));
+    .filter((iface) => destinationNetworks.includes(iface.name) && iface.up)
+    .flatMap((iface) => iface.ipv6_neighbors
+      .filter((neighbor) => isGlobalUnicast(neighbor.address) &&
+        /^[0-9a-f]{2}(?::[0-9a-f]{2}){5}$/i.test(neighbor.mac) &&
+        ["REACHABLE", "STALE", "DELAY", "PROBE", "PERMANENT"].includes(neighbor.state))
+      .map((neighbor) => ({
+        network: iface.name,
+        address: neighbor.address,
+        mac: neighbor.mac,
+        state: neighbor.state,
+      })));
   const activeDestinationIp = destinationAddresses.some((item) => item.address === destinationIp)
     ? destinationIp
     : destinationAddresses[0]?.address ?? "";
@@ -8298,9 +8305,9 @@ function OfficeIpv6PinholeManager({
           <label>
             <span>CONFIGURED GLOBAL IPv6 HOST</span>
             <select value={activeDestinationIp} onChange={(event) => { setDestinationIp(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || destinationAddresses.length === 0}>
-              {destinationAddresses.map((item) => <option value={item.address} key={item.network + ":" + item.address}>{item.network} · {item.address}</option>)}
+              {destinationAddresses.map((item) => <option value={item.address} key={item.network + ":" + item.address}>{item.network} · {item.address} · {item.mac} · {item.state}</option>)}
             </select>
-            {destinationAddresses.length === 0 ? <small>No global IPv6 address is configured on an interface in this destination zone. Configure upstream prefix delegation or a static global address first.</small> : null}
+            {destinationAddresses.length === 0 ? <small>No live global-unicast NDP neighbour is visible on an interface in this destination zone. Wake the target host, confirm it has a global IPv6 address and refresh the inventory before creating a pinhole.</small> : <small>Only current NDP neighbours with a valid unicast MAC and usable neighbour state are selectable.</small>}
           </label>
           <label>
             <span>DESTINATION PORT</span>
@@ -8320,7 +8327,7 @@ function OfficeIpv6PinholeManager({
           {notice.message}
         </div>
       ) : null}
-      <div className="module-message">Only configured global-unicast addresses on an interface attached to the selected internal zone are accepted. The rule is IPv6-only, port-scoped and restricted to the chosen WAN and LAN zones. No IPv4 NAT, permissive router INPUT policy, ICMP-wide rule or inter-zone forwarding is added; test ingress from an independent external IPv6 network.</div>
+      <div className="module-message">Only currently observed global-unicast NDP neighbours with a valid unicast MAC on an interface attached to the selected internal zone are accepted. Hosts with expired or failed neighbour entries are not offered; wake the host and refresh inventory to repopulate NDP. The rule is IPv6-only, port-scoped and restricted to the chosen WAN and LAN zones. No IPv4 NAT, permissive router INPUT policy, ICMP-wide rule or inter-zone forwarding is added; test ingress from an independent external IPv6 network.</div>
     </Panel>
   );
 }
