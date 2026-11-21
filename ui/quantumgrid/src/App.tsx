@@ -7440,7 +7440,8 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
       ...(inventory.ipv6_pinholes ?? []).map((item) => [
         exportedAt, "WAN IPv6 pinhole", item.name, item.destination_ip,
         item.protocol + " " + item.destination_port,
-        "IPv6 ACCEPT · configured host only", item.source + " → " + item.destination,
+        item.enabled ? "IPv6 ACCEPT · enabled" : "IPv6 ACCEPT · disabled",
+        item.source + " → " + item.destination,
         "", "", "", item.destination_ip, "",
       ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
@@ -8201,6 +8202,7 @@ function OfficeIpv6PinholeManager({
               <span>{pinhole.destination}</span>
               <strong>{pinhole.destination_ip}:{pinhole.destination_port}</strong>
             </div>
+            <Status active={pinhole.enabled}>{pinhole.enabled ? "ENABLED" : "DISABLED"}</Status>
             {pendingRemoval === pinhole.section ? (
               <div className="office-port-forward-confirm">
                 <span>Remove this inbound IPv6 allowance?</span>
