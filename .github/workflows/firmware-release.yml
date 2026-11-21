@@ -25,9 +25,7 @@ on:
         type: boolean
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 concurrency:
   group: quantumgrid-firmware-${{ github.ref }}
@@ -37,6 +35,8 @@ jobs:
   build:
     name: Build and package AW1000 firmware
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     env:
       QG_OPENWRT_REF: ${{ inputs.openwrt_ref || 'v25.12.6' }}
       QG_OPENWRT_EXPECTED_SHA: ${{ inputs.openwrt_expected_sha || '64900e756efa667774214f9c6b17c113222e01f7' }}
@@ -205,11 +205,6 @@ jobs:
           echo "SHA-256 manifest:"
           cat dist/SHA256SUMS
 
-      - name: Generate signed SLSA provenance for release assets
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # pinned upstream v4
-        with:
-          subject-path: 'dist/*'
-
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # pinned upstream v4
         with:
@@ -218,8 +213,41 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  attest:
+    name: Attest firmware artifacts
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned upstream v4
+        with:
+          name: quantumgrid-aw1000-firmware
+          path: dist
+
+      - name: Generate signed SLSA provenance for release assets
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # pinned upstream v4
+        with:
+          subject-path: 'dist/*'
+
+  publish:
+    name: Publish AW1000 firmware release
+    if: startsWith(github.ref, 'refs/tags/qg-v')
+    needs: [build, attest]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download firmware artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # pinned upstream v4
+        with:
+          name: quantumgrid-aw1000-firmware
+          path: dist
+
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/qg-v')
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # pinned upstream v2
         with:
           name: QuantumGrid OS ${{ github.ref_name }}
