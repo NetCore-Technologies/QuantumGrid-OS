@@ -24,6 +24,7 @@ const input = {
   dhcpStart: "100",
   dhcpLimit: "100",
   leaseTime: "12h",
+  ipv6Enabled: false,
 };
 
 const success = {
@@ -36,9 +37,15 @@ const success = {
   pool_start_ip: "192.168.20.100",
   pool_end_ip: "192.168.20.199",
   firewall_rules: 3,
+  ipv6_enabled: false,
+  ipv6_assign: "",
+  dhcpv6: "disabled",
+  ra: "disabled",
+  ndp: "disabled",
   network_reloaded: true,
   firewall_reloaded: true,
   dhcp_restarted: true,
+  odhcpd_restarted: false,
   rolled_back: false,
 };
 
@@ -66,9 +73,56 @@ test("office segment request provisions the selected VLAN, static gateway, firew
   assert.equal(form.get("start"), "100");
   assert.equal(form.get("limit"), "100");
   assert.equal(form.get("leasetime"), "12h");
+  assert.equal(form.get("ipv6_enabled"), "0");
   assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.ipv6_enabled, false);
   assert.equal(result.device, "br-lan.20");
   assert.equal(result.firewall_rules, 3);
+});
+
+test("office segment client provisions IPv6-PD, DHCPv6, RA and scoped IPv6 firewall rules when explicitly enabled", async () => {
+  let requestInit;
+  const dualStack = {
+    ...success,
+    firewall_rules: 7,
+    ipv6_enabled: true,
+    ipv6_assign: "64",
+    dhcpv6: "server",
+    ra: "server",
+    ndp: "disabled",
+    odhcpd_restarted: true,
+  };
+  globalThis.fetch = async (_url, init) => {
+    requestInit = init;
+    return jsonResponse(dualStack);
+  };
+
+  const result = await createRouterOfficeSegment({ ...input, ipv6Enabled: true });
+  const form = new URLSearchParams(requestInit.body);
+  assert.equal(form.get("ipv6_enabled"), "1");
+  assert.equal(result.ipv6_enabled, true);
+  assert.equal(result.ipv6_assign, "64");
+  assert.equal(result.dhcpv6, "server");
+  assert.equal(result.ra, "server");
+  assert.equal(result.firewall_rules, 7);
+  assert.equal(result.odhcpd_restarted, true);
+});
+
+test("office segment client rejects incomplete IPv6 service confirmation", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ...success,
+    firewall_rules: 7,
+    ipv6_enabled: true,
+    ipv6_assign: "64",
+    dhcpv6: "server",
+    ra: "server",
+    ndp: "disabled",
+    odhcpd_restarted: false,
+  });
+  await assert.rejects(
+    createRouterOfficeSegment({ ...input, ipv6Enabled: true }),
+    /did not confirm the complete office network/,
+  );
 });
 
 test("office segment client rejects reserved or unsafe network identifiers before fetch", async () => {
