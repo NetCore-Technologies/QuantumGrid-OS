@@ -67,6 +67,7 @@ commit pins in `configs/aw1000-nss-feeds.conf` before feed retrieval.
 The build also verifies that every Git package feed remains at the full commit SHA declared
 by the pinned OpenWrt release, with the configured repository origin and a clean working tree.
 Locally modified or untracked feed files are refused before package installation.
+Existing OpenWrt source checkouts must also match the expected upstream URL and contain no modified or untracked source files; ignored build outputs remain available for incremental builds.
 Every firmware build exports the verified package-feed commit list as `OPENWRT-FEEDS.txt`.
 
 The build pins the phone-feed tag `v0.9.0` to commit `fe85222e57d1c3e191ffb976b37667bbf221a020` and refuses to

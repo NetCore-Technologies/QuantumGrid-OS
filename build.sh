@@ -53,13 +53,7 @@ if [[ ! -d "$OPENWRT_DIR/.git" ]]; then
     fi
     git clone --filter=blob:none --no-checkout "$OPENWRT_REPO" "$OPENWRT_DIR"
 else
-    if [[ -n "$(git -C "$OPENWRT_DIR" status --porcelain --untracked-files=no)" ]]; then
-        die "OpenWrt checkout has modified tracked files; refusing to overwrite local source changes"
-    fi
-    CURRENT_ORIGIN="$(git -C "$OPENWRT_DIR" remote get-url origin 2>/dev/null || true)"
-    if [[ "$CURRENT_ORIGIN" != "$OPENWRT_REPO" ]]; then
-        git -C "$OPENWRT_DIR" remote set-url origin "$OPENWRT_REPO"
-    fi
+    bash "$PROJECT_ROOT/scripts/check-openwrt-worktree.sh" "$OPENWRT_DIR" "$OPENWRT_REPO"
 fi
 
 printf '\n[2/9] Checking out pinned OpenWrt ref %s...\n' "$OPENWRT_REF"
