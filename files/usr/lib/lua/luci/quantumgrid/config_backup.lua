@@ -48,6 +48,23 @@ function validate_restore_confirmation(confirmed, same_device_confirmed)
 	return true
 end
 
+function validate_restore_temp_capacity(available_bytes, upload_bytes)
+	local reserve_bytes = MAX_ARCHIVE_BYTES + 8 * 1024 * 1024
+	if type(upload_bytes) ~= "number" or upload_bytes ~= math.floor(upload_bytes) or
+		upload_bytes < 1 or upload_bytes > MAX_ARCHIVE_BYTES then
+		return nil, "The uploaded archive size is invalid for restore capacity planning."
+	end
+	if type(available_bytes) ~= "number" or available_bytes ~= math.floor(available_bytes) or
+		available_bytes < 0 then
+		return nil, "Available /tmp capacity could not be verified; no restore was attempted."
+	end
+	local required_bytes = upload_bytes + reserve_bytes
+	if available_bytes < required_bytes then
+		return nil, "There is not enough verified free /tmp space for the uploaded archive, a maximum-sized rollback snapshot and the 8 MiB safety reserve. No restore was attempted."
+	end
+	return required_bytes
+end
+
 local function valid_archive_path(path)
 	if type(path) ~= "string" or #path < 1 or #path > 512 or
 		path:find("[%z\1-\31\127]") or path:find("\\", 1, true) or
