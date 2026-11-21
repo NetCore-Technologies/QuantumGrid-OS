@@ -155,6 +155,10 @@ function inspect_status(uci, fs, sampled_at)
 		return result
 	end
 
+	local globals_ok, globals = pcall(uci.get_all, uci, "stunnel", "globals")
+	result.tls_privilege_drop_configured = globals_ok and
+		has_non_root_privilege_drop(globals)
+
 	local system_section = nil
 	local section_count = 0
 	local system_ok = pcall(function()
@@ -178,10 +182,6 @@ function inspect_status(uci, fs, sampled_at)
 	if not local_tls_forwarder then return result end
 
 	result.protocol = "tls"
-	local globals_ok, globals = pcall(uci.get_all, uci, "stunnel", "globals")
-	result.tls_privilege_drop_configured = globals_ok and
-		has_non_root_privilege_drop(globals)
-
 	local tunnel_ok, tunnel = pcall(uci.get_all, uci, "stunnel", "quantumgrid_syslog")
 	if not tunnel_ok or type(tunnel) ~= "table" or tunnel[".type"] ~= "service" then
 		result.tls_status = result.tls_available and "review" or "unavailable"
