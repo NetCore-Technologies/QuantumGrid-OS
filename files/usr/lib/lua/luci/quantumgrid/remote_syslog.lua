@@ -129,7 +129,7 @@ local function only_entry(value)
 	return nil
 end
 
-function inspect_status(uci, fs, sampled_at)
+function inspect_status(uci, fs, sampled_at, process)
 	local stunnel_installed = fs_has_access(fs, "/etc/init.d/stunnel")
 	local stunnel_config_available = fs_has_access(fs, "/etc/config/stunnel")
 	local ca_bundle_available = fs_has_access(fs, "/etc/ssl/certs/ca-certificates.crt")
@@ -141,6 +141,11 @@ function inspect_status(uci, fs, sampled_at)
 		stunnel_config_available = stunnel_config_available,
 		tls_available = stunnel_installed and stunnel_config_available and ca_bundle_available,
 		tls_privilege_drop_configured = false,
+		tls_process_running = stunnel_process_running(
+			type(process) == "table" and process.pid or nil,
+			type(process) == "table" and process.comm or nil,
+			type(process) == "table" and process.cmdline or nil
+		),
 		tls_enabled = false,
 		tls_status = "unavailable",
 		enabled = false,
@@ -229,18 +234,27 @@ function inspect_status(uci, fs, sampled_at)
 		result.tls_status = "review"
 	elseif not tls_configured then
 		result.tls_status = "review"
-	elseif not result.tls_enabled then
+	elseif not result.tls_enabled and not result.tls_process_running then
 		result.tls_status = "disabled"
+	elseif not result.tls_process_running then
+		result.tls_status = "review"
+	elseif not result.tls_enabled then
+		result.tls_status = "review"
 	else
 		result.tls_status = "ready"
 	end
-	result.enabled = result.enabled and result.tls_enabled and tls_configured and result.tls_available
+	result.enabled = result.enabled and result.tls_enabled and tls_configured and
+		result.tls_available and result.tls_process_running
 	if not result.tls_available then
 		result.tls_error = "The stunnel service, UCI configuration or trusted CA bundle is unavailable."
 	elseif not result.tls_privilege_drop_configured then
 		result.tls_error = "The stunnel global configuration must drop privileges to a non-root user and group."
 	elseif not tls_configured then
 		result.tls_error = "TLS 1.2, chain verification, local listener or exact remote certificate identity configuration is incomplete."
+	elseif not result.tls_process_running then
+		result.tls_error = "The managed stunnel process is not running with its expected PID, process identity and generated configuration file."
+	elseif not result.tls_enabled then
+		result.tls_error = "The stunnel process is running while the managed service is configured as disabled; inspect for stale tunnel state."
 	end
 	return result
 end
