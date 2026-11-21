@@ -1410,6 +1410,8 @@ export interface RouterUsteerStatus {
   running: boolean;
   status: RouterUsteerRuntimeStatus;
   network: string;
+  syslog: boolean;
+  ipv6: boolean;
   ssid_list: string[];
   aggressiveness: number;
   assoc_steering: boolean;
