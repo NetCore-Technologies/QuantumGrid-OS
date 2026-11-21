@@ -7256,6 +7256,7 @@ function action_remote_syslog_update()
 		"verifyChain", "TIMEOUTconnect", "retry", "connect", "checkHost", "checkIP", "sni"
 	}
 	local tunnel_list_options = { connect = true, checkHost = true, checkIP = true, sni = true }
+	local system_log_options = { "log_ip", "log_port", "log_proto", "log_remote", "log_hostname", "log_prefix" }
 
 	local function respond(status, payload)
 		if status then
@@ -7382,9 +7383,9 @@ function action_remote_syslog_update()
 		local ok, result
 		if value == nil or value == "" then
 			ok, result = pcall(uci.delete, uci, package, section, option)
-		else
-			ok, result = pcall(uci.set, uci, package, section, option, value)
+			return ok and result ~= false
 		end
+		ok, result = pcall(uci.set, uci, package, section, option, value)
 		return ok and result == true
 	end
 
@@ -7400,14 +7401,16 @@ function action_remote_syslog_update()
 
 	local function restore_system()
 		local restored = true
-		for option, value in pairs(previous) do
+		for _, option in ipairs(system_log_options) do
+			local value = previous[option]
 			local option_ok, option_result
 			if value == nil then
 				option_ok, option_result = pcall(uci.delete, uci, "system", section_name, option)
+				if not option_ok or option_result == false then restored = false end
 			else
 				option_ok, option_result = pcall(uci.set, uci, "system", section_name, option, value)
+				if not option_ok or option_result ~= true then restored = false end
 			end
-			if not option_ok or option_result ~= true then restored = false end
 		end
 		local commit_ok, committed = false, false
 		if restored then commit_ok, committed = pcall(uci.commit, uci, "system") end
@@ -7419,7 +7422,7 @@ function action_remote_syslog_update()
 		local restored = true
 		if not tunnel_snapshot_exists then
 			local delete_ok, delete_result = pcall(uci.delete, uci, "stunnel", tunnel_name)
-			restored = delete_ok and delete_result == true
+			restored = delete_ok and delete_result ~= false
 		else
 			for _, option in ipairs(managed_tunnel_options) do
 				local value = tunnel_snapshot[option]
