@@ -505,6 +505,7 @@ export interface RouterDropbearInstance {
   enabled?: boolean | null;
   interface: string;
   interface_bound: boolean;
+  interface_zone_status?: "internal" | "external" | "unknown";
   port?: number | null;
   port_valid: boolean;
   password_auth_enabled?: boolean | null;
