@@ -1340,10 +1340,18 @@ export interface RouterRemoteSyslogStatus {
   available: boolean;
   service_installed: boolean;
   config_available: boolean;
+  stunnel_installed?: boolean;
+  stunnel_config_available?: boolean;
+  tls_available?: boolean;
+  tls_enabled?: boolean;
+  tls_status?: "ready" | "review" | "unavailable" | "disabled";
+  tls_configured?: boolean;
+  tls_identity_verified?: boolean;
+  tls_error?: string;
   enabled: boolean;
   host: string;
   port: number;
-  protocol: "tcp" | "udp";
+  protocol: "tcp" | "udp" | "tls";
   hostname: string;
   prefix: string;
   sampled_at: number;
@@ -1354,9 +1362,10 @@ export interface RouterRemoteSyslogUpdateResult {
   enabled: boolean;
   host: string;
   port: number;
-  protocol: "tcp" | "udp";
+  protocol: "tcp" | "udp" | "tls";
   hostname: string;
   prefix: string;
+  tls_status?: "ready" | "review" | "unavailable" | "disabled";
   restarted: true;
   rolled_back: false;
 }
@@ -2641,7 +2650,7 @@ export async function updateRouterRemoteSyslog(input: {
   enabled: boolean;
   host: string;
   port: number;
-  protocol: "tcp" | "udp";
+  protocol: "tcp" | "udp" | "tls";
   hostname: string;
   prefix: string;
 }): Promise<RouterRemoteSyslogUpdateResult> {
@@ -2652,8 +2661,8 @@ export async function updateRouterRemoteSyslog(input: {
     if (!Number.isSafeInteger(input.port) || input.port < 1 || input.port > 65535) {
       throw new Error("Remote syslog port must be a whole number from 1 to 65,535.");
     }
-    if (input.protocol !== "tcp" && input.protocol !== "udp") {
-      throw new Error("Remote syslog transport must be TCP or UDP.");
+    if (input.protocol !== "tcp" && input.protocol !== "udp" && input.protocol !== "tls") {
+      throw new Error("Remote syslog transport must be UDP, TCP or authenticated TLS.");
     }
     if (input.hostname && (!/^(?:[A-Za-z0-9][A-Za-z0-9-]*\.)*[A-Za-z0-9][A-Za-z0-9-]*$/.test(input.hostname) || input.hostname.length > 253)) {
       throw new Error("The sender hostname must be a valid DNS host name.");
@@ -2699,7 +2708,7 @@ export async function updateRouterRemoteSyslog(input: {
     !("rolled_back" in payload) || payload.rolled_back !== false ||
     !("host" in payload) || typeof payload.host !== "string" ||
     !("port" in payload) || typeof payload.port !== "number" ||
-    !("protocol" in payload) || (payload.protocol !== "tcp" && payload.protocol !== "udp")
+    !("protocol" in payload) || (payload.protocol !== "tcp" && payload.protocol !== "udp" && payload.protocol !== "tls")
   ) {
     throw new Error("The router did not confirm the remote syslog update and log-service restart.");
   }
