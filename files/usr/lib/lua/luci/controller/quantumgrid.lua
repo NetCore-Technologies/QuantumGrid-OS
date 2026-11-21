@@ -6892,6 +6892,21 @@ function action_dhcp_reservation()
 		return
 	end
 
+	local qos = require "luci.quantumgrid.qos"
+	local existing_policies, policies_truncated, policies_error = qos.read_client_policies(uci, 32)
+	if not existing_policies then
+		respond(500, { ok = false, error = policies_error or "Existing client QoS policies could not be checked safely." })
+		return
+	end
+	if policies_truncated then
+		respond(409, { ok = false, error = "The client QoS inventory is truncated. Resolve it before creating a reservation that could activate download marking." })
+		return
+	end
+	if qos.find_download_policy_conflict(existing_policies, reservation.mac, reservation.ipv4) then
+		respond(409, { ok = false, error = "A QuantumGrid download DSCP rule already references this client MAC or IPv4 address. Remove or correct that policy before creating this reservation." })
+		return
+	end
+
 	local section_ok, section = pcall(uci.section, uci, "dhcp", "host", nil, {
 		name = reservation.name,
 		mac = reservation.mac,
@@ -7017,6 +7032,24 @@ function action_dhcp_reservation_update()
 	if not reservation then
 		respond(400, { ok = false, error = validation_error })
 		return
+	end
+	local previous_mac = type(snapshot.mac) == "string" and snapshot.mac:lower() or ""
+	local previous_ipv4 = type(snapshot.ip) == "string" and snapshot.ip or ""
+	if previous_mac ~= reservation.mac or previous_ipv4 ~= reservation.ipv4 then
+		local qos = require "luci.quantumgrid.qos"
+		local existing_policies, policies_truncated, policies_error = qos.read_client_policies(uci, 32)
+		if not existing_policies then
+			respond(500, { ok = false, error = policies_error or "Existing client QoS policies could not be checked safely." })
+			return
+		end
+		if policies_truncated then
+			respond(409, { ok = false, error = "The client QoS inventory is truncated. Resolve it before changing a reservation used by download marking." })
+			return
+		end
+		if qos.find_download_reservation_policy(existing_policies, previous_mac, previous_ipv4) then
+			respond(409, { ok = false, error = "This static reservation is referenced by a download DSCP policy. Remove that policy before changing the reserved MAC or IPv4 address." })
+			return
+		end
 	end
 	local network = http.formvalue("network", true)
 	if type(network) ~= "string" or #network > 64 or not network:match("^[%w_.%-]+$") then
@@ -7199,6 +7232,21 @@ function action_dhcp_reservation_remove()
 	local name = type(snapshot.name) == "string" and snapshot.name or section
 	if mac == "" or ipv4 == "" then
 		respond(409, { ok = false, error = "The selected UCI host section is not a valid static IPv4 reservation." })
+		return
+	end
+
+	local qos = require "luci.quantumgrid.qos"
+	local existing_policies, policies_truncated, policies_error = qos.read_client_policies(uci, 32)
+	if not existing_policies then
+		respond(500, { ok = false, error = policies_error or "Existing client QoS policies could not be checked safely." })
+		return
+	end
+	if policies_truncated then
+		respond(409, { ok = false, error = "The client QoS inventory is truncated. Resolve it before removing a reservation used by download marking." })
+		return
+	end
+	if qos.find_download_reservation_policy(existing_policies, mac, ipv4) then
+		respond(409, { ok = false, error = "This static reservation is referenced by a download DSCP policy. Remove that policy before removing the reservation." })
 		return
 	end
 
