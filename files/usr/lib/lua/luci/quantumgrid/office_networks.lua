@@ -1011,7 +1011,8 @@ function snapshot_office_ipv6_pinhole(snapshot)
 	if not name:match("^QuantumGrid IPv6 pinhole: [A-Za-z0-9][A-Za-z0-9_.%-]*$") then
 		return nil, "The selected firewall rule is not a QuantumGrid-managed IPv6 pinhole."
 	end
-	if snapshot.family ~= "ipv6" or snapshot.target ~= "ACCEPT"
+	if (snapshot.enabled ~= nil and snapshot.enabled ~= "0" and snapshot.enabled ~= "1")
+		or snapshot.family ~= "ipv6" or snapshot.target ~= "ACCEPT"
 		or type(snapshot.src) ~= "string" or type(snapshot.dest) ~= "string"
 		or type(snapshot.dest_ip) ~= "string"
 		or not global_unicast_ipv6(snapshot.dest_ip, false)
