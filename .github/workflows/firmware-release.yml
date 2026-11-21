@@ -13,7 +13,9 @@ on:
       - "build.sh"
       - "configs/**"
       - "files/**"
+      - "profiles/**"
       - "scripts/**"
+      - "tests/**"
       - "ui/quantumgrid/**"
       - "quantumgrid-configure.sh"
   workflow_dispatch:
