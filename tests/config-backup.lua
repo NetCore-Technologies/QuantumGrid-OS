@@ -30,7 +30,7 @@ local valid_listing = table.concat({
   "-rw------- root/root 128 2026-11-22 00:00 ./etc/config/network",
   "-rw------- root/root 32 2026-11-22 00:00 ./etc/quantumgrid/device-id",
   "-rw------- root/root 64 2026-11-22 00:00 ./root/.profile",
-}, "\\n")
+}, "\n")
 local listing, listing_error = backup.validate_archive_listing(valid_listing)
 assert(listing ~= nil, listing_error or "valid native backup listing should pass")
 assert(listing.count == 5 and listing.device_id_path == "./etc/quantumgrid/device-id")
@@ -40,31 +40,31 @@ local rejected_listings = {
     "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
     "lrwxrwxrwx root/root 0 2026-11-22 00:00 etc/config/evil -> /etc/shadow",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
-  }, "\\n"),
+  }, "\n"),
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 ../etc/config/network",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
-  }, "\\n"),
+  }, "\n"),
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 /etc/config/network",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
-  }, "\\n"),
+  }, "\n"),
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 var/spool/cron/root",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
-  }, "\\n"),
+  }, "\n"),
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
-  }, "\\n"),
+  }, "\n"),
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
     "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
-  }, "\\n"),
+  }, "\n"),
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
     "hrw-r--r-- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id link to etc/config/network",
-  }, "\\n"),
+  }, "\n"),
 }
 for _, invalid_listing in ipairs(rejected_listings) do
   assert(backup.validate_archive_listing(invalid_listing) == nil,
@@ -74,7 +74,7 @@ assert(backup.validate_archive_listing("") == nil)
 assert(backup.validate_archive_listing(string.rep("x", 4 * 1024 * 1024 + 1)) == nil)
 
 local device_id = "0123456789abcdef0123456789abcdef"
-assert(backup.validate_device_identity(device_id .. "\\n", device_id) == true)
+assert(backup.validate_device_identity(device_id .. "\n", device_id) == true)
 assert(backup.validate_device_identity(device_id, "fedcba9876543210fedcba9876543210") == nil)
 assert(backup.validate_device_identity("not-a-device-id", device_id) == nil)
 assert(backup.validate_device_identity(nil, device_id) == nil)
