@@ -1373,7 +1373,7 @@ function action_wireless_update()
 	local function respond(status, payload)
 		if status then http.status(status, status == 400 and "Bad Request" or
 			status == 403 and "Forbidden" or status == 404 and "Not Found" or
-			status == 405 and "Method Not Allowed" or status == 503 and "Service Unavailable" or
+			status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or status == 503 and "Service Unavailable" or
 			status == 502 and "Bad Gateway" or "Internal Server Error") end
 		http.prepare_content("application/json; charset=UTF-8")
 		http.write_json(payload)
@@ -1464,6 +1464,20 @@ function action_wireless_update()
 	end
 
 	local current_channel = uci:get("wireless", update.radio, "channel") or "auto"
+	local expected_current_channel = http.formvalue("expected_current_channel", true)
+	if expected_current_channel ~= nil then
+		local expected_valid = expected_current_channel == "auto" or
+			type(expected_current_channel) == "string" and expected_current_channel:match("^[1-9]%d?%d?$") ~= nil and
+			tonumber(expected_current_channel) >= 1 and tonumber(expected_current_channel) <= 233
+		if not expected_valid then
+			respond(400, { ok = false, error = "The expected current radio channel must be Auto or a valid channel number." })
+			return
+		end
+		if expected_current_channel ~= current_channel then
+			respond(409, { ok = false, error = "The radio channel changed after the scan. Re-scan and review a fresh recommendation before applying it." })
+			return
+		end
+	end
 	if update.channel ~= current_channel and not wireless_channel_allowed(update.radio, update.channel) then
 		respond(400, { ok = false, error = "That channel is not reported as available and unrestricted by the radio driver." })
 		return
