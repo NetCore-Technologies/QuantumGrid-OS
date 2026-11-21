@@ -697,13 +697,15 @@ The client pins the TLS protocol to TLS 1.2, requires certificate-chain verifica
 exact DNS hostname or IPv4 subject alternative name match; DNS destinations also use SNI. The
 control refuses to enable TLS unless the stunnel global configuration explicitly drops privileges
 to a non-root user and group (the upstream package defaults are `nobody` and `nogroup`). It does
-not disable certificate verification or permit a user-supplied arbitrary stunnel configuration. Switching to plaintext or disabling
-forwarding disables the QuantumGrid-managed TLS listener. Existing unrelated stunnel sections and
-global options are preserved.
+not disable certificate verification or permit a user-supplied arbitrary stunnel configuration.
+Alternate stunnel configuration files are refused, as are unmanaged directives in the reserved
+QuantumGrid service section. Existing unrelated stunnel sections and global options are preserved.
 
 The controller snapshots the affected system and managed stunnel options, commits the tunnel before
-the native logger, checks both service restarts, and attempts to restore both configurations if a
-commit or restart fails. The operation is recorded in the redacted administrative audit history.
+the native logger, checks both service restarts, then verifies the expected stunnel PID, process name,
+executable/configuration arguments, TLS policy and exact configured destination before reporting TLS
+as ready. A failed post-start verification triggers the same rollback path as a failed restart. It
+attempts to restore both configurations if a commit, restart or live-state check fails. The operation is recorded in the redacted administrative audit history.
 A successful local restart and a valid trust configuration do **not** prove that the collector is
 reachable or that it received or retained a message.
 
