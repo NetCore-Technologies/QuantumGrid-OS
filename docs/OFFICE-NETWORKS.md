@@ -63,6 +63,10 @@ Before writing or removing a route, QuantumGrid checks the current browser admin
 
 Routes are persisted in the OpenWrt network UCI configuration. A network reload is required after commit. If reload fails, QuantumGrid attempts to remove the added section or restore the complete removed section, commits the previous configuration and reloads it; the API reports whether rollback was confirmed. The static-route list shows configured route sections, not proof that a route is installed in the live kernel or that its next hop is reachable. Validate live IPv4/IPv6 route tables and client reachability separately.
 
+## IPv4 WAN port-forward lifecycle
+
+The WAN port-forward inventory reports each validated IPv4 DNAT redirect as enabled or disabled. Administrators can enable or disable a redirect without deleting its configuration. Each state change requires an authenticated HTTPS, same-origin POST and explicit confirmation. The service snapshots the full redirect before changing only its enabled option; if the firewall reload fails, it restores the exact previous value, including an originally absent option, and attempts a second reload. Repeating the already-active state is an idempotent no-op and does not reload the firewall. A successful configuration reload is not proof of Internet reachability; verify the WAN path from an independent network.
+
 ## IPv6 WAN pinholes (not NAT)
 
 Office Networks can add and remove **QuantumGrid-managed IPv6 pinholes** for services hosted on a LAN device that is currently visible in the router's IPv6 neighbour-discovery (NDP) table. The controller reads `ip -6 neigh show dev <interface>` only for an active kernel L3 device and exposes valid global-unicast neighbours with a unicast MAC and a usable kernel neighbour state (`REACHABLE`, `STALE`, `DELAY`, `PROBE` or `PERMANENT`). A firewall pinhole is eligible only when the address is observed exactly once across the active L3 inventory and that interface belongs to the selected internal firewall zone; down, unbound or ambiguous observations fail closed. IPv6 is routed end-to-end; this is a firewall allowance, not IPv4-style address/port translation.
