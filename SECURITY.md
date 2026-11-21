@@ -132,13 +132,17 @@ to the router. Use a unique high-entropy passphrase stored separately from the b
 be recovered. Both encrypted backups and the decrypted gzip archive contain sensitive settings.
 
 Restore is an authenticated same-origin HTTPS operation. The browser decrypts locally and streams
-the gzip archive to the router without sending the passphrase. Before the native `sysupgrade -r`
-extractor is invoked, QuantumGrid verifies the gzip/tar structure, bounded compressed and expanded
-size, member count, allowed `etc/` and `root/` paths, unique names, ordinary file/directory types,
-and absence of symlinks, hardlinks, special files, set-ID and sticky modes. It requires the device
-inventory ID, exact AW1000 profile and OpenWrt target/architecture to match. A separately generated
-native rollback archive is validated before the uploaded archive can be applied. Failed restoration
-triggers a rollback attempt; the router reboots after successful restore or successful rollback.
+the gzip archive to the router without sending the passphrase. Backup snapshot creation and restore
+share an atomic lock. Before the native `sysupgrade -r` extractor is invoked, QuantumGrid verifies
+the gzip/tar structure, bounded compressed and expanded size, exact verbose-listing metadata layout,
+member count, allowed `etc/` and `root/` paths, unique names, file/directory types and mode characters,
+parent/child path consistency, and absence of whitespace-ambiguous paths, symlinks, hardlinks,
+special files, set-ID and sticky modes. It requires the device inventory ID, exact AW1000 profile
+and OpenWrt target/architecture to match. A separately generated native rollback archive is validated
+before the uploaded archive can be applied. Failed restoration triggers a rollback attempt; if
+rollback cannot be confirmed, its validated archive is preserved under `/tmp` and its path is reported
+for out-of-band retrieval before temporary storage is cleared. A reboot is scheduled after successful
+restore or successful rollback.
 
 The stable device ID is public inventory metadata, not a secret, cryptographic hardware attestation
 or publisher signature. It is an accidental cross-device guard only. AES-GCM authenticates the
