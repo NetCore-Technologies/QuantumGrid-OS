@@ -53,6 +53,16 @@ logread -e odhcpd
 
 Use the actual upstream IPv6 interface name if it is not wan6. Confirm that a delegated prefix appears in the upstream interface status, that the new VLAN interface receives its own /64, that Router Advertisements reach a client, and that the client's IPv6 route and DNS work before enabling production workloads.
 
+## Static IPv4 and IPv6 routes
+
+The Network control centre also manages persistent unicast routes on existing logical interfaces. It supports explicit destination CIDRs for IPv4 and IPv6, an optional next-hop gateway, metric and numeric routing-table ID. The main table is used when no custom table is supplied. Default routes are deliberately excluded; WAN defaults, policy-routing rules and Multi-WAN policy have separate controls.
+
+The firmware validates canonical network prefixes (host bits must be zero), unicast gateways, address family, interface existence, metric bounds and routing-table IDs. It rejects duplicate destinations in the same family/table and does not silently create policy rules, firewall forwarding, DNS settings or source-based routing. IPv6 link-local gateways are permitted for next-hop use; IPv6 link-local destination prefixes and multicast/unspecified destinations are rejected.
+
+Before writing or removing a route, QuantumGrid checks the current browser administrator's client address against the destination prefix. It refuses the operation if that route would cover the active management client, and it fails closed when the client address or route inventory is unavailable, truncated or contains unsupported/malformed sections. This is a safety guard, not a substitute for an out-of-band management path. Do not use remote route changes to modify the path currently carrying the administrator session.
+
+Routes are persisted in the OpenWrt network UCI configuration. A network reload is required after commit. If reload fails, QuantumGrid attempts to remove the added section or restore the complete removed section, commits the previous configuration and reloads it; the API reports whether rollback was confirmed. The static-route list shows configured route sections, not proof that a route is installed in the live kernel or that its next hop is reachable. Validate live IPv4/IPv6 route tables and client reachability separately.
+
 ## Transaction and recovery
 
 Provisioning uses an authenticated, same-origin HTTPS POST and requires explicit confirmation. QuantumGrid snapshots the selected zone's existing network list, stages network/DHCP/firewall UCI changes, commits all three configuration packages and reloads the affected services. If staging, commit or a required reload fails, it removes the partial segment, restores the previous zone attachment and attempts to commit and reload the previous state. The API reports whether rollback was confirmed; a failed rollback must be investigated locally.
