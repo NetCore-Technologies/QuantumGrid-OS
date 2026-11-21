@@ -2957,7 +2957,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const sshGatewayPorts = summarizeSshOption(sshGatewayPortsValues);
   const sshAuthorizedKeys = managementTransport?.ssh_authorized_keys;
   const sshAuthorizedKeysPermissions = sshAuthorizedKeys?.status === "present"
-    ? "REGULAR · ROOT-READABLE · ROOT-OWNED · NOT GROUP/WORLD-WRITABLE"
+    ? "FILE + DIRECTORY ROOT-OWNED · SAFE WRITE PERMISSIONS"
     : sshAuthorizedKeys?.status?.toUpperCase() ?? "UNKNOWN";
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
@@ -3035,6 +3035,11 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Management transport", "Authorized keys owner readable", sshAuthorizedKeys?.owner_readable === true ? "YES" : sshAuthorizedKeys?.owner_readable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "Authorized keys group writable", sshAuthorizedKeys?.group_writable === true ? "YES" : sshAuthorizedKeys?.group_writable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "Authorized keys other writable", sshAuthorizedKeys?.other_writable === true ? "YES" : sshAuthorizedKeys?.other_writable === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys directory", sshAuthorizedKeys?.directory ?? "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys directory root owned", sshAuthorizedKeys?.directory_root_owned === true ? "YES" : sshAuthorizedKeys?.directory_root_owned === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys parent directory valid", sshAuthorizedKeys?.directory_valid === true ? "YES" : sshAuthorizedKeys?.directory_valid === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys directory group writable", sshAuthorizedKeys?.directory_group_writable === true ? "YES" : sshAuthorizedKeys?.directory_group_writable === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys directory other writable", sshAuthorizedKeys?.directory_other_writable === true ? "YES" : sshAuthorizedKeys?.directory_other_writable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "SSH inventory truncated", managementTransport?.ssh_truncated ? "YES" : managementTransport?.ssh_truncated === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Firewall", "Configuration", security.firewall_config_readable ? "READABLE" : "UNAVAILABLE", ""],
       [exportedAt, "Firewall", "Rules", "REPORTED", security.rules_count],
@@ -3175,6 +3180,11 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["Authorized keys file validation", sshAuthorizedKeysPermissions],
               ["Authorized keys file type", sshAuthorizedKeys?.regular_file === true ? "REGULAR FILE" : sshAuthorizedKeys?.regular_file === false ? "NOT A REGULAR FILE" : "UNKNOWN"],
               ["Authorized keys owner readable", sshAuthorizedKeys?.owner_readable === true ? "YES" : sshAuthorizedKeys?.owner_readable === false ? "NO" : "UNKNOWN"],
+              ["Authorized keys parent directory", sshAuthorizedKeys?.directory || "UNKNOWN"],
+              ["Authorized keys parent directory type", sshAuthorizedKeys?.directory_valid === true ? "DIRECTORY" : sshAuthorizedKeys?.directory_valid === false ? "INVALID" : "UNKNOWN"],
+              ["Authorized keys parent directory ownership", sshAuthorizedKeys?.directory_root_owned === true ? "ROOT-OWNED" : sshAuthorizedKeys?.directory_root_owned === false ? "NOT ROOT-OWNED" : "UNKNOWN"],
+              ["Authorized keys parent directory writable by group", sshAuthorizedKeys?.directory_group_writable === true ? "YES" : sshAuthorizedKeys?.directory_group_writable === false ? "NO" : "UNKNOWN"],
+              ["Authorized keys parent directory writable by others", sshAuthorizedKeys?.directory_other_writable === true ? "YES" : sshAuthorizedKeys?.directory_other_writable === false ? "NO" : "UNKNOWN"],
               ["Authorized keys file size", sshAuthorizedKeys?.size_bytes == null ? "UNKNOWN" : fmt(sshAuthorizedKeys.size_bytes) + " bytes"],
               ["SSH inventory truncated", managementTransport.ssh_truncated === true ? "YES" : managementTransport.ssh_truncated === false ? "NO" : "UNKNOWN"],
             ]} />
