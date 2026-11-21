@@ -8167,7 +8167,7 @@ function OfficeIpv6PinholeManager({
   };
 
   const toggle = async (pinhole: RouterOfficeIpv6Pinhole) => {
-    if (!pinhole.section || toggling || pendingToggle !== pinhole.section) return;
+    if (!pinhole.section || toggling || removing || pendingToggle !== pinhole.section) return;
     const desired = !pinhole.enabled;
     setToggling(pinhole.section);
     setNotice(null);
@@ -8191,7 +8191,7 @@ function OfficeIpv6PinholeManager({
   };
 
   const remove = async (section: string) => {
-    if (!section || removing) return;
+    if (!section || removing || toggling) return;
     setRemoving(section);
     setNotice(null);
     try {
@@ -8238,26 +8238,26 @@ function OfficeIpv6PinholeManager({
             {pendingToggle === pinhole.section ? (
               <div className="office-port-forward-confirm">
                 <span>{pinhole.enabled ? "Disable" : "Enable"} this inbound IPv6 allowance?</span>
-                <button className="office-remove-start" type="button" onClick={() => void toggle(pinhole)} disabled={Boolean(toggling)}>
+                <button className="office-remove-start" type="button" onClick={() => void toggle(pinhole)} disabled={Boolean(toggling) || Boolean(removing)}>
                   {toggling === pinhole.section ? "Applying…" : "Confirm"}
                 </button>
-                <button className="office-remove-start" type="button" onClick={() => setPendingToggle("")} disabled={Boolean(toggling)}>Cancel</button>
+                <button className="office-remove-start" type="button" onClick={() => setPendingToggle("")} disabled={Boolean(toggling) || Boolean(removing)}>Cancel</button>
               </div>
             ) : (
-              <button className="office-remove-start" type="button" onClick={() => setPendingToggle(pinhole.section)} disabled={!available || truncated || Boolean(toggling) || Boolean(removing) || saving}>
+              <button className="office-remove-start" type="button" onClick={() => setPendingToggle(pinhole.section)} disabled={!available || truncated || Boolean(toggling) || Boolean(removing) || saving || pendingRemoval === pinhole.section}>
                 {pinhole.enabled ? "Disable pinhole" : "Enable pinhole"}
               </button>
             )}
             {pendingRemoval === pinhole.section ? (
               <div className="office-port-forward-confirm">
                 <span>Remove this inbound IPv6 allowance?</span>
-                <button className="office-remove-start" type="button" onClick={() => void remove(pinhole.section)} disabled={Boolean(removing)}>
+                <button className="office-remove-start" type="button" onClick={() => void remove(pinhole.section)} disabled={Boolean(removing) || Boolean(toggling)}>
                   {removing === pinhole.section ? "Removing…" : "Confirm removal"}
                 </button>
-                <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing)}>Cancel</button>
+                <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing) || Boolean(toggling)}>Cancel</button>
               </div>
             ) : (
-              <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(pinhole.section)} disabled={!available || truncated || Boolean(removing) || saving}>
+              <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(pinhole.section)} disabled={!available || truncated || Boolean(removing) || Boolean(toggling) || saving || pendingToggle === pinhole.section}>
                 Remove pinhole
               </button>
             )}
