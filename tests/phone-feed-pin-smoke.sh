@@ -10,6 +10,7 @@ REMOTE="$TEST_DIR/phone-source"
 PROJECT="$TEST_DIR/project"
 OPENWRT="$PROJECT/openwrt"
 mkdir -p "$REMOTE" "$OPENWRT" "$PROJECT"
+printf '.PHONY: all\n' > "$OPENWRT/Makefile"
 git -C "$REMOTE" init -q
 git -C "$REMOTE" config user.name "QuantumGrid CI"
 git -C "$REMOTE" config user.email "ci@example.invalid"
