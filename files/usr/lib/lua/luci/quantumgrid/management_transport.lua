@@ -56,6 +56,74 @@ local function boolean_option(value, default)
   return nil
 end
 
+local function authorized_keys_status(fs)
+  local result = {
+    available = false,
+    path = "",
+    size_bytes = nil,
+    root_owned = nil,
+    group_writable = nil,
+    other_writable = nil,
+    status = "missing"
+  }
+
+  if type(fs) ~= "table" or type(fs.access) ~= "function" then
+    result.status = "unavailable"
+    return result
+  end
+
+  local candidates = {
+    "/etc/dropbear/authorized_keys",
+    "/root/.ssh/authorized_keys"
+  }
+  local selected = nil
+  for _, path in ipairs(candidates) do
+    if exists(fs, path) then
+      selected = path
+      break
+    end
+  end
+
+  if not selected then return result end
+  result.available = true
+  result.path = selected
+
+  if type(fs.stat) ~= "function" then
+    result.status = "unknown"
+    return result
+  end
+
+  local ok, stat = pcall(fs.stat, selected)
+  if not ok or type(stat) ~= "table" then
+    result.status = "unknown"
+    return result
+  end
+
+  if type(stat.size) == "number" and stat.size >= 0 then
+    result.size_bytes = stat.size
+  end
+  if type(stat.uid) == "number" then
+    result.root_owned = stat.uid == 0
+  end
+  if type(stat.mode) == "number" then
+    local permissions = stat.mode % 512
+    result.group_writable = math.floor(permissions / 16) % 2 == 1
+    result.other_writable = math.floor(permissions / 2) % 2 == 1
+  end
+
+  if result.size_bytes == nil or result.root_owned == nil or
+    result.group_writable == nil or result.other_writable == nil then
+    result.status = "unknown"
+  elseif result.size_bytes == 0 or result.size_bytes > 65536 or
+    not result.root_owned or result.group_writable or result.other_writable then
+    result.status = "review"
+  else
+    result.status = "present"
+  end
+
+  return result
+end
+
 local function dropbear_status(uci, fs)
   local result = {
     ssh_service_installed = exists(fs, "/etc/init.d/dropbear"),
@@ -64,7 +132,8 @@ local function dropbear_status(uci, fs)
     ssh_enabled_instance_count = 0,
     ssh_truncated = false,
     ssh_instances = {},
-    ssh_status = "disabled"
+    ssh_status = "disabled",
+    ssh_authorized_keys = authorized_keys_status(fs)
   }
 
   if not result.ssh_service_installed then
@@ -114,7 +183,9 @@ local function dropbear_status(uci, fs)
           if not interface_valid or not port_valid or
             password_auth_enabled ~= false or
             root_password_auth_enabled ~= false or
-            gateway_ports_enabled == true then
+            gateway_ports_enabled == true or
+            (password_auth_enabled == false and root_password_auth_enabled == false
+              and result.ssh_authorized_keys.status ~= "present") then
             secure = false
           end
         elseif enabled == nil then
@@ -231,6 +302,7 @@ function M.inspect(uci, fs)
     ssh_truncated = ssh.ssh_truncated,
     ssh_instances = ssh.ssh_instances,
     ssh_status = ssh.ssh_status,
+    ssh_authorized_keys = ssh.ssh_authorized_keys,
     status = status
   }
 end
