@@ -5502,7 +5502,7 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
   const safeReady = !enabled || (network !== "" && allSelectedAvailable && !missingKOrV &&
     !wrongNetwork && numericSettingsValid && networkOptions.some((item) => item.name === network));
   const statusLabel = !status ? "WAITING" : status.status === "cluster" ? "CLUSTER PEERS" :
-    status.status === "local_only" ? "LOCAL ONLY" : status.status.replaceAll("_", " ").toUpperCase();
+    status.status === "local_only" ? "LOCAL ONLY" : status.status.replace(/_/g, " ").toUpperCase();
   const markDirty = () => { setDirty(true); setNotice(null); };
 
   const save = async () => {
@@ -6015,6 +6015,12 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
           )}
         </Panel>
       </div>
+      <UsteerRoamingManager
+        status={routerOverview?.usteer}
+        wirelessConfigs={wirelessConfigs}
+        networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
+        refresh={refresh}
+      />
       <Panel title="Associated Wi-Fi clients" eyebrow="IWINFO ASSOCIATION DATA">
         <WirelessClientList clients={wirelessClients} available={wirelessInventoryAvailable} leases={clients} />
         <div className="module-message">AP signal/noise and link bitrate are radio-interface measurements. Per-station signal, noise, rates, counters, connected time and retries are shown separately from iwinfo association data; drivers may omit fields.</div>
