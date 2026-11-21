@@ -57,8 +57,8 @@ function validate(input)
 		return nil, "Remote syslog port must be a whole number from 1 to 65,535."
 	end
 	local protocol = input.protocol
-	if protocol ~= "tcp" and protocol ~= "udp" then
-		return nil, "Remote syslog transport must be TCP or UDP."
+	if protocol ~= "tcp" and protocol ~= "udp" and protocol ~= "tls" then
+		return nil, "Remote syslog transport must be UDP, TCP or authenticated TLS."
 	end
 	local hostname = input.hostname or ""
 	if type(hostname) ~= "string" or (hostname ~= "" and not valid_hostname(hostname)) then
@@ -69,7 +69,7 @@ function validate(input)
 		or (prefix ~= "" and not prefix:match("^[A-Za-z0-9][A-Za-z0-9_.%-]*$")) then
 		return nil, "The optional syslog prefix may contain only letters, digits, dots, underscores and hyphens (maximum 32 characters)."
 	end
-	return {
+	local result = {
 		enabled = true,
 		host = host,
 		port = tostring(port),
@@ -77,6 +77,20 @@ function validate(input)
 		hostname = hostname,
 		prefix = prefix
 	}
+	if protocol == "tls" then
+		result.tls = {
+			section = "quantumgrid_syslog",
+			local_host = "127.0.0.1",
+			local_port = "5514",
+			ca_file = "/etc/ssl/certs/ca-certificates.crt",
+			connect = host .. ":" .. tostring(port),
+			verify_chain = true,
+			check_host = valid_ipv4(host) and nil or host,
+			check_ip = valid_ipv4(host) and host or nil,
+			sni = valid_ipv4(host) and nil or host
+		}
+	end
+	return result
 end
 
 return _M
