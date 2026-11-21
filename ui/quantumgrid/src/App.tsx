@@ -2999,7 +2999,7 @@ function RemoteSyslogSettings({ status, refresh }: {
     <Panel
       title="Remote system logging"
       eyebrow="NATIVE OPENWRT LOGREAD · CENTRAL OFFICE COLLECTION"
-      action={<Status active={Boolean(status?.enabled)}>{status?.enabled ? "FORWARDING" : status?.available ? "DISABLED" : "UNAVAILABLE"}</Status>}
+      action={<Status active={Boolean(status?.enabled)}>{status?.enabled ? status.protocol === "tls" ? "TLS CONFIGURED" : "FORWARDING" : status?.available ? "DISABLED" : "UNAVAILABLE"}</Status>}
     >
       {!status?.service_installed || !status.config_available ? (
         <div className="module-message">The native OpenWrt log service or system configuration is unavailable on this firmware.</div>
@@ -3040,7 +3040,7 @@ function RemoteSyslogSettings({ status, refresh }: {
                 }}>
                   <option value="udp">UDP · unencrypted</option>
                   <option value="tcp">TCP · unencrypted</option>
-                  <option value="tls">TLS · verified server identity</option>
+                  <option value="tls" disabled={!status?.tls_available && protocol !== "tls"}>TLS · verified server identity{status?.tls_available ? "" : " · firmware support unavailable"}</option>
                 </select>
               </label>
               <label>
@@ -3060,7 +3060,7 @@ function RemoteSyslogSettings({ status, refresh }: {
               disabled={busy}
               onChange={(event) => setConfirmed(event.target.checked)}
             />
-            <span>I confirm this destination and authorize QuantumGrid to update the native system logging settings and restart the log service.</span>
+            <span>I confirm this destination and authorize QuantumGrid to update the native logging settings and restart the log service and, for TLS, its managed tunnel.</span>
           </label>
           <div className="remote-syslog-actions">
             <button className="hero-button" type="submit" disabled={!confirmed || busy || (enabled && (!host.trim() || !port))}>
