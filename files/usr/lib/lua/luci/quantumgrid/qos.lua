@@ -2,7 +2,7 @@ module("luci.quantumgrid.qos", package.seeall)
 
 local POLICY_PREFIX = "QuantumGrid client QoS: "
 local DEFAULT_LIMIT = 32
-local EXTERNAL_NAMES = { wan = true, wan6 = true, wwan = true, cellular = true }
+local EXTERNAL_NAMES = { wan = true, wan6 = true, wwan = true, cellular = true, lte = true, ["5g"] = true }
 local ALLOWED_DSCP = { BE = true, AF41 = true, EF = true, CS1 = true }
 
 local function valid_token(value)
@@ -22,10 +22,22 @@ local function zone_network_list(value)
 	return result
 end
 
+local function unique_zone(zones, name)
+	local found = nil
+	local matches = 0
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" and zone.name == name then
+			found = zone
+			matches = matches + 1
+		end
+	end
+	return matches == 1 and found or nil
+end
+
 local function is_external_zone(zone)
 	if type(zone) ~= "table" then return false end
 	local name = type(zone.name) == "string" and zone.name:lower() or ""
-	if EXTERNAL_NAMES[name] then return true end
+	if EXTERNAL_NAMES[name] or zone.masquerade == true then return true end
 	for _, network in ipairs(zone_network_list(zone.networks)) do
 		if EXTERNAL_NAMES[network:lower()] then return true end
 	end
@@ -57,13 +69,8 @@ function validate_client_policy(mac, source_zone, destination_zone, dscp_class, 
 		return nil, "Choose one supported DSCP class: BE, AF41, EF or CS1."
 	end
 
-	local source, destination
-	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
-		if type(zone) == "table" then
-			if zone.name == source_zone then source = zone end
-			if zone.name == destination_zone then destination = zone end
-		end
-	end
+	local source = unique_zone(zones, source_zone)
+	local destination = unique_zone(zones, destination_zone)
 	if not source or not destination then
 		return nil, "Both firewall zones must already exist in the current inventory."
 	end
@@ -131,13 +138,8 @@ function validate_client_download_policy(mac, destination_ip, source_zone, desti
 	if type(dscp_class) ~= "string" or not ALLOWED_DSCP[dscp_class] then
 		return nil, "Choose one supported DSCP class: BE, AF41, EF or CS1."
 	end
-	local source, destination
-	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
-		if type(zone) == "table" then
-			if zone.name == source_zone then source = zone end
-			if zone.name == destination_zone then destination = zone end
-		end
-	end
+	local source = unique_zone(zones, source_zone)
+	local destination = unique_zone(zones, destination_zone)
 	if not source or not destination then
 		return nil, "Both firewall zones must already exist in the current inventory."
 	end
