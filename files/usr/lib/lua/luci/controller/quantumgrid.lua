@@ -1884,21 +1884,27 @@ function action_usteer_update()
 		return
 	end
 
-	local network_inventory = wireless_network_inventory(uci, fs)
-	if not network_inventory.available or network_inventory.truncated then
-		respond(503, {
-			ok = false,
-			error = "The routed-network or firewall-zone inventory is unavailable or truncated; the inter-AP network cannot be verified."
-		})
-		return
-	end
-	local access_point_inventory = usteer_access_point_inventory(uci)
-	if not access_point_inventory.available or access_point_inventory.truncated then
-		respond(503, {
-			ok = false,
-			error = "The AP inventory is unavailable or truncated; roaming prerequisites cannot be verified across every local SSID."
-		})
-		return
+	local requested_enabled = http.formvalue("enabled", true)
+	local network_name = http.formvalue("network", true) or ""
+	local network_inventory = nil
+	local access_point_inventory = nil
+	if requested_enabled == "1" then
+		network_inventory = wireless_network_inventory(uci, fs)
+		if not network_inventory.available or network_inventory.truncated then
+			respond(503, {
+				ok = false,
+				error = "The routed-network or firewall-zone inventory is unavailable or truncated; the inter-AP network cannot be verified."
+			})
+			return
+		end
+		access_point_inventory = usteer_access_point_inventory(uci)
+		if not access_point_inventory.available or access_point_inventory.truncated then
+			respond(503, {
+				ok = false,
+				error = "The AP inventory is unavailable or truncated; roaming prerequisites cannot be verified across every local SSID."
+			})
+			return
+		end
 	end
 
 	local ssid_json = http.formvalue("ssids", true) or ""
@@ -1913,8 +1919,6 @@ function action_usteer_update()
 		return
 	end
 
-	local requested_enabled = http.formvalue("enabled", true)
-	local network_name = http.formvalue("network", true) or ""
 	local binding = nil
 	if requested_enabled == "1" then
 		local office = require "luci.quantumgrid.office_networks"
@@ -2015,7 +2019,7 @@ function action_usteer_update()
 		local init_command = previous_init_enabled
 			and "/etc/init.d/usteer enable"
 			or "/etc/init.d/usteer disable"
-		local service_command = previous_config_enabled
+		local service_command = previous_init_enabled and previous_config_enabled
 			and "/etc/init.d/usteer restart"
 			or "/etc/init.d/usteer stop"
 		local ok, status = pcall(sys.call, init_command .. " >/dev/null 2>&1 && " ..
