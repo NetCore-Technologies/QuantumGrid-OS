@@ -70,7 +70,7 @@ test("port-forward API rejects malformed names, zones, ports and protocols befor
     throw new Error("fetch must not be called for invalid input");
   };
   await assert.rejects(createRouterOfficePortForward({ ...baseInput, name: "../rule" }), /valid rule name/);
-  await assert.rejects(createRouterOfficePortForward({ ...baseInput, source: "wan;uci" }), /valid rule name/);
+  await assert.rejects(createRouterOfficePortForward({ ...baseInput, source: "wan;uci" }), /valid existing firewall zone/);
   await assert.rejects(createRouterOfficePortForward({ ...baseInput, protocol: "icmp" }), /Protocol must be TCP/);
   await assert.rejects(createRouterOfficePortForward({ ...baseInput, sourcePort: "0" }), /ports must be whole numbers/);
   await assert.rejects(createRouterOfficePortForward({ ...baseInput, destinationPort: "65536" }), /ports must be whole numbers/);
