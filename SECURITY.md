@@ -85,38 +85,33 @@ Security fixes will be included in supported releases whenever practical.
 Release notes and security advisories will identify affected versions and recommended upgrade or mitigation steps when appropriate.
 
 ## Administrator web transport
-Dropbear SSH is explicitly bound to the logical `lan` interface on TCP port 22.
-It is not configured to listen on WAN or all interfaces. Keep any SSH port-forward
-or separate WAN firewall exposure disabled.
-
-Every administrator POST action also checks the uHTTPd TLS environment server-side
-and returns a forbidden response when the request did not arrive over HTTPS. The first-boot policy also removes the default plaintext HTTP listeners entirely and
-keeps the redirect setting enabled as defence in depth. This avoids creating LuCI's
-non-Secure HTTP session cookie in the default configuration. The policy is idempotent.
-The TLS requirement does not replace LuCI authentication, same-origin validation or
-trusted-network firewall policy.
-
-
 
 The stable AW1000 image includes uHTTPd, the mbedTLS ustream runtime and the OpenSSL
-key-generation utility. On first boot, QuantumGrid removes the default HTTP listener
-and enables `redirect_https` as defence in depth. The Security Center reports configured
-HTTPS listener entries, TLS runtime availability, non-empty certificate/key files and
-the HTTP redirect setting. This configuration-level check does not probe live sockets
-or external reachability.
+key-generation utility. On first boot, QuantumGrid removes the default plaintext HTTP
+listener and enables `redirect_https` as defence in depth. The Security Center reports
+configured HTTPS listener entries, TLS runtime availability, non-empty certificate/key
+files and the redirect setting. This is a configuration-level check; it does not probe
+live sockets or external reachability.
 
-The optional RJ11 FXS packages are sourced from the third-party
-`Perz3us/openwrt-aw1000-phone` repository. QuantumGrid pins the `v0.9.0` feed to
-commit `fe85222e57d1c3e191ffb976b37667bbf221a020`; the upstream commit is unsigned, so this pin enforces exact source
-identity but does not cryptographically authenticate the upstream author's identity.
-The FXS service remains disabled by default and still requires the separate Skyworks
-SLIC patch and physical telephony validation.
+Every administrator POST action independently checks the uHTTPd TLS environment and
+returns a forbidden response unless the request arrived over HTTPS. This does not replace
+LuCI authentication, same-origin validation or trusted-network firewall policy.
+
+Dropbear SSH is explicitly bound to the logical `lan` interface on TCP port 22. It is
+not configured to listen on WAN or all interfaces. Keep SSH port-forwarding and separate
+WAN firewall exposure disabled.
 
 The default device certificate is self-signed. HTTPS encrypts the management session,
 but it does not provide a publicly trusted device identity. Administrators should verify
-the certificate fingerprint over a trusted channel and keep the management interface
-restricted to trusted management networks. Do not expose the router's administration
-service to the public Internet.
+the certificate fingerprint over a trusted channel and restrict management to trusted
+networks. Do not expose the router's administration service to the public Internet.
+
+The optional RJ11 FXS packages are sourced from the third-party
+`Perz3us/openwrt-aw1000-phone` repository. QuantumGrid pins the `v0.9.0` feed to
+commit `fe85222e57d1c3e191ffb976b37667bbf221a020`; the upstream commit is unsigned, so
+the pin enforces exact source identity but does not cryptographically authenticate
+the author's identity. The FXS service remains disabled by default and needs the separate
+Skyworks SLIC patch and physical telephony validation.
 
 ## Development Status
 
