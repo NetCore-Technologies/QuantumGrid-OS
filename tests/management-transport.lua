@@ -177,7 +177,7 @@ assert(not https_only.ssh_authorized_keys.group_writable)
 assert(not https_only.ssh_authorized_keys.other_writable)
 
 -- A non-empty file is not a usable SSH trust store unless it contains a valid OpenSSH public-key blob.
-uci, fs = fixture("1", { authorized_keys_contents = "not a public key\\nssh-ed25519 invalid-base64! comment\\n" })
+uci, fs = fixture("1", { authorized_keys_contents = "not a public key\nssh-ed25519 invalid-base64! comment\n" })
 local malformed_authorized_keys = transport.inspect(uci, fs)
 assert(malformed_authorized_keys.ssh_authorized_keys.key_count == 0)
 assert(malformed_authorized_keys.ssh_authorized_keys.invalid_line_count == 2)
@@ -186,8 +186,8 @@ assert(malformed_authorized_keys.ssh_status == "review")
 
 -- Malformed authorized-key options and algorithm/blob mismatches must not create a false positive.
 uci, fs = fixture("1", {
-  authorized_keys_contents = "command=\\\"echo ssh-ed25519 AAAA\\\" ssh-ed25519 " ..
-    encode_base64(ssh_string("ssh-rsa") .. ssh_string("bad")) .. " comment\\n"
+  authorized_keys_contents = "command=\"echo ssh-ed25519 AAAA\" ssh-ed25519 " ..
+    encode_base64(ssh_string("ssh-rsa") .. ssh_string("bad")) .. " comment\n"
 })
 local forged_authorized_keys = transport.inspect(uci, fs)
 assert(forged_authorized_keys.ssh_authorized_keys.key_count == 0)
@@ -195,7 +195,7 @@ assert(forged_authorized_keys.ssh_authorized_keys.status == "review")
 
 -- The parser accepts a valid restricted key line without exposing its key material.
 uci, fs = fixture("1", {
-  authorized_keys_contents = "restrict,from=\\\"192.0.2.0/24\\\" " ..
+  authorized_keys_contents = "restrict,from=\"192.0.2.0/24\" " ..
     valid_ed25519_key
 })
 local restricted_authorized_keys = transport.inspect(uci, fs)
