@@ -138,8 +138,9 @@ the gzip/tar structure, bounded compressed and expanded size, exact verbose-list
 member count, allowed `etc/` and `root/` paths, unique names, file/directory types and mode characters,
 parent/child path consistency, and absence of whitespace-ambiguous paths, symlinks, hardlinks,
 special files, set-ID and sticky modes. It requires the device inventory ID, exact AW1000 profile
-and OpenWrt target/architecture to match. A separately generated native rollback archive is validated
-before the uploaded archive can be applied. Failed restoration triggers a rollback attempt; if
+and OpenWrt target/architecture to match. Free `/tmp` space must cover the uploaded archive, a
+maximum-sized 64 MiB rollback archive and an 8 MiB reserve. A separately generated native rollback
+archive is validated before the uploaded archive can be applied. Failed restoration triggers a rollback attempt; if
 rollback cannot be confirmed, its validated archive is preserved under `/tmp` and its path is reported
 for out-of-band retrieval before temporary storage is cleared. A reboot is scheduled after successful
 restore or successful rollback.
