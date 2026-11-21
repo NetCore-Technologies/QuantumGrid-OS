@@ -26,6 +26,8 @@ assert(escaped and escaped:find('\\"uplink\\"', 1, true), "quotes must be JSON e
 assert(escaped:find("\\\\", 1, true), "backslashes must be JSON escaped")
 assert(audit.encode_event({ timestamp = 3, action = "package.feed.update", target = "opkg", outcome = "success" }) ~= nil, "package feed updates should be allowlisted")
 assert(audit.encode_event({ timestamp = 4, action = "sqm.cake-profile", target = "wan_main", outcome = "success" }) ~= nil, "CAKE profile changes should be allowlisted")
+assert(audit.encode_event({ timestamp = 5, action = "sqm.client-qos.add", target = "cfg_client_1", outcome = "success" }) ~= nil, "client QoS additions should be allowlisted")
+assert(audit.encode_event({ timestamp = 6, action = "sqm.client-qos.remove", target = "cfg_client_1", outcome = "success" }) ~= nil, "client QoS removals should be allowlisted")
 
 local function expect_invalid(event, label)
   local result, err = audit.encode_event(event)

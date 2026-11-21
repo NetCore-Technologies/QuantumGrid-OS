@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5692,6 +5692,13 @@ function GamingControlPage({ routerOverview, refresh }: {
         <div className="module-message">Rate limits must be whole numbers from 64 to 1,000,000 kbit/s. Link-layer overhead accepts -64 to 256 bytes and minimum packet unit accepts 0 to 256 bytes. Changes apply only to the selected existing queue; the router snapshots all changed UCI values and attempts rollback if the SQM restart fails.</div>
       </Panel>
 
+      <SqmClientQosManager
+        available={sqm?.client_policy_available === true}
+        truncated={sqm?.client_policies_truncated === true || routerOverview?.office_networks?.truncated === true}
+        policies={sqm?.client_policies ?? []}
+        zones={routerOverview?.office_networks?.zones ?? []}
+        refresh={refresh}
+      />
       <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={
         <div className="qdisc-export-actions">
           <Status active={runtimeAvailable}>{runtimeAvailable ? "RUNTIME READ" : "NOT AVAILABLE"}</Status>
@@ -5757,6 +5764,164 @@ function GamingControlPage({ routerOverview, refresh }: {
   );
 }
 
+
+
+
+function SqmClientQosManager({
+  available,
+  truncated,
+  policies,
+  zones,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  policies: RouterSqmClientPolicy[];
+  zones: RouterOfficeFirewallZone[];
+  refresh: () => void;
+}) {
+  const isExternalZone = (zone: RouterOfficeFirewallZone) =>
+    ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
+    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
+  const sourceZones = zones.filter((zone) => !isExternalZone(zone));
+  const destinationZones = zones.filter(isExternalZone);
+  const [mac, setMac] = useState("");
+  const [sourceZone, setSourceZone] = useState("");
+  const [destinationZone, setDestinationZone] = useState("");
+  const [dscpClass, setDscpClass] = useState<RouterSqmClientDscpClass>("BE");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState("");
+  const [removing, setRemoving] = useState("");
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const activeSource = sourceZones.some((zone) => zone.name === sourceZone) ? sourceZone : sourceZones[0]?.name ?? "";
+  const activeDestination = destinationZones.some((zone) => zone.name === destinationZone) ? destinationZone : destinationZones[0]?.name ?? "";
+
+  const add = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!available || truncated || !confirmed || saving || !activeSource || !activeDestination) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await addRouterSqmClientPolicy({
+        mac: mac.trim(), sourceZone: activeSource, destinationZone: activeDestination, dscpClass,
+      });
+      setNotice({
+        success: true,
+        message: result.mac + " now has " + result.dscp_class + " DSCP marking for upload traffic from " +
+          result.source_zone + " to " + result.destination_zone + "; firewall reload completed.",
+      });
+      setMac("");
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({ success: false, message: cause instanceof Error ? cause.message : "The per-client DSCP policy could not be added." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (section: string) => {
+    if (!section || removing) return;
+    setRemoving(section);
+    setNotice(null);
+    try {
+      const result = await removeRouterSqmClientPolicy(section);
+      setPendingRemoval("");
+      setNotice({ success: true, message: "Client policy for " + result.mac + " was removed and firewall reload completed." });
+      refresh();
+    } catch (cause) {
+      setNotice({ success: false, message: cause instanceof Error ? cause.message : "The per-client DSCP policy could not be removed." });
+    } finally {
+      setRemoving("");
+    }
+  };
+
+  return (
+    <Panel title="Per-client upload marking" eyebrow="FIREWALL4 DSCP · INTERNAL CLIENT → WAN">
+      {!available ? (
+        <div className="module-message">Firewall configuration is unavailable. Per-client marking controls are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The client QoS inventory is truncated. Resolve it before adding or removing a policy.</div>
+      ) : sourceZones.length === 0 || destinationZones.length === 0 ? (
+        <div className="module-message">An existing internal zone and WAN/WWAN zone are required before a client upload policy can be created.</div>
+      ) : null}
+      {policies.length === 0 ? (
+        <div className="module-message">No QuantumGrid client DSCP policies are configured.</div>
+      ) : (
+        <div className="sqm-client-qos-list">
+          {policies.map((policy) => (
+            <div className="sqm-client-qos-row" key={policy.section}>
+              <div>
+                <strong>{policy.mac}</strong>
+                <span>{policy.source_zone} → {policy.destination_zone} · {policy.enabled ? policy.dscp_class : "DISABLED · " + policy.dscp_class}</span>
+              </div>
+              {pendingRemoval === policy.section ? (
+                <div className="sqm-client-qos-confirm">
+                  <span>Remove this client marking rule?</span>
+                  <button className="office-remove-start" type="button" onClick={() => void remove(policy.section)} disabled={Boolean(removing)}>
+                    {removing === policy.section ? "Removing…" : "Confirm removal"}
+                  </button>
+                  <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing)}>Cancel</button>
+                </div>
+              ) : (
+                <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(policy.section)} disabled={!available || truncated || Boolean(removing) || saving}>
+                  Remove policy
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      <form className="sqm-client-qos-editor" onSubmit={(event) => void add(event)}>
+        <div className="sqm-client-qos-heading">
+          <strong>Add a client upload marking</strong>
+          <span>Marks forwarded packets matching one client MAC address as they travel from the internal zone towards the WAN.</span>
+        </div>
+        <div className="sqm-client-qos-fields">
+          <label>
+            <span>CLIENT MAC ADDRESS</span>
+            <input value={mac} onChange={(event) => { setMac(event.target.value); setConfirmed(false); }} maxLength={17} placeholder="02:11:22:33:44:55" disabled={!available || truncated || saving} />
+          </label>
+          <label>
+            <span>INTERNAL SOURCE ZONE</span>
+            <select value={activeSource} onChange={(event) => { setSourceZone(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || sourceZones.length === 0}>
+              {sourceZones.map((zone) => <option key={zone.section} value={zone.name}>{zone.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>WAN DESTINATION ZONE</span>
+            <select value={activeDestination} onChange={(event) => { setDestinationZone(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || destinationZones.length === 0}>
+              {destinationZones.map((zone) => <option key={zone.section} value={zone.name}>{zone.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>DSCP CLASS</span>
+            <select value={dscpClass} onChange={(event) => { setDscpClass(event.target.value as RouterSqmClientDscpClass); setConfirmed(false); }} disabled={!available || truncated || saving}>
+              <option value="BE">BE · Best effort</option>
+              <option value="AF41">AF41 · Interactive video</option>
+              <option value="EF">EF · Voice / low latency</option>
+              <option value="CS1">CS1 · Background</option>
+            </select>
+          </label>
+        </div>
+        <label className="office-reservation-confirm">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !mac.trim() || !activeSource || !activeDestination} />
+          <span>I understand this marks upload traffic for {mac.trim() || "this client"} and authorise a firewall rule change and reload.</span>
+        </label>
+        <button className="hero-button" type="submit" disabled={!available || truncated || !confirmed || saving || !mac.trim() || !activeSource || !activeDestination}>
+          {saving ? "Applying…" : "Add client marking"}
+        </button>
+      </form>
+      {notice ? (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+      <div className="module-message">Direction is upload-only: the rule matches the client as the packet source and the WAN as destination. For CAKE tins to interpret DSCP markings, configure the existing egress CAKE profile as DiffServ 4 or DiffServ 8. Best-effort and SQM script-default profiles do not promise separate DSCP tins. Download-side per-client marking, bandwidth caps and rate guarantees are not implemented by this control.</div>
+    </Panel>
+  );
+}
 
 function AuditLogPage() {
   const [inventory, setInventory] = useState<RouterAuditLog | null>(null);

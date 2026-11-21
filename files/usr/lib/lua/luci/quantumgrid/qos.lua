@@ -1,0 +1,152 @@
+module("luci.quantumgrid.qos", package.seeall)
+
+local POLICY_PREFIX = "QuantumGrid client QoS: "
+local DEFAULT_LIMIT = 32
+local EXTERNAL_NAMES = { wan = true, wan6 = true, wwan = true, cellular = true }
+local ALLOWED_DSCP = { BE = true, AF41 = true, EF = true, CS1 = true }
+
+local function valid_token(value)
+	return type(value) == "string" and #value >= 1 and #value <= 64
+		and value:match("^[A-Za-z0-9_.%-]+$") ~= nil and value ~= "." and value ~= ".."
+end
+
+local function zone_network_list(value)
+	local result = {}
+	if type(value) == "string" then
+		result[1] = value
+	elseif type(value) == "table" then
+		for _, item in ipairs(value) do
+			if type(item) == "string" then table.insert(result, item) end
+		end
+	end
+	return result
+end
+
+local function is_external_zone(zone)
+	if type(zone) ~= "table" then return false end
+	local name = type(zone.name) == "string" and zone.name:lower() or ""
+	if EXTERNAL_NAMES[name] then return true end
+	for _, network in ipairs(zone_network_list(zone.networks)) do
+		if EXTERNAL_NAMES[network:lower()] then return true end
+	end
+	return false
+end
+
+local function normalize_unicast_mac(value)
+	if type(value) ~= "string" or #value ~= 17
+		or not value:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then return nil end
+	local mac = value:lower()
+	local first = tonumber(mac:sub(1, 2), 16)
+	if not first or first % 2 ~= 0 or mac == "00:00:00:00:00:00"
+		or mac == "ff:ff:ff:ff:ff:ff" then return nil end
+	return mac
+end
+
+function validate_client_policy(mac, source_zone, destination_zone, dscp_class, zones)
+	local normalized_mac = normalize_unicast_mac(mac)
+	if not normalized_mac then
+		return nil, "Choose one unicast client MAC address in six-octet notation."
+	end
+	if not valid_token(source_zone) or not valid_token(destination_zone) then
+		return nil, "Choose existing internal and external firewall zones."
+	end
+	if source_zone == destination_zone then
+		return nil, "The client source zone and WAN destination zone must be different."
+	end
+	if type(dscp_class) ~= "string" or not ALLOWED_DSCP[dscp_class] then
+		return nil, "Choose one supported DSCP class: BE, AF41, EF or CS1."
+	end
+
+	local source, destination
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			if zone.name == source_zone then source = zone end
+			if zone.name == destination_zone then destination = zone end
+		end
+	end
+	if not source or not destination then
+		return nil, "Both firewall zones must already exist in the current inventory."
+	end
+	if is_external_zone(source) then
+		return nil, "Per-client upload marking must start in an internal LAN/office zone."
+	end
+	if not is_external_zone(destination) then
+		return nil, "Per-client upload marking must target an existing WAN/WWAN zone."
+	end
+	return {
+		mac = normalized_mac,
+		source_zone = source_zone,
+		destination_zone = destination_zone,
+		dscp_class = dscp_class,
+		name = POLICY_PREFIX .. normalized_mac
+	}
+end
+
+function validate_client_policy_section(section)
+	if not valid_token(section) then
+		return nil, "The client QoS firewall rule section identifier is invalid."
+	end
+	return section
+end
+
+function summarize_client_policy(section)
+	if type(section) ~= "table" or type(section.name) ~= "string"
+		or section.name:sub(1, #POLICY_PREFIX) ~= POLICY_PREFIX or section.target ~= "dscp" then return nil end
+	local mac = normalize_unicast_mac(section.src_mac)
+	if not mac or section.name ~= POLICY_PREFIX .. mac then return nil end
+	if not valid_token(section.src) or not valid_token(section.dest) then return nil end
+	if type(section.set_dscp) ~= "string" or not ALLOWED_DSCP[section.set_dscp] then return nil end
+	if section[".type"] ~= nil and section[".type"] ~= "rule" then return nil end
+	local name = type(section[".name"]) == "string" and section[".name"] or ""
+	if not valid_token(name) then return nil end
+	return {
+		section = name,
+		name = "Client " .. mac,
+		mac = mac,
+		source_zone = section.src,
+		destination_zone = section.dest,
+		dscp_class = section.set_dscp,
+		enabled = section.enabled ~= "0"
+	}
+end
+
+function read_client_policies(uci, limit)
+	if type(uci) ~= "table" or type(uci.foreach) ~= "function" then
+		return nil, false, "Firewall UCI cursor is unavailable."
+	end
+	limit = tonumber(limit) or DEFAULT_LIMIT
+	if limit < 1 or limit > 64 or limit ~= math.floor(limit) then
+		return nil, false, "Client QoS inventory limit is invalid."
+	end
+	local result, truncated = {}, false
+	local ok, err = pcall(uci.foreach, uci, "firewall", "rule", function(section)
+		local summary = summarize_client_policy(section)
+		if summary then
+			if #result < limit then table.insert(result, summary) else truncated = true end
+		end
+	end)
+	if not ok then return nil, false, tostring(err or "Firewall QoS inventory could not be read.") end
+	return result, truncated
+end
+
+function has_duplicate_client_policy(policies, update)
+	if type(policies) ~= "table" or type(update) ~= "table" then return false end
+	for _, policy in ipairs(policies) do
+		if type(policy) == "table" and policy.mac == update.mac
+			and policy.source_zone == update.source_zone
+			and policy.destination_zone == update.destination_zone then return true end
+	end
+	return false
+end
+
+function snapshot_client_policy_section(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "rule"
+		or not summarize_client_policy(snapshot) then
+		return nil, "A QuantumGrid-owned DSCP client rule is required."
+	end
+	local values = {}
+	for key, value in pairs(snapshot) do
+		if type(key) == "string" and key:sub(1, 1) ~= "." then values[key] = value end
+	end
+	return { section = snapshot[".name"], values = values }
+end

@@ -245,6 +245,33 @@ export interface RouterQdiscState {
   backlog_packets?: number;
 }
 
+export type RouterSqmClientDscpClass = "BE" | "AF41" | "EF" | "CS1";
+
+export interface RouterSqmClientPolicy {
+  section: string;
+  name: string;
+  mac: string;
+  source_zone: string;
+  destination_zone: string;
+  dscp_class: RouterSqmClientDscpClass;
+  enabled: boolean;
+}
+
+export interface RouterSqmClientPolicyResult {
+  ok: true;
+  section: string;
+  mac: string;
+  source_zone: string;
+  destination_zone: string;
+  dscp_class: RouterSqmClientDscpClass;
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterSqmClientPolicyRemoveResult extends RouterSqmClientPolicyResult {
+  removed: true;
+}
+
 export interface RouterSqmStatus {
   installed: boolean;
   config_available: boolean;
@@ -253,6 +280,9 @@ export interface RouterSqmStatus {
   runtime_available: boolean;
   qdiscs_truncated: boolean;
   qdiscs: RouterQdiscState[];
+  client_policy_available: boolean;
+  client_policies: RouterSqmClientPolicy[];
+  client_policies_truncated: boolean;
 }
 
 export interface RouterMwan3TrackTarget {
@@ -1136,6 +1166,8 @@ const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const SQM_CAKE_PROFILE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cake-profile";
+const SQM_CLIENT_QOS_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-add";
+const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
@@ -1741,6 +1773,97 @@ export async function updateRouterCakeProfile(
     throw new Error("The router did not confirm the CAKE profile update and service restart.");
   }
   return payload as RouterSqmCakeProfileUpdateResult;
+}
+
+
+export async function addRouterSqmClientPolicy(input: {
+  mac: string;
+  sourceZone: string;
+  destinationZone: string;
+  dscpClass: RouterSqmClientDscpClass;
+}): Promise<RouterSqmClientPolicyResult> {
+  if (!/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(input.mac)) {
+    throw new Error("Choose one unicast client MAC address in six-octet notation.");
+  }
+  const firstOctet = Number.parseInt(input.mac.slice(0, 2), 16);
+  if ((firstOctet & 1) !== 0 || input.mac.toLowerCase() === "00:00:00:00:00:00" ||
+      input.mac.toLowerCase() === "ff:ff:ff:ff:ff:ff") {
+    throw new Error("Choose one unicast client MAC address in six-octet notation.");
+  }
+  const validZone = (value: string) =>
+    /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
+  if (!validZone(input.sourceZone) || !validZone(input.destinationZone) || input.sourceZone === input.destinationZone) {
+    throw new Error("Choose different existing internal and external firewall zones.");
+  }
+  if (!["BE", "AF41", "EF", "CS1"].includes(input.dscpClass)) {
+    throw new Error("Choose a supported DSCP class: BE, AF41, EF or CS1.");
+  }
+  const form = new URLSearchParams();
+  form.set("mac", input.mac.toLowerCase());
+  form.set("source_zone", input.sourceZone);
+  form.set("destination_zone", input.destinationZone);
+  form.set("dscp_class", input.dscpClass);
+  form.set("confirmed", "1");
+  const response = await fetch(SQM_CLIENT_QOS_ADD_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Client QoS changes require an active router administrator session."
+      : "The router returned an invalid client QoS response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid client QoS response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || typeof payload.section !== "string" || payload.section.length === 0 ||
+      !("mac" in payload) || payload.mac !== input.mac.toLowerCase() ||
+      !("source_zone" in payload) || payload.source_zone !== input.sourceZone ||
+      !("destination_zone" in payload) || payload.destination_zone !== input.destinationZone ||
+      !("dscp_class" in payload) || payload.dscp_class !== input.dscpClass ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the client DSCP rule and firewall reload.");
+  }
+  return payload as RouterSqmClientPolicyResult;
+}
+
+export async function removeRouterSqmClientPolicy(section: string): Promise<RouterSqmClientPolicyRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid client QoS firewall rule section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(SQM_CLIENT_QOS_REMOVE_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Client QoS removal requires an active router administrator session."
+      : "The router returned an invalid client QoS removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid client QoS removal response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("mac" in payload) || typeof payload.mac !== "string" ||
+      !("source_zone" in payload) || typeof payload.source_zone !== "string" ||
+      !("destination_zone" in payload) || typeof payload.destination_zone !== "string" ||
+      !("dscp_class" in payload) || !["BE", "AF41", "EF", "CS1"].includes(String(payload.dscp_class)) ||
+      !("removed" in payload) || payload.removed !== true ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the client DSCP rule removal and firewall reload.");
+  }
+  return payload as RouterSqmClientPolicyRemoveResult;
 }
 
 export async function updateRouterLedBrightness(
