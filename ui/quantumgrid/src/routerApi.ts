@@ -1074,6 +1074,7 @@ export interface RouterOfficeIpv6Pinhole {
   protocol: RouterOfficePortForwardProtocol;
   destination_ip: string;
   destination_port: number;
+  enabled: boolean;
 }
 
 export interface RouterOfficeForwardingCreateResult {
