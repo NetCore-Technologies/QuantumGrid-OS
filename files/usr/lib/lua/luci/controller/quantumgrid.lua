@@ -4393,8 +4393,7 @@ function action_config_restore()
     local upload_state = { file = nil, metadata = nil, count = 0, bytes = 0, closed = false, error = nil }
     local restore_path = nil
     local rollback_path = nil
-    local restore_lock_acquired = false
-    local restore_lock_path = CONFIG_ARCHIVE_LOCK_PATH
+    local release_restore_lock = nil
     local restore_authorized = false
     local restore_audit_attempted = false
     local restore_audit_target = "preflight"
@@ -4419,10 +4418,12 @@ function action_config_restore()
         end
         if restore_path then os.remove(restore_path) end
         if rollback_path and not preserve_rollback then os.remove(rollback_path) end
-        if restore_lock_acquired then
-            pcall(sys.call, "/bin/rmdir " .. restore_lock_path .. " >/dev/null 2>&1")
-            restore_lock_acquired = false
+        if release_restore_lock then
+            local released = release_restore_lock()
+            if released then release_restore_lock = nil end
+            return released == true
         end
+        return true
     end
 
     local function audit_restore(outcome)
@@ -4433,7 +4434,10 @@ function action_config_restore()
 
     local function fail(status, message, extra, preserve_rollback)
         audit_restore("failed")
-        cleanup(preserve_rollback)
+        local lock_released = cleanup(preserve_rollback)
+        if not lock_released then
+            message = message .. " The shared configuration archive lock could not be released; do not start another backup or restore until it is cleared."
+        end
         local payload = { ok = false, error = message }
         if type(extra) == "table" then
             for key, value in pairs(extra) do payload[key] = value end
@@ -4477,13 +4481,11 @@ function action_config_restore()
         return
     end
     restore_audit_target = context.profile_id
-    local lock_ok, lock_status = pcall(sys.call,
-        "/bin/mkdir " .. restore_lock_path .. " >/dev/null 2>&1")
-    if not lock_ok or lock_status ~= 0 then
+    release_restore_lock = acquire_config_archive_lock(sys)
+    if not release_restore_lock then
         fail(409, "Another configuration backup or restore is already active, or the archive lock could not be acquired. No archive was applied.")
         return
     end
-    restore_lock_acquired = true
 
     local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
     if not backup_paths_ok then
