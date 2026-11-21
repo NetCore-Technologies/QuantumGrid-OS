@@ -2651,6 +2651,8 @@ local function platform_status(fs)
 	end
 	local device_profile = require("luci.quantumgrid.device_profile").inspect(
 		profile_data, board.board_name)
+	local device_identity = require("luci.quantumgrid.device_identity").inspect(
+		read_file("/etc/quantumgrid/device-id"))
 	local modules = {
 		{ name = "ath11k Wi-Fi driver", path = "/sys/module/ath11k" },
 		{ name = "mac80211 wireless stack", path = "/sys/module/mac80211" },
@@ -2879,6 +2881,7 @@ local function platform_status(fs)
 		description = field(release.description, 192),
 		package_manager = package_manager,
 		device_profile = device_profile,
+		device_identity = device_identity,
 		acceleration = acceleration,
 		modules = modules,
 		kernel_modules = kernel_module_inventory,
