@@ -7037,7 +7037,7 @@ function action_static_route_add()
 		requested_target = http.formvalue("target", true),
 		target = update.target,
 		gateway = update.gateway,
-		metric = update.metric,
+		metric = update.metric ~= nil and tostring(update.metric) or "",
 		table = update.table,
 		reloaded = true,
 		rolled_back = false
