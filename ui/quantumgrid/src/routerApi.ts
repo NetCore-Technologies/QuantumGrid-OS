@@ -2465,7 +2465,13 @@ export async function decryptRouterConfigBackup(file: Blob, passphrase: string):
   if (file.size > CONFIG_BACKUP_MAX_BYTES + CONFIG_BACKUP_HEADER_BYTES + 16) {
     throw new Error("The encrypted backup is larger than the supported 64 MiB limit.");
   }
-  const plaintext = await decryptRouterConfigBackupBytes(await file.arrayBuffer(), passphrase);
+  const encryptedBytes = new Uint8Array(await file.arrayBuffer());
+  let plaintext: Uint8Array;
+  try {
+    plaintext = await decryptRouterConfigBackupBytes(encryptedBytes, passphrase);
+  } finally {
+    encryptedBytes.fill(0);
+  }
   if (plaintext.byteLength < 2 || plaintext[0] !== 0x1f || plaintext[1] !== 0x8b) {
     plaintext.fill(0);
     throw new Error("The decrypted payload is not a valid gzip configuration archive.");
@@ -2527,6 +2533,7 @@ export async function downloadRouterConfigBackup(passphrase: string): Promise<vo
     archiveBytes.fill(0);
   }
   const secureArchive = new Blob([backupBytesToArrayBuffer(encrypted)], { type: "application/vnd.quantumgrid.backup" });
+  encrypted.fill(0);
   const exportedAt = new Date().toISOString();
   const objectUrl = URL.createObjectURL(secureArchive);
   const link = document.createElement("a");
