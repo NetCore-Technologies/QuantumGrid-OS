@@ -62,6 +62,8 @@ cd QuantumGrid-OS
 ./build.sh
 ```
 
+The experimental NSS profile converts its moving upstream feed branches into the reviewed
+commit pins in `configs/aw1000-nss-feeds.conf` before feed retrieval.
 The build also verifies that every Git package feed remains at the full commit SHA declared
 by the pinned OpenWrt release, with the configured repository origin and a clean working tree.
 Locally modified or untracked feed files are refused before package installation.

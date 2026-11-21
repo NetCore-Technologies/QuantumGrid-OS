@@ -68,6 +68,9 @@ git -C "$OPENWRT_DIR" fetch --depth 1 origin "$OPENWRT_REF"
 git -C "$OPENWRT_DIR" checkout --detach FETCH_HEAD
 OPENWRT_SHA="$(git -C "$OPENWRT_DIR" rev-parse HEAD)"
 sh "$PROJECT_ROOT/scripts/verify-openwrt-source.sh" "$OPENWRT_DIR" "$OPENWRT_EXPECTED_SHA"
+if [[ "$QG_ENABLE_NSS" == "1" ]]; then
+    bash "$PROJECT_ROOT/scripts/pin-aw1000-nss-feeds.sh" "$OPENWRT_DIR" "$PROJECT_ROOT/configs/aw1000-nss-feeds.conf"
+fi
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 
 printf '\n[3/9] Registering pinned AW1000 RJ11 phone feed...\n'
