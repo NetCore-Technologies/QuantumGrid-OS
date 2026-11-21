@@ -4090,6 +4090,64 @@ local function quantumgrid_backup_context(fs)
 	}
 end
 
+local function inspect_quantumgrid_config_archive(path, context, validator, util, sys)
+	if type(path) ~= "string" or type(context) ~= "table" then
+		return nil, "The restore archive or current device context is unavailable."
+	end
+	local tar_ok, tar_status = pcall(sys.call, "/bin/tar -tzf " .. path .. " >/dev/null 2>&1")
+	if not tar_ok or tar_status ~= 0 then
+		return nil, "The configuration archive is not a readable gzip tar archive."
+	end
+	local listing_ok, listing_text = pcall(util.exec, "/bin/tar -tvzf " .. path .. " 2>/dev/null")
+	if not listing_ok or type(listing_text) ~= "string" then
+		return nil, "The configuration archive member list could not be inspected."
+	end
+	local listing, listing_error = validator.validate_archive_listing(listing_text)
+	if not listing then return nil, listing_error end
+	local sizes = {}
+	for _, item in ipairs(listing.entries) do sizes[item.path] = item.size end
+	if not sizes["etc/quantumgrid/device-id"] or sizes["etc/quantumgrid/device-id"] > 33 or
+		sizes["etc/quantumgrid/device-id"] < 32 or
+		not sizes["etc/quantumgrid/device-profile.json"] or
+		sizes["etc/quantumgrid/device-profile.json"] > 32768 or
+		sizes["etc/quantumgrid/device-profile.json"] < 2 or
+		not sizes["etc/openwrt_release"] or sizes["etc/openwrt_release"] > 16384 or
+		sizes["etc/openwrt_release"] < 1 then
+		return nil, "The archive's device, profile or OpenWrt target metadata has an unsafe size."
+	end
+	local function read_member(member)
+		local ok, value = pcall(util.exec,
+			"/bin/tar -xOzf " .. path .. " " .. member .. " 2>/dev/null")
+		if not ok or type(value) ~= "string" then return nil end
+		return value
+	end
+	local archive_id = read_member(listing.device_id_path)
+	local identity_ok, identity_error = validator.validate_device_identity(archive_id, context.device_id)
+	if not identity_ok then return nil, identity_error end
+	local profile_contents = read_member(listing.profile_path)
+	if type(profile_contents) ~= "string" or #profile_contents > 32768 then
+		return nil, "The archived hardware profile could not be read safely."
+	end
+	local jsonc = require "luci.jsonc"
+	local parse_ok, archived_profile = pcall(jsonc.parse, profile_contents)
+	if not parse_ok or type(archived_profile) ~= "table" then
+		return nil, "The archived hardware profile is malformed."
+	end
+	local profile_status = require("luci.quantumgrid.device_profile").inspect(
+		archived_profile, context.board_name)
+	if type(profile_status) ~= "table" or profile_status.available ~= true or
+		profile_status.status ~= "matched" or profile_status.profile_id ~= context.profile_id then
+		return nil, "The archived hardware profile does not match this router and firmware build profile."
+	end
+	local archive_release_text = read_member(listing.release_path)
+	local archive_release = backup_release_identity(archive_release_text)
+	if not archive_release then return nil, "The archived OpenWrt target metadata is malformed." end
+	local compatible, compatibility_error = validator.validate_platform_compatibility(
+		archive_release.target, context.target, archive_release.architecture, context.architecture)
+	if not compatible then return nil, compatibility_error end
+	return listing
+end
+
 local function ensure_sysupgrade_backup_paths()
 	local required = {
 		"/etc/quantumgrid/audit.jsonl",
