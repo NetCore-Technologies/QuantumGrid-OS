@@ -2934,6 +2934,27 @@ function CellularControlPage({ routerOverview, cellularHistory }: { routerOvervi
 function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOverview: RouterOverview | null; wireGuardPeerRates: Map<string, WireGuardPeerMeasuredRate> }) {
   const security = routerOverview?.security;
   const managementTransport = security?.management_transport;
+  const sshInstances = managementTransport?.ssh_instances ?? [];
+  const enabledSshInstances = sshInstances.filter((instance) => instance.enabled === true);
+  const sshInterfaceBindings = enabledSshInstances
+    .map((instance) => instance.name + ": " + (instance.interface_bound ? instance.interface : "ALL INTERFACES"))
+    .join(", ") || "NONE / UNKNOWN";
+  const sshPorts = enabledSshInstances
+    .map((instance) => instance.name + ": " + (instance.port_valid ? String(instance.port ?? "UNKNOWN") : "INVALID"))
+    .join(", ") || "NONE / UNKNOWN";
+  const sshPasswordAuthValues = enabledSshInstances.map((instance) => instance.password_auth_enabled);
+  const sshRootPasswordAuthValues = enabledSshInstances.map((instance) => instance.root_password_auth_enabled);
+  const sshGatewayPortsValues = enabledSshInstances.map((instance) => instance.gateway_ports_enabled);
+  const summarizeSshOption = (values: Array<boolean | null>) => {
+    if (!managementTransport?.ssh_config_available) return "UNKNOWN";
+    if (values.length === 0) return "NOT ENABLED";
+    if (values.some((value) => value === true)) return "ENABLED";
+    if (values.some((value) => value === null)) return "UNKNOWN";
+    return "DISABLED";
+  };
+  const sshPasswordAuth = summarizeSshOption(sshPasswordAuthValues);
+  const sshRootPasswordAuth = summarizeSshOption(sshRootPasswordAuthValues);
+  const sshGatewayPorts = summarizeSshOption(sshGatewayPortsValues);
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const nftRuntime = security?.nft_runtime;
@@ -2994,6 +3015,16 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Management transport", "HTTPS listeners", managementTransport?.https_listener_count ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTP redirect", managementTransport?.http_redirect_enabled ? "ENABLED" : "DISABLED / UNKNOWN", ""],
       [exportedAt, "Management transport", "Unredirected HTTP", managementTransport?.plaintext_http_unredirected ? "PRESENT" : "NOT REPORTED", ""],
+      [exportedAt, "Management transport", "SSH posture", managementTransport?.ssh_status?.toUpperCase() ?? "NOT REPORTED", ""],
+      [exportedAt, "Management transport", "Dropbear service", managementTransport?.ssh_service_installed ? "INSTALLED" : managementTransport?.ssh_service_installed === false ? "NOT INSTALLED" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "SSH configuration inventory", managementTransport?.ssh_config_available ? "AVAILABLE" : managementTransport?.ssh_config_available === false ? "UNAVAILABLE" : "NOT REPORTED", ""],
+      [exportedAt, "Management transport", "Enabled SSH instances", managementTransport?.ssh_enabled_instance_count ?? "UNKNOWN", ""],
+      [exportedAt, "Management transport", "SSH interface bindings", sshInterfaceBindings, ""],
+      [exportedAt, "Management transport", "SSH ports", sshPorts, ""],
+      [exportedAt, "Management transport", "SSH password authentication", sshPasswordAuth, ""],
+      [exportedAt, "Management transport", "SSH root password authentication", sshRootPasswordAuth, ""],
+      [exportedAt, "Management transport", "SSH gateway port forwarding", sshGatewayPorts, ""],
+      [exportedAt, "Management transport", "SSH inventory truncated", managementTransport?.ssh_truncated ? "YES" : managementTransport?.ssh_truncated === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Firewall", "Configuration", security.firewall_config_readable ? "READABLE" : "UNAVAILABLE", ""],
       [exportedAt, "Firewall", "Rules", "REPORTED", security.rules_count],
       [exportedAt, "Firewall", "Redirects", "REPORTED", security.redirects_count],
@@ -3112,12 +3143,36 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["Configured HTTP listeners", fmt(managementTransport.http_listener_count)],
               ["HTTP → HTTPS redirect", managementTransport.http_redirect_enabled ? "ENABLED" : "DISABLED"],
             ]} />
+            <div className="firewall-posture-heading">
+              <div><strong>SSH configuration posture</strong><span>Read-only Dropbear listener and authentication inventory</span></div>
+              <Status active={managementTransport.ssh_status === "ready" || managementTransport.ssh_status === "disabled"}>
+                {managementTransport.ssh_status?.toUpperCase() ?? "UNKNOWN"}
+              </Status>
+            </div>
+            <InfoRows rows={[
+              ["Dropbear service", managementTransport.ssh_service_installed ? "INSTALLED" : managementTransport.ssh_service_installed === false ? "NOT INSTALLED" : "NOT REPORTED"],
+              ["SSH configuration inventory", managementTransport.ssh_config_available ? "AVAILABLE" : managementTransport.ssh_config_available === false ? "UNAVAILABLE" : "NOT REPORTED"],
+              ["Configured SSH instances", fmt(managementTransport.ssh_instance_count ?? 0)],
+              ["Enabled SSH instances", fmt(managementTransport.ssh_enabled_instance_count ?? 0)],
+              ["SSH interface bindings", sshInterfaceBindings],
+              ["SSH listener ports", sshPorts],
+              ["SSH password authentication", sshPasswordAuth],
+              ["SSH root password authentication", sshRootPasswordAuth],
+              ["SSH gateway port forwarding", sshGatewayPorts],
+              ["SSH inventory truncated", managementTransport.ssh_truncated === true ? "YES" : managementTransport.ssh_truncated === false ? "NO" : "UNKNOWN"],
+            ]} />
             <div className="module-message">
-              {managementTransport.status === "review"
-                ? "HTTP listeners are active without an HTTPS redirect. HTTP is configured without a redirect to HTTPS. Credentials and session traffic may travel in plaintext; do not use the HTTP address for administration."
-                : managementTransport.status === "unavailable"
-                  ? "HTTPS readiness could not be confirmed. Do not enter administrator credentials over HTTP until the TLS runtime, HTTPS listener and certificate/key are available."
-                  : "HTTPS listener entries, TLS runtime and non-empty certificate/key files are configured, and any configured HTTP listener is redirected. The device certificate is self-signed. This configuration-level check does not probe live sockets, validate the certificate chain or establish WAN reachability."}
+              {managementTransport.plaintext_http_unredirected
+                ? "HTTP listeners are active without an HTTPS redirect. Credentials and session traffic may travel in plaintext; do not use the HTTP address for administration."
+                : managementTransport.ssh_status === "review"
+                  ? "SSH management needs review. Bind every enabled Dropbear instance to an explicit trusted management interface, use key-only authentication and keep gateway port forwarding disabled. Do not disable password access until a working SSH key has been installed and an independent recovery path has been tested."
+                  : managementTransport.ssh_status === "unavailable"
+                    ? "Dropbear configuration could not be fully inspected. Treat SSH exposure as unknown and review the native SSH configuration before production deployment."
+                    : managementTransport.ssh_status === undefined
+                      ? "This firmware does not report SSH posture. Update QuantumGrid before relying on the combined management-plane review."
+                      : managementTransport.status === "unavailable"
+                        ? "HTTPS readiness could not be confirmed. Do not enter administrator credentials over HTTP until the TLS runtime, HTTPS listener and certificate/key are available."
+                        : "HTTPS listener entries, TLS runtime and non-empty certificate/key files are configured, and any configured HTTP listener is redirected. SSH posture is reported from Dropbear configuration. These configuration checks do not probe live sockets, validate certificate trust, confirm installed SSH keys or establish WAN reachability."}
             </div>
           </>
         )}
