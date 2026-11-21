@@ -16,7 +16,8 @@
     "nss": {
       "supported": true,
       "config_fragment": "configs/aw1000-nss.fragment",
-      "feed_pins": "configs/aw1000-nss-feeds.conf"
+      "feed_pins": "configs/aw1000-nss-feeds.conf",
+      "pin_script": "scripts/pin-aw1000-nss-feeds.sh"
     },
     "fxs": {
       "supported": true,
