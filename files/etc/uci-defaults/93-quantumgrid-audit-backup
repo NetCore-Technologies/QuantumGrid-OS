@@ -10,7 +10,9 @@ touch "$backup_list"
 for entry in \
   "/etc/quantumgrid/audit.jsonl" \
   "/etc/quantumgrid/audit.jsonl.1" \
-  "/etc/quantumgrid/device-id"; do
+  "/etc/quantumgrid/device-id" \
+  "/etc/quantumgrid/device-profile.json" \
+  "/etc/openwrt_release"; do
   if ! grep -qxF "$entry" "$backup_list"; then
     printf '%s\n' "$entry" >> "$backup_list"
   fi
