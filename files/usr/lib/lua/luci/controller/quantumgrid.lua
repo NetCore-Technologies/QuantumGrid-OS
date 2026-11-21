@@ -4364,7 +4364,7 @@ function action_config_restore()
     local restore_lock_acquired = false
     local restore_lock_path = "/tmp/quantumgrid-config-archive.lock"
     local restore_authorized = false
-    local restore_audit_recorded = false
+    local restore_audit_attempted = false
     local restore_audit_target = "preflight"
 
     local function respond(status, payload)
@@ -4394,10 +4394,9 @@ function action_config_restore()
     end
 
     local function audit_restore(outcome)
-        if not restore_authorized or restore_audit_recorded then return false end
-        local recorded = record_audit(http, "system.config.restore", restore_audit_target, outcome)
-        if recorded then restore_audit_recorded = true end
-        return recorded
+        if not restore_authorized or restore_audit_attempted then return false end
+        restore_audit_attempted = true
+        return record_audit(http, "system.config.restore", restore_audit_target, outcome)
     end
 
     local function fail(status, message, extra, preserve_rollback)
@@ -4446,19 +4445,19 @@ function action_config_restore()
         return
     end
     restore_audit_target = context.profile_id
+    local lock_ok, lock_status = pcall(sys.call,
+        "/bin/mkdir " .. restore_lock_path .. " >/dev/null 2>&1")
+    if not lock_ok or lock_status ~= 0 then
+        fail(409, "Another configuration backup or restore is already active, or the archive lock could not be acquired. No archive was applied.")
+        return
+    end
+    restore_lock_acquired = true
+
     local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
     if not backup_paths_ok then
         fail(503, backup_paths_error)
         return
     end
-
-    local lock_ok, lock_status = pcall(sys.call,
-        "/bin/mkdir " .. restore_lock_path .. " >/dev/null 2>&1")
-    if not lock_ok or lock_status ~= 0 then
-        fail(409, "Another configuration restore is already active, or the restore lock could not be acquired. No archive was applied.")
-        return
-    end
-    restore_lock_acquired = true
 
     local mktemp_command = nil
     if fs.access("/bin/mktemp") == true then
