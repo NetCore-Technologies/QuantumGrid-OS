@@ -707,12 +707,15 @@ executable/configuration arguments, TLS policy and exact configured destination 
 as ready. A failed post-start verification triggers the same rollback path as a failed restart. It
 attempts to restore both configurations if a commit, restart or live-state check fails. The operation is recorded in the redacted administrative audit history.
 A successful local restart and a valid trust configuration do **not** prove that the collector is
-reachable or that it received or retained a message.
+reachable or that it received or retained a message. Native OpenWrt `logread` sends newline-delimited
+records over TCP; this tunnel does not convert them to RFC 5425 octet-counted framing. Configure the
+collector for compatible LF-delimited syslog/TCP input, or place a protocol-aware relay in front of
+the collector, and verify message receipt and parsing independently.
 
 UDP and TCP modes remain unencrypted and do not authenticate the collector; use a trusted management
 VLAN or VPN for those transports. The TLS mode uses the firmware's installed public CA bundle and
 does not currently support private-CA import, mutual-TLS client certificates, certificate pinning,
-IPv6 literal destinations, collector health probes or multiple destinations. A production deployment
+RFC 5425 octet-counting, IPv6 literal destinations, collector health probes or multiple destinations. A production deployment
 must verify the collector's certificate chain, DNS, firewall policy, receipt and retention from the
 collector side. Lua validation is covered by `tests/remote-syslog.lua`, and the browser API contract
 by `tests/remote-syslog-api.test.mjs` in CI.
