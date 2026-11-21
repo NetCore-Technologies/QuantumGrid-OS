@@ -4362,7 +4362,7 @@ function action_config_restore()
     local restore_path = nil
     local rollback_path = nil
     local restore_lock_acquired = false
-    local restore_lock_path = "/tmp/quantumgrid-config-restore.lock"
+    local restore_lock_path = "/tmp/quantumgrid-config-archive.lock"
 
     local function respond(status, payload)
         if status then
