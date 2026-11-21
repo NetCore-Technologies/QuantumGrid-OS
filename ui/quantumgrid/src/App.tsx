@@ -2948,7 +2948,7 @@ function RemoteSyslogSettings({ status, refresh }: {
   const [enabled, setEnabled] = useState(status?.enabled ?? false);
   const [host, setHost] = useState(status?.host ?? "");
   const [port, setPort] = useState(String(status?.port ?? 514));
-  const [protocol, setProtocol] = useState<"tcp" | "udp">(status?.protocol ?? "udp");
+  const [protocol, setProtocol] = useState<"tcp" | "udp" | "tls">(status?.protocol ?? "udp");
   const [hostname, setHostname] = useState(status?.hostname ?? "");
   const [prefix, setPrefix] = useState(status?.prefix ?? "");
   const [confirmed, setConfirmed] = useState(false);
@@ -2979,7 +2979,9 @@ function RemoteSyslogSettings({ status, refresh }: {
       setNotice({
         success: true,
         message: result.enabled
-          ? "Remote syslog forwarding is enabled to " + result.host + ":" + result.port + " over " + result.protocol.toUpperCase() + "."
+          ? result.protocol === "tls"
+            ? "TLS syslog forwarding is configured to " + result.host + ":" + result.port + " with certificate-chain and server-identity verification. Confirm receipt at the collector."
+            : "Remote syslog forwarding is enabled to " + result.host + ":" + result.port + " over unencrypted " + result.protocol.toUpperCase() + "."
           : "Remote syslog forwarding has been disabled.",
       });
       refresh();
@@ -3003,10 +3005,17 @@ function RemoteSyslogSettings({ status, refresh }: {
         <div className="module-message">The native OpenWrt log service or system configuration is unavailable on this firmware.</div>
       ) : (
         <form className="remote-syslog-form" onSubmit={save}>
-          <div className="remote-syslog-warning" role="note">
-            <strong>Transport is not encrypted.</strong>
-            <span>OpenWrt's built-in forwarder supports TCP or UDP syslog, not TLS. Use a trusted management network or VPN between the router and log collector. Do not send operational logs across an untrusted public network.</span>
-          </div>
+          {protocol === "tls" ? (
+            <div className="remote-syslog-warning" role="note">
+              <strong>Authenticated TLS transport</strong>
+              <span>QuantumGrid uses a loopback-only stunnel client with the system CA bundle, certificate-chain validation, and hostname or IPv4 subject-alternative-name verification. This confirms the configured TLS checks and local service restart, not collector reachability or message receipt. Private certificate authorities and mutual-TLS client certificates are not configured by this control.</span>
+            </div>
+          ) : (
+            <div className="remote-syslog-warning" role="note">
+              <strong>Transport is not encrypted.</strong>
+              <span>UDP and TCP syslog are unencrypted and do not authenticate the collector. Use a trusted management network or VPN between the router and log collector; do not send operational logs across an untrusted public network.</span>
+            </div>
+          )}
           <label className="remote-syslog-enabled">
             <input type="checkbox" checked={enabled} disabled={busy} onChange={(event) => setEnabled(event.target.checked)} />
             <span>Enable remote syslog forwarding</span>
@@ -3023,9 +3032,15 @@ function RemoteSyslogSettings({ status, refresh }: {
               </label>
               <label>
                 <span>Transport</span>
-                <select value={protocol} onChange={(event) => setProtocol(event.target.value as "tcp" | "udp")}>
-                  <option value="udp">UDP</option>
-                  <option value="tcp">TCP</option>
+                <select value={protocol} onChange={(event) => {
+                  const nextProtocol = event.target.value as "tcp" | "udp" | "tls";
+                  setProtocol(nextProtocol);
+                  if (nextProtocol === "tls" && (port === "514" || port === "")) setPort("6514");
+                  if (nextProtocol !== "tls" && port === "6514") setPort("514");
+                }}>
+                  <option value="udp">UDP · unencrypted</option>
+                  <option value="tcp">TCP · unencrypted</option>
+                  <option value="tls">TLS · verified server identity</option>
                 </select>
               </label>
               <label>
