@@ -516,6 +516,10 @@ function validate_radius_dynamic_vlan_mappings(mappings, interfaces, bridges, vl
 
 		local binding, binding_error = validate_wireless_network_binding(network, interfaces, zones)
 		if not binding then return nil, binding_error end
+		if type(binding.ipv4) ~= "table" or #binding.ipv4 == 0 then
+			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
+				" must map to an existing routed IPv4 office segment with a gateway address."
+		end
 		local parent_bridge, device_vid = binding.device:match("^(.-)%.(%d+)$")
 		if not parent_bridge or tonumber(device_vid) ~= numeric_vid then
 			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
@@ -624,6 +628,7 @@ function validate_wireless_network_binding(network_name, interfaces, zones)
 	return {
 		network = network_name,
 		device = selected_interface.device,
+		ipv4 = zone_networks(selected_interface.ipv4),
 		zone_section = selected_zone.section,
 		zone_name = selected_zone.name
 	}
