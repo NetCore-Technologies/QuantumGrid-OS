@@ -796,7 +796,8 @@ and path validation are covered by `tests/config-backup.lua` in the firmware CI 
 The Office **Admin Audit** page exposes an authenticated read-only history for supported actions:
 first-boot root-password setup, Wi-Fi configuration changes, SQM queue changes, DHCP scope
 updates, static DHCP reservation add/remove, APK/OPKG install/remove/feed-update operations,
-manual LED brightness changes, remote syslog destination updates and configuration backup downloads. Each event records only a timestamp, the current administrator label, remote source IP,
+manual LED brightness changes, remote syslog destination updates, configuration backup downloads
+and authenticated configuration restore outcomes. Each event records only a timestamp, the current administrator label, remote source IP,
 allowlisted action, target label and success/failure outcome. Submitted passwords, SSIDs, keys,
 VPN private keys, package command output and arbitrary configuration values are not part of the
 event schema.
