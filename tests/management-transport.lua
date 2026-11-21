@@ -327,7 +327,7 @@ assert(directory_authorized_keys.ssh_status == "review")
 -- A key file that the Dropbear process cannot read is not a ready posture.
 uci, fs = fixture("1", {
   stat_overrides = {
-    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 33024 }
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 32896 }
   },
   dropbear_sections = {{
     [".name"] = "main",
