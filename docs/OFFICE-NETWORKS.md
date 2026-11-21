@@ -65,15 +65,15 @@ Routes are persisted in the OpenWrt network UCI configuration. A network reload 
 
 ## IPv6 WAN pinholes (not NAT)
 
-Office Networks can add and remove **QuantumGrid-managed IPv6 pinholes** for services hosted on a LAN device that is currently visible in the router's IPv6 neighbour-discovery (NDP) table. The controller reads `ip -6 neigh show dev <interface>` for each configured office interface and exposes only valid global-unicast neighbours with a unicast MAC and a usable kernel neighbour state (`REACHABLE`, `STALE`, `DELAY`, `PROBE` or `PERMANENT`). IPv6 is routed end-to-end; this is a firewall allowance, not IPv4-style address/port translation.
+Office Networks can add and remove **QuantumGrid-managed IPv6 pinholes** for services hosted on a LAN device that is currently visible in the router's IPv6 neighbour-discovery (NDP) table. The controller reads `ip -6 neigh show dev <interface>` only for an active kernel L3 device and exposes valid global-unicast neighbours with a unicast MAC and a usable kernel neighbour state (`REACHABLE`, `STALE`, `DELAY`, `PROBE` or `PERMANENT`). A firewall pinhole is eligible only when the address is observed exactly once across the active L3 inventory and that interface belongs to the selected internal firewall zone; down, unbound or ambiguous observations fail closed. IPv6 is routed end-to-end; this is a firewall allowance, not IPv4-style address/port translation.
 
 A pinhole is limited to:
 - One existing external WAN/WWAN source zone.
 - One existing internal destination zone.
-- One exact, currently observed global-unicast IPv6 NDP neighbour on an interface attached to that destination zone; the neighbour must have a valid unicast MAC and a usable state.
+- One exact, unambiguous, currently observed global-unicast IPv6 NDP neighbour on a single active L3 device attached to that destination zone; the neighbour must have a valid unicast MAC and a usable state.
 - TCP, UDP or TCP+UDP and one destination port (1–65535).
 
-The validator rejects ULA, link-local, multicast, unspecified, documentation and other IPv6 special-purpose addresses; malformed IPv6; neighbours on a different interface; invalid/multicast/zero MAC addresses; failed or incomplete NDP entries; unsupported protocols; invalid ports; duplicate names; and overlapping zone/address/port/protocol allowances. The controller re-reads the live network, neighbour and firewall inventory on every request and refuses changes if inventory is unavailable or truncated.
+The validator rejects ULA, link-local, multicast, unspecified, documentation and other IPv6 special-purpose addresses; malformed IPv6; neighbours on a different interface; invalid/multicast/zero MAC addresses; down or unbound interfaces; duplicate/ambiguous NDP observations; failed or incomplete NDP entries; unsupported protocols; invalid ports; duplicate names; and overlapping zone/address/port/protocol allowances. The controller re-reads the live network, neighbour and firewall inventory on every request and refuses changes if inventory is unavailable or truncated.
 
 The generated rule is an IPv6 firewall rule with the explicit source zone, destination zone, destination host, protocol, destination port, IPv6 family and ACCEPT target. It does **not** add an IPv6 redirect/NAT rule, change zone INPUT/OUTPUT/FORWARD defaults, open all ports, add ICMP-wide access, or create inter-zone forwarding. Existing default-deny policy remains in control of all unrelated traffic.
 
