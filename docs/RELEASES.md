@@ -13,7 +13,7 @@ The release workflow uses upstream OpenWrt `v25.12.6` by default and the AW1000 
 at `v0.9.0`. Manual firmware dispatches can opt into the experimental NSS profile, which pins
 `qosmio/openwrt-ipq` at `d6848fa2ea00193b5b7d3973e3990da7f608027c`; NSS artefacts carry an
 `-nss` suffix. Resolved source commits and profile configuration hashes are written into
-`BUILDINFO.txt`. Automatic release-tag builds remain on the stable upstream profile.
+`BUILDINFO.txt`; package-feed commit revisions are listed in `OPENWRT-FEEDS.txt`. Automatic release-tag builds remain on the stable upstream profile.
 
 ## AW1000 image formats
 
@@ -22,6 +22,7 @@ Every completed build must include:
 - Exactly one non-empty Arcadyan AW1000 squashfs factory UBI image (`.ubi`), validated for the UBI erase-counter header
 - One AW1000 initramfs image (`.itb`) for temporary RAM boot and recovery/development
 - Package archive produced by the same build
+- `OPENWRT-FEEDS.txt` listing verified package-feed commit revisions
 - Pinned AW1000 phone-feed source archive
 - Package manifest when generated
 - Phone-port and recovery guides

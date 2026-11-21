@@ -148,10 +148,15 @@ jobs:
           copy_required "*arcadyan_aw1000-initramfs-uImage.itb" \
             "QuantumGrid-OS-${VERSION}-AW1000-initramfs-uImage.itb"
 
-          if [[ -d openwrt/bin/packages ]]; then
-            tar --zstd -cf "dist/QuantumGrid-OS-${VERSION}-AW1000-packages.tar.zst" \
-              -C openwrt/bin/packages .
-          fi
+          [[ -d openwrt/bin/packages ]] || { echo "OpenWrt package output directory is missing." >&2; exit 1; }
+          PACKAGE_COUNT="$(find openwrt/bin/packages -type f \( -name '*.apk' -o -name '*.ipk' \) -size +0c -print | wc -l | tr -d '[:space:]')"
+          [[ "$PACKAGE_COUNT" =~ ^[1-9][0-9]*$ ]] || { echo "No non-empty APK/IPK packages were produced." >&2; exit 1; }
+          PACKAGE_ARCHIVE="dist/QuantumGrid-OS-${VERSION}-AW1000-packages.tar.zst"
+          tar --zstd -cf "$PACKAGE_ARCHIVE" -C openwrt/bin/packages .
+          [[ -s "$PACKAGE_ARCHIVE" ]] || { echo "AW1000 package archive is empty." >&2; exit 1; }
+
+          bash scripts/verify-openwrt-feeds.sh openwrt > dist/OPENWRT-FEEDS.txt
+          [[ -s dist/OPENWRT-FEEDS.txt ]] || { echo "OpenWrt feed revision report is missing." >&2; exit 1; }
 
           MANIFEST="$(find "$IMAGE_DIR" -maxdepth 1 -type f -name '*arcadyan_aw1000*.manifest' -print -quit)"
           if [[ -n "$MANIFEST" ]]; then
@@ -191,6 +196,7 @@ jobs:
             echo "OpenWrt requested ref: $OPENWRT_REQUESTED_REF"
             echo "OpenWrt expected commit: $OPENWRT_EXPECTED_SHA"
             echo "OpenWrt resolved commit: $OPENWRT_SHA"
+            echo "OpenWrt package feed revisions: OPENWRT-FEEDS.txt"
             echo "AW1000 phone requested ref: $PHONE_REF"
             echo "AW1000 phone expected commit: $PHONE_EXPECTED_SHA"
             echo "AW1000 phone resolved commit: $PHONE_SHA"

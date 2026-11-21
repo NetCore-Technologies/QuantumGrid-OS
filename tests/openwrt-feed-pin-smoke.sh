@@ -10,6 +10,12 @@ REMOTE="$TEST_DIR/packages.git"
 WORK="$TEST_DIR/packages-work"
 PHONE="$TEST_DIR/phone/openwrt"
 mkdir -p "$OPENWRT/feeds" "$PHONE"
+git init -q "$PHONE"
+git -C "$PHONE" config user.name "QuantumGrid CI"
+git -C "$PHONE" config user.email "ci@example.invalid"
+printf 'phone feed fixture\n' > "$PHONE/Makefile"
+git -C "$PHONE" add Makefile
+git -C "$PHONE" commit -q -m "phone link fixture"
 git init --bare -q "$REMOTE"
 git init -q "$WORK"
 git -C "$WORK" config user.name "QuantumGrid CI"
@@ -24,6 +30,14 @@ git clone -q "$REMOTE" "$OPENWRT/feeds/packages"
 ln -s "$PHONE" "$OPENWRT/feeds/quantumgrid_phone"
 printf 'src-git packages %s^%s\nsrc-link quantumgrid_phone %s\n' "$REMOTE" "$PINNED" "$PHONE" > "$OPENWRT/feeds.conf"
 bash "$VERIFY" "$OPENWRT"
+
+# Linked local feeds must also be clean Git checkouts.
+printf 'injected local phone source\n' > "$PHONE/injected.c"
+if bash "$VERIFY" "$OPENWRT" >/dev/null 2>&1; then
+  echo "ERROR: modified linked feed content was accepted." >&2
+  exit 1
+fi
+rm -f "$PHONE/injected.c"
 
 printf 'injected package code\n' > "$OPENWRT/feeds/packages/injected.c"
 if bash "$VERIFY" "$OPENWRT" >/dev/null 2>&1; then echo "ERROR: untracked feed content was accepted." >&2; exit 1; fi
