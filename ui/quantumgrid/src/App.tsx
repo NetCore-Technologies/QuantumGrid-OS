@@ -4233,7 +4233,7 @@ function WirelessConfigEditor({
   const networkChanged = network !== currentNetwork;
   const eligibleRadiusVlans = (officeInventory?.interfaces ?? []).flatMap((iface) => {
     const deviceMatch = /^(.+)\.([0-9]{1,4})$/.exec(iface.device);
-    if (!deviceMatch || iface.protocol !== "static") return [];
+    if (!deviceMatch || iface.protocol !== "static" || iface.ipv4.length === 0) return [];
     const bridgeName = deviceMatch[1];
     const vid = Number(deviceMatch[2]);
     const bridge = officeInventory?.bridges.find((item) =>
