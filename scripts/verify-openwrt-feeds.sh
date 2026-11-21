@@ -49,9 +49,9 @@ while IFS= read -r raw || [[ -n "$raw" ]]; do
       resolved_source="$(readlink -f "$source")"
       resolved_feed="$(readlink -f "$feed_dir")"
       [[ "$resolved_source" == "$resolved_feed" ]] || die "Linked feed '$name' resolves to an unexpected source directory."
-      [[ -d "$source/.git" ]] || die "Linked feed '$name' must be a Git checkout with a recorded commit."
-      linked_sha="$(git -C "$source" rev-parse --verify 'HEAD^{commit}' 2>/dev/null)" || die "Could not resolve linked feed '$name' commit."
-      linked_dirty="$(git -C "$source" status --porcelain --untracked-files=all)"
+      linked_repo="$(git -C "$source" rev-parse --show-toplevel 2>/dev/null)" || die "Linked feed '$name' must be inside a Git checkout with a recorded commit."
+      linked_sha="$(git -C "$linked_repo" rev-parse --verify 'HEAD^{commit}' 2>/dev/null)" || die "Could not resolve linked feed '$name' commit."
+      linked_dirty="$(git -C "$linked_repo" status --porcelain --untracked-files=all)"
       [[ -z "$linked_dirty" ]] || die "Linked feed '$name' contains modified or untracked files."
       link_count=$((link_count + 1))
       printf 'Verified linked feed %-8s %s\n' "$name" "$linked_sha"
