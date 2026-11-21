@@ -45,7 +45,7 @@ class DeviceProfileTests(unittest.TestCase):
         self.assertEqual(fields[0], "arcadyan-aw1000")
         self.assertEqual(fields[3:6], ["qualcommax", "ipq807x", "arcadyan_aw1000"])
         self.assertEqual(fields[7], "1")
-        self.assertEqual(len(fields[11].split(";")), 18)
+        self.assertEqual(len(fields[11].split(";")), 19)
         self.assertIn("CONFIG_ATH11K_NSS_SUPPORT=y", fields[11])
         self.assertEqual(fields[12], "1")
         self.assertEqual(fields[15], "*arcadyan_aw1000-squashfs-factory.ubi")
