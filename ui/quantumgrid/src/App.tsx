@@ -8947,6 +8947,12 @@ function AdvancedControlPage({ routerOverview, refresh }: {
       [generatedAt, platform.hostname, "Platform", "Firmware identity", "AVAILABLE",
         [platform.model, platform.board_name, platform.distribution, platform.version, platform.revision,
           platform.target, platform.kernel, platform.description].filter(Boolean).join(" | "), "", "", "", ""],
+      [generatedAt, platform.hostname, "Device profile", "Profile identity", platform.device_profile?.status?.toUpperCase() ?? "NOT REPORTED",
+        [platform.device_profile?.profile_id, platform.device_profile?.openwrt_device,
+          platform.device_profile?.openwrt_target, platform.device_profile?.openwrt_subtarget].filter(Boolean).join(" | "), "", "", "", ""],
+      [generatedAt, platform.hostname, "Device profile", "Board compatibility", platform.device_profile?.status?.toUpperCase() ?? "NOT REPORTED",
+        "observed=" + (platform.device_profile?.observed_board_name ?? platform.board_name ?? "unknown") +
+          "; expected=" + (platform.device_profile?.board_compatible?.join(" ") ?? "unknown"), "", "", "", ""],
       [generatedAt, platform.hostname, "Package manager", platform.package_manager, "DETECTED", "", "", "", "", ""],
       ...runtimeRows,
       [generatedAt, platform.hostname, "Kernel networking", "Connection tracking", conntrack?.available ? (conntrack.status?.toUpperCase() ?? "UNKNOWN") : "UNAVAILABLE", "Read-only nf_conntrack_count / nf_conntrack_max; warning at 75%, critical at 90%", "", "", conntrack?.used_percent ?? "", conntrack?.available ? `${conntrack.count?.toLocaleString() ?? "N/A"} / ${conntrack.maximum?.toLocaleString() ?? "N/A"} entries; ${conntrack.free?.toLocaleString() ?? "N/A"} free` : ""],
@@ -9003,6 +9009,28 @@ function AdvancedControlPage({ routerOverview, refresh }: {
               <div><small>REVISION</small><strong>{platform.revision || "N/A"}</strong></div>
               <div><small>TARGET</small><strong>{platform.target || "N/A"}</strong></div>
               <div className="platform-detail-wide"><small>BUILD DESCRIPTION</small><strong>{platform.description || "N/A"}</strong></div>
+            </div>
+            <div className="firewall-posture-heading">
+              <div><strong>Installed hardware profile</strong><span>Embedded build manifest compared with the live system.board identity</span></div>
+              <Status active={platform.device_profile?.status === "matched"}>
+                {platform.device_profile?.status?.toUpperCase() ?? "NOT REPORTED"}
+              </Status>
+            </div>
+            <div className="platform-detail-grid">
+              <div><small>PROFILE</small><strong>{platform.device_profile?.profile_id || "N/A"}</strong></div>
+              <div><small>DECLARED DEVICE</small><strong>{platform.device_profile?.openwrt_device || "N/A"}</strong></div>
+              <div><small>DECLARED TARGET</small><strong>{platform.device_profile?.openwrt_target && platform.device_profile?.openwrt_subtarget ? platform.device_profile.openwrt_target + "/" + platform.device_profile.openwrt_subtarget : "N/A"}</strong></div>
+              <div><small>OBSERVED BOARD NAME</small><strong>{platform.device_profile?.observed_board_name || platform.board_name || "N/A"}</strong></div>
+              <div className="platform-detail-wide"><small>EXPECTED BOARD COMPATIBILITY IDS</small><strong>{platform.device_profile?.board_compatible?.join(", ") || "N/A"}</strong></div>
+            </div>
+            <div className="module-message">
+              {platform.device_profile?.status === "matched"
+                ? "The runtime board name matches one of the compatibility identifiers in the firmware's embedded device profile. This is a software identity check only; it does not prove the physical board, flash layout, radios, modem, or peripherals have passed hardware validation."
+                : platform.device_profile?.status === "mismatch"
+                  ? "The observed OpenWrt board name does not match this firmware's declared device profile. Treat this firmware/device pairing as unsupported and do not flash or perform hardware-specific writes."
+                  : platform.device_profile?.status === "unknown"
+                    ? "The embedded profile is valid, but OpenWrt did not report a board name that can be compared. Hardware compatibility remains unknown."
+                    : "No valid embedded device profile was found. This firmware cannot establish its declared hardware target from the running profile inventory."}
             </div>
           </Panel>
           <Panel title="Runtime health snapshot" eyebrow="READ-ONLY · LIVE SYSTEM TELEMETRY">
