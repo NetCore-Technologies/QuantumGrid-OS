@@ -32,6 +32,7 @@ local ALLOWED_ACTIONS = {
 	["office.wifi.network.update"] = true,
 	["office.port-forward.add"] = true,
 	["office.port-forward.remove"] = true,
+	["office.port-forward.toggle"] = true,
 	["office.ipv6-pinhole.add"] = true,
 	["office.ipv6-pinhole.remove"] = true,
 	["office.ipv6-pinhole.toggle"] = true,
