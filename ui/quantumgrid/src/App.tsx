@@ -7406,7 +7406,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
     if (!inventory) return;
     const exportedAt = new Date().toISOString();
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
-      ["Exported at (UTC)", "Category", "Name", "Device / Bridge", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "Netmask", "IPv6", "MAC"],
+      ["Exported at (UTC)", "Category", "Name", "Device / Bridge / Address", "Protocol / VLAN ID", "State / Ports", "Firewall Zones", "Wi-Fi SSIDs", "IPv4", "Netmask", "IPv6", "MAC"],
       ...interfaces.map((item) => [
         exportedAt, "Network interface", item.name, item.device, item.protocol,
         item.up ? "UP" : "DOWN", item.firewall_zones.join(" "),
@@ -7433,9 +7433,15 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         "CONFIGURED", "", "", "", "", "", "",
       ]),
       ...(inventory.redirects ?? []).map((item) => [
-        exportedAt, "WAN port forward", item.name, item.destination_ip,
+        exportedAt, "WAN IPv4 port forward", item.name, item.destination_ip,
         item.protocol + " " + item.source_port + " → " + item.destination_port,
         "DNAT", item.source + " → " + item.destination, "", "", "", "", "",
+      ]),
+      ...(inventory.ipv6_pinholes ?? []).map((item) => [
+        exportedAt, "WAN IPv6 pinhole", item.name, item.destination_ip,
+        item.protocol + " " + item.destination_port,
+        "IPv6 ACCEPT · configured host only", item.source + " → " + item.destination,
+        "", "", "", item.destination_ip, "",
       ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
@@ -7482,7 +7488,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         <Metric title="Bridge Devices" value={inventory?.available ? fmt(inventory.bridge_count) : "N/A"} unit="" detail={inventory ? inventory.vlan_filtering_bridge_count + " with VLAN filtering" : "Waiting for router inventory"} icon={Database} />
         <Metric title="Bridge VLANs" value={inventory?.available ? fmt(inventory.vlan_count) : "N/A"} unit="" detail={inventory ? inventory.segmented_interface_count + " L3 interfaces linked to a VLAN" : "Waiting for router inventory"} icon={SlidersHorizontal} />
         <Metric title="Wi-Fi Access Points" value={inventory?.available ? fmt(inventory.wifi_ap_count) : "N/A"} unit="" detail="Configured AP sections, including disabled entries" icon={Wifi} />
-        <Metric title="WAN Port Forwards" value={inventory?.firewall_available ? fmt(inventory.redirect_count) : "N/A"} unit="" detail="Validated IPv4 DNAT redirect summaries" icon={Shield} />
+        <Metric title="IPv4 DNAT / IPv6 pinholes" value={inventory?.firewall_available ? fmt(inventory.redirect_count) + " / " + fmt(inventory.ipv6_pinhole_count) : "N/A"} unit="" detail="Validated NAT redirects / host-and-port IPv6 allowances" icon={Shield} />
         <Metric title="DHCP / Reservations" value={inventory?.dhcp_available ? fmt(inventory.dhcp_scope_count) + " / " + fmt(inventory.static_lease_count) : "N/A"} unit="" detail="Scopes / static host mappings" icon={Database} />
       </div>
 
