@@ -118,6 +118,12 @@ assert(sqm.detect_cake_profile(preserved_options) == "besteffort")
 assert(sqm.detect_cake_profile("diffserv4 dual-dsthost nat wash") == "custom")
 assert(sqm.detect_cake_profile("overhead 18 rtt 100ms") == "default")
 assert(sqm.detect_cake_profile(nil) == "default")
+assert(sqm.detect_cake_profile_pair(nil, nil) == "default",
+	"matching SQM script defaults should be reported as a script-default profile")
+assert(sqm.detect_cake_profile_pair("diffserv4 triple-isolate nat", "diffserv4 triple-isolate nat") == "diffserv4",
+	"matching ingress and egress profiles should be identified")
+assert(sqm.detect_cake_profile_pair("diffserv4 triple-isolate nat", "besteffort triple-isolate nat ack-filter") == "custom",
+	"different ingress and egress profiles must be shown as custom")
 local ingress_options = sqm.build_cake_profile_options("ingress rtt 100ms overhead 18", "diffserv4")
 local egress_options = sqm.build_cake_profile_options("egress rtt 50ms overhead 44", "diffserv4")
 assert(ingress_options == "ingress rtt 100ms overhead 18 diffserv4 triple-isolate nat")

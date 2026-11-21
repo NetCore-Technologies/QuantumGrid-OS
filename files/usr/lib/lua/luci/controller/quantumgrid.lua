@@ -2337,9 +2337,8 @@ local function sqm_status(uci, fs)
 					tc_mpu = tonumber(section.tcMPU)
 				}
 				if queue.qdisc:lower() == "cake" then
-					local ingress_profile = sqm_validator.detect_cake_profile(section.iqdisc_opts)
-					local egress_profile = sqm_validator.detect_cake_profile(section.eqdisc_opts)
-					queue.cake_profile = ingress_profile == egress_profile and ingress_profile or "custom"
+					queue.cake_profile = sqm_validator.detect_cake_profile_pair(
+						section.iqdisc_opts, section.eqdisc_opts)
 				end
 				table.insert(result.queues, queue)
 			end

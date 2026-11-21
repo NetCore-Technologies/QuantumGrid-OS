@@ -117,6 +117,13 @@ function detect_cake_profile(options)
 	return "custom"
 end
 
+function detect_cake_profile_pair(ingress_options, egress_options)
+	local ingress_profile = detect_cake_profile(ingress_options)
+	local egress_profile = detect_cake_profile(egress_options)
+	if ingress_profile == egress_profile then return ingress_profile end
+	return "custom"
+end
+
 
 local MAX_QDISCS = 64
 

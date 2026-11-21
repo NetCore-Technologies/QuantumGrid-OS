@@ -5509,7 +5509,7 @@ function SqmQueueEditor({
               setAcknowledged(false);
             }}>
               {queue.cake_profile === "custom" ? <option value="custom" disabled>Custom · preserved</option> : null}
-              <option value="default">Native CAKE defaults</option>
+              <option value="default">SQM script default (no profile override)</option>
               <option value="besteffort">Best effort · host fairness · ACK filter</option>
               <option value="diffserv4">DiffServ 4 · host fairness · NAT-aware</option>
               <option value="diffserv8">DiffServ 8 · host fairness · NAT-aware</option>
@@ -5682,7 +5682,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         ) : (
           <div className="sqm-policy-list">
             {queues.map((queue) => (
-              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "") + "-" + queue.linklayer + "-" + (queue.overhead ?? "") + "-" + (queue.tc_mpu ?? "")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} onApplyCakeProfile={applyCakeProfile} />
+              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "") + "-" + queue.linklayer + "-" + (queue.overhead ?? "") + "-" + (queue.tc_mpu ?? "") + "-" + (queue.cake_profile ?? "custom")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} onApplyCakeProfile={applyCakeProfile} />
             ))}
           </div>
         )}
