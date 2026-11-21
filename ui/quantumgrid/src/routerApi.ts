@@ -2708,7 +2708,9 @@ export async function updateRouterRemoteSyslog(input: {
     !("rolled_back" in payload) || payload.rolled_back !== false ||
     !("host" in payload) || typeof payload.host !== "string" ||
     !("port" in payload) || typeof payload.port !== "number" ||
-    !("protocol" in payload) || (payload.protocol !== "tcp" && payload.protocol !== "udp" && payload.protocol !== "tls")
+    !("protocol" in payload) || (payload.protocol !== "tcp" && payload.protocol !== "udp" && payload.protocol !== "tls") ||
+    (input.enabled && (payload.host !== input.host.trim() || payload.port !== input.port || payload.protocol !== input.protocol)) ||
+    (input.enabled && input.protocol === "tls" && (!("tls_status" in payload) || payload.tls_status !== "ready"))
   ) {
     throw new Error("The router did not confirm the remote syslog update and log-service restart.");
   }
