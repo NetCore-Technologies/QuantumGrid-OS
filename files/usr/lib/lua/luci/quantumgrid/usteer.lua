@@ -197,6 +197,54 @@ local function map_count(value, maximum)
 	return math.min(total, maximum), rows, total > maximum
 end
 
+local function same_numeric(value, expected)
+	local actual = tonumber(value)
+	return actual ~= nil and actual == expected
+end
+
+local function same_string_list(left, right)
+	if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+	local a, b = {}, {}
+	for _, value in ipairs(left) do
+		if type(value) ~= "string" then return false end
+		a[#a + 1] = value
+	end
+	for _, value in ipairs(right) do
+		if type(value) ~= "string" then return false end
+		b[#b + 1] = value
+	end
+	table.sort(a)
+	table.sort(b)
+	for index = 1, #a do if a[index] ~= b[index] then return false end end
+	return true
+end
+
+function runtime_policy_matches(runtime, persisted)
+	if type(runtime) ~= "table" or type(persisted) ~= "table" then return false end
+	if runtime.syslog ~= true or runtime.ipv6 ~= false or runtime.local_mode ~= false or
+		runtime.assoc_steering ~= false or runtime.load_kick_enabled ~= false or
+		persisted.probe_steering == true then
+		return false
+	end
+	if not same_numeric(runtime.aggressiveness, persisted.aggressiveness) or
+		not same_numeric(runtime.band_steering_interval, persisted.band_steering_interval) or
+		not same_numeric(runtime.band_steering_min_snr, persisted.band_steering_min_snr) or
+		not same_numeric(runtime.band_steering_threshold, persisted.band_steering_threshold) or
+		not same_numeric(runtime.load_balancing_threshold, persisted.load_balancing_threshold) then
+		return false
+	end
+	if not same_numeric(runtime.min_snr or 0, 0) or
+		not same_numeric(runtime.min_connect_snr or 0, 0) or
+		not same_numeric(runtime.roam_scan_snr or 0, 0) or
+		not same_numeric(runtime.roam_trigger_snr or 0, 0) then
+		return false
+	end
+	if type(runtime.aggressiveness_mac_list) ~= "table" or #runtime.aggressiveness_mac_list ~= 0 then
+		return false
+	end
+	return same_string_list(runtime.ssid_list, persisted.ssid_list)
+end
+
 function summarize_runtime(config, local_nodes, remote_hosts)
 	local local_count, nodes, local_truncated = map_count(local_nodes, 32)
 	local remote_count = 0
