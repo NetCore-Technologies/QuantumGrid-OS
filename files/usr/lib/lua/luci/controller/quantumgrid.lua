@@ -6807,6 +6807,7 @@ function action_api()
 	local platform = platform_status(fs)
 	local conntrack = conntrack_status(fs)
 	local route_inventory = default_route_inventory(fs)
+	local static_routes = static_route_inventory(uci, fs)
 	local rule_inventory = policy_rule_inventory(fs)
 	local hardware_io = hardware_io_status(fs)
 	local office_networks = office_network_status(uci, fs)
@@ -6829,6 +6830,11 @@ function action_api()
 		interfaces = network_interfaces(),
 		routes_available = route_inventory.available,
 		routes = route_inventory.routes,
+		static_routes_available = static_routes.available,
+		static_routes_count = static_routes.count,
+		static_routes_truncated = static_routes.truncated,
+		static_routes_invalid_count = static_routes.invalid_count,
+		static_routes = static_routes.routes,
 		policy_rules_available = rule_inventory.available,
 		policy_rules_count = rule_inventory.count,
 		policy_rules_truncated = rule_inventory.truncated,
