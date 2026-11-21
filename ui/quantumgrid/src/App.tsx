@@ -6486,8 +6486,8 @@ function SqmClientQosManager({
   refresh: () => void;
 }) {
   const isExternalZone = (zone: RouterOfficeFirewallZone) =>
-    ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
-    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
+    zone.masquerade || ["wan", "wan6", "wwan", "cellular", "lte", "5g"].includes(zone.name.toLowerCase()) ||
+    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular", "lte", "5g"].includes(network.toLowerCase()));
   const internalZones = zones.filter((zone) => !isExternalZone(zone));
   const externalZones = zones.filter(isExternalZone);
   const [direction, setDirection] = useState<"upload" | "download">("upload");
