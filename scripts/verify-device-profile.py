@@ -106,7 +106,7 @@ def validate(profile_path: Path) -> list[str]:
         raise ProfileError("platform.board_compatible contains duplicate board IDs")
 
     capabilities = require_object(root["capabilities"], "capabilities", {"nss", "fxs"})
-    nss = require_object(capabilities["nss"], "capabilities.nss", {"supported", "config_fragment", "feed_pins"})
+    nss = require_object(capabilities["nss"], "capabilities.nss", {"supported", "config_fragment", "feed_pins", "pin_script"})
     fxs = require_object(capabilities["fxs"], "capabilities.fxs", {"supported", "setup_script"})
 
     if not isinstance(nss["supported"], bool):
@@ -162,6 +162,7 @@ def validate(profile_path: Path) -> list[str]:
         "1" if nss["supported"] else "0",
         nss_fragment,
         nss_feed_pins,
+        nss_pin_script,
         "1" if fxs["supported"] else "0",
         fxs_script,
         output_directory,
