@@ -2999,12 +2999,15 @@ function RemoteSyslogSettings({ status, refresh }: {
     <Panel
       title="Remote system logging"
       eyebrow="NATIVE OPENWRT LOGREAD · CENTRAL OFFICE COLLECTION"
-      action={<Status active={Boolean(status?.enabled)}>{status?.enabled ? status.protocol === "tls" ? "TLS CONFIGURED" : "FORWARDING" : status?.available ? "DISABLED" : "UNAVAILABLE"}</Status>}
+      action={<Status active={Boolean(status?.enabled && (status.protocol !== "tls" || status.tls_status === "ready"))}>{status?.protocol === "tls" ? (status.tls_status ?? "UNKNOWN").toUpperCase() : status?.enabled ? "FORWARDING" : status?.available ? "DISABLED" : "UNAVAILABLE"}</Status>}
     >
       {!status?.service_installed || !status.config_available ? (
         <div className="module-message">The native OpenWrt log service or system configuration is unavailable on this firmware.</div>
       ) : (
         <form className="remote-syslog-form" onSubmit={save}>
+          {status?.protocol === "tls" && status.tls_status !== "ready" && status.tls_error && (
+            <div className="module-message remote-syslog-error" role="alert">{status.tls_error}</div>
+          )}
           {protocol === "tls" ? (
             <div className="remote-syslog-warning" role="note">
               <strong>Authenticated TLS transport</strong>
