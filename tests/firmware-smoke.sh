@@ -917,6 +917,8 @@ grep -Fq 'function validate_office_segment_ipv6(enabled)' "$ROOT/files/usr/lib/l
 grep -Fq 'network_options.ip6assign = ipv6.ip6assign' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'IPv6 neighbour discovery' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'odhcpd_restarted = ipv6.enabled' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'dhcp_options.ra_flags = ipv6.ra_flags' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq '"managed-config", "other-config"' "$ROOT/files/usr/lib/lua/luci/quantumgrid/office_networks.lua"
 grep -Fq 'restore_office_segment' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'office.segment.add' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'local source_ip = rule.family == "ipv4" and rule.label ~= "DHCP"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
