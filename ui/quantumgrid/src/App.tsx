@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -3087,17 +3087,26 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
   const memory = routerOverview?.system.memory;
   const load = routerOverview?.system.load_avg ?? [];
   const [backupConfirmed, setBackupConfirmed] = useState(false);
+  const [backupPassphrase, setBackupPassphrase] = useState("");
+  const [backupPassphraseConfirm, setBackupPassphraseConfirm] = useState("");
   const [backupBusy, setBackupBusy] = useState(false);
   const [backupNotice, setBackupNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const [backupDecryptFile, setBackupDecryptFile] = useState<File | null>(null);
+  const [backupDecryptPassphrase, setBackupDecryptPassphrase] = useState("");
+  const [backupDecryptBusy, setBackupDecryptBusy] = useState(false);
+  const [backupDecryptNotice, setBackupDecryptNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const createBackup = async () => {
-    if (!backupConfirmed || backupBusy) return;
+    if (!backupConfirmed || backupBusy || backupPassphrase.length < 16 ||
+        backupPassphrase !== backupPassphraseConfirm) return;
     setBackupBusy(true);
     setBackupNotice(null);
     try {
-      await downloadRouterConfigBackup();
-      setBackupNotice({ success: true, message: "The configuration archive was generated and sent to this browser. Store it in encrypted private storage." });
+      await downloadRouterConfigBackup(backupPassphrase);
+      setBackupNotice({ success: true, message: "The configuration archive was encrypted in this browser using AES-256-GCM and downloaded as a .qgbak file. Keep the passphrase separate; it cannot be recovered." });
       setBackupConfirmed(false);
+      setBackupPassphrase("");
+      setBackupPassphraseConfirm("");
     } catch (error) {
       setBackupNotice({
         success: false,
@@ -3105,6 +3114,25 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
       });
     } finally {
       setBackupBusy(false);
+    }
+  };
+
+  const decryptBackup = async () => {
+    if (!backupDecryptFile || !backupDecryptPassphrase || backupDecryptBusy) return;
+    setBackupDecryptBusy(true);
+    setBackupDecryptNotice(null);
+    try {
+      await decryptRouterConfigBackup(backupDecryptFile, backupDecryptPassphrase);
+      setBackupDecryptNotice({ success: true, message: "The encrypted backup was authenticated and decrypted locally in this browser. The original .tar.gz archive was downloaded; it was not uploaded to the router." });
+      setBackupDecryptFile(null);
+      setBackupDecryptPassphrase("");
+    } catch (error) {
+      setBackupDecryptNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The encrypted backup could not be decrypted.",
+      });
+    } finally {
+      setBackupDecryptBusy(false);
     }
   };
 
