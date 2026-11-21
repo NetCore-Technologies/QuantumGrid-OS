@@ -2484,6 +2484,8 @@ export async function decryptRouterConfigBackup(file: Blob, passphrase: string):
 }
 
 export async function downloadRouterConfigBackup(passphrase: string): Promise<void> {
+  assertBackupPassphrase(passphrase).fill(0);
+  requireBackupCrypto();
   const form = new URLSearchParams();
   form.set("confirmed", "1");
   const response = await fetch(CONFIG_BACKUP_URL, {
