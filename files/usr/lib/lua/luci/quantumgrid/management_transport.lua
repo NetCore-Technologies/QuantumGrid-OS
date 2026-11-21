@@ -31,6 +31,15 @@ local function exists(fs, path)
   return ok and value == true
 end
 
+local function nonempty_file(fs, path)
+  if type(fs.stat) == "function" then
+    local ok, stat = pcall(fs.stat, path)
+    return ok and type(stat) == "table" and
+      type(stat.size) == "number" and stat.size > 0
+  end
+  return exists(fs, path)
+end
+
 function M.inspect(uci, fs)
   local service_installed = exists(fs, "/etc/init.d/uhttpd")
   local http_listener_count = listener_count(uci, "listen_http")
@@ -41,18 +50,18 @@ function M.inspect(uci, fs)
     (redirect_value == "1" or redirect_value == true)
 
   local tls_library_available = exists(fs, "/lib/libustream-ssl.so")
-  local certificate_available = exists(fs, "/etc/uhttpd.crt") and
-    exists(fs, "/etc/uhttpd.key")
+  local certificate_available = nonempty_file(fs, "/etc/uhttpd.crt") and
+    nonempty_file(fs, "/etc/uhttpd.key")
   local key_generator_available = exists(fs, "/usr/bin/openssl") or
     exists(fs, "/usr/sbin/px5g")
 
-  local https_ready = service_installed and https_listener_count > 0 and
+  local https_configured = service_installed and https_listener_count > 0 and
     tls_library_available and certificate_available
   local plaintext_http_unredirected = http_listener_count > 0 and
     not http_redirect_enabled
 
   local status = "ready"
-  if not https_ready then
+  if not https_configured then
     status = "unavailable"
   elseif plaintext_http_unredirected then
     status = "review"
@@ -66,7 +75,7 @@ function M.inspect(uci, fs)
     certificate_available = certificate_available,
     key_generator_available = key_generator_available,
     http_redirect_enabled = http_redirect_enabled,
-    https_ready = https_ready,
+    https_configured = https_configured,
     plaintext_http_unredirected = plaintext_http_unredirected,
     status = status
   }

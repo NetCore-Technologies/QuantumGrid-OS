@@ -14,10 +14,12 @@ local function fixture(redirect, overrides)
     ["/etc/uhttpd.key"] = true,
     ["/usr/bin/openssl"] = true
   }
+  local empty_files = {}
   for key, value in pairs(overrides or {}) do
     if key == "lists" then lists = value
     elseif key == "values" then values = value
     elseif key == "files" then files = value
+    elseif key == "empty_files" then empty_files = value
     end
   end
 
@@ -31,7 +33,11 @@ local function fixture(redirect, overrides)
     return nil
   end
   local fs = {
-    access = function(path) return files[path] == true end
+    access = function(path) return files[path] == true end,
+    stat = function(path)
+      if files[path] ~= true then return nil end
+      return { size = empty_files[path] and 0 or 128 }
+    end
   }
   return uci, fs
 end
@@ -41,13 +47,13 @@ local review = transport.inspect(uci, fs)
 assert(review.service_installed)
 assert(review.http_listener_count == 2 and review.https_listener_count == 2)
 assert(review.tls_library_available and review.certificate_available)
-assert(review.key_generator_available and review.https_ready)
+assert(review.key_generator_available and review.https_configured)
 assert(not review.http_redirect_enabled and review.plaintext_http_unredirected)
 assert(review.status == "review", "an HTTP listener without HTTPS redirect must require review")
 
 uci, fs = fixture("1")
 local ready = transport.inspect(uci, fs)
-assert(ready.http_redirect_enabled and ready.https_ready)
+assert(ready.http_redirect_enabled and ready.https_configured)
 assert(not ready.plaintext_http_unredirected and ready.status == "ready")
 
 uci, fs = fixture("0", {
@@ -67,7 +73,7 @@ uci, fs = fixture("1", {
   }
 })
 local missing_tls = transport.inspect(uci, fs)
-assert(not missing_tls.https_ready and missing_tls.status == "unavailable")
+assert(not missing_tls.https_configured and missing_tls.status == "unavailable")
 
 uci, fs = fixture("1", {
   files = {
@@ -79,13 +85,19 @@ uci, fs = fixture("1", {
   }
 })
 local missing_certificate = transport.inspect(uci, fs)
-assert(not missing_certificate.https_ready and missing_certificate.status == "unavailable")
+assert(not missing_certificate.https_configured and missing_certificate.status == "unavailable")
+
+uci, fs = fixture("1", {
+  empty_files = { ["/etc/uhttpd.crt"] = true }
+})
+local empty_certificate = transport.inspect(uci, fs)
+assert(not empty_certificate.certificate_available and not empty_certificate.https_configured)
 
 uci, fs = fixture("1", {
   lists = { listen_http = { "0.0.0.0:80" }, listen_https = {} }
 })
 local missing_listener = transport.inspect(uci, fs)
-assert(not missing_listener.https_ready and missing_listener.status == "unavailable")
+assert(not missing_listener.https_configured and missing_listener.status == "unavailable")
 
 uci, fs = fixture("1", {
   files = {

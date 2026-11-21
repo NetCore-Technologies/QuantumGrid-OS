@@ -439,7 +439,7 @@ export interface RouterManagementTransport {
   certificate_available: boolean;
   key_generator_available: boolean;
   http_redirect_enabled: boolean;
-  https_ready: boolean;
+  https_configured: boolean;
   plaintext_http_unredirected: boolean;
   status: "ready" | "review" | "unavailable";
 }

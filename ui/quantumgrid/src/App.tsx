@@ -2989,7 +2989,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       ["Exported at (UTC)", "Category", "Item", "Status", "Details"],
       [exportedAt, "Firewall", "Init service", security.firewall_installed ? "INSTALLED" : "MISSING", ""],
       [exportedAt, "Management transport", "Posture", managementTransport?.status?.toUpperCase() ?? "UNKNOWN", ""],
-      [exportedAt, "Management transport", "HTTPS readiness", managementTransport?.https_ready ? "READY" : "NOT VERIFIED", ""],
+      [exportedAt, "Management transport", "HTTPS readiness", managementTransport?.https_configured ? "CONFIGURED" : "NOT VERIFIED", ""],
       [exportedAt, "Management transport", "HTTP listeners", managementTransport?.http_listener_count ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTPS listeners", managementTransport?.https_listener_count ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTP redirect", managementTransport?.http_redirect_enabled ? "ENABLED" : "DISABLED / UNKNOWN", ""],
@@ -3100,24 +3100,24 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
         ) : (
           <>
             <div className="firewall-posture-heading">
-              <div><strong>HTTPS configuration posture</strong><span>Read-only service, TLS, certificate and listener checks</span></div>
+              <div><strong>HTTPS configuration posture</strong><span>Read-only TLS and uHTTPd configuration checks</span></div>
               <Status active={managementTransport.status === "ready"}>{managementTransport.status.toUpperCase()}</Status>
             </div>
             <InfoRows rows={[
               ["uHTTPd service", managementTransport.service_installed ? "INSTALLED" : "MISSING"],
-              ["HTTPS listeners", fmt(managementTransport.https_listener_count)],
+              ["Configured HTTPS listeners", fmt(managementTransport.https_listener_count)],
               ["TLS runtime library", managementTransport.tls_library_available ? "AVAILABLE" : "MISSING"],
-              ["Certificate and private key", managementTransport.certificate_available ? "PRESENT" : "MISSING"],
+              ["Non-empty certificate and private key", managementTransport.certificate_available ? "PRESENT" : "MISSING"],
               ["Certificate key generator", managementTransport.key_generator_available ? "AVAILABLE" : "MISSING"],
-              ["HTTP listeners", fmt(managementTransport.http_listener_count)],
+              ["Configured HTTP listeners", fmt(managementTransport.http_listener_count)],
               ["HTTP → HTTPS redirect", managementTransport.http_redirect_enabled ? "ENABLED" : "DISABLED"],
             ]} />
             <div className="module-message">
               {managementTransport.status === "review"
-                ? "HTTP listeners are active without an HTTPS redirect. Browser credentials and session traffic can travel in plaintext; do not use the HTTP address for administration."
+                ? "HTTP listeners are active without an HTTPS redirect. HTTP is configured without a redirect to HTTPS. Credentials and session traffic may travel in plaintext; do not use the HTTP address for administration."
                 : managementTransport.status === "unavailable"
                   ? "HTTPS readiness could not be confirmed. Do not enter administrator credentials over HTTP until the TLS runtime, HTTPS listener and certificate/key are available."
-                  : "HTTPS listeners, TLS runtime and certificate/key are present, and any configured HTTP listener is redirected. The default device certificate is self-signed; this check does not establish browser trust, certificate validity or WAN reachability."}
+                  : "HTTPS listener entries, TLS runtime and non-empty certificate/key files are configured, and any configured HTTP listener is redirected. The device certificate is self-signed. This configuration-level check does not probe live sockets, validate the certificate chain or establish WAN reachability."}
             </div>
           </>
         )}

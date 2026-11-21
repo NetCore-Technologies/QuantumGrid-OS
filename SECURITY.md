@@ -89,8 +89,9 @@ Release notes and security advisories will identify affected versions and recomm
 The stable AW1000 image includes uHTTPd, the mbedTLS ustream runtime and the OpenSSL
 key-generation utility. On first boot, QuantumGrid sets uHTTPd's `redirect_https`
 option so requests arriving on the default HTTP listeners are redirected to HTTPS.
-The Security Center reports the observed HTTPS listener, TLS runtime, certificate/key,
-and HTTP redirect configuration; it does not probe external reachability.
+The Security Center reports configured HTTPS listener entries, TLS runtime availability,
+non-empty certificate/key files and HTTP redirect configuration. This is a configuration-
+level check; it does not probe live sockets or external reachability.
 
 The default device certificate is self-signed. HTTPS encrypts the management session,
 but it does not provide a publicly trusted device identity. Administrators should verify
