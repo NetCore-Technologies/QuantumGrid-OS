@@ -23,6 +23,7 @@ const success = {
   ok: true,
   section: "cfg_client_download_1",
   direction: "download",
+  protocol: "all",
   mac: "02:11:22:33:44:55",
   destination_ip: "192.168.20.40",
   source_zone: "wan",
