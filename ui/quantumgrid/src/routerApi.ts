@@ -1936,6 +1936,7 @@ export async function updateRouterWirelessConfig(input: {
   accountingSecret: string;
   hidden: boolean;
   channel: string;
+  expectedCurrentChannel?: string;
   htmode: string;
   txpower: string;
   ieee80211k: boolean;
@@ -2024,6 +2025,12 @@ export async function updateRouterWirelessConfig(input: {
   if (input.channel !== "auto" && !/^[0-9]{1,3}$/.test(input.channel)) {
     throw new Error("Choose Auto or a supported numeric channel.");
   }
+  if (input.expectedCurrentChannel !== undefined &&
+      input.expectedCurrentChannel !== "auto" &&
+      (!/^[1-9][0-9]{0,2}$/.test(input.expectedCurrentChannel) ||
+       Number(input.expectedCurrentChannel) > 233)) {
+    throw new Error("The expected current radio channel must be Auto or a valid channel number.");
+  }
 
   if (input.htmode !== "auto" && !/^[A-Z0-9+]{1,16}$/.test(input.htmode)) {
     throw new Error("Choose Auto or a driver-reported wireless width/PHY mode.");
@@ -2083,6 +2090,7 @@ export async function updateRouterWirelessConfig(input: {
   form.set("accounting_secret", input.accountingSecret);
   form.set("hidden", input.hidden ? "1" : "0");
   form.set("channel", input.channel);
+  if (input.expectedCurrentChannel !== undefined) form.set("expected_current_channel", input.expectedCurrentChannel);
   form.set("htmode", input.htmode);
   form.set("txpower", input.txpower);
   form.set("allow_open", input.allowOpen ? "1" : "0");
