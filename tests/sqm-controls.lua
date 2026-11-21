@@ -47,3 +47,28 @@ expect_invalid("wan", "1", "95000", "", "empty upload rate")
 expect_invalid(string.rep("a", 33), "1", "95000", "18000", "long section name")
 
 print("sqm-controls: all validation tests passed")
+
+local function queue_state(queue, qdiscs, available, truncated)
+	return sqm.queue_runtime_state(queue, qdiscs, available, truncated)
+end
+local expected_queue = { enabled = true, qdisc = "cake", interface = "wan" }
+assert(queue_state(expected_queue, {
+	{ kind = "cake", handle = "8001:", device = "wan", root = true }
+}, true, false) == "observed", "matching live root CAKE qdisc should be observed")
+assert(queue_state(expected_queue, {
+	{ kind = "fq_codel", handle = "8001:", device = "wan", root = true }
+}, true, false) == "not_observed", "a different root qdisc must not be reported as the configured discipline")
+assert(queue_state(expected_queue, {
+	{ kind = "cake", handle = "8001:", device = "ifb-wan", root = true }
+}, true, false) == "not_observed", "a qdisc on another device must not be attributed to this queue")
+assert(queue_state(expected_queue, {
+	{ kind = "cake", handle = "8001:", device = "wan", root = false }
+}, true, false) == "not_observed", "a child qdisc must not satisfy the root discipline check")
+assert(queue_state(expected_queue, {}, false, false) == "unavailable", "missing runtime telemetry must remain unavailable")
+assert(queue_state(expected_queue, {}, true, true) == "inventory_truncated", "truncated qdisc inventories must not be treated as definitive absence")
+assert(queue_state({ enabled = false, qdisc = "cake", interface = "wan" }, {}, true, false) == "disabled",
+	"disabled queues must not be reported as missing runtime qdiscs")
+assert(queue_state({ enabled = true, qdisc = "", interface = "wan" }, {}, true, false) == "unconfigured",
+	"queues without a configured qdisc must remain unconfigured")
+
+print("sqm-controls: runtime qdisc attribution and validation tests passed")
