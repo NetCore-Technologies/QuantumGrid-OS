@@ -55,6 +55,7 @@ test("creates a static-IP download DSCP policy and verifies the exact firewall r
   assert.equal(form.get("dscp_class"), "AF41");
   assert.equal(form.get("confirmed"), "1");
   assert.equal(result.direction, "download");
+  assert.equal(result.protocol, "all");
   assert.equal(result.destination_ip, baseInput.destinationIp);
   assert.equal(result.reloaded, true);
 });
