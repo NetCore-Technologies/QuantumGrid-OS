@@ -9,10 +9,22 @@ local function fixture(redirect, overrides)
   local values = { redirect_https = redirect }
   local files = {
     ["/etc/init.d/uhttpd"] = true,
+    ["/etc/init.d/dropbear"] = true,
     ["/lib/libustream-ssl.so"] = true,
     ["/etc/uhttpd.crt"] = true,
     ["/etc/uhttpd.key"] = true,
     ["/usr/bin/openssl"] = true
+  }
+  local dropbear_sections = {
+    {
+      [".name"] = "main",
+      enable = "1",
+      Interface = "lan",
+      Port = "22",
+      PasswordAuth = "off",
+      RootPasswordAuth = "off",
+      GatewayPorts = "off"
+    }
   }
   local empty_files = {}
   for key, value in pairs(overrides or {}) do
@@ -20,6 +32,7 @@ local function fixture(redirect, overrides)
     elseif key == "values" then values = value
     elseif key == "files" then files = value
     elseif key == "empty_files" then empty_files = value
+    elseif key == "dropbear_sections" then dropbear_sections = value
     end
   end
 
@@ -31,6 +44,11 @@ local function fixture(redirect, overrides)
   function uci:get_list(package, section, option)
     if package == "uhttpd" and section == "main" then return lists[option] end
     return nil
+  end
+  function uci:foreach(package, section_type, callback)
+    if package == "dropbear" and section_type == "dropbear" then
+      for _, section in ipairs(dropbear_sections) do callback(section) end
+    end
   end
   local fs = {
     access = function(path) return files[path] == true end,
@@ -62,6 +80,86 @@ uci, fs = fixture("0", {
 local https_only = transport.inspect(uci, fs)
 assert(https_only.status == "ready", "HTTPS-only listeners do not require an HTTP redirect")
 assert(https_only.http_listener_count == 0 and not https_only.plaintext_http_unredirected)
+
+assert(https_only.ssh_service_installed and https_only.ssh_config_available)
+assert(https_only.ssh_instance_count == 1 and https_only.ssh_enabled_instance_count == 1)
+assert(https_only.ssh_status == "ready")
+assert(https_only.ssh_instances[1].interface == "lan")
+assert(https_only.ssh_instances[1].interface_bound)
+assert(not https_only.ssh_instances[1].password_auth_enabled)
+assert(not https_only.ssh_instances[1].root_password_auth_enabled)
+
+-- The shipped AW1000 Dropbear defaults allow password and root-password login.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "on",
+    RootPasswordAuth = "on",
+    GatewayPorts = "off"
+  }}
+})
+local password_ssh = transport.inspect(uci, fs)
+assert(password_ssh.ssh_status == "review")
+assert(password_ssh.status == "review", "password-enabled SSH must lower the management posture")
+assert(password_ssh.ssh_instances[1].password_auth_enabled)
+assert(password_ssh.ssh_instances[1].root_password_auth_enabled)
+
+-- Key-only authentication is not sufficient when the daemon is unbound to an interface.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local unbound_ssh = transport.inspect(uci, fs)
+assert(unbound_ssh.ssh_status == "review")
+assert(not unbound_ssh.ssh_instances[1].interface_bound)
+assert(unbound_ssh.status == "review")
+
+-- Unknown authentication values fail closed instead of being treated as disabled.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "maybe",
+    RootPasswordAuth = "off"
+  }}
+})
+local unknown_auth = transport.inspect(uci, fs)
+assert(unknown_auth.ssh_status == "review")
+assert(unknown_auth.ssh_instances[1].password_auth_enabled == nil)
+
+-- An intentionally disabled Dropbear service does not create a false warning.
+uci, fs = fixture("1", {
+  files = {
+    ["/etc/init.d/uhttpd"] = true,
+    ["/lib/libustream-ssl.so"] = true,
+    ["/etc/uhttpd.crt"] = true,
+    ["/etc/uhttpd.key"] = true,
+    ["/usr/bin/openssl"] = true
+  }
+})
+local ssh_not_installed = transport.inspect(uci, fs)
+assert(not ssh_not_installed.ssh_service_installed)
+assert(ssh_not_installed.ssh_status == "disabled")
+assert(ssh_not_installed.status == "ready")
+
+-- An installed daemon without a readable instance inventory is unknown.
+uci, fs = fixture("1", { dropbear_sections = {} })
+local missing_ssh_config = transport.inspect(uci, fs)
+assert(missing_ssh_config.ssh_service_installed)
+assert(not missing_ssh_config.ssh_config_available or missing_ssh_config.ssh_instance_count == 0)
+assert(missing_ssh_config.ssh_status == "unavailable")
+assert(missing_ssh_config.status == "review")
 
 uci, fs = fixture("1", {
   files = {
