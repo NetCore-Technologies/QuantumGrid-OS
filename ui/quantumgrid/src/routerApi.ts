@@ -443,6 +443,16 @@ export interface RouterDropbearInstance {
   gateway_ports_enabled: boolean | null;
 }
 
+export interface RouterAuthorizedKeysStatus {
+  available: boolean;
+  path: string;
+  size_bytes: number | null;
+  root_owned: boolean | null;
+  group_writable: boolean | null;
+  other_writable: boolean | null;
+  status: "present" | "missing" | "review" | "unknown" | "unavailable";
+}
+
 export interface RouterManagementTransport {
   service_installed: boolean;
   http_listener_count: number;
@@ -460,6 +470,7 @@ export interface RouterManagementTransport {
   ssh_truncated?: boolean;
   ssh_instances?: RouterDropbearInstance[];
   ssh_status?: "ready" | "review" | "unavailable" | "disabled";
+  ssh_authorized_keys?: RouterAuthorizedKeysStatus;
   status: "ready" | "review" | "unavailable";
 }
 
