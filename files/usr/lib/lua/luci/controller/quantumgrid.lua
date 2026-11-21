@@ -3755,6 +3755,8 @@ local function usteer_status(uci, fs)
 		network = "",
 		ssid_list = {},
 		aggressiveness = tonumber(section and section.aggressiveness) or 1,
+		syslog = section and section.syslog == "1" or false,
+		ipv6 = section and section.ipv6 == "1" or false,
 		assoc_steering = section and section.assoc_steering == "1" or false,
 		probe_steering = section and section.probe_steering == "1" or false,
 		load_kick_enabled = section and section.load_kick_enabled == "1" or false,
