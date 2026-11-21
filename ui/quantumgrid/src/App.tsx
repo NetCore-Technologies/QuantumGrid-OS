@@ -3295,7 +3295,7 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
         </label>
         <div className="config-backup-actions">
           <button className="hero-button" onClick={() => { void restoreBackup(); }} disabled={!restoreFile || !restorePassphrase || !restoreConfirmed || restoreBusy}>
-            <Upload size={15} /> {restoreBusy ? "Validating & restoring…" : "Restore backup & reboot"}
+            <HardDrive size={15} /> {restoreBusy ? "Validating & restoring…" : "Restore backup & reboot"}
           </button>
           <span>Archives without the required device/profile/target markers are rejected. Cross-device or cross-target restores are not supported.</span>
         </div>
