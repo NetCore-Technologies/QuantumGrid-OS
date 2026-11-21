@@ -208,10 +208,18 @@ plus the selected queue's enabled/download/upload values, snapshots every modifi
 restarts SQM and attempts rollback if the restart fails. The queue interface, qdisc, setup script
 and advanced option strings are preserved. Administrators must choose the link layer and framing
 values from their ISP/connection details; QuantumGrid does not guess them. The Gaming page also
-supports audited, upload-only DSCP marking for one unicast client MAC on an existing internal-zone
-to WAN/WWAN-zone path, using fixed BE, AF41, EF or CS1 classes. It does not mark downloads or
-provide bandwidth caps/guarantees; an existing CAKE egress profile must use DiffServ 4 or 8 for
-DSCP tin selection, and actual packet-path effectiveness still requires hardware testing.
+supports audited per-client upload and download DSCP marking using fixed BE, AF41, EF or CS1 classes.
+Upload policies match one unicast source MAC on an internal-to-WAN/WWAN path. Download policies match
+the client's destination IPv4 address on a WAN/WWAN-to-internal path; they can only be created from
+one exact static DHCP reservation whose MAC/IP pair is unique and whose address belongs to one
+unambiguous routed subnet attached to the selected internal zone. firewall4 does not support
+destination-MAC matching, so QuantumGrid does not claim to implement it. Both directions explicitly
+match all IP protocols. DHCP reservation updates that would change a referenced client's MAC or IP,
+removal of a referenced reservation, and creation of a reservation that could activate a stale rule
+are blocked until the download policy is removed. Policies remain capped at 32. These markings do
+not provide per-client bandwidth caps/guarantees or a managed per-client queue scheduler; an existing
+CAKE egress profile must use DiffServ 4 or 8 for DSCP tin selection, and actual packet-path
+effectiveness still requires hardware testing.
 Diagnostics has a separate on-demand five-packet ICMP test to the fixed target 1.1.1.1,
 reporting the measured received/sent ratio, packet-loss percentage, RTT minimum/average/maximum
 and mean absolute difference between consecutive successful RTT samples (jitter).
@@ -821,9 +829,11 @@ reported posture must not be interpreted as proof that a service is or is not re
   and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, a
   redacted local administrative audit history with bounded retention, read-only live root-qdisc
   matching for enabled SQM queues with explicit incomplete/unavailable states, and guarded,
-  audited upload-only per-client DSCP marking on validated internal-to-WAN firewall-zone paths.
-- **Active development:** wider UI-to-ubus control wiring, download-side client classification,
-  per-client bandwidth and priority policies, controlled-load bufferbloat testing, radio
+  audited upload and static-reservation IPv4 download DSCP marking on validated firewall-zone paths.
+  Download rules cover all IP protocols and are tied to unique static DHCP reservations; reservation
+  changes that would orphan these rules are blocked.
+- **Active development:** wider UI-to-ubus control wiring, per-client bandwidth and priority policies,
+  controlled-load bufferbloat testing, radio
   intelligence/scheduling and modem observability. Curated CAKE profiles and upload-side DSCP
   policies are configuration controls; they do not prove ingress/egress shaping or measured
   latency improvement without hardware testing.
