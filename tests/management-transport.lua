@@ -123,6 +123,15 @@ assert(private_key.available and private_key.status == "present")
 assert(private_key.root_owned and private_key.regular_file and private_key.owner_readable)
 assert(not private_key.group_access and not private_key.other_access)
 
+-- OpenWrt nixio.fs metadata uses type and modedec; both are handled directly.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/uhttpd.key"] = { size = 512, uid = 0, modedec = 33152, type = "reg" }
+  }
+})
+local nixio_metadata_key = transport.inspect(uci, fs)
+assert(nixio_metadata_key.private_key.status == "present")
+
 -- lstat must reject a symlink even when its target metadata appears private.
 uci, fs = fixture("1", {
   stat_overrides = {
