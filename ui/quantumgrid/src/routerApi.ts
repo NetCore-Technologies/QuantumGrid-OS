@@ -1344,7 +1344,6 @@ export interface RouterRemoteSyslogStatus {
   stunnel_config_available?: boolean;
   tls_available?: boolean;
   tls_privilege_drop_configured?: boolean;
-  tls_process_running?: boolean;
   tls_enabled?: boolean;
   tls_process_running?: boolean;
   tls_status?: "ready" | "review" | "unavailable" | "disabled";
