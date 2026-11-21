@@ -284,8 +284,8 @@ function stunnel_process_running(pid_contents, comm_contents, cmdline_contents)
 		return false
 	end
 	if type(cmdline_contents) ~= "string" then return false end
-	return cmdline_contents:find("/usr/bin/stunnel", 1, true) ~= nil and
-		cmdline_contents:find("/var/etc/stunnel.conf", 1, true) ~= nil
+	local executable, config_file, trailing = cmdline_contents:match("^([^%z]+)%z([^%z]+)%z(.*)$")
+	return executable == "/usr/bin/stunnel" and config_file == "/var/etc/stunnel.conf" and trailing == ""
 end
 
 function stunnel_options(update)
