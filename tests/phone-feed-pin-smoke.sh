@@ -33,6 +33,22 @@ bash "$SCRIPT" "$PROJECT" "$OPENWRT"
 test "$(git -C "$PROJECT/third_party/openwrt-aw1000-phone" rev-parse HEAD)" = "$PINNED"
 grep -Fqx "src-link quantumgrid_phone $PROJECT/third_party/openwrt-aw1000-phone/openwrt" "$OPENWRT/feeds.conf"
 
+# Existing local modifications and untracked package files must not be compiled.
+printf 'injected package content\\n' > "$PROJECT/third_party/openwrt-aw1000-phone/openwrt/fxsd/injected.c"
+if bash "$SCRIPT" "$PROJECT" "$OPENWRT" >/dev/null 2>&1; then
+  echo "ERROR: modified phone feed worktree was accepted." >&2
+  exit 1
+fi
+rm -f "$PROJECT/third_party/openwrt-aw1000-phone/openwrt/fxsd/injected.c"
+
+# The pre-existing checkout must still point to the configured upstream.
+git -C "$PROJECT/third_party/openwrt-aw1000-phone" remote set-url origin "$TEST_DIR/wrong-origin"
+if bash "$SCRIPT" "$PROJECT" "$OPENWRT" >/dev/null 2>&1; then
+  echo "ERROR: unexpected phone-feed origin was accepted." >&2
+  exit 1
+fi
+git -C "$PROJECT/third_party/openwrt-aw1000-phone" remote set-url origin "$REMOTE"
+
 # Repoint the same upstream tag at new source. A fresh build must reject it.
 printf 'changed source\n' >> "$REMOTE/LICENSE"
 git -C "$REMOTE" add LICENSE

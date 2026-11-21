@@ -17,12 +17,19 @@ mkdir -p "$(dirname "$PHONE_DIR")"
 if [[ ! -d "$PHONE_DIR/.git" ]]; then
     rm -rf "$PHONE_DIR"
     git clone --filter=blob:none --no-checkout "$PHONE_REPOSITORY" "$PHONE_DIR"
+else
+    PHONE_ORIGIN="$(git -C "$PHONE_DIR" remote get-url origin 2>/dev/null || true)"
+    [[ "$PHONE_ORIGIN" == "$PHONE_REPOSITORY" ]] || die "Existing AW1000 phone checkout origin does not match the configured source repository."
+    PHONE_DIRTY="$(git -C "$PHONE_DIR" status --porcelain --untracked-files=all)"
+    [[ -z "$PHONE_DIRTY" ]] || die "Existing AW1000 phone checkout contains modified or untracked files; refusing to compile unpinned content."
 fi
 git -C "$PHONE_DIR" fetch --depth 1 origin "refs/tags/$PHONE_REF:refs/tags/$PHONE_REF"
 git -C "$PHONE_DIR" checkout --detach "$PHONE_REF"
 PHONE_ACTUAL_SHA="$(git -C "$PHONE_DIR" rev-parse --verify 'HEAD^{commit}')"
 PHONE_ACTUAL_SHA="$(printf '%s' "$PHONE_ACTUAL_SHA" | tr 'A-F' 'a-f')"
 [[ "$PHONE_ACTUAL_SHA" == "$PHONE_EXPECTED_SHA" ]] || die "AW1000 phone feed resolved to $PHONE_ACTUAL_SHA, expected pinned commit $PHONE_EXPECTED_SHA. Refusing to build."
+PHONE_DIRTY="$(git -C "$PHONE_DIR" status --porcelain --untracked-files=all)"
+[[ -z "$PHONE_DIRTY" ]] || die "AW1000 phone checkout is not clean after pinned checkout; refusing to build."
 
 for required in "$PHONE_DIR/LICENSE" "$PHONE_DIR/openwrt/aw1000-fxs/Makefile" "$PHONE_DIR/openwrt/fxsd/Makefile" "$PHONE_DIR/openwrt/luci-app-fxs/Makefile"; do
     [[ -s "$required" ]] || die "Pinned phone source is incomplete: $required"
