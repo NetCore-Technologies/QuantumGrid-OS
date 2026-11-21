@@ -149,6 +149,8 @@ jobs:
           sh -n files/etc/init.d/quantumgrid-button-events
           sh -n files/etc/uci-defaults/94-quantumgrid-button-events
           sh -n files/etc/uci-defaults/95-quantumgrid-https-only
+          bash -n tests/https-only-defaults-smoke.sh
+          bash tests/https-only-defaults-smoke.sh
           sh -n files/etc/uci-defaults/93-quantumgrid-audit-backup
           bash -n tests/firmware-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua

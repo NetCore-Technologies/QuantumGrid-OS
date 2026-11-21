@@ -86,9 +86,10 @@ Release notes and security advisories will identify affected versions and recomm
 
 ## Administrator web transport
 Every administrator POST action also checks the uHTTPd TLS environment server-side
-and returns a forbidden response when the request did not arrive over HTTPS. The redirect
-is therefore not the only protection for password setup or configuration-changing APIs.
-This TLS requirement does not replace LuCI authentication, same-origin validation or
+and returns a forbidden response when the request did not arrive over HTTPS. The first-boot policy also removes the default plaintext HTTP listeners entirely and
+keeps the redirect setting enabled as defence in depth. This avoids creating LuCI's
+non-Secure HTTP session cookie in the default configuration. The policy is idempotent.
+The TLS requirement does not replace LuCI authentication, same-origin validation or
 trusted-network firewall policy.
 
 

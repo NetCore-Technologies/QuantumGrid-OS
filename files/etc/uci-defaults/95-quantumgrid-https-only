@@ -1,8 +1,11 @@
 #!/bin/sh
-# Keep the AW1000 administrator interface encrypted by default.
-# uhttpd's HTTPS listeners and TLS runtime are selected in the firmware profile.
+# Expose the administrator interface only over encrypted HTTPS.
+# Remove every default plaintext HTTP listener; do not rely on redirects alone.
 set -eu
 
+if uci -q get uhttpd.main.listen_http >/dev/null 2>&1; then
+  uci -q delete uhttpd.main.listen_http
+fi
 uci -q set uhttpd.main.redirect_https=1
 uci -q commit uhttpd
 
