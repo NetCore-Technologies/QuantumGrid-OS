@@ -34,6 +34,7 @@ local ALLOWED_ACTIONS = {
 	["office.port-forward.remove"] = true,
 	["office.ipv6-pinhole.add"] = true,
 	["office.ipv6-pinhole.remove"] = true,
+	["office.ipv6-pinhole.toggle"] = true,
 	["package.install"] = true,
 	["package.remove"] = true,
 	["package.feed.update"] = true,
