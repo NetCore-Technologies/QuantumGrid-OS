@@ -165,8 +165,8 @@ test("missing signal is reported instead of silently counted as a measurement", 
 
 test("recommends a materially cleaner channel only with measured interference and safe flags", () => {
   const plans = planWifiChannels([
-    ap({ bssid: "aa:00:00:00:09:01", channel: 1, signal: -35 }),
-    ap({ bssid: "aa:00:00:00:09:02", channel: 2, signal: -45 }),
+    ap({ bssid: "aa:00:00:00:09:01", channel: 1, signal: -35, width: 20 }),
+    ap({ bssid: "aa:00:00:00:09:02", channel: 2, signal: -45, width: 20 }),
   ], [radio({
     channels: [channel(1, "2.4 GHz"), channel(2, "2.4 GHz"), channel(11, "2.4 GHz")],
   })]);
@@ -204,7 +204,7 @@ test("does not auto-recommend when radio width or observed signal confidence is 
 
 test("does not recommend DFS, radar, passive or no-IR candidate channels", () => {
   const plans = planWifiChannels([
-    ap({ bssid: "aa:00:00:00:09:05", channel: 36, band: "5 GHz", signal: -35 }),
+    ap({ bssid: "aa:00:00:00:09:05", channel: 36, band: "5 GHz", signal: -35, width: 20 }),
   ], [radio({
     interfaces: [{
       ifname: "wlan0", ssid: "QG", bssid: "02:00:00:00:00:01", mode: "ap",
