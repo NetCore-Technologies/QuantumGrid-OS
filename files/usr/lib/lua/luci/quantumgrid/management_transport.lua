@@ -56,6 +56,29 @@ local function boolean_option(value, default)
   return nil
 end
 
+local function permission_bits(stat)
+  local mode = type(stat) == "table" and tonumber(stat.modedec or stat.mode) or nil
+  if not mode then return nil end
+  return mode % 512
+end
+
+local function file_type_matches(stat, expected, mode_number)
+  if type(stat) == "table" and type(stat.type) == "string" then
+    return stat.type == expected
+  end
+  local mode = type(stat) == "table" and tonumber(stat.modedec or stat.mode) or nil
+  if not mode then return nil end
+  return math.floor(mode / 4096) % 16 == mode_number
+end
+
+local function lstat(fs, path)
+  if type(fs) ~= "table" or type(fs.lstat) ~= "function" then
+    return false, nil
+  end
+  local ok, stat = pcall(fs.lstat, path)
+  return ok and type(stat) == "table", stat
+end
+
 local function authorized_keys_status(fs)
   local result = {
     available = false,
@@ -96,13 +119,8 @@ local function authorized_keys_status(fs)
   result.path = selected.path
   result.directory = selected.directory
 
-  if type(fs.stat) ~= "function" then
-    result.status = "unknown"
-    return result
-  end
-
-  local ok, stat = pcall(fs.stat, selected.path)
-  if not ok or type(stat) ~= "table" then
+  local ok, stat = lstat(fs, selected.path)
+  if not ok then
     result.status = "unknown"
     return result
   end
@@ -113,26 +131,24 @@ local function authorized_keys_status(fs)
   if type(stat.uid) == "number" then
     result.root_owned = stat.uid == 0
   end
-  if type(stat.mode) == "number" then
-    local permissions = stat.mode % 512
-    local file_type = math.floor(stat.mode / 4096) % 16
-    result.regular_file = file_type == 8
+  local permissions = permission_bits(stat)
+  result.regular_file = file_type_matches(stat, "reg", 8)
+  if permissions then
     result.owner_readable = math.floor(permissions / 256) % 2 == 1
     result.group_writable = math.floor(permissions / 16) % 2 == 1
     result.other_writable = math.floor(permissions / 2) % 2 == 1
   end
 
-  local directory_ok, directory_stat = pcall(fs.stat, selected.directory)
-  if directory_ok and type(directory_stat) == "table" then
+  local directory_ok, directory_stat = lstat(fs, selected.directory)
+  if directory_ok then
     if type(directory_stat.uid) == "number" then
       result.directory_root_owned = directory_stat.uid == 0
     end
-    if type(directory_stat.mode) == "number" then
-      local permissions = directory_stat.mode % 512
-      local file_type = math.floor(directory_stat.mode / 4096) % 16
-      result.directory_valid = file_type == 4
-      result.directory_group_writable = math.floor(permissions / 16) % 2 == 1
-      result.directory_other_writable = math.floor(permissions / 2) % 2 == 1
+    local directory_permissions = permission_bits(directory_stat)
+    result.directory_valid = file_type_matches(directory_stat, "dir", 4)
+    if directory_permissions then
+      result.directory_group_writable = math.floor(directory_permissions / 16) % 2 == 1
+      result.directory_other_writable = math.floor(directory_permissions / 2) % 2 == 1
     end
   end
 
@@ -170,13 +186,8 @@ local function https_private_key_status(fs)
 
   if not exists(fs, result.path) then return result end
   result.available = true
-  if type(fs.stat) ~= "function" then
-    result.status = "unknown"
-    return result
-  end
-
-  local ok, stat = pcall(fs.stat, result.path)
-  if not ok or type(stat) ~= "table" then
+  local ok, stat = lstat(fs, result.path)
+  if not ok then
     result.status = "unknown"
     return result
   end
@@ -186,10 +197,9 @@ local function https_private_key_status(fs)
   if type(stat.uid) == "number" then
     result.root_owned = stat.uid == 0
   end
-  if type(stat.mode) == "number" then
-    local permissions = stat.mode % 512
-    local file_type = math.floor(stat.mode / 4096) % 16
-    result.regular_file = file_type == 8
+  local permissions = permission_bits(stat)
+  result.regular_file = file_type_matches(stat, "reg", 8)
+  if permissions then
     result.owner_readable = math.floor(permissions / 256) % 2 == 1
     result.group_access = math.floor(permissions / 8) % 8 ~= 0
     result.other_access = permissions % 8 ~= 0
