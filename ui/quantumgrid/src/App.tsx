@@ -9094,6 +9094,10 @@ function AdvancedControlPage({ routerOverview, refresh }: {
       [generatedAt, platform.hostname, "Platform", "Firmware identity", "AVAILABLE",
         [platform.model, platform.board_name, platform.distribution, platform.version, platform.revision,
           platform.target, platform.kernel, platform.description].filter(Boolean).join(" | "), "", "", "", ""],
+      [generatedAt, platform.hostname, "Device identity", "Stable inventory identifier",
+        platform.device_identity?.status?.toUpperCase() ?? "UNAVAILABLE",
+        "Public persistent identifier; not an authentication credential or cryptographic attestation", "", "", "",
+        platform.device_identity?.id ?? ""],
       [generatedAt, platform.hostname, "Device profile", "Profile identity", platform.device_profile?.status?.toUpperCase() ?? "NOT REPORTED",
         [platform.device_profile?.profile_id, platform.device_profile?.openwrt_device,
           platform.device_profile?.openwrt_target, platform.device_profile?.openwrt_subtarget].filter(Boolean).join(" | "), "", "", "", ""],
@@ -9156,12 +9160,16 @@ function AdvancedControlPage({ routerOverview, refresh }: {
           <Panel title="Firmware and board identity" eyebrow="UBUS · SYSTEM.BOARD">
             <div className="platform-detail-grid">
               <div><small>HOSTNAME</small><strong>{platform.hostname || "N/A"}</strong></div>
+              <div><small>DEVICE INVENTORY ID</small><strong>{platform.device_identity?.id || "NOT PROVISIONED"}</strong></div>
               <div><small>BOARD NAME</small><strong>{platform.board_name || "N/A"}</strong></div>
               <div><small>SYSTEM</small><strong>{platform.system || "N/A"}</strong></div>
               <div><small>RELEASE VERSION</small><strong>{platform.version || "N/A"}</strong></div>
               <div><small>REVISION</small><strong>{platform.revision || "N/A"}</strong></div>
               <div><small>TARGET</small><strong>{platform.target || "N/A"}</strong></div>
               <div className="platform-detail-wide"><small>BUILD DESCRIPTION</small><strong>{platform.description || "N/A"}</strong></div>
+            </div>
+            <div className="module-message">
+              This stable 128-bit identifier is generated once on first boot and is used to distinguish routers in inventory. It is public metadata only; it does not authenticate this router, replace its HTTPS certificate, or establish a trusted fleet-enrollment relationship.
             </div>
             <div className="firewall-posture-heading">
               <div><strong>Installed hardware profile</strong><span>Embedded build manifest compared with the live system.board identity</span></div>
