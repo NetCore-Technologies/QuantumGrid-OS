@@ -108,6 +108,7 @@ function stunnel_options(update)
 		accept_port = tls.local_port,
 		CAfile = tls.ca_file,
 		verifyChain = "1",
+		sslVersion = "TLSv1.2",
 		TIMEOUTconnect = "10",
 		retry = "1"
 	}
