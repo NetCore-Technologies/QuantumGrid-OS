@@ -187,6 +187,71 @@ local oversized_authorized_keys = transport.inspect(uci, fs)
 assert(oversized_authorized_keys.ssh_authorized_keys.status == "review")
 assert(oversized_authorized_keys.ssh_status == "review")
 
+-- The alternate root-owned Dropbear key location is recognised when the standard file is absent.
+uci, fs = fixture("1", {
+  files = {
+    ["/etc/init.d/uhttpd"] = true,
+    ["/etc/init.d/dropbear"] = true,
+    ["/root/.ssh/authorized_keys"] = true,
+    ["/lib/libustream-ssl.so"] = true,
+    ["/etc/uhttpd.crt"] = true,
+    ["/etc/uhttpd.key"] = true,
+    ["/usr/bin/openssl"] = true
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local alternate_authorized_keys = transport.inspect(uci, fs)
+assert(alternate_authorized_keys.ssh_authorized_keys.path == "/root/.ssh/authorized_keys")
+assert(alternate_authorized_keys.ssh_authorized_keys.status == "present")
+assert(alternate_authorized_keys.ssh_status == "ready")
+
+-- Other-writable authorized-keys files are also rejected.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 33154 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local other_writable_authorized_keys = transport.inspect(uci, fs)
+assert(other_writable_authorized_keys.ssh_authorized_keys.other_writable)
+assert(other_writable_authorized_keys.ssh_authorized_keys.status == "review")
+assert(other_writable_authorized_keys.ssh_status == "review")
+
+-- A present file with incomplete metadata is unknown, not ready.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local unknown_key_permissions = transport.inspect(uci, fs)
+assert(unknown_key_permissions.ssh_authorized_keys.status == "unknown")
+assert(unknown_key_permissions.ssh_status == "review")
+
 -- The shipped AW1000 Dropbear defaults allow password and root-password login.
 uci, fs = fixture("1", {
   dropbear_sections = {{
