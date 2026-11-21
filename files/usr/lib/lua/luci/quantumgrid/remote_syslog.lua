@@ -96,4 +96,28 @@ function validate(input)
 	return result
 end
 
+function stunnel_options(update)
+	if type(update) ~= "table" or update.enabled ~= true or type(update.tls) ~= "table" then
+		return nil
+	end
+	local tls = update.tls
+	local scalars = {
+		enabled = "1",
+		client = "1",
+		accept_host = tls.local_host,
+		accept_port = tls.local_port,
+		CAfile = tls.ca_file,
+		verifyChain = "1",
+		TIMEOUTconnect = "10",
+		retry = "1"
+	}
+	local lists = { connect = { tls.connect }, checkHost = {}, checkIP = {}, sni = {} }
+	if tls.check_host then
+		table.insert(lists.checkHost, tls.check_host)
+		table.insert(lists.sni, tls.sni)
+	end
+	if tls.check_ip then table.insert(lists.checkIP, tls.check_ip) end
+	return { section = tls.section, scalars = scalars, lists = lists }
+end
+
 return _M
