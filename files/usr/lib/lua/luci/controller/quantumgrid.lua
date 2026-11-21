@@ -1647,6 +1647,18 @@ function action_wireless_update()
 	end
 
 	record_audit(http, "wireless.update", update.section, "success")
+	local response_radius_vlan_mappings = {}
+	if manage_radius_vlans then
+		response_radius_vlan_mappings = validated_radius_vlans
+	else
+		for _, item in ipairs(radius_vlan_inventory.sections) do
+			table.insert(response_radius_vlan_mappings, {
+				vid = tostring(item.vid),
+				network = item.network,
+				name = item.name
+			})
+		end
+	end
 	respond(nil, {
 		ok = true,
 		radio = update.radio,
@@ -1668,7 +1680,7 @@ function action_wireless_update()
 		accounting_secret_set = enterprise_encryption and update.accounting_server ~= "",
 		dynamic_vlan = manage_radius_vlans and (dynamic_vlan_enabled and 2 or 0) or current_dynamic_vlan,
 		radius_vlan_count = manage_radius_vlans and #validated_radius_vlans or #radius_vlan_inventory.sections,
-		radius_vlan_mappings = manage_radius_vlans and validated_radius_vlans or radius_vlan_inventory.sections,
+		radius_vlan_mappings = response_radius_vlan_mappings,
 		reloaded = true,
 		rolled_back = false
 	})
