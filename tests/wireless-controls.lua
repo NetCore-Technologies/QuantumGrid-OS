@@ -164,4 +164,14 @@ rejected("radio0", "default_radio0", "Test", "psk2", "password123", "0", "auto",
 rejected("radio0", "default_radio0", "Test", "psk2", "password123", "0", "auto", "HE80", "18.5", "0", "1", "fractional power")
 rejected("radio0", "default_radio0", "Test", "psk2", "password123", "0", "auto", "HE80", "101", "0", "1", "out-of-range power")
 
+local roaming = wireless.validate_roaming_features("sae", "1", "1")
+assert(roaming and roaming.ieee80211k == "1" and roaming.ieee80211v == "1")
+assert(wireless.validate_roaming_features("sae", "0", "1") == nil,
+  "802.11v must require 802.11k")
+assert(wireless.validate_roaming_features("none", "1", "0") == nil,
+  "802.11k must not be enabled on an open network")
+assert(wireless.validate_roaming_features("psk2", "2", "0") == nil)
+assert(wireless.validate_roaming_features("psk2", "1", "yes") == nil)
+assert(wireless.validate_roaming_features("psk2", "0", "0"))
+
 print("wireless-controls: all validation tests passed")
