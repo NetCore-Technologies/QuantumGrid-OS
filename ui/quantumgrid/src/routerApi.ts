@@ -1449,7 +1449,11 @@ function normalizeGlobalUnicastIpv6(value: string): string | null {
     groups = parsed;
   }
   if (groups.length !== 8 || groups[0] < 0x2000 || groups[0] > 0x3fff) return null;
-  if (groups[0] === 0x2001 && groups[1] === 0x0db8) return null;
+  // Reject special-purpose blocks inside 2000::/3, including transition,
+  // benchmarking, ORCHID, documentation and the 3fff::/20 test prefix.
+  if (groups[0] === 0x2001 && groups[1] < 0x0200) return null;
+  if (groups[0] === 0x2002) return null;
+  if (groups[0] === 0x3fff && groups[1] < 0x1000) return null;
   return groups.map((part) => part.toString(16).padStart(4, "0")).join(":");
 }
 
