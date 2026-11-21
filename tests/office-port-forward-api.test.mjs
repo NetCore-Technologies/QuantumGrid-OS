@@ -3,6 +3,7 @@ import { afterEach, test } from "node:test";
 import {
   createRouterOfficePortForward,
   removeRouterOfficePortForward,
+  setRouterOfficePortForwardEnabled,
 } from "../ui/quantumgrid/src/routerApi.ts";
 
 const originalFetch = globalThis.fetch;
@@ -115,6 +116,69 @@ test("removes a port-forward and verifies firewall reload", async () => {
   assert.equal(new URLSearchParams(requestInit.body).get("confirmed"), "1");
   assert.equal(result.removed, true);
   await assert.rejects(removeRouterOfficePortForward("../firewall"), /Invalid firewall redirect section/);
+});
+
+test("enables or disables a validated port-forward with explicit state verification", async () => {
+  let requestUrl = "";
+  let requestInit;
+  globalThis.fetch = async (url, init) => {
+    requestUrl = String(url);
+    requestInit = init;
+    return jsonResponse({
+      ok: true,
+      section: "cfg443",
+      enabled: false,
+      changed: true,
+      reloaded: true,
+      rolled_back: false,
+    });
+  };
+  const result = await setRouterOfficePortForwardEnabled("cfg443", false);
+  assert.equal(requestUrl, "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-toggle");
+  assert.equal(requestInit.method, "POST");
+  assert.equal(requestInit.credentials, "same-origin");
+  assert.equal(requestInit.cache, "no-store");
+  const form = new URLSearchParams(requestInit.body);
+  assert.equal(form.get("section"), "cfg443");
+  assert.equal(form.get("enabled"), "0");
+  assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.enabled, false);
+  assert.equal(result.changed, true);
+  assert.equal(result.reloaded, true);
+});
+
+test("port-forward state API accepts an idempotent no-op without firewall reload", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true,
+    section: "cfg443",
+    enabled: true,
+    changed: false,
+    reloaded: false,
+    rolled_back: false,
+  });
+  const result = await setRouterOfficePortForwardEnabled("cfg443", true);
+  assert.equal(result.enabled, true);
+  assert.equal(result.changed, false);
+  assert.equal(result.reloaded, false);
+});
+
+test("port-forward state API rejects invalid sections before network access", async () => {
+  globalThis.fetch = async () => {
+    throw new Error("fetch must not be called for invalid input");
+  };
+  await assert.rejects(setRouterOfficePortForwardEnabled("../firewall", false), /Invalid firewall redirect section/);
+});
+
+test("port-forward state API rejects a server response for a different requested state", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true,
+    section: "cfg443",
+    enabled: true,
+    changed: true,
+    reloaded: true,
+    rolled_back: false,
+  });
+  await assert.rejects(setRouterOfficePortForwardEnabled("cfg443", false), /did not confirm the requested port-forward state/);
 });
 
 test("port-forward removal rejects an unconfirmed service reload", async () => {
