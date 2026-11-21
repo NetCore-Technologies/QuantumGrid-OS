@@ -4344,6 +4344,8 @@ function action_config_restore()
     local upload_state = { file = nil, metadata = nil, count = 0, bytes = 0, closed = false, error = nil }
     local restore_path = nil
     local rollback_path = nil
+    local restore_lock_acquired = false
+    local restore_lock_path = "/tmp/quantumgrid-config-restore.lock"
 
     local function respond(status, payload)
         if status then
@@ -4358,17 +4360,21 @@ function action_config_restore()
         http.write_json(payload)
     end
 
-    local function cleanup()
+    local function cleanup(preserve_rollback)
         if upload_state.file and not upload_state.closed then
             pcall(upload_state.file.close, upload_state.file)
             upload_state.closed = true
         end
         if restore_path then os.remove(restore_path) end
-        if rollback_path then os.remove(rollback_path) end
+        if rollback_path and not preserve_rollback then os.remove(rollback_path) end
+        if restore_lock_acquired then
+            pcall(sys.call, "/bin/rmdir " .. restore_lock_path .. " >/dev/null 2>&1")
+            restore_lock_acquired = false
+        end
     end
 
-    local function fail(status, message, extra)
-        cleanup()
+    local function fail(status, message, extra, preserve_rollback)
+        cleanup(preserve_rollback)
         local payload = { ok = false, error = message }
         if type(extra) == "table" then
             for key, value in pairs(extra) do payload[key] = value end
@@ -4399,7 +4405,8 @@ function action_config_restore()
         end
     end
     if fs.access("/sbin/sysupgrade") ~= true or fs.access("/bin/tar") ~= true or
-        fs.access("/sbin/reboot") ~= true or fs.access("/bin/sleep") ~= true then
+        fs.access("/sbin/reboot") ~= true or fs.access("/bin/sleep") ~= true or
+        fs.access("/bin/mkdir") ~= true or fs.access("/bin/rmdir") ~= true then
         respond(503, { ok = false, error = "Native sysupgrade, tar or reboot utilities are unavailable; no configuration was changed." })
         return
     end
@@ -4414,6 +4421,14 @@ function action_config_restore()
         respond(503, { ok = false, error = backup_paths_error })
         return
     end
+
+    local lock_ok, lock_status = pcall(sys.call,
+        "/bin/mkdir " .. restore_lock_path .. " >/dev/null 2>&1")
+    if not lock_ok or lock_status ~= 0 then
+        respond(409, { ok = false, error = "Another configuration restore is already active, or the restore lock could not be acquired. No archive was applied." })
+        return
+    end
+    restore_lock_acquired = true
 
     local mktemp_command = nil
     if fs.access("/bin/mktemp") == true then
@@ -4579,26 +4594,28 @@ function action_config_restore()
             return
         end
         fail(502,
-            "The restore failed and the pre-restore configuration could not be restored. Keep the router powered and use an out-of-band recovery path.",
-            { rolled_back = false, reboot_scheduled = false })
+            "The restore failed and the pre-restore configuration could not be restored. Keep the router powered and use an out-of-band recovery path. The validated rollback archive has been preserved at " .. tostring(rollback_path) .. ".",
+            { rolled_back = false, reboot_scheduled = false, rollback_archive = rollback_path }, true)
         return
     end
 
     record_audit(http, "system.config.restore", context.profile_id, "success")
-    cleanup()
     local reboot_ok, reboot_status = pcall(sys.call,
         "( /bin/sleep 3; /sbin/reboot ) >/dev/null 2>&1 </dev/null &")
     local reboot_scheduled = reboot_ok and reboot_status == 0
     if not reboot_scheduled then
+        cleanup(true)
         respond(502, {
             ok = false,
-            error = "The configuration was restored, but the router could not schedule its reboot. Reboot it from an out-of-band management path.",
+            error = "The configuration was restored, but the router could not schedule its reboot. Reboot it from an out-of-band management path. The validated rollback archive has been preserved at " .. tostring(rollback_path) .. ".",
             restored = true,
             reboot_scheduled = false,
+            rollback_archive = rollback_path,
             profile_id = context.profile_id
         })
         return
     end
+    cleanup()
     respond(nil, {
         ok = true,
         restored = true,
