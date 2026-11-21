@@ -3011,7 +3011,7 @@ function RemoteSyslogSettings({ status, refresh }: {
           {protocol === "tls" ? (
             <div className="remote-syslog-warning" role="note">
               <strong>Authenticated TLS transport</strong>
-              <span>QuantumGrid uses a loopback-only stunnel client running under configured non-root identities, with the system CA bundle, TLS 1.2, certificate-chain validation, and hostname or IPv4 subject-alternative-name verification. This confirms the configured TLS checks and local service restart, not collector reachability or message receipt. Private certificate authorities and mutual-TLS client certificates are not configured by this control.</span>
+              <span>QuantumGrid uses a loopback-only stunnel client running under configured non-root identities, with the system CA bundle, TLS 1.2, certificate-chain validation, and hostname or IPv4 subject-alternative-name verification. The native logread stream remains newline-delimited; this path does not implement RFC 5425 octet-counting framing. Confirm that the collector accepts newline-delimited syslog over TCP and verify receipt there. A local service restart does not prove collector reachability or message delivery. Private certificate authorities and mutual-TLS client certificates are not configured by this control.</span>
             </div>
           ) : (
             <div className="remote-syslog-warning" role="note">
