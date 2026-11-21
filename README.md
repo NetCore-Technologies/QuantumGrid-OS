@@ -87,11 +87,22 @@ profile leaves mesh off and keeps usteer as the separately configurable roaming 
 A full hardware traffic-counter and throughput/latency validation is still required before
 calling NSS offload operational.
 
-To use a different OpenWrt revision deliberately:
+The stable upstream base is pinned to the upstream GPG-verified
+OpenWrt `v25.12.6` release commit
+`64900e756efa667774214f9c6b17c113222e01f7`. The build checks the resolved checkout against this exact
+40-character commit SHA before feeds, package configuration or compilation proceed.
+Changing the source ref is deliberately a two-part operation: choose the ref and
+provide the full commit SHA you have reviewed.
 
 ```bash
-QG_OPENWRT_REF=v25.12.6 ./build.sh
+QG_OPENWRT_REF=<tag-or-commit> \
+QG_OPENWRT_EXPECTED_SHA=<full-40-character-commit-sha> \
+./build.sh
 ```
+
+The manual firmware workflow exposes the same paired inputs and writes both
+the expected and resolved commits to `BUILDINFO.txt`. An unreviewed or moved
+tag therefore fails before the firmware build can continue.
 
 The OpenWrt Apps page includes a 48-entry native LuCI launcher, a bounded APK/OPKG inventory and authenticated package controls for refreshing configured feeds and installing/removing named packages. Removal is blocked for core services, LuCI base/modules, kernel modules, Wi-Fi firmware/supplicants and NSS packages; full catalog search and dependency planning still use native LuCI Software.
 
