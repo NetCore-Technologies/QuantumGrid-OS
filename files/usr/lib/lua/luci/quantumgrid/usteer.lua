@@ -223,7 +223,11 @@ function runtime_policy_matches(runtime, persisted)
 	if type(runtime) ~= "table" or type(persisted) ~= "table" then return false end
 	if runtime.syslog ~= true or runtime.ipv6 ~= false or runtime.local_mode ~= false or
 		runtime.assoc_steering ~= false or runtime.load_kick_enabled ~= false or
-		persisted.probe_steering == true then
+		persisted.syslog ~= true or persisted.ipv6 ~= false or persisted.local_mode ~= false or
+		persisted.assoc_steering ~= false or persisted.probe_steering ~= false or
+		persisted.load_kick_enabled ~= false or persisted.min_snr ~= 0 or
+		persisted.min_connect_snr ~= 0 or persisted.roam_scan_snr ~= 0 or
+		persisted.roam_trigger_snr ~= 0 or persisted.aggressiveness_override_count ~= 0 then
 		return false
 	end
 	if not same_numeric(runtime.aggressiveness, persisted.aggressiveness) or
