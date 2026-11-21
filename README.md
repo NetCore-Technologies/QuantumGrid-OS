@@ -536,10 +536,11 @@ management route cannot be proven, changes to an existing AP binding fail closed
 management AP or out-of-band access to change a management SSID.
 
 This does not create the destination L3 interface, bridge VLAN, switch tagging, DHCP pool, firewall
-zone or IPv6 prefix plan. It also does not add per-client VLAN assignment, RADIUS dynamic VLANs,
-multiple simultaneous network bindings, mesh topology or downstream managed-switch configuration.
-Validate the switch port membership, firewall segmentation and DHCP/IPv6 client operation after
-moving a corporate, guest or IoT SSID.
+zone or IPv6 prefix plan. Separately, Enterprise APs can use the allow-listed RADIUS dynamic VLAN
+manager documented below; it accepts only pre-provisioned mappings and does not create VLANs or
+subnets. Multiple simultaneous static network bindings, mesh topology and downstream managed-switch
+configuration are not provided. Validate switch membership, firewall segmentation and DHCP/IPv6
+client operation after moving a corporate, guest or IoT SSID.
 
 ## WAN port forwarding (DNAT)
 
