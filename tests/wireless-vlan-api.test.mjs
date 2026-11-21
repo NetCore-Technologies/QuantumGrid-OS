@@ -22,6 +22,9 @@ const input = {
   radiusServer: "radius.example.com",
   radiusPort: "1812",
   radiusSecret: "",
+  manageRadiusVlans: true,
+  dynamicVlanEnabled: false,
+  radiusVlans: [],
   accountingServer: "",
   accountingPort: "1813",
   accountingSecret: "",
@@ -45,6 +48,9 @@ const success = {
   txpower: "auto",
   key_set: false,
   radius_secret_set: true,
+  dynamic_vlan: 0,
+  radius_vlan_count: 0,
+  radius_vlan_mappings: [],
   accounting_secret_set: false,
   reloaded: true,
   rolled_back: false,
@@ -65,6 +71,9 @@ test("wireless AP update sends one explicit routed VLAN interface and verifies t
   assert.equal(requestInit.cache, "no-store");
   const form = new URLSearchParams(requestInit.body);
   assert.equal(form.get("network"), "corp20");
+  assert.equal(form.get("manage_radius_vlans"), "1");
+  assert.equal(form.get("dynamic_vlan_enabled"), "0");
+  assert.equal(form.get("radius_vlan_mappings"), "[]");
   assert.equal(form.get("confirmed"), "1");
   assert.equal(result.network, "corp20");
 });
@@ -100,4 +109,75 @@ test("wireless AP update retains existing WPA3 PMF and RADIUS response verificat
   });
   const result = await updateRouterWirelessConfig(wpa3Input);
   assert.equal(result.network, "corp20");
+});
+
+test("wireless AP update enables only explicit pre-provisioned RADIUS VLAN mappings", async () => {
+  const dynamicInput = {
+    ...input,
+    manageRadiusVlans: true,
+    dynamicVlanEnabled: true,
+    radiusVlans: [
+      { vid: "20", network: "corp20" },
+      { vid: "30", network: "guest30" },
+    ],
+  };
+  globalThis.fetch = async (url, init) => {
+    const form = new URLSearchParams(init.body);
+    assert.equal(form.get("dynamic_vlan_enabled"), "1");
+    assert.equal(form.get("radius_vlan_mappings"),
+      JSON.stringify(dynamicInput.radiusVlans));
+    return jsonResponse({
+      ...success,
+      dynamic_vlan: 2,
+      radius_vlan_count: 2,
+      radius_vlan_mappings: [
+        { vid: "20", network: "corp20", name: "qg20" },
+        { vid: "30", network: "guest30", name: "qg30" },
+      ],
+    });
+  };
+  const result = await updateRouterWirelessConfig(dynamicInput);
+  assert.equal(result.dynamic_vlan, 2);
+  assert.equal(result.radius_vlan_count, 2);
+});
+
+test("wireless AP update refuses duplicate or unsafe dynamic VLAN mappings before fetch", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not be called for invalid mappings"); };
+  await assert.rejects(
+    updateRouterWirelessConfig({
+      ...input,
+      dynamicVlanEnabled: true,
+      radiusVlans: [{ vid: "20", network: "corp20" }, { vid: "20", network: "guest30" }],
+    }),
+    /must be unique/,
+  );
+  await assert.rejects(
+    updateRouterWirelessConfig({
+      ...input,
+      dynamicVlanEnabled: true,
+      radiusVlans: [{ vid: "4095", network: "corp20" }],
+    }),
+    /VLAN ID from 1 to 4094/,
+  );
+  await assert.rejects(
+    updateRouterWirelessConfig({
+      ...input,
+      dynamicVlanEnabled: true,
+      radiusVlans: [{ vid: "20", network: "../wan" }],
+    }),
+    /valid routed network/,
+  );
+});
+
+test("wireless AP update cannot manage externally-owned RADIUS VLAN mappings", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not be called for externally-managed configuration"); };
+  await assert.rejects(
+    updateRouterWirelessConfig({
+      ...input,
+      manageRadiusVlans: false,
+      dynamicVlanEnabled: true,
+      radiusVlans: [{ vid: "20", network: "corp20" }],
+    }),
+    /Externally managed/,
+  );
 });
