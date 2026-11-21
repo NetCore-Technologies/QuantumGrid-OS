@@ -2,7 +2,7 @@
 set -euo pipefail
 PROJECT_ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 OPENWRT_DIR="${2:-$PROJECT_ROOT/openwrt}"
-PHONE_REPOSITORY="https://github.com/Perz3us/openwrt-aw1000-phone.git"
+PHONE_REPOSITORY="${QG_AW1000_PHONE_REPOSITORY:-https://github.com/Perz3us/openwrt-aw1000-phone.git}"
 PHONE_REF="${QG_AW1000_PHONE_REF:-v0.9.0}"
 PHONE_EXPECTED_SHA="${QG_AW1000_PHONE_EXPECTED_SHA:-fe85222e57d1c3e191ffb976b37667bbf221a020}"
 PHONE_DIR="$PROJECT_ROOT/third_party/openwrt-aw1000-phone"
