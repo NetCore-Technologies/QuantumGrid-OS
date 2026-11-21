@@ -4351,17 +4351,22 @@ function action_office_zone_update()
 	})
 end
 
-local function office_segment_reload(sys)
+local function office_segment_reload(sys, ipv6_enabled)
 	local network_ok, network_status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
 	local firewall_ok, firewall_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
 	local dhcp_ok, dhcp_status = pcall(sys.call, "/etc/init.d/dnsmasq restart >/dev/null 2>&1")
+	local odhcpd_ok, odhcpd_status = true, 0
+	if ipv6_enabled then
+		odhcpd_ok, odhcpd_status = pcall(sys.call, "/etc/init.d/odhcpd restart >/dev/null 2>&1")
+	end
 	return network_ok and network_status == 0
 		and firewall_ok and firewall_status == 0
 		and dhcp_ok and dhcp_status == 0
+		and odhcpd_ok and odhcpd_status == 0
 end
 
 local function restore_office_segment(uci, sys, network_section, dhcp_section,
-	zone_section, zone_networks_present, previous_zone_networks, rule_sections)
+	zone_section, zone_networks_present, previous_zone_networks, rule_sections, ipv6_enabled)
 	local writes_ok = true
 	local function delete_if_present(config, section)
 		if type(section) ~= "string" or section == "" then return end
@@ -4400,7 +4405,7 @@ local function restore_office_segment(uci, sys, network_section, dhcp_section,
 		local commit_ok, committed = pcall(uci.commit, uci, config)
 		if not commit_ok or committed ~= true then writes_ok = false end
 	end
-	local services_ok = office_segment_reload(sys)
+	local services_ok = office_segment_reload(sys, ipv6_enabled)
 	return writes_ok and services_ok
 end
 
@@ -4440,6 +4445,15 @@ function action_office_segment_add()
 		respond(400, { ok = false, error = "Explicit confirmation is required before provisioning an office network." })
 		return
 	end
+	local ipv6, ipv6_error = validator.validate_office_segment_ipv6(http.formvalue("ipv6_enabled", true) or "0")
+	if not ipv6 then
+		respond(400, { ok = false, error = ipv6_error })
+		return
+	end
+	if ipv6.enabled and fs.access("/etc/init.d/odhcpd") ~= true then
+		respond(503, { ok = false, error = "Dual-stack provisioning requires the odhcpd DHCPv6/Router Advertisement service." })
+		return
+	end
 	if fs.access("/etc/config/network") ~= true or fs.access("/etc/config/firewall") ~= true
 		or fs.access("/etc/config/dhcp") ~= true
 		or fs.access("/etc/init.d/network") ~= true or fs.access("/etc/init.d/firewall") ~= true
@@ -4471,6 +4485,7 @@ function action_office_segment_add()
 			name = zone.name,
 			networks = zone.networks,
 			input = zone.input,
+			output = zone.output,
 			forward = zone.forward,
 			selected = selected
 		})
@@ -4498,6 +4513,11 @@ function action_office_segment_add()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
+	update.zone_output = update.zone_output or nil
+	if ipv6.enabled and update.zone_output ~= "ACCEPT" then
+		respond(400, { ok = false, error = "Dual-stack segments require the selected firewall zone to allow router-originated output so Router Advertisements can reach the VLAN." })
+		return
+	end
 
 	local network_section = update.name
 	local dhcp_section = "dhcp_" .. update.name
@@ -4506,6 +4526,12 @@ function action_office_segment_add()
 		"qgrid_" .. update.name .. "_dnsudp",
 		"qgrid_" .. update.name .. "_dnstcp"
 	}
+	if ipv6.enabled then
+		table.insert(rule_sections, "qgrid_" .. update.name .. "_dhcpv6")
+		table.insert(rule_sections, "qgrid_" .. update.name .. "_dns6udp")
+		table.insert(rule_sections, "qgrid_" .. update.name .. "_dns6tcp")
+		table.insert(rule_sections, "qgrid_" .. update.name .. "_icmp6")
+	end
 	if #dhcp_section > 64 then
 		respond(400, { ok = false, error = "The generated DHCP section identifier is too long." })
 		return
@@ -4545,30 +4571,43 @@ function action_office_segment_add()
 	end
 	table.insert(zone_networks, update.name)
 
-	local network_ok, network_created = pcall(uci.section, uci, "network", "interface", network_section, {
+	local network_options = {
 		proto = "static",
 		device = update.device,
 		ipaddr = update.address,
 		netmask = update.netmask,
 		defaultroute = "0",
 		peerdns = "0",
-		delegate = "0"
-	})
+		delegate = ipv6.enabled and "1" or "0"
+	}
+	if ipv6.enabled then
+		network_options.ip6assign = ipv6.ip6assign
+	end
+	local network_ok, network_created = pcall(
+		uci.section, uci, "network", "interface", network_section, network_options)
 	if not network_ok or network_created ~= network_section then
 		pcall(uci.revert, uci, "network")
 		respond(500, { ok = false, error = "The new static IPv4 network interface could not be staged." })
 		return
 	end
 
-	local dhcp_ok, dhcp_created = pcall(uci.section, uci, "dhcp", "dhcp", dhcp_section, {
+	local dhcp_options = {
 		interface = update.name,
 		start = update.dhcp_start,
 		limit = update.dhcp_limit,
-		leasetime = update.lease_time,
-		dhcpv6 = "disabled",
-		ra = "disabled",
-		ndp = "disabled"
-	})
+		leasetime = update.lease_time
+	}
+	if ipv6.enabled then
+		dhcp_options.dhcpv6 = ipv6.dhcpv6
+		dhcp_options.ra = ipv6.ra
+		dhcp_options.ndp = ipv6.ndp
+	else
+		dhcp_options.dhcpv6 = "disabled"
+		dhcp_options.ra = "disabled"
+		dhcp_options.ndp = "disabled"
+	end
+	local dhcp_ok, dhcp_created = pcall(
+		uci.section, uci, "dhcp", "dhcp", dhcp_section, dhcp_options)
 	if not dhcp_ok or dhcp_created ~= dhcp_section then
 		pcall(uci.revert, uci, "network")
 		pcall(uci.revert, uci, "dhcp")
@@ -4586,25 +4625,50 @@ function action_office_segment_add()
 	end
 
 	local rule_definitions = {
-		{ section = rule_sections[1], protocol = "udp", source_port = "68", port = "67", label = "DHCP" },
-		{ section = rule_sections[2], protocol = "udp", source_port = nil, port = "53", label = "DNS UDP" },
-		{ section = rule_sections[3], protocol = "tcp", source_port = nil, port = "53", label = "DNS TCP" }
+		{ section = rule_sections[1], protocol = "udp", source_port = "68", port = "67", label = "DHCP", family = "ipv4" },
+		{ section = rule_sections[2], protocol = "udp", port = "53", label = "DNS UDP", family = "ipv4" },
+		{ section = rule_sections[3], protocol = "tcp", port = "53", label = "DNS TCP", family = "ipv4" }
 	}
+	if ipv6.enabled then
+		table.insert(rule_definitions, {
+			section = rule_sections[4], protocol = "udp", source_port = "546",
+			port = "547", label = "DHCPv6", family = "ipv6"
+		})
+		table.insert(rule_definitions, {
+			section = rule_sections[5], protocol = "udp", port = "53",
+			label = "DNSv6 UDP", family = "ipv6"
+		})
+		table.insert(rule_definitions, {
+			section = rule_sections[6], protocol = "tcp", port = "53",
+			label = "DNSv6 TCP", family = "ipv6"
+		})
+		table.insert(rule_definitions, {
+			section = rule_sections[7], protocol = "icmp",
+			label = "IPv6 neighbour discovery",
+			family = "ipv6",
+			icmp_types = { "router-solicitation", "neighbour-solicitation", "neighbour-advertisement" }
+		})
+	end
 	for _, rule in ipairs(rule_definitions) do
+		local source_ip = rule.family == "ipv4" and rule.label ~= "DHCP"
+			and update.subnet_cidr or nil
+		local destination_ip = rule.family == "ipv4" and rule.label ~= "DHCP"
+			and update.address or nil
 		local create_ok, created = pcall(uci.section, uci, "firewall", "rule", rule.section, {
 			name = "QuantumGrid " .. update.name .. " " .. rule.label,
 			src = update.zone_name,
 			proto = rule.protocol,
 			src_port = rule.source_port,
-			dest_ip = rule.label ~= "DHCP" and update.address or nil,
-			src_ip = rule.label ~= "DHCP" and update.subnet_cidr or nil,
+			dest_ip = destination_ip,
+			src_ip = source_ip,
 			dest_port = rule.port,
-			family = "ipv4",
+			icmp_type = rule.icmp_types,
+			family = rule.family,
 			target = "ACCEPT"
 		})
 		if not create_ok or created ~= rule.section then
 			local recovered = restore_office_segment(uci, sys, network_section, dhcp_section,
-				update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections)
+				update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections, ipv6.enabled)
 			record_audit(http, "office.segment.add", update.name, "failed")
 			respond(500, {
 				error = recovered and "A narrowly scoped DHCP/DNS firewall rule could not be staged. The partial configuration was removed."
@@ -4622,7 +4686,7 @@ function action_office_segment_add()
 	end
 	if not commits_ok then
 		local recovered = restore_office_segment(uci, sys, network_section, dhcp_section,
-			update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections)
+			update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections, ipv6.enabled)
 		record_audit(http, "office.segment.add", update.name, "failed")
 		respond(500, {
 			error = recovered and "One or more configuration commits failed. The partial segment was removed and previous services reloaded."
@@ -4632,10 +4696,10 @@ function action_office_segment_add()
 		return
 	end
 
-	local applied = office_segment_reload(sys)
+	local applied = office_segment_reload(sys, ipv6.enabled)
 	if not applied then
 		local recovered = restore_office_segment(uci, sys, network_section, dhcp_section,
-			update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections)
+			update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections, ipv6.enabled)
 		record_audit(http, "office.segment.add", update.name, "failed")
 		respond(502, {
 			error = recovered and "A network, firewall or DHCP service reload failed. The new segment was removed and the previous configuration restored."
@@ -4655,10 +4719,16 @@ function action_office_segment_add()
 		zone = update.zone_name,
 		pool_start_ip = update.pool_start_ip,
 		pool_end_ip = update.pool_end_ip,
-		firewall_rules = 3,
+		firewall_rules = #rule_definitions,
+		ipv6_enabled = ipv6.enabled,
+		ipv6_assign = ipv6.ip6assign,
+		dhcpv6 = ipv6.dhcpv6,
+		ra = ipv6.ra,
+		ndp = ipv6.ndp,
 		network_reloaded = true,
 		firewall_reloaded = true,
 		dhcp_restarted = true,
+		odhcpd_restarted = ipv6.enabled,
 		rolled_back = false
 	})
 end
