@@ -65,21 +65,21 @@ Routes are persisted in the OpenWrt network UCI configuration. A network reload 
 
 ## IPv6 WAN pinholes (not NAT)
 
-Office Networks can add and remove **QuantumGrid-managed IPv6 pinholes** for services hosted on a device with an already configured global-unicast IPv6 address. IPv6 is routed end-to-end; this is a firewall allowance, not IPv4-style address/port translation.
+Office Networks can add and remove **QuantumGrid-managed IPv6 pinholes** for services hosted on a LAN device that is currently visible in the router's IPv6 neighbour-discovery (NDP) table. The controller reads `ip -6 neigh show dev <interface>` for each configured office interface and exposes only valid global-unicast neighbours with a unicast MAC and a usable kernel neighbour state (`REACHABLE`, `STALE`, `DELAY`, `PROBE` or `PERMANENT`). IPv6 is routed end-to-end; this is a firewall allowance, not IPv4-style address/port translation.
 
 A pinhole is limited to:
 - One existing external WAN/WWAN source zone.
 - One existing internal destination zone.
-- One exact global-unicast IPv6 address already configured on an interface attached to that destination zone.
+- One exact, currently observed global-unicast IPv6 NDP neighbour on an interface attached to that destination zone; the neighbour must have a valid unicast MAC and a usable state.
 - TCP, UDP or TCP+UDP and one destination port (1–65535).
 
-The validator rejects ULA, link-local, multicast, unspecified and documentation addresses, malformed IPv6, unconfigured addresses, unsupported protocols, invalid ports, duplicate names and overlapping zone/address/port/protocol allowances. The controller re-reads the live UCI inventory on every request and refuses changes if inventory is unavailable or truncated.
+The validator rejects ULA, link-local, multicast, unspecified, documentation and other IPv6 special-purpose addresses; malformed IPv6; neighbours on a different interface; invalid/multicast/zero MAC addresses; failed or incomplete NDP entries; unsupported protocols; invalid ports; duplicate names; and overlapping zone/address/port/protocol allowances. The controller re-reads the live network, neighbour and firewall inventory on every request and refuses changes if inventory is unavailable or truncated.
 
 The generated rule is an IPv6 firewall rule with the explicit source zone, destination zone, destination host, protocol, destination port, IPv6 family and ACCEPT target. It does **not** add an IPv6 redirect/NAT rule, change zone INPUT/OUTPUT/FORWARD defaults, open all ports, add ICMP-wide access, or create inter-zone forwarding. Existing default-deny policy remains in control of all unrelated traffic.
 
 Create, enable, disable and remove operations require an authenticated HTTPS, same-origin administrator POST and explicit confirmation. Enable/disable updates only the managed rule's enabled option; an already-matching state is treated as an idempotent no-op. A firewall reload is checked; failure triggers an attempted restoration of the previous UCI value (including restoring an originally absent option) and a second reload. The API verifies the exact section, desired state and reload result before the control centre reports success. Only rules bearing QuantumGrid's managed marker and expected IPv6 rule structure are shown as managed pinholes or eligible for state changes/removal; administrator-created firewall rules remain outside this lifecycle. Create/state-change/remove successes and failures are written to the bounded local audit log.
 
-**A configured address is not proof of public reachability.** The selected host must have a delegated or otherwise correctly routed global IPv6 address, the upstream network must carry inbound IPv6, and host firewall/service policy must allow the selected traffic. Test from a separate external IPv6 network. The UI inventory and a successful firewall reload are not proof that an ISP route, remote peer, host service or end-to-end connection is working.
+**An observed NDP entry is not proof of public reachability.** The selected host must have a delegated or otherwise correctly routed global IPv6 address, the upstream network must carry inbound IPv6, and host firewall/service policy must allow the selected traffic. Sleeping or offline devices may not appear in the live neighbour inventory until they communicate again; wake the target host and refresh the router inventory before creating its pinhole. Test from a separate external IPv6 network. The UI inventory and a successful firewall reload are not proof that an ISP route, remote peer, host service or end-to-end connection is working.
 
 ## Transaction and recovery
 
