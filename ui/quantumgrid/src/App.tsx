@@ -3240,7 +3240,7 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
             {backupNotice.message}
           </div>
         )}
-        <div className="module-message">The encrypted .qgbak file is not a firmware image. Decrypt it before using the original archive with the documented recovery process; only restore to a compatible device and firmware build. QuantumGrid does not provide one-click restore.</div>
+        <div className="module-message">The encrypted .qgbak file is a configuration backup, not a firmware image. Use the guarded restore section below to restore it to the same QuantumGrid device, AW1000 profile and OpenWrt target/architecture. Keep the passphrase and an independent out-of-band recovery route.</div>
       </Panel>
       <Panel title="Encrypted backup recovery" eyebrow="LOCAL DECRYPTION · NO ROUTER UPLOAD">
         <div className="config-backup-warning" role="note">
