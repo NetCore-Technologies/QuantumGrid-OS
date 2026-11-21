@@ -116,10 +116,12 @@ def validate(profile_path: Path) -> list[str]:
 
     nss_fragment = "-"
     nss_feed_pins = "-"
+    nss_pin_script = "-"
     if nss["supported"]:
         nss_fragment = safe_repo_file(nss["config_fragment"], "capabilities.nss.config_fragment")
         nss_feed_pins = safe_repo_file(nss["feed_pins"], "capabilities.nss.feed_pins")
-    elif nss["config_fragment"] is not None or nss["feed_pins"] is not None:
+        nss_pin_script = safe_repo_file(nss["pin_script"], "capabilities.nss.pin_script")
+    elif any(nss[field] is not None for field in ("config_fragment", "feed_pins", "pin_script")):
         raise ProfileError("unsupported NSS capability must not declare build inputs")
 
     fxs_script = "-"
