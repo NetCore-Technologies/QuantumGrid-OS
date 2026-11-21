@@ -1530,6 +1530,7 @@ const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backup";
+const CONFIG_RESTORE_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-restore";
 const AUDIT_URL = "/cgi-bin/luci/admin/services/quantumgrid/audit";
 const DHCP_RESERVATION_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation";
 const DHCP_RESERVATION_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/dhcp-reservation-remove";
@@ -2802,6 +2803,82 @@ export async function decryptRouterConfigBackupBytes(
     return new Uint8Array(decrypted);
   } catch {
     throw new Error("The passphrase is incorrect or the encrypted backup has been modified.");
+  }
+}
+
+export interface RouterConfigRestoreResult {
+  ok: true;
+  restored: true;
+  reboot_scheduled: true;
+  profile_id: string;
+  target: string;
+}
+
+export async function restoreRouterConfigBackup(
+  file: Blob,
+  passphrase: string,
+): Promise<RouterConfigRestoreResult> {
+  if (file.size < CONFIG_BACKUP_HEADER_BYTES + 17 ||
+      file.size > CONFIG_BACKUP_MAX_BYTES + CONFIG_BACKUP_HEADER_BYTES + 16) {
+    throw new Error("The encrypted backup is empty, truncated or larger than the supported limit.");
+  }
+  assertBackupPassphrase(passphrase).fill(0);
+  requireBackupCrypto();
+
+  const encryptedBytes = new Uint8Array(await file.arrayBuffer());
+  let plaintext: Uint8Array | null = null;
+  let uploadBody: ArrayBuffer | null = null;
+  try {
+    plaintext = await decryptRouterConfigBackupBytes(encryptedBytes, passphrase);
+    if (plaintext.byteLength < 2 || plaintext[0] !== 0x1f || plaintext[1] !== 0x8b) {
+      throw new Error("The decrypted payload is not a valid gzip configuration archive.");
+    }
+    if (plaintext.byteLength > CONFIG_BACKUP_MAX_BYTES) {
+      throw new Error("The decrypted configuration archive exceeds the 64 MiB restore limit.");
+    }
+    uploadBody = backupBytesToArrayBuffer(plaintext);
+    plaintext.fill(0);
+    plaintext = null;
+
+    const response = await fetch(CONFIG_RESTORE_URL, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/gzip",
+        "X-QuantumGrid-Restore-Confirmed": "1",
+        "X-QuantumGrid-Same-Device": "1",
+      },
+      body: uploadBody,
+    });
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.includes("application/json")) {
+      throw new Error(response.status === 403
+        ? "Restore requires an active router administrator session."
+        : "The router returned an invalid configuration-restore response.");
+    }
+    const payload: unknown = await response.json();
+    if (typeof payload !== "object" || payload === null) {
+      throw new Error("The router returned an invalid configuration-restore response.");
+    }
+    if ("error" in payload && typeof payload.error === "string") {
+      throw new Error(payload.error);
+    }
+    if (
+      !response.ok || !( "ok" in payload) || payload.ok !== true ||
+      !("restored" in payload) || payload.restored !== true ||
+      !("reboot_scheduled" in payload) || payload.reboot_scheduled !== true ||
+      !("profile_id" in payload) || typeof payload.profile_id !== "string" ||
+      !("target" in payload) || typeof payload.target !== "string"
+    ) {
+      throw new Error("The router did not confirm a completed restore and scheduled reboot.");
+    }
+    return payload as RouterConfigRestoreResult;
+  } finally {
+    encryptedBytes.fill(0);
+    if (plaintext) plaintext.fill(0);
+    if (uploadBody) new Uint8Array(uploadBody).fill(0);
   }
 }
 
