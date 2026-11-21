@@ -1459,6 +1459,22 @@ const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
+function isRemoteSyslogIpv4(value: string): boolean {
+  const octets = value.split(".");
+  return octets.length === 4 && octets.every((octet) =>
+    /^(?:0|[1-9][0-9]{0,2})$/.test(octet) && Number(octet) <= 255,
+  );
+}
+
+function isRemoteSyslogHostname(value: string): boolean {
+  if (value.length < 1 || value.length > 253 || /^\d+(?:\.\d+)*$/.test(value)) return false;
+  const labels = value.split(".");
+  return labels.every((label) =>
+    label.length >= 1 && label.length <= 63 &&
+    /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?$/.test(label),
+  );
+}
+
 function normalizeGlobalUnicastIpv6(value: string): string | null {
   if (value.length === 0 || value.length > 45 || value.includes("%") || value.includes(".")) return null;
   if (!/^[0-9a-fA-F:]+$/.test(value) || value.includes(":::")) return null;
@@ -2656,7 +2672,7 @@ export async function updateRouterRemoteSyslog(input: {
   prefix: string;
 }): Promise<RouterRemoteSyslogUpdateResult> {
   if (input.enabled) {
-    if (!/^(?:[A-Za-z0-9-]+\.)*[A-Za-z0-9-]+$/.test(input.host) || input.host.length > 253 || input.host.includes("..")) {
+    if (!isRemoteSyslogIpv4(input.host) && !isRemoteSyslogHostname(input.host)) {
       throw new Error("Enter a valid IPv4 address or DNS host name for the remote syslog server.");
     }
     if (!Number.isSafeInteger(input.port) || input.port < 1 || input.port > 65535) {
@@ -2665,7 +2681,7 @@ export async function updateRouterRemoteSyslog(input: {
     if (input.protocol !== "tcp" && input.protocol !== "udp" && input.protocol !== "tls") {
       throw new Error("Remote syslog transport must be UDP, TCP or authenticated TLS.");
     }
-    if (input.hostname && (!/^(?:[A-Za-z0-9][A-Za-z0-9-]*\.)*[A-Za-z0-9][A-Za-z0-9-]*$/.test(input.hostname) || input.hostname.length > 253)) {
+    if (input.hostname && !isRemoteSyslogHostname(input.hostname)) {
       throw new Error("The sender hostname must be a valid DNS host name.");
     }
     if (input.prefix.length > 32 || (input.prefix !== "" && !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(input.prefix))) {
