@@ -292,6 +292,37 @@ export interface RouterMwan3TrackTarget {
   packet_loss_percent?: number;
 }
 
+export interface RouterMwan3InterfaceConfig {
+  section: string;
+  enabled: boolean;
+  track_ips: string[];
+  track_targets_valid: boolean;
+  reliability: number;
+  count: number;
+  timeout: number;
+  interval: number;
+  down: number;
+  up: number;
+  initial_state: "online" | "offline" | "unknown";
+  valid: boolean;
+}
+
+export interface RouterMwan3InterfaceUpdateResult {
+  ok: true;
+  section: string;
+  enabled: boolean;
+  track_ips: string[];
+  reliability: number;
+  count: number;
+  timeout: number;
+  interval: number;
+  down: number;
+  up: number;
+  initial_state: "online" | "offline";
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterMwan3Interface {
   name: string;
   enabled: boolean;
@@ -332,6 +363,10 @@ export interface RouterMwan3Status {
   connected_available: boolean;
   connected_ipv4: string[];
   connected_ipv6: string[];
+  config_available: boolean;
+  config_count: number;
+  config_truncated: boolean;
+  config_interfaces: RouterMwan3InterfaceConfig[];
 }
 
 export interface RouterSqmQueueUpdateResult {
@@ -1231,6 +1266,7 @@ const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
+const MWAN3_INTERFACE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/mwan3-interface-update";
 const SQM_CAKE_PROFILE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cake-profile";
 const SQM_CLIENT_QOS_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-add";
 const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
@@ -1821,6 +1857,101 @@ export async function updateRouterSqmQueue(
     throw new Error("The router did not confirm the SQM queue update and service restart.");
   }
   return payload as RouterSqmQueueUpdateResult;
+}
+
+
+export async function updateRouterMwan3Interface(
+  section: string,
+  enabled: boolean,
+  trackIps: string[],
+  reliability: number,
+  count: number,
+  timeout: number,
+  interval: number,
+  down: number,
+  up: number,
+  initialState: "online" | "offline",
+  confirmed: boolean,
+): Promise<RouterMwan3InterfaceUpdateResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(section)) {
+    throw new Error("Invalid mwan3 interface section name.");
+  }
+  if (!confirmed) throw new Error("Confirm the Multi-WAN health-check change before continuing.");
+  if (!Array.isArray(trackIps) || trackIps.length < 1 || trackIps.length > 8 ||
+      trackIps.some((value) => typeof value !== "string" || value.length > 39 ||
+        !/^[0-9A-Fa-f:.]+$/.test(value)) ||
+      new Set(trackIps).size !== trackIps.length) {
+    throw new Error("Enter 1 to 8 unique IPv4 or IPv6 tracking addresses.");
+  }
+  const wholeNumber = (value: number, minimum: number, maximum: number) =>
+    Number.isInteger(value) && value >= minimum && value <= maximum;
+  if (!wholeNumber(reliability, 1, trackIps.length)) {
+    throw new Error("Reliability must be 1 to the number of tracking targets.");
+  }
+  if (!wholeNumber(count, 1, 10)) throw new Error("Probe count must be 1 to 10.");
+  if (!wholeNumber(timeout, 1, 10)) throw new Error("Probe timeout must be 1 to 10 seconds.");
+  if (!wholeNumber(interval, 1, 60)) throw new Error("Probe interval must be 1 to 60 seconds.");
+  if (!wholeNumber(down, 1, 20)) throw new Error("Failure threshold must be 1 to 20.");
+  if (!wholeNumber(up, 1, 20)) throw new Error("Recovery threshold must be 1 to 20.");
+  if (initialState !== "online" && initialState !== "offline") {
+    throw new Error("Choose an initial online or offline state.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("enabled", enabled ? "1" : "0");
+  form.set("track_ips", JSON.stringify(trackIps));
+  form.set("reliability", String(reliability));
+  form.set("count", String(count));
+  form.set("timeout", String(timeout));
+  form.set("interval", String(interval));
+  form.set("down", String(down));
+  form.set("up", String(up));
+  form.set("initial_state", initialState);
+  form.set("confirmed", "1");
+
+  const response = await fetch(MWAN3_INTERFACE_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Multi-WAN changes require an active router administrator session."
+      : "The router returned an invalid Multi-WAN update response.");
+  }
+
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid Multi-WAN update response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("enabled" in payload) || payload.enabled !== enabled ||
+      !("track_ips" in payload) || !Array.isArray(payload.track_ips) ||
+      payload.track_ips.length !== trackIps.length ||
+      !payload.track_ips.every((value, index) => value === trackIps[index]) ||
+      !("reliability" in payload) || payload.reliability !== reliability ||
+      !("count" in payload) || payload.count !== count ||
+      !("timeout" in payload) || payload.timeout !== timeout ||
+      !("interval" in payload) || payload.interval !== interval ||
+      !("down" in payload) || payload.down !== down ||
+      !("up" in payload) || payload.up !== up ||
+      !("initial_state" in payload) || payload.initial_state !== initialState ||
+      !("restarted" in payload) || payload.restarted !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the Multi-WAN health-check update and service restart.");
+  }
+  return payload as RouterMwan3InterfaceUpdateResult;
 }
 
 
