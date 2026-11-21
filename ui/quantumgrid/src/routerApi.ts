@@ -2115,17 +2115,22 @@ export async function updateRouterUsteer(input: {
   if (input.enabled && (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) || input.network === "." || input.network === "..")) {
     throw new Error("Select one existing trusted internal network for inter-AP communication.");
   }
-  if (!Array.isArray(input.ssids) || input.ssids.length > 8 || (input.enabled && input.ssids.length < 1)) {
-    throw new Error("Choose between one and eight existing SSIDs for roaming.");
+  if (!Array.isArray(input.ssids)) {
+    throw new Error("The roaming SSID selection must be an array.");
   }
-  const seenSsids = new Set<string>();
-  for (const ssid of input.ssids) {
-    if (typeof ssid !== "string" || new TextEncoder().encode(ssid).length < 1 ||
-        new TextEncoder().encode(ssid).length > 32 || hasControlCharacters(ssid)) {
-      throw new Error("Every roaming SSID must be 1–32 bytes and contain no control characters.");
+  if (input.enabled) {
+    if (input.ssids.length < 1 || input.ssids.length > 8) {
+      throw new Error("Choose between one and eight existing SSIDs for roaming.");
     }
-    if (seenSsids.has(ssid)) throw new Error("Duplicate roaming SSIDs are not allowed.");
-    seenSsids.add(ssid);
+    const seenSsids = new Set<string>();
+    for (const ssid of input.ssids) {
+      if (typeof ssid !== "string" || new TextEncoder().encode(ssid).length < 1 ||
+          new TextEncoder().encode(ssid).length > 32 || hasControlCharacters(ssid)) {
+        throw new Error("Every roaming SSID must be 1–32 bytes and contain no control characters.");
+      }
+      if (seenSsids.has(ssid)) throw new Error("Duplicate roaming SSIDs are not allowed.");
+      seenSsids.add(ssid);
+    }
   }
   const wholeNumber = (value: number, minimum: number, maximum: number) =>
     Number.isInteger(value) && value >= minimum && value <= maximum;
@@ -2140,7 +2145,7 @@ export async function updateRouterUsteer(input: {
   const form = new URLSearchParams();
   form.set("enabled", input.enabled ? "1" : "0");
   form.set("network", input.network);
-  form.set("ssids", JSON.stringify(input.ssids));
+  form.set("ssids", JSON.stringify(input.enabled ? input.ssids : []));
   form.set("aggressiveness", String(input.aggressiveness));
   form.set("assoc_steering", "0");
   form.set("probe_steering", "0");
