@@ -78,6 +78,37 @@ test("wireless AP update sends one explicit routed VLAN interface and verifies t
   assert.equal(result.network, "corp20");
 });
 
+test("channel recommendation sends the reviewed current channel and verifies the exact applied channel", async () => {
+  const channelInput = { ...input, channel: "11", expectedCurrentChannel: "1" };
+  let requestInit;
+  globalThis.fetch = async (_url, init) => {
+    requestInit = init;
+    return jsonResponse({ ...success, channel: "11" });
+  };
+  const result = await updateRouterWirelessConfig(channelInput);
+  const form = new URLSearchParams(requestInit.body);
+  assert.equal(form.get("channel"), "11");
+  assert.equal(form.get("expected_current_channel"), "1");
+  assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.channel, "11");
+});
+
+test("wireless channel update rejects an unexpected applied channel response", async () => {
+  globalThis.fetch = async () => jsonResponse({ ...success, channel: "auto" });
+  await assert.rejects(
+    updateRouterWirelessConfig({ ...input, channel: "11", expectedCurrentChannel: "1" }),
+    /did not confirm the wireless configuration and Wi-Fi reload/,
+  );
+});
+
+test("wireless channel update rejects an invalid expected current channel before fetch", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not be called for an invalid expected channel"); };
+  await assert.rejects(
+    updateRouterWirelessConfig({ ...input, channel: "11", expectedCurrentChannel: "0" }),
+    /expected current radio channel/,
+  );
+});
+
 test("wireless AP update rejects unsafe or ambiguous network identifiers before fetch", async () => {
   globalThis.fetch = async () => { throw new Error("fetch must not be called for invalid input"); };
   await assert.rejects(updateRouterWirelessConfig({ ...input, network: "../wan" }), /routed network/);
