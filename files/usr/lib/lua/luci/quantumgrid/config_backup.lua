@@ -81,7 +81,7 @@ function validate_archive_listing(listing)
 	local release_path = nil
 	local count = 0
 	local expanded_size = 0
-	for line in listing:gmatch("[^\\r\\n]+") do
+	for line in listing:gmatch("[^\r\n]+") do
 		count = count + 1
 		if count > 8192 then
 			return nil, "The archive contains too many entries for a safe configuration restore."
