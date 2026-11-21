@@ -26,6 +26,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 concurrency:
   group: quantumgrid-firmware-${{ github.ref }}
@@ -202,6 +204,11 @@ jobs:
           echo
           echo "SHA-256 manifest:"
           cat dist/SHA256SUMS
+
+      - name: Generate signed SLSA provenance for release assets
+        uses: actions/attest@v4
+        with:
+          subject-path: 'dist/*'
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
