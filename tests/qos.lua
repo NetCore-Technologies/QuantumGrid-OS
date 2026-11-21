@@ -29,6 +29,19 @@ assert(qos.validate_client_policy("02:11:22:33:44:55", "corp", "wan", "CS1", zon
 assert(qos.validate_client_policy("02:11:22:33:44:55", "corp", "uplink", "BE", zones),
 	"WWAN networks attached to an external zone must be allowed as destinations")
 
+local duplicate_zone_names = {
+  { name = "corp", networks = { "corp" } },
+  { name = "corp", networks = { "corp2" } },
+  { name = "wan", networks = { "wan" } },
+}
+assert(qos.validate_client_policy(
+  "02:11:22:33:44:55", "corp", "wan", "AF41", duplicate_zone_names) == nil,
+  "duplicate firewall zone names must not be resolved arbitrarily")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  duplicate_zone_names, {}, {}) == nil,
+  "duplicate firewall zone names must fail closed for download marking")
+
 local download_interfaces = {
   {
     name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0",
@@ -42,6 +55,16 @@ local download_interfaces = {
 local download_leases = {
   { section = "cfg_host_1", name = "desktop", mac = "02:11:22:33:44:55", ipv4 = "192.168.20.40" },
 }
+local custom_masquerade_zones = {
+  { name = "internet-edge", networks = { "uplink0" }, masquerade = true },
+  { name = "corp", networks = { "corp" }, masquerade = false },
+}
+local custom_external = qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "internet-edge", "corp", "AF41",
+  custom_masquerade_zones, download_interfaces, download_leases)
+assert(custom_external and custom_external.direction == "download",
+  "a custom masquerading WAN zone must be classified as external")
+
 local download = qos.validate_client_download_policy(
   "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
   zones, download_interfaces, download_leases)
