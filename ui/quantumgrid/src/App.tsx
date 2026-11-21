@@ -1853,7 +1853,7 @@ function Mwan3HealthEditor({ config, refresh }: {
   refresh: () => void;
 }) {
   const [enabled, setEnabled] = useState(config.enabled);
-  const [trackTargets, setTrackTargets] = useState(config.track_ips.join("\\n"));
+  const [trackTargets, setTrackTargets] = useState(config.track_ips.join("\n"));
   const [reliability, setReliability] = useState(config.reliability);
   const [count, setCount] = useState(config.count);
   const [timeout, setTimeoutValue] = useState(config.timeout);
@@ -1869,7 +1869,7 @@ function Mwan3HealthEditor({ config, refresh }: {
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const targets = trackTargets.split(/\\r?\\n/).map((value) => value.trim()).filter(Boolean);
+    const targets = trackTargets.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     setSaving(true);
     setNotice(null);
     try {
@@ -1916,7 +1916,7 @@ function Mwan3HealthEditor({ config, refresh }: {
           <label className="mwan3-editor-targets">
             Tracking target IP addresses
             <textarea rows={3} value={trackTargets} onChange={(event) => setTrackTargets(event.target.value)}
-              placeholder={"1.1.1.1\\n9.9.9.9"} spellCheck={false} />
+              placeholder={"1.1.1.1\n9.9.9.9"} spellCheck={false} />
             <small>One IPv4 or IPv6 address per line; up to 8. Hostnames and CIDR prefixes are not accepted.</small>
           </label>
           <label>
