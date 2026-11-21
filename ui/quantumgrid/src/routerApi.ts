@@ -998,6 +998,9 @@ export interface RouterOfficeSegmentCreateResult {
   ipv6_assign: "" | "64";
   dhcpv6: "disabled" | "server";
   ra: "disabled" | "server";
+  ra_flags: string[];
+  ra_slaac: "0" | "1";
+  ra_dns: "0" | "1";
   ndp: "disabled";
   network_reloaded: true;
   firewall_reloaded: true;
