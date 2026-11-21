@@ -3373,6 +3373,9 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const sshInterfaceBindings = enabledSshInstances
     .map((instance) => instance.name + ": " + (instance.interface_bound ? instance.interface : "ALL INTERFACES"))
     .join(", ") || "NONE / UNKNOWN";
+  const sshInterfaceZoneStatus = enabledSshInstances
+    .map((instance) => instance.name + ": " + (instance.interface_zone_status?.toUpperCase() ?? "UNKNOWN"))
+    .join(", ") || "NONE / UNKNOWN";
   const sshPorts = enabledSshInstances
     .map((instance) => instance.name + ": " + (instance.port_valid ? String(instance.port ?? "UNKNOWN") : "INVALID"))
     .join(", ") || "NONE / UNKNOWN";
@@ -3468,6 +3471,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Management transport", "SSH configuration inventory", managementTransport?.ssh_config_available ? "AVAILABLE" : managementTransport?.ssh_config_available === false ? "UNAVAILABLE" : "NOT REPORTED", ""],
       [exportedAt, "Management transport", "Enabled SSH instances", managementTransport?.ssh_enabled_instance_count ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "SSH interface bindings", sshInterfaceBindings, ""],
+      [exportedAt, "Management transport", "SSH firewall-zone classification", sshInterfaceZoneStatus, "Only a unique recognised internal zone is accepted as trusted; custom and ambiguous zones remain unknown"],
       [exportedAt, "Management transport", "SSH ports", sshPorts, ""],
       [exportedAt, "Management transport", "SSH password authentication", sshPasswordAuth, ""],
       [exportedAt, "Management transport", "SSH root password authentication", sshRootPasswordAuth, ""],
@@ -3623,6 +3627,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["Configured SSH instances", fmt(managementTransport.ssh_instance_count ?? 0)],
               ["Enabled SSH instances", fmt(managementTransport.ssh_enabled_instance_count ?? 0)],
               ["SSH interface bindings", sshInterfaceBindings],
+              ["SSH firewall-zone classification", sshInterfaceZoneStatus],
               ["SSH listener ports", sshPorts],
               ["SSH password authentication", sshPasswordAuth],
               ["SSH root password authentication", sshRootPasswordAuth],
@@ -3644,7 +3649,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               {managementTransport.plaintext_http_unredirected
                 ? "HTTP listeners are active without an HTTPS redirect. Credentials and session traffic may travel in plaintext; do not use the HTTP address for administration."
                 : managementTransport.ssh_status === "review"
-                  ? "SSH management needs review. Bind every enabled Dropbear instance to an explicit trusted management interface, use key-only authentication and keep gateway port forwarding disabled. Confirm the authorized-keys file is root-owned and not group/world-writable. Do not disable password access until a working SSH key has been installed and an independent recovery path has been tested."
+                  ? "SSH management needs review. Bind every enabled Dropbear instance to a uniquely mapped, recognised internal management zone; WAN bindings and custom, missing or ambiguous zone mappings are not trusted. Use key-only authentication and keep gateway port forwarding disabled. Confirm the authorized-keys file is root-owned and not group/world-writable. Do not disable password access until a working SSH key has been installed and an independent recovery path has been tested."
                   : managementTransport.ssh_status === "unavailable"
                     ? "Dropbear configuration could not be fully inspected. Treat SSH exposure as unknown and review the native SSH configuration before production deployment."
                     : managementTransport.ssh_status === undefined
