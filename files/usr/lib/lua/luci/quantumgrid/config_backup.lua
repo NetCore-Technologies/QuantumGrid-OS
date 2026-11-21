@@ -86,6 +86,9 @@ function validate_archive_listing(listing)
 		if count > 8192 then
 			return nil, "The archive contains too many entries for a safe configuration restore."
 		end
+		if line:find(" link to ", 1, true) or line:find(" -> ", 1, true) then
+			return nil, "The archive contains a hard link or symbolic link; links are never restored."
+		end
 		local kind = line:sub(1, 1)
 		if kind ~= "-" and kind ~= "d" then
 			return nil, "The archive contains a link or special file; only regular files and directories can be restored."
