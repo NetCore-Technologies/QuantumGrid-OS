@@ -765,7 +765,11 @@ authentication or restart Dropbear, because doing so before a public key is inst
 could lock the administrator out. For a production deployment, install and verify a working
 administrator SSH key using a trusted console or independent recovery path, then explicitly disable
 both `PasswordAuth` and `RootPasswordAuth` for every enabled Dropbear instance. Keep SSH bound to
-the dedicated trusted management interface and leave `GatewayPorts` disabled.
+the dedicated trusted management interface and leave `GatewayPorts` disabled. The SSH posture
+review now correlates every enabled Dropbear interface against the configured firewall-zone network
+membership: only one recognised internal management zone is accepted, standard WAN/WWAN bindings
+require review, and custom, missing or ambiguous mappings remain unknown. A syntactically valid
+interface name is not treated as evidence of a trusted management network.
 
 These are configuration inventory checks, not a live socket scan, firewall reachability test,
 cryptographic validation of authorized-key contents, proof that a key is installed on an administrator's
