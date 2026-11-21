@@ -47,4 +47,70 @@ equal(#limited, 64, "inventory limit")
 equal(total, 70, "complete match count")
 equal(was_truncated, true, "truncation flag")
 
+
+local route_interfaces = {
+  { name = "lan" },
+  { name = "wan" },
+  { name = "wg0" },
+}
+local ipv4_route, ipv4_route_error = routing.validate_static_route(
+  "IPv4", "lan", "10.20.0.0/16", "192.168.1.2", "20", "100",
+  route_interfaces, {})
+assert(ipv4_route, ipv4_route_error)
+equal(ipv4_route.route_type, "route", "IPv4 route section type")
+equal(ipv4_route.target, "10.20.0.0/16", "IPv4 route target")
+equal(ipv4_route.gateway, "192.168.1.2", "IPv4 route gateway")
+equal(ipv4_route.metric, 20, "IPv4 route metric")
+equal(ipv4_route.table, "100", "IPv4 route table")
+assert(routing.static_route_contains_address(ipv4_route, "10.20.20.5"))
+assert(not routing.static_route_contains_address(ipv4_route, "10.21.20.5"))
+
+local ipv6_route, ipv6_route_error = routing.validate_static_route(
+  "IPv6", "wg0", "2001:db8:1200::/56", "fe80::1", "5", "200",
+  route_interfaces, {})
+assert(ipv6_route, ipv6_route_error)
+equal(ipv6_route.route_type, "route6", "IPv6 route section type")
+equal(ipv6_route.target, "2001:db8:1200:0:0:0:0:0/56", "IPv6 target normalization")
+equal(ipv6_route.gateway, "fe80:0:0:0:0:0:0:1", "IPv6 link-local gateway normalization")
+equal(ipv6_route.metric, 5, "IPv6 route metric")
+assert(routing.static_route_contains_address(ipv6_route, "2001:db8:1200:0:ffff::10"))
+assert(not routing.static_route_contains_address(ipv6_route, "2001:db8:1200:100::10"))
+
+local duplicate_route, duplicate_error = routing.validate_static_route(
+  "IPv4", "wan", "10.20.0.0/16", "192.0.2.1", "", "100",
+  route_interfaces, { ipv4_route })
+assert(duplicate_route == nil and duplicate_error:find("already exists", 1, true))
+
+local invalid_routes = {
+  { "IPv4", "lan", "10.20.1.0/16", "", "", "", "canonical network" },
+  { "IPv4", "lan", "10.20.0.0/0", "", "", "", "default route" },
+  { "IPv4", "lan", "10.20.0.0/16", "192.168.001.1", "", "", "noncanonical gateway" },
+  { "IPv4", "lan", "10.20.0.0/16", "224.0.0.1", "", "", "multicast gateway" },
+  { "IPv4", "../wan", "10.20.0.0/16", "", "", "", "unsafe interface" },
+  { "IPv4", "missing", "10.20.0.0/16", "", "", "", "missing interface" },
+  { "IPv4", "lan", "10.20.0.0/16", "", "65536", "", "oversized metric" },
+  { "IPv4", "lan", "10.20.0.0/16", "", "", "253", "reserved route table" },
+  { "IPv6", "wg0", "2001:db8:1::1/64", "", "", "", "IPv6 host bits" },
+  { "IPv6", "wg0", "2001:db8:gg::/64", "", "", "", "invalid IPv6 syntax" },
+  { "IPv6", "wg0", "ff00::/8", "", "", "", "multicast prefix" },
+  { "IPv6", "wg0", "fe80::/10", "", "", "", "link-local destination prefix" },
+  { "IPv6", "wg0", "2001:db8:1::/64", "::", "", "", "unspecified IPv6 gateway" },
+}
+for _, item in ipairs(invalid_routes) do
+  local route = routing.validate_static_route(
+    item[1], item[2], item[3], item[4], item[5], item[6], route_interfaces, {})
+  assert(route == nil, item[7] .. " must be rejected")
+end
+
+local route_snapshot = routing.snapshot_static_route_section({
+  [".type"] = "route6", [".name"] = "cfg_remote6",
+  interface = "wg0", target = "2001:db8:1200::/56",
+  gateway = "fe80::1", metric = "5", table = "200",
+}, "route6")
+assert(route_snapshot and route_snapshot.name == "cfg_remote6")
+equal(route_snapshot.values.table, "200", "static route rollback preserves custom table")
+assert(routing.snapshot_static_route_section({
+  [".type"] = "interface", [".name"] = "lan",
+}, "route") == nil)
+
 print("policy-routing: all parser tests passed")
