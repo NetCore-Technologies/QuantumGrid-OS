@@ -2673,6 +2673,7 @@ export async function updateRouterRemoteSyslog(input: {
     }
   }
   const form = new URLSearchParams();
+  form.set("confirmed", "1");
   form.set("enabled", input.enabled ? "1" : "0");
   form.set("host", input.host);
   form.set("port", String(input.port));
