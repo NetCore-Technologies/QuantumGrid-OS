@@ -431,6 +431,19 @@ export interface RouterFirewallRuntimeStatus {
   sampled_at: number;
 }
 
+export interface RouterManagementTransport {
+  service_installed: boolean;
+  http_listener_count: number;
+  https_listener_count: number;
+  tls_library_available: boolean;
+  certificate_available: boolean;
+  key_generator_available: boolean;
+  http_redirect_enabled: boolean;
+  https_ready: boolean;
+  plaintext_http_unredirected: boolean;
+  status: "ready" | "review" | "unavailable";
+}
+
 export interface RouterSecurityStatus {
   firewall_installed: boolean;
   firewall_config_available: boolean;
@@ -444,6 +457,7 @@ export interface RouterSecurityStatus {
   nft_available: boolean;
   nft_tables: string[];
   nft_runtime: RouterFirewallRuntimeStatus;
+  management_transport?: RouterManagementTransport;
   adblock_fast: {
     installed: boolean;
     config_available: boolean;

@@ -84,6 +84,20 @@ Security fixes will be included in supported releases whenever practical.
 
 Release notes and security advisories will identify affected versions and recommended upgrade or mitigation steps when appropriate.
 
+## Administrator web transport
+
+The stable AW1000 image includes uHTTPd, the mbedTLS ustream runtime and the OpenSSL
+key-generation utility. On first boot, QuantumGrid sets uHTTPd's `redirect_https`
+option so requests arriving on the default HTTP listeners are redirected to HTTPS.
+The Security Center reports the observed HTTPS listener, TLS runtime, certificate/key,
+and HTTP redirect configuration; it does not probe external reachability.
+
+The default device certificate is self-signed. HTTPS encrypts the management session,
+but it does not provide a publicly trusted device identity. Administrators should verify
+the certificate fingerprint over a trusted channel and keep the management interface
+restricted to trusted management networks. Do not expose the router's administration
+service to the public Internet.
+
 ## Development Status
 
 QuantumGrid OS is experimental software during development.

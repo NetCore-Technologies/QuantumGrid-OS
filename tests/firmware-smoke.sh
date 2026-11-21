@@ -4,6 +4,13 @@ trap 'status=$?; printf "ERROR: firmware smoke check failed at line %s: %s (stat
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/configs/aw1000-max.config"
+grep -qx 'CONFIG_PACKAGE_uhttpd=y' "$CONFIG"
+grep -qx 'CONFIG_PACKAGE_libustream-mbedtls=y' "$CONFIG"
+grep -qx 'CONFIG_PACKAGE_openssl-util=y' "$CONFIG"
+test -s "$ROOT/files/etc/uci-defaults/95-quantumgrid-https-only"
+grep -Fq 'uhttpd.main.redirect_https=1' "$ROOT/files/etc/uci-defaults/95-quantumgrid-https-only"
+grep -Fq 'management_transport = management_transport.inspect(uci, fs)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'plaintext_http_unredirected' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 RELEASE_WORKFLOW="$ROOT/.github/workflows/firmware-release.yml"
 grep -Fqx '  id-token: write' "$RELEASE_WORKFLOW"
 grep -Fqx '  attestations: write' "$RELEASE_WORKFLOW"

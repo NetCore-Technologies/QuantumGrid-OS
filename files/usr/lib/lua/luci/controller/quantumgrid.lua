@@ -2132,6 +2132,7 @@ end
 local function security_status(uci, fs)
 	local firewall_inventory = require "luci.quantumgrid.firewall_inventory"
 	local firewall_runtime = require "luci.quantumgrid.firewall_runtime"
+	local management_transport = require "luci.quantumgrid.management_transport"
 	local result = {
 		firewall_installed = fs.access("/etc/init.d/firewall") == true,
 		firewall_config_available = fs.access("/etc/config/firewall") == true,
@@ -2145,6 +2146,7 @@ local function security_status(uci, fs)
 		nft_available = false,
 		nft_tables = {},
 		nft_runtime = firewall_runtime.unavailable(os.time(), false),
+		management_transport = management_transport.inspect(uci, fs),
 		adblock_fast = {
 			installed = fs.access("/etc/init.d/adblock-fast") == true,
 			config_available = fs.access("/etc/config/adblock-fast") == true,

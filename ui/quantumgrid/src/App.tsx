@@ -2933,6 +2933,7 @@ function CellularControlPage({ routerOverview, cellularHistory }: { routerOvervi
 
 function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOverview: RouterOverview | null; wireGuardPeerRates: Map<string, WireGuardPeerMeasuredRate> }) {
   const security = routerOverview?.security;
+  const managementTransport = security?.management_transport;
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
   const nftRuntime = security?.nft_runtime;
@@ -2987,6 +2988,12 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
     const rows: Array<Array<string | number | boolean | null | undefined>> = [
       ["Exported at (UTC)", "Category", "Item", "Status", "Details"],
       [exportedAt, "Firewall", "Init service", security.firewall_installed ? "INSTALLED" : "MISSING", ""],
+      [exportedAt, "Management transport", "Posture", managementTransport?.status?.toUpperCase() ?? "UNKNOWN", ""],
+      [exportedAt, "Management transport", "HTTPS readiness", managementTransport?.https_ready ? "READY" : "NOT VERIFIED", ""],
+      [exportedAt, "Management transport", "HTTP listeners", managementTransport?.http_listener_count ?? "UNKNOWN", ""],
+      [exportedAt, "Management transport", "HTTPS listeners", managementTransport?.https_listener_count ?? "UNKNOWN", ""],
+      [exportedAt, "Management transport", "HTTP redirect", managementTransport?.http_redirect_enabled ? "ENABLED" : "DISABLED / UNKNOWN", ""],
+      [exportedAt, "Management transport", "Unredirected HTTP", managementTransport?.plaintext_http_unredirected ? "PRESENT" : "NOT REPORTED", ""],
       [exportedAt, "Firewall", "Configuration", security.firewall_config_readable ? "READABLE" : "UNAVAILABLE", ""],
       [exportedAt, "Firewall", "Rules", "REPORTED", security.rules_count],
       [exportedAt, "Firewall", "Redirects", "REPORTED", security.redirects_count],
@@ -3084,6 +3091,37 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
         <Metric title="Firewall Zones" value={security?.firewall_config_readable ? fmt(zones.length) : "N/A"} unit="" detail="UCI zone sections" icon={Settings} />
         <Metric title="Rules / Redirects" value={security?.firewall_config_readable ? `${fmt(security.rules_count)} / ${fmt(security.redirects_count)}` : "N/A"} unit="" detail="Configured firewall entries" icon={Activity} />
       </div>
+
+      <Panel title="Administrator web transport" eyebrow="UHTTPD · TLS · HTTP REDIRECT">
+        {!security ? (
+          <div className="module-message">Waiting for authenticated management-transport telemetry.</div>
+        ) : !managementTransport ? (
+          <div className="module-message">This firmware does not report HTTPS readiness. Update QuantumGrid firmware before treating the administrator interface as protected.</div>
+        ) : (
+          <>
+            <div className="firewall-posture-heading">
+              <div><strong>HTTPS configuration posture</strong><span>Read-only service, TLS, certificate and listener checks</span></div>
+              <Status active={managementTransport.status === "ready"}>{managementTransport.status.toUpperCase()}</Status>
+            </div>
+            <InfoRows rows={[
+              ["uHTTPd service", managementTransport.service_installed ? "INSTALLED" : "MISSING"],
+              ["HTTPS listeners", fmt(managementTransport.https_listener_count)],
+              ["TLS runtime library", managementTransport.tls_library_available ? "AVAILABLE" : "MISSING"],
+              ["Certificate and private key", managementTransport.certificate_available ? "PRESENT" : "MISSING"],
+              ["Certificate key generator", managementTransport.key_generator_available ? "AVAILABLE" : "MISSING"],
+              ["HTTP listeners", fmt(managementTransport.http_listener_count)],
+              ["HTTP → HTTPS redirect", managementTransport.http_redirect_enabled ? "ENABLED" : "DISABLED"],
+            ]} />
+            <div className="module-message">
+              {managementTransport.status === "review"
+                ? "HTTP listeners are active without an HTTPS redirect. Browser credentials and session traffic can travel in plaintext; do not use the HTTP address for administration."
+                : managementTransport.status === "unavailable"
+                  ? "HTTPS readiness could not be confirmed. Do not enter administrator credentials over HTTP until the TLS runtime, HTTPS listener and certificate/key are available."
+                  : "HTTPS listeners, TLS runtime and certificate/key are present, and any configured HTTP listener is redirected. The default device certificate is self-signed; this check does not establish browser trust, certificate validity or WAN reachability."}
+            </div>
+          </>
+        )}
+      </Panel>
 
       <Panel title="Firewall posture review" eyebrow="READ-ONLY CONFIGURATION CHECKS">
         <div className="firewall-posture-summary">
