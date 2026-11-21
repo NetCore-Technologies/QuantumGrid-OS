@@ -255,7 +255,8 @@ local function map_count(value, maximum)
 		local noise = type(item) == "table" and bounded_integer(item.noise, -127, 0) or nil
 		local key_matches = type(key) == "string" and valid_bssid(key) and key:lower() == bssid
 		if type(item) ~= "table" or not key_matches or not valid_bssid(bssid) or
-			not valid_ssid(ssid) or not frequency or clients == nil or seen_bssids[bssid] then
+			not valid_ssid(ssid) or not frequency or clients == nil or load == nil or
+			noise == nil or seen_bssids[bssid] then
 			invalid_count = invalid_count + 1
 		else
 			seen_bssids[bssid] = true
