@@ -163,6 +163,40 @@ local gateway_scope = office.validate_dhcp_scope_update(
   "1", "120", "12h", "192.168.10.1", "255.255.255.0", {})
 assert(gateway_scope == nil, "pool ranges containing the gateway must be rejected")
 
+local segment_bridges = {
+  { name = "br-lan", vlan_filtering = true },
+  { name = "br-iot", vlan_filtering = false },
+}
+local segment_vlans = {
+  { name = "vlan20", device = "br-lan", vlan_id = 20 },
+  { name = "vlan30", device = "br-lan", vlan_id = 30 },
+}
+local segment_interfaces = {
+  { name = "lan", ipv4 = { "192.168.1.1" }, netmask = "255.255.255.0" },
+}
+local segment_zones = { { name = "lan", networks = { "lan" } } }
+local valid_segment = office.validate_office_vlan_segment(
+  "corp", "corp", "br-lan", "20", "192.168.20.1", "255.255.255.0",
+  "100", "120", "12h", segment_interfaces, segment_bridges, segment_vlans, segment_zones, {})
+assert(valid_segment and valid_segment.device == "br-lan.20")
+assert(valid_segment.pool_start_ip == "192.168.20.100" and valid_segment.pool_end_ip == "192.168.20.219")
+
+local function reject_segment(section, zone, bridge, vid, address, netmask, start_value, limit, lease, label)
+  local result, err = office.validate_office_vlan_segment(
+    section, zone, bridge, vid, address, netmask, start_value, limit, lease,
+    segment_interfaces, segment_bridges, segment_vlans, segment_zones, {})
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain why it was rejected")
+end
+reject_segment("../corp", "corp", "br-lan", "20", "192.168.20.1", "255.255.255.0", "100", "120", "12h", "path-like network section")
+reject_segment("corp", "lan", "br-lan", "20", "192.168.20.1", "255.255.255.0", "100", "120", "12h", "existing firewall zone")
+reject_segment("corp", "corp", "br-iot", "20", "192.168.20.1", "255.255.255.0", "100", "120", "12h", "bridge without VLAN filtering")
+reject_segment("corp", "corp", "br-lan", "40", "192.168.20.1", "255.255.255.0", "100", "120", "12h", "missing bridge VLAN")
+reject_segment("corp", "corp", "br-lan", "20", "192.168.1.1", "255.255.255.0", "100", "120", "12h", "overlapping office subnet")
+reject_segment("corp", "corp", "br-lan", "20", "192.168.20.1", "255.0.255.0", "100", "120", "12h", "non-contiguous new subnet mask")
+reject_segment("corp", "corp", "br-lan", "20", "192.168.20.0", "255.255.255.0", "100", "120", "12h", "network-address gateway")
+reject_segment("corp", "corp", "br-lan", "20", "192.168.20.1", "255.255.255.0", "240", "40", "12h", "DHCP pool outside new subnet")
+
 local redirect_zones = {
   { name = "wan", networks = { "wan", "wan6" } },
   { name = "corp", networks = { "corp" } },
