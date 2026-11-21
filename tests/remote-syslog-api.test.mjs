@@ -89,6 +89,9 @@ test("TLS syslog API rejects responses that do not confirm the selected protocol
     { ...tlsSuccess, restarted: false },
     { ...tlsSuccess, rolled_back: true },
     { ...tlsSuccess, host: "other.corp.example" },
+    { ...tlsSuccess, port: 6515 },
+    { ...tlsSuccess, tls_status: "review" },
+    { ...tlsSuccess, tls_status: undefined },
   ];
   for (const response of invalidResponses) {
     globalThis.fetch = async () => jsonResponse(response);
