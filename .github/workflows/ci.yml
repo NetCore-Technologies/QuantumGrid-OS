@@ -121,6 +121,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.1
+      - name: Validate hardware profile contracts
+        run: |
+          python3 -m py_compile scripts/verify-device-profile.py tests/device-profile.py
+          python3 scripts/verify-device-profile.py profiles/arcadyan-aw1000.json --check-only
+          python3 tests/device-profile.py
       - name: Check shell and Lua syntax
         run: |
           bash -n build.sh
