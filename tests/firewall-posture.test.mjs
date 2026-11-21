@@ -2,6 +2,39 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { auditFirewallPosture } from "../ui/quantumgrid/src/firewallPosture.ts";
 
+const managementTransport = {
+  service_installed: true,
+  http_listener_count: 0,
+  https_listener_count: 1,
+  tls_library_available: true,
+  certificate_available: true,
+  key_generator_available: true,
+  private_key: { available: true, path: "/etc/uhttpd.key", status: "present" },
+  certificate_fingerprint: { available: false, algorithm: "SHA-256" },
+  http_redirect_enabled: false,
+  https_configured: true,
+  plaintext_http_unredirected: false,
+  ssh_service_installed: true,
+  ssh_config_available: true,
+  ssh_instance_count: 1,
+  ssh_enabled_instance_count: 1,
+  ssh_truncated: false,
+  ssh_instances: [{
+    name: "main",
+    enabled: true,
+    interface: "lan",
+    interface_bound: true,
+    interface_zone_status: "internal",
+    port: 22,
+    port_valid: true,
+    password_auth_enabled: false,
+    root_password_auth_enabled: false,
+    gateway_ports_enabled: false,
+  }],
+  ssh_status: "ready",
+  status: "ready",
+};
+
 const security = (overrides = {}) => ({
   firewall_installed: true,
   firewall_config_available: true,
@@ -32,6 +65,7 @@ const security = (overrides = {}) => ({
     wireguard_interfaces: [],
     openvpn_enabled_instances: 0,
   },
+  management_transport: managementTransport,
   ...overrides,
 });
 
@@ -40,6 +74,55 @@ test("missing telemetry remains unknown instead of being reported secure", () =>
   assert.equal(result.reviewCount, 0);
   assert.equal(result.okCount, 0);
   assert.equal(result.unknownCount, 1);
+});
+
+test("HTTPS and key-only SSH on a uniquely mapped internal zone pass management checks", () => {
+  const result = auditFirewallPosture(security());
+  assert.equal(result.checks.find((item) => item.id === "management-https")?.status, "ok");
+  assert.equal(result.checks.find((item) => item.id === "ssh-authentication")?.status, "ok");
+  assert.equal(result.checks.find((item) => item.id === "ssh-management-zone:main")?.status, "ok");
+});
+
+test("unredirected plaintext HTTP and unsafe HTTPS key metadata require review", () => {
+  const result = auditFirewallPosture(security({
+    management_transport: {
+      ...managementTransport,
+      plaintext_http_unredirected: true,
+      private_key: { available: true, path: "/etc/uhttpd.key", status: "review" },
+    },
+  }));
+  assert.equal(result.checks.find((item) => item.id === "management-https")?.status, "review");
+});
+
+test("SSH mapped to an external WAN firewall zone is a management-plane exposure", () => {
+  const result = auditFirewallPosture(security({
+    management_transport: {
+      ...managementTransport,
+      ssh_status: "review",
+      status: "review",
+      ssh_instances: [{ ...managementTransport.ssh_instances[0], interface: "wan", interface_zone_status: "external" }],
+    },
+  }));
+  assert.equal(result.checks.find((item) => item.id === "ssh-management-zone:main")?.status, "review");
+  assert.match(result.checks.find((item) => item.id === "ssh-management-zone:main")?.detail ?? "", /external WAN\/WWAN/i);
+});
+
+test("custom or ambiguous SSH zone mappings remain unknown rather than trusted", () => {
+  const result = auditFirewallPosture(security({
+    management_transport: {
+      ...managementTransport,
+      ssh_status: "review",
+      ssh_instances: [{ ...managementTransport.ssh_instances[0], interface: "uplink", interface_zone_status: "unknown" }],
+    },
+  }));
+  assert.equal(result.checks.find((item) => item.id === "ssh-management-zone:main")?.status, "unknown");
+});
+
+test("missing management transport telemetry cannot imply a hardened administrator plane", () => {
+  const result = auditFirewallPosture(security({ management_transport: undefined }));
+  assert.equal(result.checks.find((item) => item.id === "management-https")?.status, "unknown");
+  assert.equal(result.checks.find((item) => item.id === "ssh-authentication")?.status, "unknown");
+  assert.equal(result.checks.find((item) => item.id === "ssh-management-zone")?.status, "unknown");
 });
 
 test("missing firewall service and configuration require review", () => {
