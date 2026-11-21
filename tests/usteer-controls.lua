@@ -106,7 +106,8 @@ assert(usteer.validate(input(), binding, different_network) == nil,
 local different_key = {
   aps[1],
   { section = "ap5", radio = "radio1", mode = "ap", ssid = "Corp", networks = { "corp20" },
-    encryption = "sae", key = "different-key-value", ieee80211k = "1", ieee80211v = "1" },
+    encryption = "sae", key = "different-key-value", ieee80211w = "2", dynamic_vlan = "0",
+    acct_server = "", acct_port = 1813, acct_secret = "", ieee80211k = "1", ieee80211v = "1" },
 }
 assert(usteer.validate(input(), binding, different_key) == nil,
   "same-SSID local APs must use identical security credentials")
