@@ -4,8 +4,18 @@ on:
   # Full OpenWrt builds run for published-version tags or an explicit manual dispatch.
   # Routine main-branch changes are covered by the fast lint, build and firmware-smoke gates.
   push:
+    branches:
+      - main
     tags:
       - "qg-v*"
+    paths:
+      - ".github/workflows/firmware-release.yml"
+      - "build.sh"
+      - "configs/**"
+      - "files/**"
+      - "scripts/**"
+      - "ui/quantumgrid/**"
+      - "quantumgrid-configure.sh"
   workflow_dispatch:
     inputs:
       openwrt_ref:
@@ -45,6 +55,7 @@ jobs:
   build:
     name: Build and package AW1000 firmware
     runs-on: ubuntu-24.04
+    timeout-minutes: 360
     permissions:
       contents: read
     env:
