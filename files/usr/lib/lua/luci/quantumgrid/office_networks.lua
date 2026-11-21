@@ -1034,14 +1034,23 @@ function validate_office_segment_ipv6(enabled)
 
 	local modes, mode_error = validate_dhcp_scope_ipv6_modes("server", "server", "disabled")
 	if not modes then return nil, mode_error end
+	local advanced, advanced_error = validate_dhcp_scope_ipv6_advanced(
+		"managed-config+other-config", "1", "1", "medium", "2700",
+		"1", "0", "0", "UNCHANGED")
+	if not advanced then return nil, advanced_error end
 	return {
 		enabled = true,
 		ip6assign = "64",
 		dhcpv6 = modes.dhcpv6,
 		ra = modes.ra,
 		ra_flags = { "managed-config", "other-config" },
-		ra_slaac = "1",
-		ra_dns = "1",
+		ra_slaac = advanced.ra_slaac,
+		ra_dns = advanced.ra_dns,
+		ra_preference = advanced.ra_preference,
+		ra_lifetime = advanced.ra_lifetime,
+		dhcpv6_na = advanced.dhcpv6_na,
+		dhcpv6_pd = advanced.dhcpv6_pd,
+		dhcpv6_assignall = advanced.dhcpv6_assignall,
 		ndp = modes.ndp
 	}
 end
