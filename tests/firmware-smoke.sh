@@ -1090,3 +1090,5 @@ grep -Fq 'result.qdiscs_truncated = true' "$ROOT/files/usr/lib/lua/luci/controll
 grep -Fq 'runtime_state: "observed"' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'LIVE ROOT MATCH' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'inventory_truncated' "$ROOT/tests/sqm-controls.lua"
+grep -Fq 'function parse_qdisc_inventory(output)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/sqm.lua"
+grep -Fq 'sqm_validator.parse_qdisc_inventory(output)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
