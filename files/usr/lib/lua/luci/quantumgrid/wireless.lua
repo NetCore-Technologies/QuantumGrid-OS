@@ -60,6 +60,19 @@ function validate_roaming_features(encryption, ieee80211k, ieee80211v)
 	return { ieee80211k = ieee80211k, ieee80211v = ieee80211v }
 end
 
+function validate_expected_current_channel(expected, current)
+	if expected == nil then return true end
+	if type(expected) ~= "string" or
+		(expected ~= "auto" and (not expected:match("^[1-9]%d?%d?$") or
+			not tonumber(expected) or tonumber(expected) > 233)) then
+		return nil, "The expected current radio channel must be Auto or a valid channel number.", 400
+	end
+	if type(current) ~= "string" or expected ~= current then
+		return nil, "The radio channel changed after the scan. Re-scan and review a fresh recommendation before applying it.", 409
+	end
+	return true
+end
+
 function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, radius_server, radius_port, radius_secret, accounting_server, accounting_port, accounting_secret)
 	if not valid_section(radio) then
 		return nil, "Invalid radio section name."
