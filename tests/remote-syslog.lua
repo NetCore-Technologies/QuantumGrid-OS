@@ -13,6 +13,9 @@ for _, globals in ipairs({
   { [".type"] = "globals", setuid = "nobody", setgid = "root" },
   { [".type"] = "globals", setuid = "0", setgid = "nogroup" },
   { [".type"] = "globals", setuid = "nobody" },
+  { [".type"] = "globals", setuid = "   ", setgid = "nogroup" },
+  { [".type"] = "globals", setuid = "nobody", setgid = "bad group" },
+  { [".type"] = "globals", setuid = "nobody", setgid = "name;id" },
   { [".type"] = "service", setuid = "nobody", setgid = "nogroup" },
 }) do
   assert(not remote.has_non_root_privilege_drop(globals),
