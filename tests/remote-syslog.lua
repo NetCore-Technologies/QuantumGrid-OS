@@ -50,13 +50,13 @@ assert(not remote.has_only_managed_service_options({
 local valid = remote.validate({
   confirmed = "1",
   enabled = "1",
-  host = "192.0.2.15",
+  host = "10.40.0.15",
   port = "514",
   protocol = "udp",
   hostname = "qg-office-router",
   prefix = "office-site1"
 })
-assert(valid and valid.enabled and valid.host == "192.0.2.15" and valid.port == "514")
+assert(valid and valid.enabled and valid.host == "10.40.0.15" and valid.port == "514")
 assert(valid.protocol == "udp" and valid.hostname == "qg-office-router" and valid.prefix == "office-site1")
 
 local tcp = remote.validate({
@@ -100,15 +100,15 @@ assert(remote.stunnel_options({ enabled = false, protocol = "tls" }) == nil)
 local tls_ip = remote.validate({
   confirmed = "1",
   enabled = "1",
-  host = "192.0.2.15",
+  host = "10.40.0.15",
   port = "6514",
   protocol = "tls"
 })
-assert(tls_ip and tls_ip.tls.check_ip == "192.0.2.15")
+assert(tls_ip and tls_ip.tls.check_ip == "10.40.0.15")
 assert(tls_ip.tls.check_host == nil and tls_ip.tls.sni == nil,
   "IPv4 destinations must use IP SAN validation rather than hostname/SNI validation")
 local ip_tunnel_options = remote.stunnel_options(tls_ip)
-assert(ip_tunnel_options.lists.checkIP[1] == "192.0.2.15")
+assert(ip_tunnel_options.lists.checkIP[1] == "10.40.0.15")
 assert(#ip_tunnel_options.lists.checkHost == 0 and #ip_tunnel_options.lists.sni == 0)
 
 local ipv6_tls = remote.validate({
@@ -148,7 +148,14 @@ assert(remote.validate({ enabled = "0" }) == nil, "missing explicit confirmation
 assert(disabled and disabled.enabled == false, "remote logging may be disabled without a destination")
 
 local invalid = {
-  { confirmed = "1", enabled = "2", host = "192.0.2.15", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "2", host = "10.40.0.15", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "192.0.2.15", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "198.51.100.5", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "203.0.113.5", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "127.0.0.1", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "169.254.1.5", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "224.0.0.1", port = "514", protocol = "udp" },
+  { confirmed = "1", enabled = "1", host = "0.0.0.0", port = "514", protocol = "udp" },
   { confirmed = "1", enabled = "1", host = "192.0.2.999", port = "514", protocol = "udp" },
   { confirmed = "1", enabled = "1", host = "bad host", port = "514", protocol = "udp" },
   { confirmed = "1", enabled = "1", host = "../syslog", port = "514", protocol = "udp" },
@@ -258,12 +265,12 @@ end
 local unencrypted_uci, unencrypted_fs, unencrypted_process = status_fixture({
   system_sections = {{
     [".name"] = "system", [".type"] = "system",
-    log_ip = "192.0.2.20", log_port = "514", log_proto = "udp", log_remote = "1",
+    log_ip = "10.40.0.20", log_port = "514", log_proto = "udp", log_remote = "1",
   }},
 })
 local unencrypted_status = remote.inspect_status(unencrypted_uci, unencrypted_fs, 456, unencrypted_process)
 assert(unencrypted_status.available and unencrypted_status.enabled)
-assert(unencrypted_status.protocol == "udp" and unencrypted_status.host == "192.0.2.20")
+assert(unencrypted_status.protocol == "udp" and unencrypted_status.host == "10.40.0.20")
 assert(unencrypted_status.tls_privilege_drop_configured,
   "TLS service prerequisites must be detected even before the administrator enables TLS")
 assert(unencrypted_status.tls_status == "unavailable", "plain UDP must not be reported as TLS")
@@ -333,13 +340,13 @@ local ip_tls_uci, ip_tls_fs, ip_tls_process = status_fixture({
     [".name"] = "quantumgrid_syslog", [".type"] = "service",
     enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
     CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1",
-    sslVersion = "TLSv1.2", connect = { "192.0.2.15:6514" },
-    checkIP = { "192.0.2.15" },
+    sslVersion = "TLSv1.2", connect = { "10.40.0.15:6514" },
+    checkIP = { "10.40.0.15" },
   },
 })
 local ip_tls_status = remote.inspect_status(ip_tls_uci, ip_tls_fs, 4, ip_tls_process)
 assert(ip_tls_status.tls_status == "ready" and ip_tls_status.tls_identity_verified)
-assert(ip_tls_status.host == "192.0.2.15" and ip_tls_status.port == 6514)
+assert(ip_tls_status.host == "10.40.0.15" and ip_tls_status.port == 6514)
 
 local stopped_tunnel_uci, stopped_tunnel_fs = status_fixture({ process = {
   pid = "1234", comm = "dropbear\n", cmdline = "/usr/bin/dropbear\0",
@@ -379,7 +386,7 @@ assert(missing_ca.tls_status == "unavailable" and not missing_ca.enabled)
 local ambiguous_uci, ambiguous_fs, ambiguous_process = status_fixture({
   system_sections = {
     { [".name"] = "system", [".type"] = "system", log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp", log_remote = "1" },
-    { [".name"] = "system2", [".type"] = "system", log_ip = "192.0.2.10", log_port = "514", log_proto = "udp", log_remote = "1" },
+    { [".name"] = "system2", [".type"] = "system", log_ip = "10.40.0.10", log_port = "514", log_proto = "udp", log_remote = "1" },
   },
 })
 local ambiguous_status = remote.inspect_status(ambiguous_uci, ambiguous_fs, 6, ambiguous_process)
