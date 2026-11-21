@@ -1845,6 +1845,7 @@ function action_usteer_update()
 	local options = {
 		"enabled", "network", "syslog", "local_mode", "ipv6",
 		"assoc_steering", "probe_steering", "aggressiveness",
+		"load_kick_enabled", "min_snr", "min_connect_snr", "roam_scan_snr", "roam_trigger_snr",
 		"band_steering_interval", "band_steering_min_snr",
 		"band_steering_threshold", "load_balancing_threshold"
 	}
@@ -2023,6 +2024,7 @@ function action_usteer_update()
 	local previous = {}
 	for _, option in ipairs(options) do previous[option] = snapshot[option] end
 	previous.ssid_list = snapshot.ssid_list
+	previous.aggressiveness_mac_list = snapshot.aggressiveness_mac_list
 	local previous_init_enabled = fs.access("/etc/rc.d/S50usteer") == true
 	local previous_config_enabled = snapshot.enabled ~= "0"
 	local desired = { enabled = update.enabled and "1" or "0" }
@@ -2033,6 +2035,11 @@ function action_usteer_update()
 		desired.ipv6 = "0"
 		desired.assoc_steering = "0"
 		desired.probe_steering = "0"
+		desired.load_kick_enabled = "0"
+		desired.min_snr = "0"
+		desired.min_connect_snr = "0"
+		desired.roam_scan_snr = "0"
+		desired.roam_trigger_snr = "0"
 		desired.aggressiveness = tostring(update.aggressiveness)
 		desired.band_steering_interval = tostring(update.band_steering_interval)
 		desired.band_steering_min_snr = tostring(update.band_steering_min_snr)
@@ -2061,6 +2068,14 @@ function action_usteer_update()
 			if list_ok and list_result == nil then list_result = true end
 		end
 		if not list_ok or list_result ~= true then restored = false end
+		local override_ok, override_result
+		if type(previous.aggressiveness_mac_list) == "table" then
+			override_ok, override_result = pcall(uci.set_list, uci, "usteer", section_name, "aggressiveness_mac_list", previous.aggressiveness_mac_list)
+		else
+			override_ok, override_result = pcall(uci.delete, uci, "usteer", section_name, "aggressiveness_mac_list")
+			if override_ok and override_result == nil then override_result = true end
+		end
+		if not override_ok or override_result ~= true then restored = false end
 		local commit_ok, committed = false, false
 		if restored then commit_ok, committed = pcall(uci.commit, uci, "usteer") end
 		return restored and commit_ok and committed == true
@@ -2106,6 +2121,12 @@ function action_usteer_update()
 		end
 	end
 	if update.enabled then
+		local override_ok, override_result = pcall(uci.delete, uci, "usteer", section_name, "aggressiveness_mac_list")
+		if not override_ok or override_result == false then
+			pcall(uci.revert, uci, "usteer")
+			respond(500, { ok = false, error = "Per-client aggressiveness overrides could not be cleared safely." })
+			return
+		end
 		local list_ok, list_result = pcall(uci.set_list, uci, "usteer", section_name, "ssid_list", update.ssids)
 		if not list_ok or list_result ~= true then
 			pcall(uci.revert, uci, "usteer")
@@ -2193,6 +2214,11 @@ function action_usteer_update()
 		aggressiveness = update.enabled and update.aggressiveness or tonumber(previous.aggressiveness) or 0,
 		assoc_steering = false,
 		probe_steering = false,
+		load_kick_enabled = false,
+		min_snr = 0,
+		min_connect_snr = 0,
+		roam_scan_snr = 0,
+		roam_trigger_snr = 0,
 		band_steering_interval = update.enabled and update.band_steering_interval or tonumber(previous.band_steering_interval) or 0,
 		band_steering_min_snr = update.enabled and update.band_steering_min_snr or tonumber(previous.band_steering_min_snr) or -60,
 		band_steering_threshold = update.enabled and update.band_steering_threshold or tonumber(previous.band_steering_threshold) or 5,
@@ -3731,6 +3757,11 @@ local function usteer_status(uci, fs)
 		aggressiveness = tonumber(section and section.aggressiveness) or 1,
 		assoc_steering = section and section.assoc_steering == "1" or false,
 		probe_steering = section and section.probe_steering == "1" or false,
+		load_kick_enabled = section and section.load_kick_enabled == "1" or false,
+		min_snr = tonumber(section and section.min_snr) or 0,
+		min_connect_snr = tonumber(section and section.min_connect_snr) or 0,
+		roam_scan_snr = tonumber(section and section.roam_scan_snr) or 0,
+		roam_trigger_snr = tonumber(section and section.roam_trigger_snr) or 0,
 		local_mode = section and section.local_mode == "1" or false,
 		band_steering_interval = tonumber(section and section.band_steering_interval) or 0,
 		band_steering_min_snr = tonumber(section and section.band_steering_min_snr) or -60,
@@ -3786,6 +3817,10 @@ local function usteer_status(uci, fs)
 		return true
 	end
 	local runtime_matches = tonumber(runtime_config.aggressiveness) == result.aggressiveness and
+		runtime_config.load_kick_enabled == false and result.load_kick_enabled == false and
+		tostring(runtime_config.min_snr or 0) == "0" and tostring(runtime_config.min_connect_snr or 0) == "0" and
+		tostring(runtime_config.roam_scan_snr or 0) == "0" and tostring(runtime_config.roam_trigger_snr or 0) == "0" and
+		type(runtime_config.aggressiveness_mac_list) == "table" and #runtime_config.aggressiveness_mac_list == 0 and
 		tostring(runtime_config.local_mode == true and "1" or "0") == (result.local_mode and "1" or "0") and
 		tostring(runtime_config.assoc_steering == true and "1" or "0") == (result.assoc_steering and "1" or "0") and
 		tostring(runtime_config.band_steering_interval or 0) == tostring(result.band_steering_interval) and
