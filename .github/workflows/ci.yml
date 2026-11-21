@@ -67,6 +67,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/policy-routing-analysis.test.mjs
       - name: Test IPv4 and IPv6 static route API contract
         run: node --experimental-strip-types --test ../../tests/static-routes-api.test.mjs
+      - name: Test authenticated TLS and native remote syslog API
+        run: node --experimental-strip-types --test ../../tests/remote-syslog-api.test.mjs
       - name: Test measured interface throughput rates
         run: node --experimental-strip-types --test ../../tests/interface-rates.test.mjs
       - name: Test measured WireGuard peer rates
