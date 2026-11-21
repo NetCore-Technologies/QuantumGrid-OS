@@ -2957,7 +2957,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const sshGatewayPorts = summarizeSshOption(sshGatewayPortsValues);
   const sshAuthorizedKeys = managementTransport?.ssh_authorized_keys;
   const sshAuthorizedKeysPermissions = sshAuthorizedKeys?.status === "present"
-    ? "ROOT-OWNED · NOT GROUP/WORLD-WRITABLE"
+    ? "REGULAR · ROOT-READABLE · ROOT-OWNED · NOT GROUP/WORLD-WRITABLE"
     : sshAuthorizedKeys?.status?.toUpperCase() ?? "UNKNOWN";
   const zones = security?.zones ?? [];
   const fw4Present = security?.nft_tables.includes("inet/fw4") ?? false;
@@ -3031,6 +3031,8 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Management transport", "Authorized keys metadata", sshAuthorizedKeysPermissions, sshAuthorizedKeys?.path ?? ""],
       [exportedAt, "Management transport", "Authorized keys file bytes", sshAuthorizedKeys?.size_bytes ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "Authorized keys root owned", sshAuthorizedKeys?.root_owned === true ? "YES" : sshAuthorizedKeys?.root_owned === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys regular file", sshAuthorizedKeys?.regular_file === true ? "YES" : sshAuthorizedKeys?.regular_file === false ? "NO" : "UNKNOWN", ""],
+      [exportedAt, "Management transport", "Authorized keys owner readable", sshAuthorizedKeys?.owner_readable === true ? "YES" : sshAuthorizedKeys?.owner_readable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "Authorized keys group writable", sshAuthorizedKeys?.group_writable === true ? "YES" : sshAuthorizedKeys?.group_writable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "Authorized keys other writable", sshAuthorizedKeys?.other_writable === true ? "YES" : sshAuthorizedKeys?.other_writable === false ? "NO" : "UNKNOWN", ""],
       [exportedAt, "Management transport", "SSH inventory truncated", managementTransport?.ssh_truncated ? "YES" : managementTransport?.ssh_truncated === false ? "NO" : "UNKNOWN", ""],
@@ -3170,7 +3172,9 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["SSH gateway port forwarding", sshGatewayPorts],
               ["Authorized keys file", sshAuthorizedKeys?.status?.toUpperCase() ?? "NOT REPORTED"],
               ["Authorized keys file location", sshAuthorizedKeys?.path || "UNKNOWN"],
-              ["Authorized keys ownership and write permissions", sshAuthorizedKeysPermissions],
+              ["Authorized keys file validation", sshAuthorizedKeysPermissions],
+              ["Authorized keys file type", sshAuthorizedKeys?.regular_file === true ? "REGULAR FILE" : sshAuthorizedKeys?.regular_file === false ? "NOT A REGULAR FILE" : "UNKNOWN"],
+              ["Authorized keys owner readable", sshAuthorizedKeys?.owner_readable === true ? "YES" : sshAuthorizedKeys?.owner_readable === false ? "NO" : "UNKNOWN"],
               ["Authorized keys file size", sshAuthorizedKeys?.size_bytes == null ? "UNKNOWN" : fmt(sshAuthorizedKeys.size_bytes) + " bytes"],
               ["SSH inventory truncated", managementTransport.ssh_truncated === true ? "YES" : managementTransport.ssh_truncated === false ? "NO" : "UNKNOWN"],
             ]} />
