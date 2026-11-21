@@ -773,8 +773,9 @@ absolute or traversal paths, symlinks, hardlinks, special files and members outs
 and exact OpenWrt target and architecture. Cross-device and cross-target restores are not
 supported; old backups without these markers must be recreated.
 
-Before applying the uploaded archive, QuantumGrid verifies free `/tmp` capacity for the upload,
-a maximum-sized 64 MiB rollback archive and an 8 MiB safety reserve. It then creates and validates a
+Before accepting the restore, QuantumGrid bounds the uploaded archive at 64 MiB. Once it has been
+staged in `/tmp`, the controller verifies that the remaining free capacity can hold a maximum-sized
+64 MiB rollback archive and an 8 MiB safety reserve. It then creates and validates a
 second native rollback snapshot before using `sysupgrade -r` to restore and scheduling a reboot so
 services and network configuration start from a clean boot. If the restore command fails, the controller attempts to
 reapply the rollback snapshot and schedules a reboot when rollback succeeds. If rollback cannot
