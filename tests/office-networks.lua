@@ -762,6 +762,41 @@ end
 local capped = office.build_inventory(oversized)
 assert(capped.interface_count == 64 and capped.vlan_count == 64 and capped.truncated)
 
+local provisioned_segment, provisioned_segment_error = office.validate_office_segment(
+  "corp20", "br-lan", "20", "192.168.20.1", "255.255.255.0",
+  "100", "100", "12h",
+  {
+    { name = "lan", protocol = "static", device = "br-lan",
+      ipv4 = { "192.168.1.1" }, netmask = "255.255.255.0" }
+  },
+  { { name = "br-lan", vlan_filtering = true } },
+  { { name = "vlan20", device = "br-lan", vlan_id = 20, ports = { "lan1:t" } } },
+  { {
+    section = "cfg_corp", name = "corp", networks = {},
+    input = "REJECT", output = "ACCEPT", forward = "REJECT", selected = true
+  } },
+  {})
+assert(provisioned_segment and provisioned_segment.device == "br-lan.20"
+  and provisioned_segment.zone_output == "ACCEPT",
+  provisioned_segment_error or "dual-stack validation needs the selected zone output policy")
+
+local closed_output_segment = office.validate_office_segment(
+  "corp30", "br-lan", "30", "192.168.30.1", "255.255.255.0",
+  "100", "100", "12h",
+  {
+    { name = "lan", protocol = "static", device = "br-lan",
+      ipv4 = { "192.168.1.1" }, netmask = "255.255.255.0 }
+  },
+  { { name = "br-lan", vlan_filtering = true } },
+  { { name = "vlan30", device = "br-lan", vlan_id = 30, ports = { "lan2:t" } } },
+  { {
+    section = "cfg_corp", name = "corp", networks = {},
+    input = "REJECT", output = "REJECT", forward = "REJECT", selected = true
+  } },
+  {})
+assert(closed_output_segment and closed_output_segment.zone_output == "REJECT",
+  "segment inventory must preserve a restrictive zone output policy for the controller to reject IPv6 safely")
+
 local ipv4_segment_mode, ipv4_segment_mode_error = office.validate_office_segment_ipv6("0")
 assert(ipv4_segment_mode and ipv4_segment_mode.enabled == false
   and ipv4_segment_mode.ip6assign == "" and ipv4_segment_mode.dhcpv6 == "disabled"
