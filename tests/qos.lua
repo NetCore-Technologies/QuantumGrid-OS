@@ -143,6 +143,24 @@ assert(qos.summarize_client_policy({
   name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
   src = "wan", dest = "corp", dest_ip = "not-an-ip", target = "dscp", set_dscp = "AF41",
 }) == nil, "malformed downlink destination addresses must not be inventoried")
+assert(qos.summarize_client_policy({
+  [".name"] = "cfg_client_download_srcmac", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  src_mac = "invalid", proto = "all", target = "dscp", set_dscp = "AF41",
+}) == nil, "downlink rules with a source-MAC condition must not be inventoried as destination-IP-only rules")
+assert(qos.summarize_client_policy({
+  [".name"] = "cfg_client_download_port", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  dest_port = "443", proto = "all", target = "dscp", set_dscp = "AF41",
+}) == nil, "downlink rules with extra port restrictions must not be inventoried as general traffic policies")
+assert(qos.summarize_client_policy({
+  [".name"] = "cfg_client_upload_port", [".type"] = "rule",
+  name = "QuantumGrid client QoS: 02:11:22:33:44:55",
+  src = "corp", dest = "wan", src_mac = "02:11:22:33:44:55",
+  src_port = "443", proto = "all", target = "dscp", set_dscp = "AF41",
+}) == nil, "upload rules with extra port restrictions must not be inventoried as general traffic policies")
 
 local all_protocol_upload = qos.summarize_client_policy({
   [".name"] = "cfg_client_all_upload", [".type"] = "rule",
@@ -196,9 +214,15 @@ local snap = qos.snapshot_client_policy_section({
 	[".name"] = "cfg_client_1", [".type"] = "rule",
 	name = "QuantumGrid client QoS: 02:11:22:33:44:55",
 	src = "corp", dest = "wan", src_mac = "02:11:22:33:44:55",
-	target = "dscp", set_dscp = "AF41", extra = { "preserve", "both" }
+	target = "dscp", set_dscp = "AF41"
 })
-assert(snap and snap.values.extra[2] == "both")
+assert(snap and snap.values.src_mac == "02:11:22:33:44:55")
+assert(qos.snapshot_client_policy_section({
+	[".name"] = "cfg_client_extra_port", [".type"] = "rule",
+	name = "QuantumGrid client QoS: 02:11:22:33:44:55",
+	src = "corp", dest = "wan", src_mac = "02:11:22:33:44:55",
+	target = "dscp", set_dscp = "AF41", dest_port = "443"
+}) == nil, "a policy modified with extra port matches must not be treated as a managed full-traffic rule")
 assert(qos.snapshot_client_policy_section({
 	[".name"] = "user_rule", [".type"] = "rule", name = "unowned"
 }) == nil)
