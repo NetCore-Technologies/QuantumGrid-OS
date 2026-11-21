@@ -1190,6 +1190,8 @@ grep -Fq 'function record_audit(http, action, target, outcome)' "$ROOT/files/usr
 grep -Fq 'truncated = parsed.truncated or rotated_truncated or current_truncated' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'MAX_SOURCE_BYTES = 512 * 1024' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'record_audit(http, "system.config.backup"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'record_audit(http, "system.config.restore"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq '"system.config.restore" = true' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'record_audit(http, "hardware.led.update"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'record_audit(http, audit_action' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'record_audit(http, "admin.password.setup"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
