@@ -838,6 +838,8 @@ assert(valid_pinhole and valid_pinhole.destination_ip == "2001:4860:4860:0000:00
 
 local invalid_ipv6_pinhole_addresses = {
   "fd00::10", "fe80::1", "ff02::1", "::", "2001:db8::1",
+  "2001:0000::1", "2001:0002::1", "2001:0010::1",
+  "2002:c000:0201::1", "3fff::1",
   "2001:4860::9999", "2001:4860:4860:::8888", "not-ipv6"
 }
 for _, address in ipairs(invalid_ipv6_pinhole_addresses) do
@@ -906,15 +908,19 @@ local pinhole_inventory = office.build_inventory({
   available = true,
   ipv6_pinholes = {
     { section = "cfg_v6_https", name = "office-https-v6", source = "wan", destination = "corp",
-      protocol = "tcp", destination_ip = "2001:4860:4860::8888", destination_port = 443 },
+      protocol = "tcp", destination_ip = "2001:4860:4860::8888", destination_port = 443, enabled = true },
+    { section = "cfg_v6_disabled", name = "office-smtp-v6", source = "wan", destination = "corp",
+      protocol = "tcp", destination_ip = "2001:4860:4860::8888", destination_port = 25, enabled = false },
     { section = "../unsafe", name = "bad", source = "wan", destination = "corp",
       protocol = "tcp", destination_ip = "2001:4860:4860::8888", destination_port = 443 },
     { section = "cfg_v6_private", name = "private", source = "wan", destination = "corp",
       protocol = "tcp", destination_ip = "fd00::10", destination_port = 443 },
   }
 })
-assert(pinhole_inventory.ipv6_pinhole_count == 1
-  and pinhole_inventory.ipv6_pinholes[1].destination_ip == "2001:4860:4860:0000:0000:0000:0000:8888",
-  "IPv6 pinhole inventory must discard malformed sections and non-global destination addresses")
+assert(pinhole_inventory.ipv6_pinhole_count == 2
+  and pinhole_inventory.ipv6_pinholes[1].destination_ip == "2001:4860:4860:0000:0000:0000:0000:8888"
+  and pinhole_inventory.ipv6_pinholes[1].enabled == true
+  and pinhole_inventory.ipv6_pinholes[2].enabled == false,
+  "IPv6 pinhole inventory must discard malformed sections/non-global addresses and preserve enabled state")
 
 print("office-networks: IPv4/IPv6 VLAN, DHCP, forwarding, pinhole and SSID tests passed")
