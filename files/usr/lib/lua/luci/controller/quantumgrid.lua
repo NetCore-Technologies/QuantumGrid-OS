@@ -3812,29 +3812,7 @@ local function usteer_status(uci, fs)
 		return result
 	end
 
-	local function same_string_list(left, right)
-		if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
-		local a, b = {}, {}
-		for _, value in ipairs(left) do a[#a + 1] = tostring(value) end
-		for _, value in ipairs(right) do b[#b + 1] = tostring(value) end
-		table.sort(a)
-		table.sort(b)
-		for index = 1, #a do if a[index] ~= b[index] then return false end end
-		return true
-	end
-	local runtime_matches = tonumber(runtime_config.aggressiveness) == result.aggressiveness and
-		runtime_config.load_kick_enabled == false and result.load_kick_enabled == false and
-		not result.probe_steering and result.aggressiveness_override_count == 0 and
-		tostring(runtime_config.min_snr or 0) == "0" and tostring(runtime_config.min_connect_snr or 0) == "0" and
-		tostring(runtime_config.roam_scan_snr or 0) == "0" and tostring(runtime_config.roam_trigger_snr or 0) == "0" and
-		type(runtime_config.aggressiveness_mac_list) == "table" and #runtime_config.aggressiveness_mac_list == 0 and
-		tostring(runtime_config.local_mode == true and "1" or "0") == (result.local_mode and "1" or "0") and
-		tostring(runtime_config.assoc_steering == true and "1" or "0") == (result.assoc_steering and "1" or "0") and
-		tostring(runtime_config.band_steering_interval or 0) == tostring(result.band_steering_interval) and
-		tostring(runtime_config.band_steering_min_snr or -60) == tostring(result.band_steering_min_snr) and
-		tostring(runtime_config.band_steering_threshold or 5) == tostring(result.band_steering_threshold) and
-		tostring(runtime_config.load_balancing_threshold or 0) == tostring(result.load_balancing_threshold) and
-		same_string_list(runtime_config.ssid_list or {}, result.ssid_list)
+	local runtime_matches = manager.runtime_policy_matches(runtime_config, result)
 	if not runtime_matches then
 		result.status = "review"
 	elseif result.remote_host_count > 0 then
