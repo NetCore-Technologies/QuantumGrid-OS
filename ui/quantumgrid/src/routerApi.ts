@@ -3440,9 +3440,21 @@ export async function createRouterStaticRoute(input: {
   if (!input.target || input.target.length > 64 || !input.target.includes("/")) {
     throw new Error("Enter a destination network in explicit CIDR notation.");
   }
-  if (input.family === "IPv4" &&
-      !/^(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\/(?:[1-9]|[12][0-9]|3[0-2])$/.test(input.target)) {
-    throw new Error("Enter an IPv4 network CIDR with a prefix from /1 to /32.");
+  if (input.family === "IPv4") {
+    if (!/^(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\/(?:[1-9]|[12][0-9]|3[0-2])$/.test(input.target)) {
+      throw new Error("Enter an IPv4 network CIDR with a prefix from /1 to /32.");
+    }
+    const [address, prefixText] = input.target.split("/");
+    const octets = address.split(".").map(Number);
+    if (octets.some((octet) => octet < 0 || octet > 255)) {
+      throw new Error("IPv4 route target octets must be between 0 and 255.");
+    }
+    const addressValue = octets.reduce((value, octet) => (value << 8n) | BigInt(octet), 0n);
+    const prefix = Number(prefixText);
+    const hostBlock = 1n << BigInt(32 - prefix);
+    if (addressValue % hostBlock !== 0n) {
+      throw new Error("IPv4 target must be a canonical network CIDR with all host bits zero.");
+    }
   }
   if (input.family === "IPv6" &&
       !/^[0-9A-Fa-f:]+\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/.test(input.target)) {
