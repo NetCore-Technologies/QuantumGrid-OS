@@ -131,7 +131,10 @@ local function global_unicast_ipv6(value, allow_prefix)
 end
 
 local function valid_unicast_neighbor_mac(value)
-	if not valid_mac(value) then return false end
+	if type(value) ~= "string"
+		or not value:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then
+		return false
+	end
 	local first = tonumber(value:sub(1, 2), 16)
 	return first ~= nil and first % 2 == 0 and value:lower() ~= "00:00:00:00:00:00"
 end
