@@ -82,12 +82,32 @@ export interface RouterWirelessTxPower {
   active: boolean;
 }
 
+export interface RouterWirelessRadiusVlan {
+  section: string;
+  name: string;
+  vid: number;
+  network: string;
+  managed: boolean;
+}
+
+export interface RouterWirelessRadiusVlanUpdate {
+  vid: string;
+  network: string;
+  name?: string;
+  device?: string;
+  bridge?: string;
+  zone?: string;
+}
+
 export interface RouterWirelessConfig {
   section: string;
   radio: string;
   mode: "ap";
   ssid: string;
   networks: string[];
+  dynamic_vlan: number;
+  radius_vlan_unmanaged: boolean;
+  radius_vlan_mappings: RouterWirelessRadiusVlan[];
   encryption: string;
   ieee80211w: string;
   hidden: boolean;
@@ -128,6 +148,9 @@ export interface RouterWirelessUpdateResult {
   radius_auth_server?: string;
   radius_auth_port?: number;
   radius_secret_set: boolean;
+  dynamic_vlan: number;
+  radius_vlan_count: number;
+  radius_vlan_mappings: RouterWirelessRadiusVlanUpdate[];
   accounting_server?: string;
   accounting_port?: number;
   accounting_secret_set: boolean;
@@ -1350,6 +1373,9 @@ export async function updateRouterWirelessConfig(input: {
   radiusServer: string;
   radiusPort: string;
   radiusSecret: string;
+  manageRadiusVlans: boolean;
+  dynamicVlanEnabled: boolean;
+  radiusVlans: Array<{ vid: string; network: string }>;
   accountingServer: string;
   accountingPort: string;
   accountingSecret: string;
@@ -1439,6 +1465,40 @@ export async function updateRouterWirelessConfig(input: {
   if (input.txpower !== "auto" && !/^(?:[0-9]|[1-9][0-9]|100)$/.test(input.txpower)) {
     throw new Error("Choose Auto or a driver-reported whole-number transmit power.");
   }
+  if (typeof input.manageRadiusVlans !== "boolean" ||
+      typeof input.dynamicVlanEnabled !== "boolean" || !Array.isArray(input.radiusVlans)) {
+    throw new Error("RADIUS VLAN control settings are invalid.");
+  }
+  const enterpriseMode = input.encryption === "wpa2" || input.encryption === "wpa3";
+  if (!input.manageRadiusVlans && (input.dynamicVlanEnabled || input.radiusVlans.length !== 0)) {
+    throw new Error("Externally managed RADIUS VLAN settings cannot be changed through QuantumGrid.");
+  }
+  if (input.manageRadiusVlans && input.dynamicVlanEnabled) {
+    if (!enterpriseMode) {
+      throw new Error("RADIUS dynamic VLAN requires WPA2-Enterprise or WPA3-Enterprise.");
+    }
+    if (input.radiusVlans.length < 1 || input.radiusVlans.length > 16) {
+      throw new Error("Choose between 1 and 16 pre-provisioned RADIUS VLAN mappings.");
+    }
+    const seenVids = new Set<string>();
+    const seenNetworks = new Set<string>();
+    for (const mapping of input.radiusVlans) {
+      if (!mapping || typeof mapping.vid !== "string" ||
+          !/^[1-9][0-9]{0,3}$/.test(mapping.vid) ||
+          Number(mapping.vid) < 1 || Number(mapping.vid) > 4094 ||
+          !/^[A-Za-z0-9_.-]{1,64}$/.test(mapping.network) ||
+          mapping.network === "." || mapping.network === "..") {
+        throw new Error("Each RADIUS VLAN mapping requires a VLAN ID from 1 to 4094 and a valid routed network.");
+      }
+      if (seenVids.has(mapping.vid) || seenNetworks.has(mapping.network)) {
+        throw new Error("RADIUS VLAN IDs and routed network interfaces must be unique.");
+      }
+      seenVids.add(mapping.vid);
+      seenNetworks.add(mapping.network);
+    }
+  } else if (input.radiusVlans.length !== 0) {
+    throw new Error("Disable RADIUS dynamic VLAN by removing all mappings.");
+  }
 
   const form = new URLSearchParams();
   form.set("radio", input.radio);
@@ -1450,6 +1510,9 @@ export async function updateRouterWirelessConfig(input: {
   form.set("radius_server", input.radiusServer);
   form.set("radius_port", input.radiusPort);
   form.set("radius_secret", input.radiusSecret);
+  form.set("manage_radius_vlans", input.manageRadiusVlans ? "1" : "0");
+  form.set("dynamic_vlan_enabled", input.dynamicVlanEnabled ? "1" : "0");
+  form.set("radius_vlan_mappings", JSON.stringify(input.radiusVlans));
   form.set("accounting_server", input.accountingServer);
   form.set("accounting_port", input.accountingPort);
   form.set("accounting_secret", input.accountingSecret);
@@ -1500,7 +1563,20 @@ export async function updateRouterWirelessConfig(input: {
     (input.encryption === "wpa3" && (!("ieee80211w" in payload) || payload.ieee80211w !== "2")) ||
     !("radius_secret_set" in payload) || payload.radius_secret_set !== enterpriseMode ||
     !("accounting_secret_set" in payload) ||
-      payload.accounting_secret_set !== (enterpriseMode && input.accountingServer !== "")
+      payload.accounting_secret_set !== (enterpriseMode && input.accountingServer !== "") ||
+    (input.manageRadiusVlans && (
+      !("dynamic_vlan" in payload) ||
+      payload.dynamic_vlan !== (input.dynamicVlanEnabled ? 2 : 0) ||
+      !("radius_vlan_count" in payload) ||
+      payload.radius_vlan_count !== input.radiusVlans.length ||
+      !("radius_vlan_mappings" in payload) || !Array.isArray(payload.radius_vlan_mappings) ||
+      payload.radius_vlan_mappings.length !== input.radiusVlans.length ||
+      payload.radius_vlan_mappings.some((mapping, index) =>
+        typeof mapping !== "object" || mapping === null ||
+        !("vid" in mapping) || mapping.vid !== input.radiusVlans[index].vid ||
+        !("network" in mapping) || mapping.network !== input.radiusVlans[index].network
+      )
+    ))
   ) {
     throw new Error("The router did not confirm the wireless configuration and Wi-Fi reload.");
   }
