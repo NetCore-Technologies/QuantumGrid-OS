@@ -685,19 +685,33 @@ The parser and correlation rules, including IP/MAC validation, are covered by `t
 
 ## Remote syslog forwarding
 
-The System page can configure the native OpenWrt remote log forwarder through the existing
-`system` UCI section. It supports an IPv4 address or DNS name, a destination port, TCP or UDP,
-optional sender hostname and message prefix. Changes require an authenticated same-origin POST
-and explicit confirmation, are validated before writing, and restart the native `log` service.
-The previous UCI values are snapshotted and a rollback/restart is attempted if the service restart
-fails. The local log buffer remains enabled.
+The System page configures the native OpenWrt remote log forwarder through the existing
+`system` UCI section. It supports an IPv4 address or DNS name, a destination port, UDP, TCP or
+authenticated TLS, an optional sender hostname and a message prefix. Changes require an authenticated
+same-origin HTTPS POST and explicit confirmation. The local log buffer remains enabled.
 
-**Transport security limitation:** OpenWrt's built-in `logread` forwarder supports TCP or UDP
-syslog, not TLS. This feature does not encrypt or authenticate the remote connection and does not
-verify that the collector received the messages. Use a trusted management VLAN or VPN between the
-router and collector; do not send logs over an untrusted public network. IPv6 literal destinations,
-TLS syslog, certificate management, collector health tests and multi-destination forwarding are not
-implemented. The validation rules are covered by `tests/remote-syslog.lua` in CI.
+For TLS, the firmware includes OpenWrt's `stunnel` client and the system CA bundle. QuantumGrid
+creates or updates only its reserved `stunnel.quantumgrid_syslog` service section, binds the
+plaintext side exclusively to `127.0.0.1:5514`, and forwards to the configured collector over TLS.
+The client requires certificate-chain verification and an exact DNS hostname or IPv4 subject
+alternative name match; DNS destinations also use SNI. It does not disable certificate verification
+or permit a user-supplied arbitrary stunnel configuration. Switching to plaintext or disabling
+forwarding disables the QuantumGrid-managed TLS listener. Existing unrelated stunnel sections and
+global options are preserved.
+
+The controller snapshots the affected system and managed stunnel options, commits the tunnel before
+the native logger, checks both service restarts, and attempts to restore both configurations if a
+commit or restart fails. The operation is recorded in the redacted administrative audit history.
+A successful local restart and a valid trust configuration do **not** prove that the collector is
+reachable or that it received or retained a message.
+
+UDP and TCP modes remain unencrypted and do not authenticate the collector; use a trusted management
+VLAN or VPN for those transports. The TLS mode uses the firmware's installed public CA bundle and
+does not currently support private-CA import, mutual-TLS client certificates, certificate pinning,
+IPv6 literal destinations, collector health probes or multiple destinations. A production deployment
+must verify the collector's certificate chain, DNS, firewall policy, receipt and retention from the
+collector side. Lua validation is covered by `tests/remote-syslog.lua`, and the browser API contract
+by `tests/remote-syslog-api.test.mjs` in CI.
 
 ## Configuration backup
 
