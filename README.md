@@ -700,10 +700,11 @@ Unknown or malformed enabled-instance settings are treated as a review item rath
 setting. Missing SSH configuration is not reported as a successful hardened state. For key-only
 Dropbear configurations, the inventory also checks the metadata of the standard
 `/etc/dropbear/authorized_keys` and `/root/.ssh/authorized_keys` locations: file presence, size,
-regular-file type, owner-read permission, root ownership, and group/other write bits. The inspection
-never returns public-key contents, and files that are empty, larger than 64 KiB, not regular files,
-not owner-readable, not root-owned, writable by group/others, or impossible to inspect are not
-treated as a ready key-file posture.
+regular-file type, owner-read permission, root ownership, and group/other write bits. The parent directory must also be a real,
+root-owned directory that is not writable by group/others. The inspection never returns public-key
+contents, and files that are empty, larger than 64 KiB, not regular files, not owner-readable,
+not root-owned, or writable by group/others—or files with an unsafe/uninspectable parent directory—
+are not treated as a ready key-file posture.
 
 The current AW1000 first-boot Dropbear profile deliberately keeps password and root-password
 authentication enabled for initial access while binding the daemon to the LAN interface. QuantumGrid
