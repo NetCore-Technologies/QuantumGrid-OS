@@ -3281,6 +3281,17 @@ local function remote_syslog_status(uci, fs)
 	}
 	if not result.config_available then return result end
 
+	local globals_ok, globals = pcall(uci.get_all, uci, "stunnel", "globals")
+	local function non_root_identity(value)
+		if type(value) ~= "string" or value == "" then return false end
+		local normalized = value:lower():match("^%s*(.-)%s*$")
+		return normalized ~= "root" and normalized ~= "0" and
+			(not tonumber(normalized) or tonumber(normalized) > 0)
+	end
+	result.tls_privilege_drop_configured = globals_ok and type(globals) == "table" and
+		globals[".type"] == "globals" and non_root_identity(globals.setuid) and
+		non_root_identity(globals.setgid)
+
 	local section_found = false
 	local ok = pcall(function()
 		uci:foreach("system", "system", function(section)
@@ -3343,7 +3354,7 @@ local function remote_syslog_status(uci, fs)
 		and contains_value(tunnel.checkIP, result.host)
 		or not is_ipv4 and contains_value(tunnel.checkHost, result.host) and
 			contains_value(tunnel.sni, result.host)
-	local tls_configured = tunnel.client == "1" and tunnel.verifyChain == "1" and tunnel.sslVersion == "TLSv1.2" and
+	local tls_configured = result.tls_privilege_drop_configured and tunnel.client == "1" and tunnel.verifyChain == "1" and tunnel.sslVersion == "TLSv1.2" and
 		tunnel.CAfile == "/etc/ssl/certs/ca-certificates.crt" and
 		tunnel.accept_host == "127.0.0.1" and tonumber(tunnel.accept_port) == 5514 and
 		remote_port ~= nil and remote_port >= 1 and remote_port <= 65535 and
@@ -3364,7 +3375,9 @@ local function remote_syslog_status(uci, fs)
 	if not result.tls_available then
 		result.tls_error = "The stunnel service or trusted CA bundle is unavailable."
 	elseif not tls_configured then
-		result.tls_error = "TLS verification, local listener or remote certificate identity configuration is incomplete."
+		result.tls_error = result.tls_privilege_drop_configured and
+			"TLS verification, local listener or remote certificate identity configuration is incomplete." or
+			"The stunnel global configuration must drop privileges to a non-root user and group."
 	end
 	return result
 end
