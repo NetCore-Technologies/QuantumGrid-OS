@@ -106,7 +106,23 @@ end
 
 function has_non_root_privilege_drop(globals)
 	return type(globals) == "table" and globals[".type"] == "globals" and
+		(globals.alt_config_file == nil or globals.alt_config_file == "") and
 		non_root_identity(globals.setuid) and non_root_identity(globals.setgid)
+end
+
+local managed_service_options = {
+	enabled = true, client = true, accept_host = true, accept_port = true,
+	CAfile = true, verifyChain = true, sslVersion = true, TIMEOUTconnect = true,
+	retry = true, connect = true, checkHost = true, checkIP = true, sni = true
+}
+
+function has_only_managed_service_options(section)
+	if type(section) ~= "table" or section[".type"] ~= "service" then return false end
+	for option in pairs(section) do
+		if type(option) ~= "string" then return false end
+		if option:sub(1, 1) ~= "." and not managed_service_options[option] then return false end
+	end
+	return true
 end
 
 local function fs_has_access(fs, path)
@@ -188,7 +204,7 @@ function inspect_status(uci, fs, sampled_at, process)
 
 	result.protocol = "tls"
 	local tunnel_ok, tunnel = pcall(uci.get_all, uci, "stunnel", "quantumgrid_syslog")
-	if not tunnel_ok or type(tunnel) ~= "table" or tunnel[".type"] ~= "service" then
+	if not tunnel_ok or not has_only_managed_service_options(tunnel) then
 		result.tls_status = result.tls_available and "review" or "unavailable"
 		result.enabled = false
 		result.tls_error = "The managed TLS tunnel section is missing or invalid."
