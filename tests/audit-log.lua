@@ -28,6 +28,7 @@ assert(audit.encode_event({ timestamp = 3, action = "package.feed.update", targe
 assert(audit.encode_event({ timestamp = 4, action = "sqm.cake-profile", target = "wan_main", outcome = "success" }) ~= nil, "CAKE profile changes should be allowlisted")
 assert(audit.encode_event({ timestamp = 5, action = "sqm.client-qos.add", target = "cfg_client_1", outcome = "success" }) ~= nil, "client QoS additions should be allowlisted")
 assert(audit.encode_event({ timestamp = 5, action = "sqm.client-qos.download.add", target = "cfg_client_download_1", outcome = "success" }) ~= nil, "client download QoS additions should be allowlisted")
+assert(audit.encode_event({ timestamp = 6, action = "system.config.restore", target = "arcadyan-aw1000", outcome = "success" }) ~= nil, "configuration restore events should be allowlisted")
 assert(audit.encode_event({ timestamp = 6, action = "sqm.client-qos.remove", target = "cfg_client_1", outcome = "success" }) ~= nil, "client QoS removals should be allowlisted")
 
 local function expect_invalid(event, label)
