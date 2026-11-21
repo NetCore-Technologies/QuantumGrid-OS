@@ -117,8 +117,8 @@ test("wireless AP update enables only explicit pre-provisioned RADIUS VLAN mappi
     manageRadiusVlans: true,
     dynamicVlanEnabled: true,
     radiusVlans: [
-      { vid: "20", network: "corp20" },
       { vid: "30", network: "guest30" },
+      { vid: "20", network: "corp20" },
     ],
   };
   globalThis.fetch = async (url, init) => {
