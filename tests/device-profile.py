@@ -75,7 +75,7 @@ class DeviceProfileTests(unittest.TestCase):
     def test_repository_paths_cannot_escape_with_parent_segments(self) -> None:
         profile = self.profile()
         profile["platform"]["config_file"] = "../README.md"
-        with self.assertRaisesRegex(VALIDATOR.ProfileError, "invalid value"):
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "escapes the repository"):
             VALIDATOR.validate(self.write_profile(profile))
 
     def test_artifact_globs_must_match_the_declared_device(self) -> None:
