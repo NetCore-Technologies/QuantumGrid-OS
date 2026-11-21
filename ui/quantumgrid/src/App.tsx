@@ -8196,12 +8196,6 @@ function OfficePortForwardManager({
 }
 
 
-outer.</div>
-    </Panel>
-  );
-}
-
-
 function OfficeIpv6PinholeManager({
   available,
   truncated,
