@@ -130,6 +130,46 @@ local function global_unicast_ipv6(value, allow_prefix)
 	return parsed.canonical
 end
 
+local function valid_unicast_neighbor_mac(value)
+	if not valid_mac(value) then return false end
+	local first = tonumber(value:sub(1, 2), 16)
+	return first ~= nil and first % 2 == 0 and value:lower() ~= "00:00:00:00:00:00"
+end
+
+function parse_ipv6_neighbor_inventory(contents, device)
+	if type(contents) ~= "string" or #contents > 65536
+		or type(device) ~= "string" or #device < 1 or #device > 64
+		or not device:match("^[%w_.%-]+$") then
+		return {}
+	end
+	local allowed_states = {
+		REACHABLE = true, STALE = true, DELAY = true,
+		PROBE = true, PERMANENT = true
+	}
+	local result, seen = {}, {}
+	for line in contents:gmatch("[^\r\n]+") do
+		if #line <= 512 and #result < 64 then
+			local raw_address, rest = line:match("^(%S+)%s+dev%s+(.+)$")
+			local observed_device = rest and rest:match("^(%S+)")
+			local mac = rest and rest:match("%slladdr%s+(%S+)")
+			local state = rest and rest:match("%s(%u+)%s*$")
+			local address = raw_address and global_unicast_ipv6(raw_address, false)
+			if observed_device == device and address and mac
+				and valid_unicast_neighbor_mac(mac) and allowed_states[state]
+				and not seen[address] then
+				seen[address] = true
+				table.insert(result, {
+					address = address,
+					mac = mac:lower(),
+					state = state
+				})
+			end
+		end
+	end
+	table.sort(result, function(left, right) return left.address < right.address end)
+	return result
+end
+
 local function valid_ipv4(value)
 	if type(value) ~= "string" then return false end
 	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
@@ -962,21 +1002,24 @@ function validate_office_ipv6_pinhole(
 	if not canonical_ip then
 		return nil, "Destination must be a global-unicast IPv6 address (2000::/3), not a private, link-local, multicast, documentation or unspecified address."
 	end
-	local configured = false
+	local observed = false
 	local destination_networks = zone_networks(destination_zone.networks)
 	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
 		if type(iface) == "table" and contains(destination_networks, iface.name) then
-			for _, configured_address in ipairs(values(iface.ipv6, 8)) do
-				if global_unicast_ipv6(configured_address, true) == canonical_ip then
-					configured = true
+			for _, neighbor in ipairs(type(iface.ipv6_neighbors) == "table" and iface.ipv6_neighbors or {}) do
+				if type(neighbor) == "table"
+					and global_unicast_ipv6(neighbor.address, false) == canonical_ip
+					and valid_unicast_neighbor_mac(neighbor.mac)
+					and ({ REACHABLE = true, STALE = true, DELAY = true, PROBE = true, PERMANENT = true })[neighbor.state] then
+					observed = true
 					break
 				end
 			end
 		end
-		if configured then break end
+		if observed then break end
 	end
-	if not configured then
-		return nil, "Destination IPv6 address must exactly match a configured global-unicast address on an interface attached to the selected internal zone."
+	if not observed then
+		return nil, "Destination must be a currently observed global-unicast NDP neighbour with a valid unicast MAC on an interface attached to the selected internal zone."
 	end
 	for _, pinhole in ipairs(type(existing) == "table" and existing or {}) do
 		if type(pinhole) == "table" and pinhole.source == source
