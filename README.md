@@ -694,7 +694,9 @@ For TLS, the firmware includes OpenWrt's `stunnel` client and the system CA bund
 creates or updates only its reserved `stunnel.quantumgrid_syslog` service section, binds the
 plaintext side exclusively to `127.0.0.1:5514`, and forwards to the configured collector over TLS.
 The client pins the TLS protocol to TLS 1.2, requires certificate-chain verification and an
-exact DNS hostname or IPv4 subject alternative name match; DNS destinations also use SNI. It does
+exact DNS hostname or IPv4 subject alternative name match; DNS destinations also use SNI. The
+control refuses to enable TLS unless the stunnel global configuration explicitly drops privileges
+to a non-root user and group (the upstream package defaults are `nobody` and `nogroup`). It does
 not disable certificate verification or permit a user-supplied arbitrary stunnel configuration. Switching to plaintext or disabling
 forwarding disables the QuantumGrid-managed TLS listener. Existing unrelated stunnel sections and
 global options are preserved.
