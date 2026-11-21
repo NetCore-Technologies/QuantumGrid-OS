@@ -17,8 +17,9 @@ grep -Fq 'local management_transport = require "luci.quantumgrid.management_tran
 grep -Fq 'root_password_set = type(root_hash) == "string" and root_hash ~= ""' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'plaintext_http_unredirected' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'local function dropbear_status(uci, fs)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
-grep -Fq 'ssh_password_auth_enabled' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua" && exit 1
-grep -Fq 'ssh_password_authentication' "$ROOT/ui/quantumgrid/src/App.tsx" && exit 1
+grep -Fq 'password_auth_enabled = password_auth_enabled' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
+grep -Fq 'root_password_auth_enabled = root_password_auth_enabled' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
+grep -Fq 'gateway_ports_enabled = gateway_ports_enabled' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'ssh_status' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'ssh_status?: "ready" | "review" | "unavailable" | "disabled"' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'SSH configuration posture' "$ROOT/ui/quantumgrid/src/App.tsx"
