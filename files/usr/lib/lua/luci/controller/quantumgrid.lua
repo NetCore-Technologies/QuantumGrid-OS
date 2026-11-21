@@ -4556,8 +4556,10 @@ function action_config_restore()
     local available_temp_bytes = statvfs_ok and type(temp_stats) == "table" and
         tonumber(temp_stats.bavail) and tonumber(temp_stats.frsize) and
         tonumber(temp_stats.bavail) * tonumber(temp_stats.frsize) or nil
-    if not available_temp_bytes or available_temp_bytes < MAX_UPLOAD_BYTES + 8 * 1024 * 1024 then
-        fail(503, "There is not enough verified free /tmp space to stage a rollback backup safely. No restore was attempted.")
+    local capacity_ok, capacity_error = validator.validate_restore_temp_capacity(
+        available_temp_bytes, upload_size)
+    if not capacity_ok then
+        fail(503, capacity_error)
         return
     end
 
