@@ -25,4 +25,88 @@ function validate_archive_size(size)
 	return size
 end
 
+function validate_restore_confirmation(confirmed, same_device_confirmed)
+	if confirmed ~= "1" or same_device_confirmed ~= "1" then
+		return nil, "Explicit restore confirmation and same-device acknowledgement are required."
+	end
+	return true
+end
+
+local function valid_archive_path(path)
+	if type(path) ~= "string" or #path < 1 or #path > 512 or
+		path:find("[%z\1-\31\127]") or path:find("\\", 1, true) or
+		path:sub(1, 1) == "/" or path:find("//", 1, true) then
+		return nil
+	end
+	if path:sub(1, 2) == "./" then path = path:sub(3) end
+	if path == "" or path:sub(1, 1) == "/" then return nil end
+	local count = 0
+	for component in path:gmatch("[^/]+") do
+		count = count + 1
+		if component == "." or component == ".." or #component > 128 or
+			not component:match("^[%w_%.%+@%-]+$") then return nil end
+	end
+	if count < 1 or path:sub(-1) == "/" then return nil end
+	if path ~= "etc" and path ~= "root" and
+		not path:match("^etc/") and not path:match("^root/") then return nil end
+	return path
+end
+
+function validate_archive_listing(listing)
+	if type(listing) ~= "string" or #listing < 1 or #listing > 4 * 1024 * 1024 then
+		return nil, "The archive member listing is unavailable or exceeds the safe inspection limit."
+	end
+	local entries = {}
+	local seen = {}
+	local has_config = false
+	local device_id_path = nil
+	local count = 0
+	for line in listing:gmatch("[^\r\n]+") do
+		count = count + 1
+		if count > 8192 then
+			return nil, "The archive contains too many entries for a safe configuration restore."
+		end
+		local kind = line:sub(1, 1)
+		if kind ~= "-" and kind ~= "d" then
+			return nil, "The archive contains a link or special file; only regular files and directories can be restored."
+		end
+		local raw_path = line:match("%s([^%s]+)$")
+		local path = valid_archive_path(raw_path)
+		if not path then
+			return nil, "The archive contains a path outside the permitted etc/ and root/ trees."
+		end
+		if seen[path] then return nil, "The archive contains duplicate member paths." end
+		seen[path] = true
+		if path:match("^etc/config/[^/]+$") and kind == "-" then has_config = true end
+		if path == "etc/quantumgrid/device-id" then
+			if kind ~= "-" then return nil, "The device identity in the archive must be a regular file." end
+			device_id_path = raw_path
+		end
+		entries[#entries + 1] = { path = path, kind = kind }
+	end
+	if count == 0 or not has_config then
+		return nil, "The archive does not contain a native /etc/config backup."
+	end
+	if not device_id_path then
+		return nil, "The archive has no QuantumGrid device identity; create a fresh backup with this firmware before restoring."
+	end
+	return { entries = entries, count = count, device_id_path = device_id_path }
+end
+
+function validate_device_identity(archive_id, current_id)
+	if type(archive_id) ~= "string" or type(current_id) ~= "string" then
+		return nil, "The current or archived QuantumGrid device identity is unavailable."
+	end
+	archive_id = archive_id:gsub("\\n$", "")
+	current_id = current_id:gsub("\\n$", "")
+	if #archive_id ~= 32 or #current_id ~= 32 or
+		not archive_id:match("^[0-9a-f]+$") or not current_id:match("^[0-9a-f]+$") then
+		return nil, "The archive or router device identity is malformed."
+	end
+	if archive_id ~= current_id then
+		return nil, "This backup belongs to a different QuantumGrid device. Cross-device restore is blocked."
+	end
+	return true
+end
+
 return _M
