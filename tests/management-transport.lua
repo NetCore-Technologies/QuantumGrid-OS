@@ -10,11 +10,13 @@ local function fixture(redirect, overrides)
   local files = {
     ["/etc/init.d/uhttpd"] = true,
     ["/etc/init.d/dropbear"] = true,
+    ["/etc/dropbear/authorized_keys"] = true,
     ["/lib/libustream-ssl.so"] = true,
     ["/etc/uhttpd.crt"] = true,
     ["/etc/uhttpd.key"] = true,
     ["/usr/bin/openssl"] = true
   }
+  local stat_overrides = {}
   local dropbear_sections = {
     {
       [".name"] = "main",
@@ -32,6 +34,7 @@ local function fixture(redirect, overrides)
     elseif key == "values" then values = value
     elseif key == "files" then files = value
     elseif key == "empty_files" then empty_files = value
+    elseif key == "stat_overrides" then stat_overrides = value
     elseif key == "dropbear_sections" then dropbear_sections = value
     end
   end
@@ -54,7 +57,13 @@ local function fixture(redirect, overrides)
     access = function(path) return files[path] == true end,
     stat = function(path)
       if files[path] ~= true then return nil end
-      return { size = empty_files[path] and 0 or 128 }
+      local override = stat_overrides[path]
+      if override then return override end
+      return {
+        size = empty_files[path] and 0 or 128,
+        uid = 0,
+        mode = 33152
+      }
     end
   }
   return uci, fs
@@ -88,6 +97,95 @@ assert(https_only.ssh_instances[1].interface == "lan")
 assert(https_only.ssh_instances[1].interface_bound)
 assert(not https_only.ssh_instances[1].password_auth_enabled)
 assert(not https_only.ssh_instances[1].root_password_auth_enabled)
+assert(https_only.ssh_authorized_keys.available)
+assert(https_only.ssh_authorized_keys.status == "present")
+assert(https_only.ssh_authorized_keys.root_owned)
+assert(not https_only.ssh_authorized_keys.group_writable)
+assert(not https_only.ssh_authorized_keys.other_writable)
+
+-- Key-only access with no authorized-keys file is not a ready management posture.
+uci, fs = fixture("1", {
+  files = {
+    ["/etc/init.d/uhttpd"] = true,
+    ["/etc/init.d/dropbear"] = true,
+    ["/lib/libustream-ssl.so"] = true,
+    ["/etc/uhttpd.crt"] = true,
+    ["/etc/uhttpd.key"] = true,
+    ["/usr/bin/openssl"] = true
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local missing_authorized_keys = transport.inspect(uci, fs)
+assert(missing_authorized_keys.ssh_authorized_keys.status == "missing")
+assert(missing_authorized_keys.ssh_status == "review")
+assert(missing_authorized_keys.status == "review")
+
+-- Group-writable authorized-keys files require remediation.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 33168 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local writable_authorized_keys = transport.inspect(uci, fs)
+assert(writable_authorized_keys.ssh_authorized_keys.group_writable)
+assert(writable_authorized_keys.ssh_authorized_keys.status == "review")
+assert(writable_authorized_keys.ssh_status == "review")
+
+-- Non-root-owned authorized-keys files are not accepted as hardened.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 1000, mode = 33152 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local unowned_authorized_keys = transport.inspect(uci, fs)
+assert(not unowned_authorized_keys.ssh_authorized_keys.root_owned)
+assert(unowned_authorized_keys.ssh_authorized_keys.status == "review")
+assert(unowned_authorized_keys.ssh_status == "review")
+
+-- Oversized authorized-keys files fail closed rather than reading unbounded data.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 65537, uid = 0, mode = 33152 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local oversized_authorized_keys = transport.inspect(uci, fs)
+assert(oversized_authorized_keys.ssh_authorized_keys.status == "review")
+assert(oversized_authorized_keys.ssh_status == "review")
 
 -- The shipped AW1000 Dropbear defaults allow password and root-password login.
 uci, fs = fixture("1", {
