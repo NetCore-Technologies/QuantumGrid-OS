@@ -17,6 +17,7 @@ git -C "$SOURCE" add README
 git -C "$SOURCE" commit -q -m "source fixture"
 git -C "$SOURCE" remote add origin "$REMOTE"
 git -C "$SOURCE" push -q origin HEAD:refs/heads/main
+git --git-dir="$REMOTE" symbolic-ref HEAD refs/heads/main
 git clone -q "$REMOTE" "$CHECKOUT"
 bash "$CHECK" "$CHECKOUT" "$REMOTE"
 
