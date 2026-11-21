@@ -276,14 +276,41 @@ local function policy_rule_inventory(fs)
 	return result
 end
 
-local function mwan3_status(fs)
+local function mwan3_status(uci, fs)
 	local result = {
 		installed = fs.access("/etc/init.d/mwan3") == true,
 		available = false,
 		count = 0,
 		truncated = false,
-		interfaces = {}
+		interfaces = {},
+		config_available = fs.access("/etc/config/mwan3") == true,
+		config_count = 0,
+		config_truncated = false,
+		config_interfaces = {}
 	}
+	if result.config_available then
+		local config = require "luci.quantumgrid.mwan3_config"
+		local config_ok = pcall(function()
+			uci:foreach("mwan3", "interface", function(section)
+				result.config_count = result.config_count + 1
+				if #result.config_interfaces < 16 then
+					local name = tostring(section[".name"] or "")
+					local projected = config.project_section(name, section)
+					if projected then
+						table.insert(result.config_interfaces, projected)
+					else
+						result.config_truncated = true
+					end
+				else
+					result.config_truncated = true
+				end
+			end)
+		end)
+		if not config_ok then
+			result.config_available = false
+			result.config_interfaces = {}
+		end
+	end
 	if not result.installed then return result end
 
 	local response = ubus_call("mwan3", "status", { section = "interfaces" })
@@ -1033,6 +1060,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "latency-test"}, call("action_latency_test")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "mwan3-interface-update"}, call("action_mwan3_interface_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-cake-profile"}, call("action_sqm_cake_profile")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-add"}, call("action_sqm_client_qos_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
@@ -1822,6 +1850,140 @@ function action_sqm_update()
 		linklayer = update.linklayer,
 		overhead_bytes = tonumber(update.overhead),
 		tc_mpu_bytes = tonumber(update.tc_mpu),
+		restarted = true,
+		rolled_back = false
+	})
+end
+
+
+function action_mwan3_interface_update()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then http.status(status, status == 400 and "Bad Request" or
+			status == 403 and "Forbidden" or status == 404 and "Not Found" or
+			status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+			status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+			"Internal Server Error") end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing Multi-WAN health checks." })
+		return
+	end
+	if fs.access("/etc/init.d/mwan3") ~= true or fs.access("/etc/config/mwan3") ~= true then
+		respond(503, { ok = false, error = "The native mwan3 service or configuration is unavailable." })
+		return
+	end
+
+	local jsonc = require "luci.jsonc"
+	local track_ips_json = http.formvalue("track_ips", true)
+	local track_ips = nil
+	if type(track_ips_json) == "string" and #track_ips_json <= 4096 then
+		local parse_ok, parsed = pcall(jsonc.parse, track_ips_json)
+		if parse_ok and type(parsed) == "table" then track_ips = parsed end
+	end
+	if not track_ips then
+		respond(400, { ok = false, error = "Tracking targets must be a JSON array containing valid IP addresses." })
+		return
+	end
+
+	local validator = require "luci.quantumgrid.mwan3_config"
+	local update, validation_error = validator.validate_update({
+		section = http.formvalue("section", true),
+		enabled = http.formvalue("enabled", true),
+		track_ips = track_ips,
+		reliability = http.formvalue("reliability", true),
+		count = http.formvalue("count", true),
+		timeout = http.formvalue("timeout", true),
+		interval = http.formvalue("interval", true),
+		down = http.formvalue("down", true),
+		up = http.formvalue("up", true),
+		initial_state = http.formvalue("initial_state", true)
+	})
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local section_ok, current = pcall(uci.get_all, uci, "mwan3", update.section)
+	if not section_ok then
+		respond(500, { ok = false, error = "Could not read the current mwan3 configuration." })
+		return
+	end
+	if type(current) ~= "table" or current[".type"] ~= "interface" then
+		respond(404, { ok = false, error = "Only an existing mwan3 interface section can be edited." })
+		return
+	end
+
+	local snapshot = validator.snapshot(current)
+	if not snapshot then
+		respond(409, { ok = false, error = "The existing mwan3 health settings cannot be snapshotted safely; no change was made." })
+		return
+	end
+	if not validator.stage_update(uci, update.section, update) then
+		pcall(uci.revert, uci, "mwan3")
+		respond(500, { ok = false, error = "The mwan3 health settings could not be staged; no service restart was attempted." })
+		return
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "mwan3")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "mwan3")
+		respond(500, { ok = false, error = "The mwan3 health settings could not be committed; no service restart was attempted." })
+		return
+	end
+
+	local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/mwan3 restart >/dev/null 2>&1")
+	if not restart_ok or restart_status ~= 0 then
+		local rollback_saved = validator.restore(uci, update.section, snapshot)
+		local rollback_restart_ok, rollback_restart_status = false, -1
+		if rollback_saved then
+			rollback_restart_ok, rollback_restart_status = pcall(sys.call, "/etc/init.d/mwan3 restart >/dev/null 2>&1")
+		end
+		local recovered = rollback_saved and rollback_restart_ok and rollback_restart_status == 0
+		record_audit(http, "mwan3.interface.update", update.section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "mwan3 restart failed. The previous health-check settings were restored and the service restarted."
+				or "mwan3 restart failed and rollback could not be confirmed. Inspect mwan3 configuration and routing locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "mwan3.interface.update", update.section, "success")
+	respond(nil, {
+		ok = true,
+		section = update.section,
+		enabled = update.enabled == "1",
+		track_ips = update.track_ips,
+		reliability = tonumber(update.reliability),
+		count = tonumber(update.count),
+		timeout = tonumber(update.timeout),
+		interval = tonumber(update.interval),
+		down = tonumber(update.down),
+		up = tonumber(update.up),
+		initial_state = update.initial_state,
 		restarted = true,
 		rolled_back = false
 	})
@@ -6467,7 +6629,7 @@ function action_api()
 	local cellular = cellular_status(fs)
 	local wireless = wireless_status()
 	local sqm = sqm_status(uci, fs)
-	local mwan3 = mwan3_status(fs)
+	local mwan3 = mwan3_status(uci, fs)
 	local security = security_status(uci, fs)
 	local platform = platform_status(fs)
 	local conntrack = conntrack_status(fs)
