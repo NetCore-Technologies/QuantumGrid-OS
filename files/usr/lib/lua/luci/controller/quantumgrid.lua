@@ -2167,6 +2167,7 @@ function action_usteer_update()
 		if update.enabled then
 			if status.running and manager.local_ess_ready(update.ssids, access_point_inventory.access_points, status) and
 				status.policy_verified == true and
+				status.local_ess_verified == true and
 				(status.status == "cluster" or status.status == "local_only") and
 				status.network == update.network and #status.ssid_list == #update.ssids then
 					runtime = status
@@ -2221,6 +2222,7 @@ function action_usteer_update()
 		remote_host_count = runtime.remote_host_count,
 		associated_clients = runtime.associated_clients,
 		policy_verified = runtime.policy_verified == true,
+		local_ess_verified = runtime.local_ess_verified == true,
 		service_action_completed = true,
 		rolled_back = false
 	})
@@ -3783,6 +3785,7 @@ local function usteer_status(uci, fs)
 		local_nodes_truncated = false,
 		local_nodes_invalid_count = 0,
 		policy_verified = false,
+		local_ess_verified = false,
 		remote_host_count = 0,
 		remote_hosts_truncated = false,
 		associated_clients = 0,
@@ -3794,6 +3797,7 @@ local function usteer_status(uci, fs)
 
 	result.network = type(section.network) == "string" and section.network or ""
 	result.ssid_list = wireless_option_list(section.ssid_list)
+	local access_points = usteer_access_point_inventory(uci)
 	if not result.configured_enabled or not init_enabled then
 		result.status = "disabled"
 		return result
@@ -3816,6 +3820,8 @@ local function usteer_status(uci, fs)
 	result.associated_clients = runtime.associated_clients
 	result.local_nodes = runtime.local_nodes
 	result.remote_hosts_available = type(remote_hosts) == "table"
+	result.local_ess_verified = access_points.available == true and access_points.truncated ~= true and
+		manager.local_ess_ready(result.ssid_list, access_points.access_points, runtime)
 	if not result.running then
 		result.status = "not_running"
 		return result
@@ -3823,7 +3829,7 @@ local function usteer_status(uci, fs)
 
 	local runtime_matches = manager.runtime_policy_matches(runtime_config, result)
 	result.policy_verified = runtime_matches
-	if not runtime_matches then
+	if not runtime_matches or not result.local_ess_verified then
 		result.status = "review"
 	elseif result.remote_host_count > 0 then
 		result.status = "cluster"
