@@ -611,8 +611,22 @@ export interface RouterKernelModuleInventory {
   modules: RouterKernelModule[];
 }
 
+export interface RouterRuntimeDeviceProfile {
+  available: boolean;
+  status: "matched" | "mismatch" | "unknown" | "unavailable";
+  profile_id?: string;
+  vendor?: string;
+  model?: string;
+  openwrt_device?: string;
+  openwrt_target?: string;
+  openwrt_subtarget?: string;
+  board_compatible?: string[];
+  observed_board_name?: string;
+}
+
 export interface RouterPlatformStatus {
   available: boolean;
+  device_profile?: RouterRuntimeDeviceProfile;
   hostname?: string;
   model?: string;
   board_name?: string;
