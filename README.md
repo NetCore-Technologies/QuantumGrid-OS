@@ -734,7 +734,14 @@ server and define an independent retention policy. Parser and redaction rules ar
 ## Administrator management-plane posture
 
 The Security Center includes a read-only inventory of configured Dropbear SSH instances alongside
-the existing uHTTPd HTTPS review. It reports service/config availability, enabled instance counts,
+the existing uHTTPd HTTPS review. HTTPS inspection now reports a SHA-256 fingerprint of the served
+certificate for independent out-of-band comparison, plus the HTTPS private-key file path, size,
+regular-file status, root ownership and full group/other access check. OpenWrt `lstat` metadata is
+used so symlinked key files are not accepted as regular key files. The controller invokes OpenSSL
+with a fixed read-only command and returns only the fingerprint digest, never certificate PEM or
+private-key contents. The fingerprint is not automatically trusted or chain-validated; administrators
+must compare it against a value obtained through a separate trusted channel. It reports service/config
+availability, enabled instance counts,
 configured interface bindings and ports, password and root-password authentication settings,
 gateway-port forwarding state, and whether the bounded eight-instance detail list is truncated.
 Unknown or malformed enabled-instance settings are treated as a review item rather than as a secure
