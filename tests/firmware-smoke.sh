@@ -1159,6 +1159,8 @@ grep -Fq 'rollback_archive = rollback_path' "$ROOT/files/usr/lib/lua/luci/contro
 grep -Fq 'member path is not recognised' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
 grep -Fq 'The archive contains a file used as a parent directory' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
 grep -Fq 'validate_archive_listing' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
+grep -Fq 'function validate_restore_temp_capacity' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
+grep -Fq 'validate_restore_temp_capacity' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'validate_device_identity' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
 grep -Fq 'validate_platform_compatibility' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
 grep -Fq 'validate_restore_confirmation' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
