@@ -71,7 +71,7 @@ function parse_qdisc_inventory(output)
 	local header_count, truncated = 0, false
 	if type(output) ~= "string" then return false, qdiscs, false end
 
-	for line in output:gmatch("[^\\r\\n]+") do
+	for line in output:gmatch("[^\r\n]+") do
 		local kind, handle, details = line:match("^qdisc%s+(%S+)%s+(%S+)%s*(.*)$")
 		if kind then
 			header_count = header_count + 1
