@@ -2469,6 +2469,21 @@ end
 local function platform_status(fs)
 	local board = ubus_call("system", "board", {}) or {}
 	local release = type(board.release) == "table" and board.release or {}
+	local profile_data = nil
+	local profile_path = "/etc/quantumgrid/device-profile.json"
+	local stat_ok, profile_stat = pcall(fs.stat, profile_path)
+	if stat_ok and type(profile_stat) == "table" and
+		type(profile_stat.size) == "number" and profile_stat.size > 0 and profile_stat.size <= 32768 then
+		local profile_contents = read_file(profile_path)
+		if type(profile_contents) == "string" and #profile_contents <= 32768 then
+			local parse_ok, parsed = pcall(function()
+				return require("luci.jsonc").parse(profile_contents)
+			end)
+			if parse_ok and type(parsed) == "table" then profile_data = parsed end
+		end
+	end
+	local device_profile = require("luci.quantumgrid.device_profile").inspect(
+		profile_data, board.board_name)
 	local modules = {
 		{ name = "ath11k Wi-Fi driver", path = "/sys/module/ath11k" },
 		{ name = "mac80211 wireless stack", path = "/sys/module/mac80211" },
@@ -2696,6 +2711,7 @@ local function platform_status(fs)
 		target = field(release.target, 128),
 		description = field(release.description, 192),
 		package_manager = package_manager,
+		device_profile = device_profile,
 		acceleration = acceleration,
 		modules = modules,
 		kernel_modules = kernel_module_inventory,
