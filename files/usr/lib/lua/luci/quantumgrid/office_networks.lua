@@ -1600,7 +1600,8 @@ function build_inventory(source)
 					destination = destination_zone,
 					protocol = item.protocol,
 					destination_ip = destination_ip,
-					destination_port = destination_port
+					destination_port = destination_port,
+					enabled = item.enabled ~= false
 				})
 			end
 		end
