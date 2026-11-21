@@ -467,6 +467,39 @@ out-of-band connection for those changes. This is static per-SSID network bindin
 dynamic VLAN assignment; each SSID should be mapped to one routed VLAN interface and clients
 should be tested on the actual switch/AP path after deployment.
 
+## RADIUS dynamic VLAN assignment
+
+The existing Enterprise AP editor supports an explicit allow-list of **RADIUS-assigned VLANs**
+using the native OpenWrt `wifi-vlan` UCI sections and hostapd `dynamic_vlan=2` mode. Mode 2
+requires the RADIUS server to return the standard tunnel attributes: Tunnel-Type = VLAN,
+Tunnel-Medium-Type = IEEE-802, and Tunnel-Private-Group-ID equal to one of the configured VLAN
+IDs. A client is not assigned to an arbitrary VLAN: every accepted VLAN ID is mapped to one
+pre-provisioned routed IPv4 office network.
+
+Each mapping requires an existing bridge with VLAN filtering enabled, a matching
+`network.bridge-vlan` section with explicit switch-port membership, a static L3 interface on
+`<bridge>.<vid>`, an IPv4 gateway, and exactly one internal firewall zone whose router INPUT and
+inter-zone FORWARD policies are REJECT or DROP. Duplicate VLAN IDs, duplicate network interfaces,
+external WAN/WWAN mappings, missing VLANs, untagged/unmanaged bridges, incomplete subnet inventory,
+and zones without the default-deny baseline are rejected. The current implementation limits an AP
+to 16 explicit mappings. It does not create VLANs, networks, DHCP pools, firewall zones or switch
+port membership dynamically; provision those first in Office Networks.
+
+QuantumGrid writes the AP's `dynamic_vlan=2` flag and deterministic `wifi-vlan` mappings together
+in one wireless UCI update. The prior AP settings and owned mapping sections are snapshotted and
+restored together when `wifi reload` fails. Mapping sections not clearly owned by QuantumGrid,
+custom hostapd VLAN file/bridge/naming options, and unsupported optional dynamic VLAN modes are
+treated as externally managed: their configuration is preserved and the GUI makes them read-only.
+WPA2-Enterprise or WPA3-Enterprise is required; WPA3 keeps mandatory 802.11w Protected Management
+Frames enabled.
+
+The administrator must configure the actual RADIUS policy to send the three tunnel attributes
+with the intended VLAN ID, deploy and protect the RADIUS shared secret, and verify the EAP method,
+certificate trust and client identity policy separately. Source tests validate the mapping rules
+and client API contract; they do not prove successful EAP authentication, RADIUS reachability,
+hostapd runtime behaviour, switch tagging or client DHCP/DNS on a physical AW1000. Test with a
+non-management SSID and an out-of-band recovery path before production deployment.
+
 ## DHCPv6, router advertisements and NDP
 
 Each eligible DHCP scope now exposes per-scope **DHCPv6**, **Router Advertisement (RA)** and
