@@ -240,6 +240,70 @@ local function default_route_inventory(fs)
 	return result
 end
 
+local function static_route_inventory(uci, fs)
+	local result = {
+		available = false,
+		routes = {},
+		count = 0,
+		truncated = false,
+		invalid_count = 0
+	}
+	if fs.access("/etc/config/network") ~= true then return result end
+	local ok = pcall(function()
+		for _, kind in ipairs({
+			{ section_type = "route", family = "IPv4" },
+			{ section_type = "route6", family = "IPv6" }
+		}) do
+			uci:foreach("network", kind.section_type, function(section)
+				result.count = result.count + 1
+				if #result.routes >= 128 then
+					result.truncated = true
+					return
+				end
+				local section_name = type(section[".name"]) == "string" and section[".name"] or ""
+				local interface = type(section.interface) == "string" and section.interface or ""
+				local target = type(section.target) == "string" and section.target or ""
+				local gateway = type(section.gateway) == "string" and section.gateway or ""
+				local metric = tonumber(section.metric)
+				local table_id = type(section.table) == "string" and section.table or ""
+				local valid = section_name:match("^[%w_.%-]+$") ~= nil
+					and interface:match("^[%w_.%-]+$") ~= nil
+					and #target > 0 and #target <= 64
+					and #gateway <= 64 and (gateway == "" or gateway:match("^[%x:%.]+$") ~= nil)
+					and (metric == nil or (metric >= 0 and metric <= 65535 and metric == math.floor(metric)))
+					and (table_id == "" or table_id:match("^%d+$") ~= nil)
+				if valid then
+					table.insert(result.routes, {
+						section = section_name,
+						family = kind.family,
+						interface = interface,
+						target = target,
+						gateway = gateway,
+						metric = metric,
+						table = table_id,
+						enabled = section.disabled ~= "1"
+					})
+				else
+					result.invalid_count = result.invalid_count + 1
+				end
+			end)
+		end
+	end)
+	result.available = ok
+	if not ok then
+		result.routes = {}
+		result.invalid_count = 0
+		result.truncated = false
+	end
+	table.sort(result.routes, function(left, right)
+		if left.family ~= right.family then return left.family < right.family end
+		if left.table ~= right.table then return left.table < right.table end
+		if left.target ~= right.target then return left.target < right.target end
+		return left.interface < right.interface
+	end)
+	return result
+end
+
 local function policy_rule_inventory(fs)
 	local result = { available = false, rules = {}, count = 0, truncated = false }
 	if fs.access("/sbin/ip") ~= true then return result end
