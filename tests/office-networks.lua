@@ -808,6 +808,10 @@ assert(dual_stack_segment_mode and dual_stack_segment_mode.enabled == true
   and dual_stack_segment_mode.ip6assign == "64"
   and dual_stack_segment_mode.dhcpv6 == "server"
   and dual_stack_segment_mode.ra == "server"
+  and dual_stack_segment_mode.ra_flags[1] == "managed-config"
+  and dual_stack_segment_mode.ra_flags[2] == "other-config"
+  and dual_stack_segment_mode.ra_slaac == "1"
+  and dual_stack_segment_mode.ra_dns == "1"
   and dual_stack_segment_mode.ndp == "disabled",
   dual_stack_segment_mode_error or "dual-stack segments must use delegated /64 prefixes and server RA/DHCPv6")
 
