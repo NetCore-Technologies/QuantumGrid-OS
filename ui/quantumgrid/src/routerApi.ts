@@ -1387,6 +1387,69 @@ export interface RouterRemoteSyslogUpdateResult {
   rolled_back: false;
 }
 
+export interface RouterUsteerNode {
+  name: string;
+  ssid: string;
+  bssid: string;
+  frequency_mhz?: number;
+  clients: number;
+  channel_load?: number;
+  noise_dbm?: number;
+}
+
+export type RouterUsteerRuntimeStatus = "unavailable" | "disabled" | "not_running" | "review" | "local_only" | "cluster";
+
+export interface RouterUsteerStatus {
+  available: boolean;
+  service_installed: boolean;
+  binary_installed: boolean;
+  config_available: boolean;
+  configured: boolean;
+  configured_enabled: boolean;
+  init_enabled: boolean;
+  running: boolean;
+  status: RouterUsteerRuntimeStatus;
+  network: string;
+  ssid_list: string[];
+  aggressiveness: number;
+  assoc_steering: boolean;
+  probe_steering: boolean;
+  local_mode: boolean;
+  band_steering_interval: number;
+  band_steering_min_snr: number;
+  band_steering_threshold: number;
+  load_balancing_threshold: number;
+  local_node_count: number;
+  local_nodes_truncated: boolean;
+  remote_host_count: number;
+  remote_hosts_truncated: boolean;
+  remote_hosts_available: boolean;
+  associated_clients: number;
+  local_nodes: RouterUsteerNode[];
+  sampled_at: number;
+}
+
+export interface RouterUsteerUpdateResult {
+  ok: true;
+  enabled: boolean;
+  network: string;
+  ssid_list: string[];
+  aggressiveness: number;
+  assoc_steering: false;
+  probe_steering: false;
+  band_steering_interval: number;
+  band_steering_min_snr: number;
+  band_steering_threshold: number;
+  load_balancing_threshold: number;
+  status: RouterUsteerRuntimeStatus;
+  running: boolean;
+  local_node_count: number;
+  remote_host_count: number;
+  associated_clients: number;
+  service_action_completed: true;
+  rolled_back: false;
+}
+
 export interface RouterOverview {
   ok: true;
   root_password_set: boolean;
@@ -1394,6 +1457,7 @@ export interface RouterOverview {
   hardware_io?: RouterHardwareIoStatus;
   office_networks?: RouterOfficeNetworks;
   remote_syslog?: RouterRemoteSyslogStatus;
+  usteer?: RouterUsteerStatus;
   conntrack?: RouterConntrackStatus;
   timestamp: number;
   routes_available?: boolean;
@@ -1475,6 +1539,7 @@ const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-
 const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-wifi-network-update";
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
+const USTEER_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/usteer-update";
 
 function isRemoteSyslogIpv4(value: string): boolean {
   const octets = value.split(".");
@@ -2032,6 +2097,106 @@ export async function updateRouterWirelessConfig(input: {
     throw new Error("The router did not confirm the wireless configuration and Wi-Fi reload.");
   }
   return payload as RouterWirelessUpdateResult;
+}
+
+export async function updateRouterUsteer(input: {
+  enabled: boolean;
+  network: string;
+  ssids: string[];
+  aggressiveness: number;
+  bandSteeringInterval: number;
+  bandSteeringMinSnr: number;
+  bandSteeringThreshold: number;
+  loadBalancingThreshold: number;
+}): Promise<RouterUsteerUpdateResult> {
+  if (typeof input.enabled !== "boolean") {
+    throw new Error("Roaming enabled state must be an explicit boolean.");
+  }
+  if (input.enabled && (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) || input.network === "." || input.network === "..")) {
+    throw new Error("Select one existing trusted internal network for inter-AP communication.");
+  }
+  if (!Array.isArray(input.ssids) || input.ssids.length > 8 || (input.enabled && input.ssids.length < 1)) {
+    throw new Error("Choose between one and eight existing SSIDs for roaming.");
+  }
+  const seenSsids = new Set<string>();
+  for (const ssid of input.ssids) {
+    if (typeof ssid !== "string" || new TextEncoder().encode(ssid).length < 1 ||
+        new TextEncoder().encode(ssid).length > 32 || hasControlCharacters(ssid)) {
+      throw new Error("Every roaming SSID must be 1–32 bytes and contain no control characters.");
+    }
+    if (seenSsids.has(ssid)) throw new Error("Duplicate roaming SSIDs are not allowed.");
+    seenSsids.add(ssid);
+  }
+  const wholeNumber = (value: number, minimum: number, maximum: number) =>
+    Number.isInteger(value) && value >= minimum && value <= maximum;
+  if (input.enabled && (!wholeNumber(input.aggressiveness, 0, 3) ||
+      !wholeNumber(input.bandSteeringInterval, 0, 300000) ||
+      !wholeNumber(input.bandSteeringMinSnr, -90, -35) ||
+      !wholeNumber(input.bandSteeringThreshold, 0, 20) ||
+      !wholeNumber(input.loadBalancingThreshold, 0, 32))) {
+    throw new Error("Roaming thresholds are outside the supported safe ranges.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("enabled", input.enabled ? "1" : "0");
+  form.set("network", input.network);
+  form.set("ssids", JSON.stringify(input.ssids));
+  form.set("aggressiveness", String(input.aggressiveness));
+  form.set("assoc_steering", "0");
+  form.set("probe_steering", "0");
+  form.set("band_steering_interval", String(input.bandSteeringInterval));
+  form.set("band_steering_min_snr", String(input.bandSteeringMinSnr));
+  form.set("band_steering_threshold", String(input.bandSteeringThreshold));
+  form.set("load_balancing_threshold", String(input.loadBalancingThreshold));
+  form.set("confirmed", "1");
+
+  const response = await fetch(USTEER_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Wi-Fi roaming changes require an active router administrator session."
+      : "The router returned an invalid Wi-Fi roaming response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid Wi-Fi roaming response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  const expectedSsids = [...input.ssids].sort();
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("enabled" in payload) || payload.enabled !== input.enabled ||
+    !("service_action_completed" in payload) || payload.service_action_completed !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false ||
+    !("status" in payload) || typeof payload.status !== "string" ||
+    !("running" in payload) || payload.running !== input.enabled ||
+    !("ssid_list" in payload) || !Array.isArray(payload.ssid_list) ||
+    payload.ssid_list.length !== expectedSsids.length ||
+    payload.ssid_list.some((ssid, index) => ssid !== expectedSsids[index]) ||
+    (input.enabled && (!("network" in payload) || payload.network !== input.network ||
+      !("aggressiveness" in payload) || payload.aggressiveness !== input.aggressiveness ||
+      !("band_steering_interval" in payload) || payload.band_steering_interval !== input.bandSteeringInterval ||
+      !("band_steering_min_snr" in payload) || payload.band_steering_min_snr !== input.bandSteeringMinSnr ||
+      !("band_steering_threshold" in payload) || payload.band_steering_threshold !== input.bandSteeringThreshold ||
+      !("load_balancing_threshold" in payload) || payload.load_balancing_threshold !== input.loadBalancingThreshold ||
+      (payload.status !== "cluster" && payload.status !== "local_only"))) ||
+    (!input.enabled && payload.status !== "disabled") ||
+    !("local_node_count" in payload) || typeof payload.local_node_count !== "number" ||
+    !("remote_host_count" in payload) || typeof payload.remote_host_count !== "number" ||
+    !("associated_clients" in payload) || typeof payload.associated_clients !== "number"
+  ) {
+    throw new Error("The router did not confirm the exact roaming policy and requested usteer service state.");
+  }
+  return payload as RouterUsteerUpdateResult;
 }
 
 export async function updateRouterSqmQueue(
