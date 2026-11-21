@@ -61,6 +61,54 @@ function validate_queue_update(section, enabled, download, upload, linklayer, ov
 	return update
 end
 
+
+local MAX_QDISCS = 64
+
+-- Parse the fixed, read-only output of "tc -s qdisc show". Unrecognised or
+-- empty output is not reported as a successful runtime inventory.
+function parse_qdisc_inventory(output)
+	local qdiscs, current = {}, nil
+	local header_count, truncated = 0, false
+	if type(output) ~= "string" then return false, qdiscs, false end
+
+	for line in output:gmatch("[^\\r\\n]+") do
+		local kind, handle, details = line:match("^qdisc%s+(%S+)%s+(%S+)%s*(.*)$")
+		if kind then
+			header_count = header_count + 1
+			if #qdiscs < MAX_QDISCS then
+				current = {
+					kind = kind,
+					handle = handle,
+					device = details:match("dev%s+(%S+)"),
+					parent = details:match("parent%s+(%S+)"),
+					root = details:match("%f[%a]root%f[%A]") ~= nil
+				}
+				table.insert(qdiscs, current)
+			else
+				truncated = true
+				current = nil
+			end
+		elseif current then
+			local bytes, packets, dropped, overlimits, requeues =
+				line:match("Sent%s+(%d+)%s+bytes%s+(%d+)%s+pkt%s+%(%s*dropped%s+(%d+),%s*overlimits%s+(%d+)%s+requeues%s+(%d+)%)")
+			if bytes then
+				current.bytes = tonumber(bytes)
+				current.packets = tonumber(packets)
+				current.dropped = tonumber(dropped)
+				current.overlimits = tonumber(overlimits)
+				current.requeues = tonumber(requeues)
+			end
+			local backlog_bytes, backlog_packets = line:match("backlog%s+(%d+)b%s+(%d+)p")
+			if backlog_bytes then
+				current.backlog_bytes = tonumber(backlog_bytes)
+				current.backlog_packets = tonumber(backlog_packets)
+			end
+		end
+	end
+
+	return header_count > 0, qdiscs, truncated
+end
+
 -- Compare an enabled queue's configured root discipline with the live kernel
 -- inventory. This is deliberately an observation, not a claim that ingress
 -- shaping or end-to-end bandwidth/latency behaviour has been verified.
