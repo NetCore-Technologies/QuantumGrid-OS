@@ -78,7 +78,7 @@ local runtime_available, parsed_qdiscs, parsed_truncated = sqm.parse_qdisc_inven
 	" backlog 128b 2p requeues 0",
 	"qdisc fq_codel 0: dev lan parent 1:10",
 	" Sent 900 bytes 9 pkt (dropped 0, overlimits 1 requeues 0)",
-}, "\\n"))
+}, "\n"))
 assert(runtime_available and not parsed_truncated and #parsed_qdiscs == 2,
 	"recognised tc qdisc output should produce a complete inventory")
 assert(parsed_qdiscs[1].kind == "cake" and parsed_qdiscs[1].handle == "8001:" and
@@ -101,7 +101,7 @@ local many_headers = {}
 for index = 1, 65 do
 	table.insert(many_headers, "qdisc cake " .. tostring(index) .. ": dev wan root")
 end
-local capped_available, capped_qdiscs, capped_truncated = sqm.parse_qdisc_inventory(table.concat(many_headers, "\\n"))
+local capped_available, capped_qdiscs, capped_truncated = sqm.parse_qdisc_inventory(table.concat(many_headers, "\n"))
 assert(capped_available and #capped_qdiscs == 64 and capped_truncated,
 	"runtime qdisc parsing must cap memory and explicitly report truncation")
 
