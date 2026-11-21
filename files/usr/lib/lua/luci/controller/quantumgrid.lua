@@ -3264,6 +3264,13 @@ local function remote_syslog_status(uci, fs)
 		available = false,
 		service_installed = fs.access("/etc/init.d/log") == true,
 		config_available = fs.access("/etc/config/system") == true,
+		stunnel_installed = fs.access("/etc/init.d/stunnel") == true,
+		stunnel_config_available = fs.access("/etc/config/stunnel") == true,
+		tls_available = fs.access("/etc/init.d/stunnel") == true and
+			fs.access("/etc/config/stunnel") == true and
+			fs.access("/etc/ssl/certs/ca-certificates.crt") == true,
+		tls_enabled = false,
+		tls_status = "unavailable",
 		enabled = false,
 		host = "",
 		port = 514,
@@ -3285,9 +3292,78 @@ local function remote_syslog_status(uci, fs)
 			result.hostname = type(section.log_hostname) == "string" and section.log_hostname or ""
 			result.prefix = type(section.log_prefix) == "string" and section.log_prefix or ""
 			result.enabled = result.host ~= "" and section.log_remote ~= "0"
+			result.local_tls_forwarder = result.host == "127.0.0.1" and
+				result.port == 5514 and result.protocol == "tcp"
 		end)
 	end)
 	result.available = ok and section_found
+	if not result.available or not result.local_tls_forwarder then return result end
+
+	local tunnel = nil
+	local tunnel_ok, tunnel_value = pcall(uci.get_all, uci, "stunnel", "quantumgrid_syslog")
+	if tunnel_ok and type(tunnel_value) == "table" and tunnel_value[".type"] == "service" then
+		tunnel = tunnel_value
+	end
+	if not tunnel then
+		result.protocol = "tls"
+		result.tls_status = result.tls_available and "review" or "unavailable"
+		result.enabled = false
+		result.tls_error = "The managed TLS tunnel section is missing or invalid."
+		return result
+	end
+
+	local function first_value(value)
+		if type(value) == "string" then return value end
+		if type(value) == "table" then return value[1] end
+		return nil
+	end
+	local function contains_value(value, wanted)
+		if type(value) == "string" then return value == wanted end
+		if type(value) == "table" then
+			for _, item in ipairs(value) do if item == wanted then return true end end
+		end
+		return false
+	end
+
+	local connect = first_value(tunnel.connect)
+	local remote_host, remote_port = type(connect) == "string" and connect:match("^([^:]+):([1-9]%d*)$") or nil, nil
+	if type(connect) == "string" then remote_host, remote_port = connect:match("^([^:]+):([1-9]%d*)$") end
+	if remote_host then
+		remote_port = tonumber(remote_port)
+		if remote_port and remote_port <= 65535 then
+			result.host = remote_host
+			result.port = remote_port
+		end
+	end
+	result.protocol = "tls"
+	local is_ipv4 = type(result.host) == "string" and result.host:match("^%d+%.%d+%.%d+%.%d+$") ~= nil
+	local identity_ok = is_ipv4
+		and contains_value(tunnel.checkIP, result.host)
+		or not is_ipv4 and contains_value(tunnel.checkHost, result.host) and
+			contains_value(tunnel.sni, result.host)
+	local tls_configured = tunnel.client == "1" and tunnel.verifyChain == "1" and
+		tunnel.CAfile == "/etc/ssl/certs/ca-certificates.crt" and
+		tunnel.accept_host == "127.0.0.1" and tonumber(tunnel.accept_port) == 5514 and
+		remote_port ~= nil and remote_port >= 1 and remote_port <= 65535 and
+		identity_ok
+	result.tls_identity_verified = identity_ok
+	result.tls_configured = tls_configured
+	result.tls_enabled = tunnel.enabled == "1"
+	if not result.tls_available then
+		result.tls_status = "unavailable"
+	elseif not tls_configured then
+		result.tls_status = "review"
+	elseif not result.tls_enabled then
+		result.tls_status = "disabled"
+	else
+		result.tls_status = "ready"
+	end
+	result.enabled = result.enabled and result.tls_enabled and tls_configured and result.tls_available
+	if not result.tls_available then
+		result.tls_error = "The stunnel service or trusted CA bundle is unavailable."
+	elseif not tls_configured then
+		result.tls_error = "TLS verification, local listener or remote certificate identity configuration is incomplete."
+	end
 	return result
 end
 
