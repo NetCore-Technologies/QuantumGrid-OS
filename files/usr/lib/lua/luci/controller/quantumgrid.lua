@@ -1832,6 +1832,317 @@ function action_wireless_update()
 end
 
 
+
+function action_usteer_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local manager = require "luci.quantumgrid.usteer"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	local options = {
+		"enabled", "network", "syslog", "local_mode", "ipv6",
+		"assoc_steering", "probe_steering", "aggressiveness",
+		"band_steering_interval", "band_steering_min_snr",
+		"band_steering_threshold", "load_balancing_threshold"
+	}
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/etc/init.d/usteer") ~= true or fs.access("/sbin/usteerd") ~= true or
+		fs.access("/etc/config/usteer") ~= true then
+		respond(503, {
+			ok = false,
+			error = "The usteer daemon, service script or UCI configuration is unavailable in this firmware."
+		})
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing the roaming service." })
+		return
+	end
+
+	local network_inventory = wireless_network_inventory(uci, fs)
+	if not network_inventory.available or network_inventory.truncated then
+		respond(503, {
+			ok = false,
+			error = "The routed-network or firewall-zone inventory is unavailable or truncated; the inter-AP network cannot be verified."
+		})
+		return
+	end
+	local access_point_inventory = usteer_access_point_inventory(uci)
+	if not access_point_inventory.available or access_point_inventory.truncated then
+		respond(503, {
+			ok = false,
+			error = "The AP inventory is unavailable or truncated; roaming prerequisites cannot be verified across every local SSID."
+		})
+		return
+	end
+
+	local ssid_json = http.formvalue("ssids", true) or ""
+	if #ssid_json > 4096 then
+		respond(400, { ok = false, error = "The roaming SSID list exceeds the maximum request size." })
+		return
+	end
+	local jsonc = require "luci.jsonc"
+	local ssids_ok, ssids = pcall(jsonc.parse, ssid_json)
+	if not ssids_ok or type(ssids) ~= "table" then
+		respond(400, { ok = false, error = "The roaming SSID selection must be a valid JSON array." })
+		return
+	end
+
+	local requested_enabled = http.formvalue("enabled", true)
+	local network_name = http.formvalue("network", true) or ""
+	local binding = nil
+	if requested_enabled == "1" then
+		local office = require "luci.quantumgrid.office_networks"
+		local binding_error
+		binding, binding_error = office.validate_wireless_network_binding(
+			network_name, network_inventory.interfaces, network_inventory.zones)
+		if not binding then
+			respond(400, { ok = false, error = binding_error })
+			return
+		end
+	end
+	local update, validation_error = manager.validate({
+		confirmed = "1",
+		enabled = requested_enabled,
+		aggressiveness = http.formvalue("aggressiveness", true),
+		assoc_steering = http.formvalue("assoc_steering", true),
+		probe_steering = http.formvalue("probe_steering", true),
+		band_steering_interval = http.formvalue("band_steering_interval", true),
+		band_steering_min_snr = http.formvalue("band_steering_min_snr", true),
+		band_steering_threshold = http.formvalue("band_steering_threshold", true),
+		load_balancing_threshold = http.formvalue("load_balancing_threshold", true),
+		ssids = ssids
+	}, binding, access_point_inventory.access_points)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local section_name = nil
+	local section_count = 0
+	local sections_ok = pcall(function()
+		uci:foreach("usteer", "usteer", function(section)
+			section_count = section_count + 1
+			if section_count == 1 then section_name = section[".name"] end
+		end)
+	end)
+	if not sections_ok or section_count ~= 1 or
+		type(section_name) ~= "string" or not section_name:match("^[%w_.%-]+$") then
+		respond(409, {
+			ok = false,
+			error = "QuantumGrid requires exactly one existing usteer configuration section. Resolve duplicate or missing sections before changing the service."
+		})
+		return
+	end
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "usteer", section_name)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "usteer" then
+		respond(500, { ok = false, error = "The existing usteer settings could not be snapshotted safely." })
+		return
+	end
+
+	local previous = {}
+	for _, option in ipairs(options) do previous[option] = snapshot[option] end
+	previous.ssid_list = snapshot.ssid_list
+	local previous_init_enabled = fs.access("/etc/rc.d/S50usteer") == true
+	local previous_config_enabled = snapshot.enabled ~= "0"
+	local desired = { enabled = update.enabled and "1" or "0" }
+	if update.enabled then
+		desired.network = update.network
+		desired.syslog = "1"
+		desired.local_mode = "0"
+		desired.ipv6 = "0"
+		desired.assoc_steering = "0"
+		desired.probe_steering = "0"
+		desired.aggressiveness = tostring(update.aggressiveness)
+		desired.band_steering_interval = tostring(update.band_steering_interval)
+		desired.band_steering_min_snr = tostring(update.band_steering_min_snr)
+		desired.band_steering_threshold = tostring(update.band_steering_threshold)
+		desired.load_balancing_threshold = tostring(update.load_balancing_threshold)
+	end
+
+	local function restore_configuration()
+		local restored = true
+		for _, option in ipairs(options) do
+			local value = previous[option]
+			local ok, result
+			if value == nil then
+				ok, result = pcall(uci.delete, uci, "usteer", section_name, option)
+				if not ok or result == false then restored = false end
+			else
+				ok, result = pcall(uci.set, uci, "usteer", section_name, option, value)
+				if not ok or result ~= true then restored = false end
+			end
+		end
+		local list_ok, list_result
+		if type(previous.ssid_list) == "table" then
+			list_ok, list_result = pcall(uci.set_list, uci, "usteer", section_name, "ssid_list", previous.ssid_list)
+		else
+			list_ok, list_result = pcall(uci.delete, uci, "usteer", section_name, "ssid_list")
+			if list_ok and list_result == nil then list_result = true end
+		end
+		if not list_ok or list_result ~= true then restored = false end
+		local commit_ok, committed = false, false
+		if restored then commit_ok, committed = pcall(uci.commit, uci, "usteer") end
+		return restored and commit_ok and committed == true
+	end
+
+	local function restore_service()
+		local init_command = previous_init_enabled
+			and "/etc/init.d/usteer enable"
+			or "/etc/init.d/usteer disable"
+		local service_command = previous_config_enabled
+			and "/etc/init.d/usteer restart"
+			or "/etc/init.d/usteer stop"
+		local ok, status = pcall(sys.call, init_command .. " >/dev/null 2>&1 && " ..
+			service_command .. " >/dev/null 2>&1")
+		if not ok or status ~= 0 then return false end
+		if previous_init_enabled and previous_config_enabled then
+			for attempt = 1, 10 do
+				if type(ubus_call("usteer", "get_config", {})) == "table" then return true end
+				if attempt < 10 then pcall(require("nixio").nanosleep, 0, 200000000) end
+			end
+			return false
+		end
+		for attempt = 1, 10 do
+			if type(ubus_call("usteer", "get_config", {})) ~= "table" then return true end
+			if attempt < 10 then pcall(require("nixio").nanosleep, 0, 200000000) end
+		end
+		return false
+	end
+
+	local function rollback()
+		pcall(uci.revert, uci, "usteer")
+		local config_restored = restore_configuration()
+		local service_restored = config_restored and restore_service()
+		return config_restored and service_restored
+	end
+
+	for option, value in pairs(desired) do
+		local ok, result = pcall(uci.set, uci, "usteer", section_name, option, value)
+		if not ok or result ~= true then
+			pcall(uci.revert, uci, "usteer")
+			respond(500, { ok = false, error = "Roaming settings could not be staged; the daemon was not restarted." })
+			return
+		end
+	end
+	if update.enabled then
+		local list_ok, list_result = pcall(uci.set_list, uci, "usteer", section_name, "ssid_list", update.ssids)
+		if not list_ok or list_result ~= true then
+			pcall(uci.revert, uci, "usteer")
+			respond(500, { ok = false, error = "The managed roaming SSID allowlist could not be staged." })
+			return
+		end
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "usteer")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "usteer")
+		respond(500, { ok = false, error = "Roaming settings could not be committed; the daemon was not restarted." })
+		return
+	end
+
+	local command = update.enabled
+		and "/etc/init.d/usteer enable >/dev/null 2>&1 && /etc/init.d/usteer restart >/dev/null 2>&1"
+		or "/etc/init.d/usteer stop >/dev/null 2>&1 && /etc/init.d/usteer disable >/dev/null 2>&1"
+	local restart_ok, restart_status = pcall(sys.call, command)
+	if not restart_ok or restart_status ~= 0 then
+		local rolled_back = rollback()
+		record_audit(http, "wireless.usteer.update", section_name, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "The roaming service transition failed. Previous usteer settings and startup state were restored."
+				or "The roaming service transition failed and rollback could not be confirmed. Inspect usteer configuration and daemon state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	local nixio = require "nixio"
+	local runtime = nil
+	local ready = false
+	for attempt = 1, 10 do
+		local status = usteer_status(uci, fs)
+		if update.enabled then
+			if status.running and (status.status == "cluster" or status.status == "local_only") and
+				status.network == update.network and #status.ssid_list == #update.ssids then
+					runtime = status
+					ready = true
+					break
+				end
+		else
+			if status.status == "disabled" and not status.running then
+				runtime = status
+				ready = true
+				break
+			end
+		end
+		runtime = status
+		if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
+	end
+	if not ready then
+		local rolled_back = rollback()
+		record_audit(http, "wireless.usteer.update", section_name, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "The usteer service did not reach the requested runtime state. Previous settings were restored."
+				or "The usteer service did not reach the requested runtime state and rollback could not be confirmed. Inspect local wireless and daemon state.",
+			rolled_back = rolled_back,
+			runtime_status = runtime and runtime.status or "unavailable"
+		})
+		return
+	end
+
+	record_audit(http, "wireless.usteer.update", section_name, "success")
+	respond(nil, {
+		ok = true,
+		enabled = update.enabled,
+		network = update.enabled and update.network or (previous.network or ""),
+		ssid_list = update.enabled and update.ssids or wireless_option_list(previous.ssid_list),
+		aggressiveness = update.enabled and update.aggressiveness or tonumber(previous.aggressiveness) or 0,
+		assoc_steering = false,
+		probe_steering = false,
+		band_steering_interval = update.enabled and update.band_steering_interval or tonumber(previous.band_steering_interval) or 0,
+		band_steering_min_snr = update.enabled and update.band_steering_min_snr or tonumber(previous.band_steering_min_snr) or -60,
+		band_steering_threshold = update.enabled and update.band_steering_threshold or tonumber(previous.band_steering_threshold) or 5,
+		load_balancing_threshold = update.enabled and update.load_balancing_threshold or tonumber(previous.load_balancing_threshold) or 0,
+		status = runtime.status,
+		running = runtime.running,
+		local_node_count = runtime.local_node_count,
+		remote_host_count = runtime.remote_host_count,
+		associated_clients = runtime.associated_clients,
+		service_action_completed = true,
+		rolled_back = false
+	})
+end
+
+
 function action_sqm_update()
 	local http = require "luci.http"
 	local sys = require "luci.sys"
