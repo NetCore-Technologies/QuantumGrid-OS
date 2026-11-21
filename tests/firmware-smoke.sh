@@ -3,6 +3,13 @@ set -Eeuo pipefail
 trap 'status=$?; printf "ERROR: firmware smoke check failed at line %s: %s (status %s)\\n" "$LINENO" "$BASH_COMMAND" "$status" >&2; exit "$status"' ERR
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DEVICE_PROFILE="$ROOT/profiles/arcadyan-aw1000.json"
+test -s "$DEVICE_PROFILE"
+test -s "$ROOT/scripts/verify-device-profile.py"
+python3 "$ROOT/scripts/verify-device-profile.py" "$DEVICE_PROFILE" --check-only
+grep -Fq 'QG_DEVICE_PROFILE' "$ROOT/build.sh"
+grep -Fq 'mapfile -t PROFILE_FIELDS' "$ROOT/build.sh"
+grep -Fq 'CONFIG_TARGET_${OPENWRT_TARGET}' "$ROOT/build.sh"
 CONFIG="$ROOT/configs/aw1000-max.config"
 grep -qx 'CONFIG_PACKAGE_uhttpd=y' "$CONFIG"
 grep -qx 'CONFIG_PACKAGE_libustream-mbedtls=y' "$CONFIG"
@@ -52,7 +59,7 @@ grep -Fq 'check-openwrt-worktree.sh' "$ROOT/build.sh"
 test -s "$ROOT/scripts/check-openwrt-worktree.sh"
 test -s "$ROOT/configs/aw1000-nss-feeds.conf"
 test -s "$ROOT/scripts/pin-aw1000-nss-feeds.sh"
-grep -Fq 'pin-aw1000-nss-feeds.sh' "$ROOT/build.sh"
+grep -Fq '"pin_script": "scripts/pin-aw1000-nss-feeds.sh"' "$ROOT/profiles/arcadyan-aw1000.json"
 grep -Fq 'PACKAGE_COUNT=' "$RELEASE_WORKFLOW"
 grep -Fq 'No non-empty APK/IPK packages were produced.' "$RELEASE_WORKFLOW"
 grep -Fq 'OPENWRT-FEEDS.txt' "$RELEASE_WORKFLOW"
@@ -117,7 +124,7 @@ for package in kmod-usb-serial-option kmod-aw1000-fxs fxsd luci-app-fxs; do
     grep -qx "CONFIG_PACKAGE_${package}=y" "$CONFIG"
 done
 
-grep -Fq 'setup-aw1000-phone-feed.sh' "$ROOT/build.sh"
+grep -Fq '"setup_script": "scripts/setup-aw1000-phone-feed.sh"' "$ROOT/profiles/arcadyan-aw1000.json"
 grep -Fq 'scripts/build-ui.sh' "$ROOT/build.sh"
 test -s "$ROOT/configs/aw1000-nss.fragment"
 test -s "$ROOT/files/etc/uci-defaults/92-quantumgrid-nss-safe"
