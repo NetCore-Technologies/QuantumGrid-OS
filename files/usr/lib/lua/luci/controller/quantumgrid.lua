@@ -7462,8 +7462,23 @@ function action_remote_syslog_update()
 		return
 	end
 
-	record_audit(http, "system.syslog.update", "remote-syslog", "success")
 	local resulting = remote_syslog_status(uci, fs)
+	if update.tls and (resulting.enabled ~= true or resulting.tls_status ~= "ready" or
+		resulting.host ~= update.host or resulting.port ~= tonumber(update.port)) then
+		local rolled_back = rollback_all()
+		record_audit(http, "system.syslog.update", "remote-syslog", "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back and
+				"The TLS service restarted but its live process, exact destination or verified trust configuration could not be confirmed. Previous settings were restored."
+				or "The TLS service did not reach the required live posture and rollback could not be confirmed. Inspect system and stunnel configuration and services locally.",
+			tls_status = resulting.tls_status,
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "system.syslog.update", "remote-syslog", "success")
 	respond(nil, {
 		ok = true,
 		enabled = resulting.enabled,
