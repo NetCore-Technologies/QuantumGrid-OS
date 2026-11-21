@@ -6987,7 +6987,12 @@ function action_static_route_add()
 		static_route_respond(http, 409, { ok = false, error = "The active administrator address is unavailable. Use an out-of-band management path to manage static routes." })
 		return
 	end
-	if routing.static_route_contains_address(update, remote_ip) then
+	local remote_family = routing.ip_address_family(remote_ip)
+	if not remote_family then
+		static_route_respond(http, 409, { ok = false, error = "The active administrator address cannot be validated as IPv4 or IPv6. Use an out-of-band management path to manage static routes." })
+		return
+	end
+	if remote_family == update.family and routing.static_route_contains_address(update, remote_ip) then
 		static_route_respond(http, 409, {
 			ok = false,
 			error = "This route would cover the active administrator client address. Use an out-of-band management path or manage the route from a different network."
@@ -7126,7 +7131,12 @@ function action_static_route_remove()
 		static_route_respond(http, 409, { ok = false, error = "The active administrator address is unavailable. Use an out-of-band management path to remove static routes." })
 		return
 	end
-	if routing.static_route_contains_address(validated, remote_ip) then
+	local remote_family = routing.ip_address_family(remote_ip)
+	if not remote_family then
+		static_route_respond(http, 409, { ok = false, error = "The active administrator address cannot be validated as IPv4 or IPv6. Use an out-of-band management path to remove static routes." })
+		return
+	end
+	if remote_family == validated.family and routing.static_route_contains_address(validated, remote_ip) then
 		static_route_respond(http, 409, {
 			ok = false,
 			error = "This route covers the active administrator client address and cannot be removed through the current session."
