@@ -4308,55 +4308,62 @@ function action_config_backup()
 	local command_ok, command_status = pcall(sys.call,
 		"/sbin/sysupgrade -b " .. backup_path .. " >/dev/null 2>&1")
 	if not command_ok or command_status ~= 0 then
-		release_archive_lock()
 		record_audit(http, "system.config.backup", "sysupgrade", "failed")
-		os.remove(backup_path)
-		respond(503, { ok = false, error = "The router could not create a configuration backup archive." })
+		local removed = os.remove(backup_path)
+		local lock_released = release_archive_lock()
+		respond(503, { ok = false, error = removed and lock_released and
+			"The router could not create a configuration backup archive." or
+			"The backup failed and its temporary file or shared lock could not be cleaned up. Clear the archive lock only after verifying no backup or restore is active." })
 		return
 	end
 	local archive_listing, archive_error = inspect_quantumgrid_config_archive(
 		backup_path, context, validator, util, sys)
 	if not archive_listing then
 		record_audit(http, "system.config.backup", "sysupgrade", "failed")
-		os.remove(backup_path)
-		release_archive_lock()
-		respond(503, { ok = false, error = "The native backup did not contain a complete, compatible recovery manifest: " .. tostring(archive_error) })
+		local removed = os.remove(backup_path)
+		local lock_released = release_archive_lock()
+		respond(503, { ok = false, error = "The native backup did not contain a complete, compatible recovery manifest: " .. tostring(archive_error) ..
+			(removed and lock_released and "" or " Temporary archive or lock cleanup also needs operator attention.") })
 		return
 	end
 
 	local archive, open_error = io.open(backup_path, "rb")
 	if not archive then
-		os.remove(backup_path)
-		release_archive_lock()
-		respond(500, { ok = false, error = "The configuration backup was created but could not be read: " .. tostring(open_error or "unknown error") })
+		local removed = os.remove(backup_path)
+		local lock_released = release_archive_lock()
+		respond(500, { ok = false, error = "The configuration backup was created but could not be read: " .. tostring(open_error or "unknown error") ..
+			(removed and lock_released and "" or " Temporary archive or lock cleanup needs operator attention.") })
 		return
 	end
 	local size = archive:seek("end")
 	local validated_size, size_error = validator.validate_archive_size(size)
 	if not validated_size then
-		archive:close()
-		os.remove(backup_path)
-		release_archive_lock()
-		respond(503, { ok = false, error = size_error })
+		pcall(archive.close, archive)
+		local removed = os.remove(backup_path)
+		local lock_released = release_archive_lock()
+		respond(503, { ok = false, error = tostring(size_error) ..
+			(removed and lock_released and "" or " Temporary archive or lock cleanup needs operator attention.") })
 		return
 	end
 	local seek_ok = archive:seek("set", 0)
 	if seek_ok ~= 0 then
-		archive:close()
-		os.remove(backup_path)
-		release_archive_lock()
-		respond(500, { ok = false, error = "The configuration backup archive could not be rewound for download." })
+		pcall(archive.close, archive)
+		local removed = os.remove(backup_path)
+		local lock_released = release_archive_lock()
+		respond(500, { ok = false, error = removed and lock_released and
+			"The configuration backup archive could not be rewound for download." or
+			"The archive could not be rewound and temporary cleanup needs operator attention." })
 		return
 	end
 	local read_ok, contents = pcall(archive.read, archive, "*a")
-	local close_ok = pcall(archive.close, archive)
-	os.remove(backup_path)
+	local close_ok, close_result = pcall(archive.close, archive)
+	local remove_ok, remove_result = os.remove(backup_path)
 	local lock_released = release_archive_lock()
-	if not lock_released then
-		respond(503, { ok = false, error = "The backup completed, but the shared archive lock could not be released. Do not retry until the router's archive lock is cleared." })
+	if not read_ok or not close_ok or not close_result or not remove_ok or not remove_result then
+		respond(500, { ok = false, error = "The configuration backup could not be read, closed, deleted and unlocked cleanly. Inspect the archive lock and temporary files before retrying." })
 		return
 	end
-	if not read_ok or not close_ok or type(contents) ~= "string" or #contents ~= validated_size then
+	if type(contents) ~= "string" or #contents ~= validated_size then
 		respond(500, { ok = false, error = "The configuration backup archive could not be read completely." })
 		return
 	end
