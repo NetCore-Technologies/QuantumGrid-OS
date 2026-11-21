@@ -4513,7 +4513,6 @@ function action_office_segment_add()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
-	update.zone_output = update.zone_output or nil
 	if ipv6.enabled and update.zone_output ~= "ACCEPT" then
 		respond(400, { ok = false, error = "Dual-stack segments require the selected firewall zone to allow router-originated output so Router Advertisements can reach the VLAN." })
 		return
@@ -4587,7 +4586,7 @@ function action_office_segment_add()
 		uci.section, uci, "network", "interface", network_section, network_options)
 	if not network_ok or network_created ~= network_section then
 		pcall(uci.revert, uci, "network")
-		respond(500, { ok = false, error = "The new static IPv4 network interface could not be staged." })
+		respond(500, { ok = false, error = "The new office network interface could not be staged." })
 		return
 	end
 
@@ -4600,6 +4599,9 @@ function action_office_segment_add()
 	if ipv6.enabled then
 		dhcp_options.dhcpv6 = ipv6.dhcpv6
 		dhcp_options.ra = ipv6.ra
+		dhcp_options.ra_flags = ipv6.ra_flags
+		dhcp_options.ra_slaac = ipv6.ra_slaac
+		dhcp_options.ra_dns = ipv6.ra_dns
 		dhcp_options.ndp = ipv6.ndp
 	else
 		dhcp_options.dhcpv6 = "disabled"
@@ -4671,8 +4673,8 @@ function action_office_segment_add()
 				update.zone_section, previous_zone_networks_present, previous_zone_networks, rule_sections, ipv6.enabled)
 			record_audit(http, "office.segment.add", update.name, "failed")
 			respond(500, {
-				error = recovered and "A narrowly scoped DHCP/DNS firewall rule could not be staged. The partial configuration was removed."
-					or "A DHCP/DNS firewall rule could not be staged and the previous configuration could not be fully restored.",
+				error = recovered and "A required office-segment firewall rule could not be staged. The partial configuration was removed."
+					or "An office-segment firewall rule could not be staged and the previous configuration could not be fully restored.",
 					rolled_back = recovered
 			})
 			return
