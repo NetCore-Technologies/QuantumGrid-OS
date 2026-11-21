@@ -690,6 +690,30 @@ For production deployments, forward system logs to a separately managed, access-
 server and define an independent retention policy. Parser and redaction rules are tested by
 `tests/audit-log.lua` in CI.
 
+## Administrator management-plane posture
+
+The Security Center includes a read-only inventory of configured Dropbear SSH instances alongside
+the existing uHTTPd HTTPS review. It reports service/config availability, enabled instance counts,
+configured interface bindings and ports, password and root-password authentication settings,
+gateway-port forwarding state, and whether the bounded eight-instance detail list is truncated.
+Unknown or malformed enabled-instance settings are treated as a review item rather than as a secure
+setting. Missing SSH configuration is not reported as a successful hardened state.
+
+The current AW1000 first-boot Dropbear profile deliberately keeps password and root-password
+authentication enabled for initial access while binding the daemon to the LAN interface. QuantumGrid
+reports that configuration for administrator review; it does not silently disable SSH password
+authentication or restart Dropbear, because doing so before a public key is installed and tested
+could lock the administrator out. For a production deployment, install and verify a working
+administrator SSH key using a trusted console or independent recovery path, then explicitly disable
+both `PasswordAuth` and `RootPasswordAuth` for every enabled Dropbear instance. Keep SSH bound to
+the dedicated trusted management interface and leave `GatewayPorts` disabled.
+
+These are configuration inventory checks, not a live socket scan, firewall reachability test, proof
+that an authorized key is installed or usable, certificate-chain validation, compliance assessment
+or security certification. Confirm SSH access from a separate management host and validate the
+effective firewall and management VLAN path before deploying a change to a remote device. The
+reported posture must not be interpreted as proof that a service is or is not reachable from WAN.
+
 ## Development status
 
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
