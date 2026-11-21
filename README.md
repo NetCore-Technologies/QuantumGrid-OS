@@ -24,6 +24,10 @@ Explore the [platform](https://netcore-technologies.github.io/QuantumGrid-OS/fea
 4. Gate hardware-sensitive changes behind compatibility checks, safe defaults and recovery instructions.
 5. Publish device-specific firmware with build provenance and SHA-256 checksums.
 
+## Office network services
+
+Office Networks provisions routed IPv4 office segments on pre-existing VLAN-filtered bridges. Optional dual-stack mode requests a delegated IPv6 /64 and configures DHCPv6, Router Advertisements and zone-scoped IPv6 control-plane rules while retaining the selected zone's default-deny INPUT/FORWARD policies. IPv4-only remains the default, and IPv6 requires upstream prefix delegation. See the [Office Networks deployment guide](Docs/OFFICE-NETWORKS.md) for prerequisites, firewall behaviour, recovery and physical validation.
+
 ## Hardware target
 
 | Component | Platform |
