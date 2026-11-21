@@ -8112,10 +8112,16 @@ function OfficeIpv6PinholeManager({
   const destinationNetworks = destinationZones.find((zone) => zone.name === activeDestination)?.networks ?? [];
   const isGlobalUnicast = (raw: string) => {
     const address = raw.split("/")[0]?.trim() ?? "";
-    const first = address.split(":")[0] ?? "";
+    if (address.includes("%") || address.includes(".")) return false;
+    const groups = address.split(":");
+    const first = groups[0] ?? "";
+    const second = groups[1] ?? "";
     const firstGroup = /^[0-9a-fA-F]{1,4}$/.test(first) ? Number.parseInt(first, 16) : -1;
+    const secondGroup = /^[0-9a-fA-F]{1,4}$/.test(second) ? Number.parseInt(second, 16) : 0;
     return firstGroup >= 0x2000 && firstGroup <= 0x3fff &&
-      !/^2001:db8:/i.test(address) && !address.includes("%") && !address.includes(".");
+      !(firstGroup === 0x2001 && (secondGroup < 0x0200 || secondGroup === 0x0db8)) &&
+      firstGroup !== 0x2002 &&
+      !(firstGroup === 0x3fff && secondGroup < 0x1000);
   };
   const destinationAddresses = interfaces
     .filter((iface) => destinationNetworks.includes(iface.name))
