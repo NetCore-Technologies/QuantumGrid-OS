@@ -42,6 +42,7 @@ local ALLOWED_ACTIONS = {
 	["package.feed.update"] = true,
 	["hardware.led.update"] = true,
 	["system.config.backup"] = true,
+	["system.config.restore"] = true,
 	["system.syslog.update"] = true
 }
 
