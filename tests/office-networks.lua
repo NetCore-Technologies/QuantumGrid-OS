@@ -851,7 +851,7 @@ local parsed_neighbors = office.parse_ipv6_neighbor_inventory(table.concat({
   "2001:4860:4860::5555 dev br-lan.20 lladdr aa:bb:cc:dd:ee:08 FAILED",
   "2001:4860:4860::4444 dev br-lan.20 lladdr aa:bb:cc:dd:ee:09 INCOMPLETE",
   "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:10 REACHABLE",
-}, "\\n"), "br-lan.20")
+}, "\n"), "br-lan.20")
 assert(#parsed_neighbors == 2
   and parsed_neighbors[1].address == "2001:4860:4860:0000:0000:0000:0000:8844"
   and parsed_neighbors[1].state == "STALE"
