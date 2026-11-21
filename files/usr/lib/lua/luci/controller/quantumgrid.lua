@@ -2090,10 +2090,20 @@ function action_usteer_update()
 	local nixio = require "nixio"
 	local runtime = nil
 	local ready = false
+	local function local_ess_ready(status)
+		if type(status.local_nodes) ~= "table" or status.local_node_count < 1 then return false end
+		local observed = {}
+		for _, node in ipairs(status.local_nodes) do
+			if type(node.ssid) == "string" and node.ssid ~= "" then observed[node.ssid] = true end
+		end
+		for _, ssid in ipairs(update.ssids) do if not observed[ssid] then return false end end
+		return true
+	end
 	for attempt = 1, 10 do
 		local status = usteer_status(uci, fs)
 		if update.enabled then
-			if status.running and (status.status == "cluster" or status.status == "local_only") and
+			if status.running and status.local_node_count > 0 and local_ess_ready(status) and
+				(status.status == "cluster" or status.status == "local_only") and
 				status.network == update.network and #status.ssid_list == #update.ssids then
 					runtime = status
 					ready = true
