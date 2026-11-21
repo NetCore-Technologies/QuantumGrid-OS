@@ -95,6 +95,12 @@ function validate_archive_listing(listing)
 		end
 		local tokens = {}
 		for token in line:gmatch("%S+") do tokens[#tokens + 1] = token end
+		local mode = tokens[1]
+		if type(mode) ~= "string" or #mode ~= 10 or
+			(mode:sub(1, 1) ~= "-" and mode:sub(1, 1) ~= "d") or
+			mode:find("[sStT]") then
+			return nil, "The archive contains an invalid, set-ID or sticky permission mode."
+		end
 		local entry_size = nil
 		for index, token in ipairs(tokens) do
 			if token:match("^%d%d%d%d%-%d%d%-%d%d$") then
