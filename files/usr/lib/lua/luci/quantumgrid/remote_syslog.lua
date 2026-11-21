@@ -12,6 +12,14 @@ local function valid_ipv4(value)
 			return false
 		end
 	end
+	local first, second, third = tonumber(a), tonumber(b), tonumber(c)
+	if first == 0 or first == 127 or first >= 224 or
+		(first == 169 and second == 254) or
+		(first == 192 and second == 0 and third == 2) or
+		(first == 198 and (second == 18 or second == 19 or (second == 51 and third == 100))) or
+		(first == 203 and second == 0 and third == 113) then
+		return false
+	end
 	return true
 end
 
