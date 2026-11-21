@@ -6861,3 +6861,303 @@ function action_api()
 		}
 	})
 end
+
+
+local function static_route_write_interfaces(uci)
+	local result, names = {}, {}
+	local ok = pcall(function()
+		uci:foreach("network", "interface", function(section)
+			local name = type(section[".name"]) == "string" and section[".name"] or ""
+			if name:match("^[%w_.%-]+$") and name ~= "loopback" and not names[name] then
+				names[name] = true
+				table.insert(result, { name = name })
+			end
+		end)
+	end)
+	return ok and result or nil
+end
+
+local function static_route_respond(http, status, payload)
+	if status then
+		http.status(status, status == 400 and "Bad Request" or
+			status == 403 and "Forbidden" or status == 404 and "Not Found" or
+			status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+			status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+			"Internal Server Error")
+	end
+	http.header("Cache-Control", "no-store")
+	http.prepare_content("application/json; charset=UTF-8")
+	http.write_json(payload)
+end
+
+local function static_route_request_origin_valid(http)
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	return host ~= nil and origin == scheme .. "://" .. host
+end
+
+local function static_route_services_ready(fs)
+	return fs.access("/etc/config/network") == true and
+		fs.access("/etc/init.d/network") == true
+end
+
+local function static_route_reload(sys)
+	local ok, status = pcall(sys.call, "/etc/init.d/network reload >/dev/null 2>&1")
+	return ok and status == 0
+end
+
+local function restore_static_route(uci, sys, section, previous)
+	if type(section) ~= "string" or type(previous) ~= "table" then return false end
+	local restore_ok, restored = pcall(
+		uci.section, uci, "network", previous.route_type, section, previous.values)
+	if not restore_ok or not restored then return false end
+	local commit_ok, committed = pcall(uci.commit, uci, "network")
+	if not commit_ok or committed ~= true then return false end
+	return static_route_reload(sys)
+end
+
+function action_static_route_add()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local routing = require "luci.quantumgrid.routing"
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		static_route_respond(http, 405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not static_route_request_origin_valid(http) then
+		static_route_respond(http, 403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		static_route_respond(http, 400, { ok = false, error = "Explicit confirmation is required before adding a static route." })
+		return
+	end
+	if not static_route_services_ready(fs) then
+		static_route_respond(http, 503, { ok = false, error = "Network configuration or the native network reload service is unavailable." })
+		return
+	end
+
+	local inventory = static_route_inventory(uci, fs)
+	if not inventory.available or inventory.truncated or inventory.invalid_count > 0 then
+		static_route_respond(http, 409, {
+			ok = false,
+			error = "Static route inventory is unavailable, invalid or truncated. Resolve existing route sections before changing them."
+		})
+		return
+	end
+	local interfaces = static_route_write_interfaces(uci)
+	if not interfaces then
+		static_route_respond(http, 409, { ok = false, error = "The network interface inventory could not be read safely." })
+		return
+	end
+
+	local update, validation_error = routing.validate_static_route(
+		http.formvalue("family", true),
+		http.formvalue("interface", true),
+		http.formvalue("target", true),
+		http.formvalue("gateway", true),
+		http.formvalue("metric", true),
+		http.formvalue("table", true),
+		interfaces,
+		inventory.routes)
+	if not update then
+		static_route_respond(http, 400, { ok = false, error = validation_error })
+		return
+	end
+
+	local remote_ip = http.getenv("REMOTE_ADDR")
+	if type(remote_ip) ~= "string" or remote_ip == "" then
+		static_route_respond(http, 409, { ok = false, error = "The active administrator address is unavailable. Use an out-of-band management path to manage static routes." })
+		return
+	end
+	if routing.static_route_contains_address(update, remote_ip) then
+		static_route_respond(http, 409, {
+			ok = false,
+			error = "This route would cover the active administrator client address. Use an out-of-band management path or manage the route from a different network."
+		})
+		return
+	end
+
+	local options = {
+		interface = update.interface,
+		target = update.target
+	}
+	if update.gateway ~= "" then options.gateway = update.gateway end
+	if update.metric ~= nil then options.metric = tostring(update.metric) end
+	if update.table ~= "" then options.table = update.table end
+
+	local create_ok, section = pcall(uci.section, uci, "network", update.route_type, nil, options)
+	if not create_ok or type(section) ~= "string" or section == "" then
+		pcall(uci.revert, uci, "network")
+		static_route_respond(http, 500, { ok = false, error = "The static route could not be staged in UCI." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "network")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "network")
+		record_audit(http, "network.route.add", section, "failed")
+		static_route_respond(http, 500, { ok = false, error = "The static route could not be committed; network reload was not attempted." })
+		return
+	end
+
+	if not static_route_reload(sys) then
+		local delete_ok, deleted = pcall(uci.delete, uci, "network", section)
+		local rollback_commit_ok, rollback_committed = false, false
+		if delete_ok and deleted == true then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "network")
+		end
+		local rollback_reload_ok = false
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok = static_route_reload(sys)
+		end
+		local rolled_back = delete_ok and deleted == true and
+			rollback_commit_ok and rollback_committed == true and rollback_reload_ok
+		record_audit(http, "network.route.add", section, "failed")
+		static_route_respond(http, 502, {
+			ok = false,
+			error = rolled_back
+				and "Network reload failed. The new static route was removed and the previous network configuration was reloaded."
+				or "Network reload failed and static route rollback could not be confirmed. Inspect network configuration and active routing locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "network.route.add", section, "success")
+	static_route_respond(http, nil, {
+		ok = true,
+		section = section,
+		family = update.family,
+		interface = update.interface,
+		requested_target = http.formvalue("target", true),
+		target = update.target,
+		gateway = update.gateway,
+		metric = update.metric,
+		table = update.table,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+function action_static_route_remove()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local routing = require "luci.quantumgrid.routing"
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		static_route_respond(http, 405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not static_route_request_origin_valid(http) then
+		static_route_respond(http, 403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		static_route_respond(http, 400, { ok = false, error = "Explicit confirmation is required before removing a static route." })
+		return
+	end
+	if not static_route_services_ready(fs) then
+		static_route_respond(http, 503, { ok = false, error = "Network configuration or the native network reload service is unavailable." })
+		return
+	end
+	local section = http.formvalue("section", true)
+	if type(section) ~= "string" or #section < 1 or #section > 64
+		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
+		static_route_respond(http, 400, { ok = false, error = "The static route section identifier is invalid." })
+		return
+	end
+
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "network", section)
+	if not snapshot_ok or type(snapshot) ~= "table" or
+		(snapshot[".type"] ~= "route" and snapshot[".type"] ~= "route6") then
+		static_route_respond(http, 404, { ok = false, error = "The selected static route no longer exists." })
+		return
+	end
+	local route_type = snapshot[".type"]
+	local previous, snapshot_error = routing.snapshot_static_route_section(snapshot, route_type)
+	if not previous then
+		static_route_respond(http, 500, { ok = false, error = snapshot_error or "The original route could not be snapshotted safely." })
+		return
+	end
+	local interfaces = static_route_write_interfaces(uci)
+	if not interfaces then
+		static_route_respond(http, 409, { ok = false, error = "The network interface inventory could not be read safely." })
+		return
+	end
+	local family = route_type == "route" and "IPv4" or "IPv6"
+	local validated, validation_error = routing.validate_static_route(
+		family,
+		snapshot.interface,
+		snapshot.target,
+		snapshot.gateway or "",
+		snapshot.metric or "",
+		snapshot.table or "",
+		interfaces,
+		{})
+	if not validated then
+		static_route_respond(http, 409, {
+			ok = false,
+			error = "This route cannot be safely verified by QuantumGrid (" .. tostring(validation_error) .. "). Inspect or remove it through native LuCI with an out-of-band management path."
+		})
+		return
+	end
+	local remote_ip = http.getenv("REMOTE_ADDR")
+	if type(remote_ip) ~= "string" or remote_ip == "" then
+		static_route_respond(http, 409, { ok = false, error = "The active administrator address is unavailable. Use an out-of-band management path to remove static routes." })
+		return
+	end
+	if routing.static_route_contains_address(validated, remote_ip) then
+		static_route_respond(http, 409, {
+			ok = false,
+			error = "This route covers the active administrator client address and cannot be removed through the current session."
+		})
+		return
+	end
+
+	local delete_ok, deleted = pcall(uci.delete, uci, "network", section)
+	if not delete_ok or deleted ~= true then
+		pcall(uci.revert, uci, "network")
+		static_route_respond(http, 500, { ok = false, error = "The static route could not be staged for removal." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "network")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "network")
+		static_route_respond(http, 500, { ok = false, error = "The static route removal could not be committed; network reload was not attempted." })
+		return
+	end
+	if not static_route_reload(sys) then
+		local restored = restore_static_route(uci, sys, section, {
+			route_type = route_type,
+			values = previous.values
+		})
+		local rolled_back = restored == true
+		record_audit(http, "network.route.remove", section, "failed")
+		static_route_respond(http, 502, {
+			ok = false,
+			error = rolled_back
+				and "Network reload failed. The complete static route was restored."
+				or "Network reload failed and the static route could not be fully restored. Inspect network configuration and routing locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "network.route.remove", section, "success")
+	static_route_respond(http, nil, {
+		ok = true,
+		section = section,
+		family = family,
+		removed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
