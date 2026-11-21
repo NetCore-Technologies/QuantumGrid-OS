@@ -10,6 +10,8 @@ local function fixture(redirect, overrides)
   local files = {
     ["/etc/init.d/uhttpd"] = true,
     ["/etc/init.d/dropbear"] = true,
+    ["/etc/dropbear"] = true,
+    ["/root/.ssh"] = true,
     ["/etc/dropbear/authorized_keys"] = true,
     ["/lib/libustream-ssl.so"] = true,
     ["/etc/uhttpd.crt"] = true,
@@ -59,6 +61,9 @@ local function fixture(redirect, overrides)
       if files[path] ~= true then return nil end
       local override = stat_overrides[path]
       if override then return override end
+      if path == "/etc/dropbear" or path == "/root/.ssh" then
+        return { size = 0, uid = 0, mode = 16832 }
+      end
       return {
         size = empty_files[path] and 0 or 128,
         uid = 0,
@@ -100,6 +105,10 @@ assert(not https_only.ssh_instances[1].root_password_auth_enabled)
 assert(https_only.ssh_authorized_keys.available)
 assert(https_only.ssh_authorized_keys.status == "present")
 assert(https_only.ssh_authorized_keys.root_owned)
+assert(https_only.ssh_authorized_keys.directory_root_owned)
+assert(https_only.ssh_authorized_keys.directory_valid)
+assert(not https_only.ssh_authorized_keys.directory_group_writable)
+assert(not https_only.ssh_authorized_keys.directory_other_writable)
 assert(https_only.ssh_authorized_keys.regular_file)
 assert(https_only.ssh_authorized_keys.owner_readable)
 assert(not https_only.ssh_authorized_keys.group_writable)
@@ -194,6 +203,7 @@ uci, fs = fixture("1", {
   files = {
     ["/etc/init.d/uhttpd"] = true,
     ["/etc/init.d/dropbear"] = true,
+    ["/root/.ssh"] = true,
     ["/root/.ssh/authorized_keys"] = true,
     ["/lib/libustream-ssl.so"] = true,
     ["/etc/uhttpd.crt"] = true,
@@ -234,6 +244,46 @@ local other_writable_authorized_keys = transport.inspect(uci, fs)
 assert(other_writable_authorized_keys.ssh_authorized_keys.other_writable)
 assert(other_writable_authorized_keys.ssh_authorized_keys.status == "review")
 assert(other_writable_authorized_keys.ssh_status == "review")
+
+-- A group-writable parent directory can replace an otherwise secure key file.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear"] = { size = 0, uid = 0, mode = 16848 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local writable_key_directory = transport.inspect(uci, fs)
+assert(writable_key_directory.ssh_authorized_keys.directory_group_writable)
+assert(writable_key_directory.ssh_authorized_keys.status == "review")
+assert(writable_key_directory.ssh_status == "review")
+
+-- A non-root-owned parent directory cannot protect root's SSH trust list.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear"] = { size = 0, uid = 1000, mode = 16832 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local unowned_key_directory = transport.inspect(uci, fs)
+assert(not unowned_key_directory.ssh_authorized_keys.directory_root_owned)
+assert(unowned_key_directory.ssh_authorized_keys.status == "review")
+assert(unowned_key_directory.ssh_status == "review")
 
 -- A present file with incomplete metadata is unknown, not ready.
 uci, fs = fixture("1", {
