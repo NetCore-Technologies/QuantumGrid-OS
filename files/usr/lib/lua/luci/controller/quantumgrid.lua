@@ -4501,7 +4501,10 @@ function action_config_restore()
         return
     end
 
-    local statvfs_ok, temp_stats = pcall(fs.statvfs, "/tmp")
+    local statvfs_ok, temp_stats = false, nil
+    if type(fs.statvfs) == "function" then
+        statvfs_ok, temp_stats = pcall(fs.statvfs, "/tmp")
+    end
     local available_temp_bytes = statvfs_ok and type(temp_stats) == "table" and
         tonumber(temp_stats.bavail) and tonumber(temp_stats.frsize) and
         tonumber(temp_stats.bavail) * tonumber(temp_stats.frsize) or nil
