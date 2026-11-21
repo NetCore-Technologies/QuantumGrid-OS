@@ -820,4 +820,101 @@ for _, invalid_mode in ipairs({ "", "true", "2", "1;uci", "server" }) do
   assert(invalid == nil, "invalid office IPv6 mode must be rejected: " .. invalid_mode)
 end
 
-print("office-networks: VLANs, bridges, DHCP reservation and scope lifecycle validation, firewall forwarding and SSID tests passed")
+local pinhole_zones = {
+  { section = "cfg_wan", name = "wan", networks = { "wan" } },
+  { section = "cfg_corp", name = "corp", networks = { "corp" } },
+  { section = "cfg_guest", name = "guest", networks = { "guest" } },
+}
+local pinhole_interfaces = {
+  { name = "corp", ipv6 = { "2001:4860:4860::8888/128" } },
+  { name = "guest", ipv6 = { "2001:4860:4860::8844/128" } },
+}
+local valid_pinhole, pinhole_error = office.validate_office_ipv6_pinhole(
+  "office-https-v6", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
+  pinhole_zones, pinhole_interfaces, {})
+assert(valid_pinhole and valid_pinhole.destination_ip == "2001:4860:4860:0000:0000:0000:0000:8888"
+  and valid_pinhole.destination_port == 443,
+  pinhole_error or "IPv6 pinholes must normalize a configured GUA host and port")
+
+local invalid_ipv6_pinhole_addresses = {
+  "fd00::10", "fe80::1", "ff02::1", "::", "2001:db8::1",
+  "2001:4860::9999", "2001:4860:4860:::8888", "not-ipv6"
+}
+for _, address in ipairs(invalid_ipv6_pinhole_addresses) do
+  local invalid = office.validate_office_ipv6_pinhole(
+    "invalid-host", "wan", "corp", "tcp", address, "443",
+    pinhole_zones, pinhole_interfaces, {})
+  assert(invalid == nil, "private, link-local, multicast, documentation, unconfigured or malformed IPv6 must be rejected: " .. address)
+end
+
+local invalid_pinhole_ports = { "0", "65536", "443;uci", "-1", " 443" }
+for _, port in ipairs(invalid_pinhole_ports) do
+  local invalid = office.validate_office_ipv6_pinhole(
+    "invalid-port", "wan", "corp", "tcp", "2001:4860:4860::8888", port,
+    pinhole_zones, pinhole_interfaces, {})
+  assert(invalid == nil, "invalid IPv6 pinhole ports must be rejected: " .. port)
+end
+
+assert(office.validate_office_ipv6_pinhole(
+  "bad-source", "corp", "guest", "tcp", "2001:4860:4860::8844", "443",
+  pinhole_zones, pinhole_interfaces, {}) == nil,
+  "an IPv6 pinhole must originate from an external firewall zone")
+assert(office.validate_office_ipv6_pinhole(
+  "bad-destination", "wan", "wan", "tcp", "2001:4860:4860::8888", "443",
+  pinhole_zones, pinhole_interfaces, {}) == nil,
+  "an IPv6 pinhole must terminate in an internal firewall zone")
+assert(office.validate_office_ipv6_pinhole(
+  "bad-protocol", "wan", "corp", "icmp", "2001:4860:4860::8888", "443",
+  pinhole_zones, pinhole_interfaces, {}) == nil,
+  "unscoped protocol rules must not be accepted as service pinholes")
+
+local overlapping_pinhole = office.validate_office_ipv6_pinhole(
+  "replacement", "wan", "corp", "tcp udp", "2001:4860:4860::8888", "443",
+  pinhole_zones, pinhole_interfaces,
+  { { name = "existing", source = "wan", destination = "corp",
+      protocol = "tcp", destination_ip = "2001:4860:4860:0000:0000:0000:0000:8888", destination_port = 443 } })
+assert(overlapping_pinhole == nil, "overlapping WAN source/address/port protocols must be rejected")
+
+local changed_protocol_pinhole = office.validate_office_ipv6_pinhole(
+  "different-protocol", "wan", "corp", "udp", "2001:4860:4860::8888", "443",
+  pinhole_zones, pinhole_interfaces,
+  { { name = "existing", source = "wan", destination = "corp",
+      protocol = "tcp", destination_ip = "2001:4860:4860:0000:0000:0000:0000:8888", destination_port = 443 } })
+assert(changed_protocol_pinhole, "non-overlapping protocol pinholes may share an address and port")
+
+local pinhole_snapshot, pinhole_snapshot_error = office.snapshot_office_ipv6_pinhole({
+  [".type"] = "rule",
+  [".name"] = "cfg_v6_https",
+  name = "QuantumGrid IPv6 pinhole: office-https-v6",
+  src = "wan",
+  dest = "corp",
+  dest_ip = "2001:4860:4860::8888",
+  dest_port = "443",
+  proto = { "tcp" },
+  family = "ipv6",
+  target = "ACCEPT",
+})
+assert(pinhole_snapshot and pinhole_snapshot.values.family == "ipv6",
+  pinhole_snapshot_error or "only managed IPv6 pinhole rules should be snapshotted")
+assert(office.snapshot_office_ipv6_pinhole({
+  [".type"] = "rule", [".name"] = "cfg_custom", name = "Administrator custom rule",
+  src = "wan", dest = "corp", dest_ip = "2001:4860:4860::8888",
+  dest_port = "443", proto = { "tcp" }, family = "ipv6", target = "ACCEPT",
+}) == nil, "arbitrary administrator firewall rules must never be managed as QuantumGrid pinholes")
+
+local pinhole_inventory = office.build_inventory({
+  available = true,
+  ipv6_pinholes = {
+    { section = "cfg_v6_https", name = "office-https-v6", source = "wan", destination = "corp",
+      protocol = "tcp", destination_ip = "2001:4860:4860::8888", destination_port = 443 },
+    { section = "../unsafe", name = "bad", source = "wan", destination = "corp",
+      protocol = "tcp", destination_ip = "2001:4860:4860::8888", destination_port = 443 },
+    { section = "cfg_v6_private", name = "private", source = "wan", destination = "corp",
+      protocol = "tcp", destination_ip = "fd00::10", destination_port = 443 },
+  }
+})
+assert(pinhole_inventory.ipv6_pinhole_count == 1
+  and pinhole_inventory.ipv6_pinholes[1].destination_ip == "2001:4860:4860:0000:0000:0000:0000:8888",
+  "IPv6 pinhole inventory must discard malformed sections and non-global destination addresses")
+
+print("office-networks: IPv4/IPv6 VLAN, DHCP, forwarding, pinhole and SSID tests passed")
