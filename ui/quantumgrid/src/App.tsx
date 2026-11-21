@@ -5978,6 +5978,23 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
   const applyChannelRecommendation = async () => {
     const review = pendingChannelChange;
     if (!review || !channelChangeConfirmed || channelChangeSaving) return;
+    const scanAgeSeconds = scan ? Math.floor(Date.now() / 1000) - scan.scanned_at : Number.POSITIVE_INFINITY;
+    if (!scan || scanAgeSeconds < 0 || scanAgeSeconds > 180) {
+      setChannelChangeNotice({ success: false, message: "The Wi-Fi scan is missing or older than three minutes. Run a fresh scan before applying a channel recommendation." });
+      setPendingChannelChange(null);
+      setChannelChangeConfirmed(false);
+      return;
+    }
+    const activePlan = channelPlans.find((plan) => plan.radio === review.radio && plan.band === review.band);
+    const activeCurrent = activePlan?.options.find((option) => option.current);
+    const activeRecommendation = activePlan ? recommendWifiChannel(activePlan) : null;
+    if (!activePlan || activeCurrent?.channel !== review.currentChannel ||
+        activeRecommendation?.channel !== review.recommendedChannel) {
+      setChannelChangeNotice({ success: false, message: "The radio or recommendation changed after review. Re-scan and review a fresh recommendation before applying it." });
+      setPendingChannelChange(null);
+      setChannelChangeConfirmed(false);
+      return;
+    }
     const config = wirelessConfigs?.sections.find((item) =>
       item.radio === review.radio && !item.interface_disabled && !item.radio_disabled &&
       item.networks.length === 1 && ["psk2", "sae", "sae-mixed", "wpa2", "wpa3"].includes(item.encryption),
@@ -6019,6 +6036,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
         accountingSecret: "",
         hidden: config.hidden,
         channel: String(review.recommendedChannel),
+        expectedCurrentChannel: String(review.currentChannel),
         htmode: config.htmode || "auto",
         txpower: config.txpower === undefined ? "auto" : String(config.txpower),
         ieee80211k: config.ieee80211k,
@@ -6043,6 +6061,9 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
   };
 
   const runWirelessScan = async () => {
+    setPendingChannelChange(null);
+    setChannelChangeConfirmed(false);
+    setChannelChangeNotice(null);
     setScanLoading(true);
     setScanError("");
     try {
@@ -6126,7 +6147,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
         eyebrow="MANUAL IWINFO SCAN"
         action={
           <div className="wifi-scan-actions">
-            <button className="hero-button wifi-scan-button" onClick={() => void runWirelessScan()} disabled={!routerOverview || scanLoading}>{scanLoading ? "Scanning…" : scan ? "Scan again" : "Scan nearby networks"}</button>
+            <button className="hero-button wifi-scan-button" onClick={() => void runWirelessScan()} disabled={!routerOverview || scanLoading || channelChangeSaving}>{scanLoading ? "Scanning…" : scan ? "Scan again" : "Scan nearby networks"}</button>
             <button className="hero-button wifi-export-button" onClick={exportWifiScan} disabled={!scan || visibleScanResults.length === 0}>Export filtered CSV</button>
           </div>
         }
