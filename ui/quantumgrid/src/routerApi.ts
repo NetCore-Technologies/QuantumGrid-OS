@@ -452,6 +452,11 @@ export interface RouterAuthorizedKeysStatus {
   owner_readable: boolean | null;
   group_writable: boolean | null;
   other_writable: boolean | null;
+  directory_root_owned: boolean | null;
+  directory_valid: boolean | null;
+  directory_group_writable: boolean | null;
+  directory_other_writable: boolean | null;
+  directory: string;
   status: "present" | "missing" | "review" | "unknown" | "unavailable";
 }
 
