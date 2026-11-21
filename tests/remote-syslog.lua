@@ -22,6 +22,31 @@ for _, globals in ipairs({
     "missing, root or malformed stunnel privilege settings must be rejected")
 end
 
+local managed_stunnel_section = {
+  [".name"] = "quantumgrid_syslog",
+  [".type"] = "service",
+  enabled = "1",
+  client = "1",
+  accept_host = "127.0.0.1",
+  accept_port = "5514",
+  CAfile = "/etc/ssl/certs/ca-certificates.crt",
+  verifyChain = "1",
+  sslVersion = "TLSv1.2",
+  TIMEOUTconnect = "10",
+  retry = "1",
+  connect = { "logs.corp.example:6514" },
+  checkHost = { "logs.corp.example" },
+  sni = { "logs.corp.example" },
+}
+assert(remote.has_only_managed_service_options(managed_stunnel_section))
+assert(not remote.has_only_managed_service_options({ [".type"] = "globals" }))
+assert(not remote.has_only_managed_service_options({
+  [".type"] = "service", enabled = "1", exec = "/bin/sh"
+}), "unexpected executable stunnel directives must be rejected")
+assert(not remote.has_only_managed_service_options({
+  [".type"] = "service", enabled = "1", protocol = "smtp"
+}), "unmanaged protocol directives must be rejected")
+
 local valid = remote.validate({
   confirmed = "1",
   enabled = "1",
@@ -221,6 +246,30 @@ local unsafe_globals_uci, unsafe_globals_fs, unsafe_globals_process = status_fix
 local unsafe_globals = remote.inspect_status(unsafe_globals_uci, unsafe_globals_fs, 1, unsafe_globals_process)
 assert(unsafe_globals.tls_status == "review" and not unsafe_globals.tls_privilege_drop_configured)
 assert(not unsafe_globals.enabled)
+
+local alternate_config_uci, alternate_config_fs, alternate_config_process = status_fixture({
+  globals = {
+    [".name"] = "globals", [".type"] = "globals",
+    setuid = "nobody", setgid = "nogroup",
+    alt_config_file = "/etc/stunnel/custom.conf",
+  },
+})
+local alternate_config = remote.inspect_status(alternate_config_uci, alternate_config_fs, 2, alternate_config_process)
+assert(alternate_config.tls_status == "review" and not alternate_config.enabled,
+  "alternate stunnel config must not bypass managed TLS policy")
+
+local unmanaged_service_uci, unmanaged_service_fs, unmanaged_service_process = status_fixture({
+  tunnel = {
+    [".name"] = "quantumgrid_syslog", [".type"] = "service",
+    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
+    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1", sslVersion = "TLSv1.2",
+    connect = { "logs.corp.example:6514" }, checkHost = { "logs.corp.example" },
+    sni = { "logs.corp.example" }, exec = "/bin/sh",
+  },
+})
+local unmanaged_service = remote.inspect_status(unmanaged_service_uci, unmanaged_service_fs, 3, unmanaged_service_process)
+assert(unmanaged_service.tls_status == "review" and not unmanaged_service.enabled,
+  "an unmanaged stunnel service directive must invalidate managed TLS posture")
 
 local weak_tls_uci, weak_tls_fs, weak_tls_process = status_fixture({
   tunnel = {
