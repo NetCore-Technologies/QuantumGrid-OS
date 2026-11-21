@@ -242,6 +242,30 @@ function has_duplicate_client_policy(policies, update)
 	return false
 end
 
+function find_download_reservation_policy(policies, mac, ipv4)
+	local normalized_mac = normalize_unicast_mac(type(mac) == "string" and mac or "")
+	if not normalized_mac or not valid_ipv4_host(ipv4) then return nil end
+	for _, policy in ipairs(type(policies) == "table" and policies or {}) do
+		if type(policy) == "table" and policy.direction == "download" and
+			policy.mac == normalized_mac and policy.destination_ip == ipv4 then
+			return policy
+		end
+	end
+	return nil
+end
+
+function find_download_policy_conflict(policies, mac, ipv4)
+	local normalized_mac = normalize_unicast_mac(type(mac) == "string" and mac or "")
+	if not normalized_mac or not valid_ipv4_host(ipv4) then return nil end
+	for _, policy in ipairs(type(policies) == "table" and policies or {}) do
+		if type(policy) == "table" and policy.direction == "download" and
+			(policy.mac == normalized_mac or policy.destination_ip == ipv4) then
+			return policy
+		end
+	end
+	return nil
+end
+
 function snapshot_client_policy_section(snapshot)
 	if type(snapshot) ~= "table" or snapshot[".type"] ~= "rule"
 		or not summarize_client_policy(snapshot) then
