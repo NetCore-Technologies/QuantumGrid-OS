@@ -35,6 +35,16 @@ local listing, listing_error = backup.validate_archive_listing(valid_listing)
 assert(listing ~= nil, listing_error or "valid native backup listing should pass")
 assert(listing.count == 5 and listing.device_id_path == "./etc/quantumgrid/device-id")
 
+local oversized_listing = table.concat({
+  "-rw------- root/root 200000000 2026-11-22 00:00 etc/config/large",
+  "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+}, "\n")
+assert(backup.validate_archive_listing(oversized_listing) == nil,
+  "expanded archive size must be bounded before restore")
+assert(backup.validate_archive_listing(
+  "-rw------- root/root 128 unknown-date etc/config/network\\n-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id"
+) == nil, "unrecognised tar listing formats must fail closed")
+
 local rejected_listings = {
   table.concat({
     "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
