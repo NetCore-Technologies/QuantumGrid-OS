@@ -100,6 +100,8 @@ assert(not https_only.ssh_instances[1].root_password_auth_enabled)
 assert(https_only.ssh_authorized_keys.available)
 assert(https_only.ssh_authorized_keys.status == "present")
 assert(https_only.ssh_authorized_keys.root_owned)
+assert(https_only.ssh_authorized_keys.regular_file)
+assert(https_only.ssh_authorized_keys.owner_readable)
 assert(not https_only.ssh_authorized_keys.group_writable)
 assert(not https_only.ssh_authorized_keys.other_writable)
 
@@ -251,6 +253,46 @@ uci, fs = fixture("1", {
 local unknown_key_permissions = transport.inspect(uci, fs)
 assert(unknown_key_permissions.ssh_authorized_keys.status == "unknown")
 assert(unknown_key_permissions.ssh_status == "review")
+
+-- Directories must not be accepted as authorized-keys files.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 16832 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local directory_authorized_keys = transport.inspect(uci, fs)
+assert(not directory_authorized_keys.ssh_authorized_keys.regular_file)
+assert(directory_authorized_keys.ssh_authorized_keys.status == "review")
+assert(directory_authorized_keys.ssh_status == "review")
+
+-- A key file that the Dropbear process cannot read is not a ready posture.
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 33024 }
+  },
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local unreadable_authorized_keys = transport.inspect(uci, fs)
+assert(not unreadable_authorized_keys.ssh_authorized_keys.owner_readable)
+assert(unreadable_authorized_keys.ssh_authorized_keys.status == "review")
+assert(unreadable_authorized_keys.ssh_status == "review")
 
 -- The shipped AW1000 Dropbear defaults allow password and root-password login.
 uci, fs = fixture("1", {
