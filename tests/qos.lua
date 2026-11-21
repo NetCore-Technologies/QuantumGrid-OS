@@ -145,6 +145,42 @@ assert(qos.snapshot_client_policy_section({
 	[".name"] = "user_rule", [".type"] = "rule", name = "unowned"
 }) == nil)
 
+local dependency_policies = {
+  {
+    direction = "download",
+    mac = "02:11:22:33:44:55",
+    destination_ip = "192.168.20.40",
+    source_zone = "wan",
+    destination_zone = "corp",
+  },
+  {
+    direction = "upload",
+    mac = "02:aa:bb:cc:dd:ee",
+    source_zone = "corp",
+    destination_zone = "wan",
+  },
+}
+local dependency = qos.find_download_reservation_policy(
+  dependency_policies, "02:11:22:33:44:55", "192.168.20.40")
+assert(dependency and dependency.direction == "download",
+  "a matching downlink rule must be tied to its static reservation")
+assert(qos.find_download_reservation_policy(
+  dependency_policies, "02:11:22:33:44:56", "192.168.20.40") == nil)
+assert(qos.find_download_reservation_policy(
+  dependency_policies, "02:11:22:33:44:55", "192.168.20.41") == nil)
+assert(qos.find_download_reservation_policy(dependency_policies, "bad-mac", "192.168.20.40") == nil)
+
+assert(qos.find_download_policy_conflict(
+  dependency_policies, "02:11:22:33:44:55", "192.168.20.41") ~= nil,
+  "changing a reserved IP for a client with a downlink policy must be blocked")
+assert(qos.find_download_policy_conflict(
+  dependency_policies, "02:aa:bb:cc:dd:ef", "192.168.20.40") ~= nil,
+  "reusing a destination IP referenced by another downlink policy must be blocked")
+assert(qos.find_download_policy_conflict(
+  dependency_policies, "02:aa:bb:cc:dd:ef", "192.168.20.41") == nil,
+  "unrelated reservations must not be blocked")
+assert(qos.find_download_policy_conflict({}, "02:11:22:33:44:55", "192.168.20.40") == nil)
+
 local download_snapshot = qos.snapshot_client_policy_section({
   [".name"] = "cfg_client_download_1", [".type"] = "rule",
   name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
