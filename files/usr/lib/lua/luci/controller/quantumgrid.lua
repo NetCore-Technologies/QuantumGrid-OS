@@ -4095,11 +4095,22 @@ local function inspect_quantumgrid_config_archive(path, context, validator, util
 	if type(path) ~= "string" or type(context) ~= "table" then
 		return nil, "The restore archive or current device context is unavailable."
 	end
+	local archive_file, archive_open_error = io.open(path, "rb")
+	if not archive_file then
+		return nil, "The configuration archive could not be opened: " .. tostring(archive_open_error or "unknown error")
+	end
+	local archive_size = archive_file:seek("end")
+	local archive_close_ok, archive_close_result = pcall(archive_file.close, archive_file)
+	local validated_archive_size, archive_size_error = validator.validate_archive_size(archive_size)
+	if not archive_close_ok or not archive_close_result or not validated_archive_size then
+		return nil, archive_size_error or "The configuration archive size could not be verified."
+	end
 	local tar_ok, tar_status = pcall(sys.call, "/bin/tar -tzf " .. path .. " >/dev/null 2>&1")
 	if not tar_ok or tar_status ~= 0 then
 		return nil, "The configuration archive is not a readable gzip tar archive."
 	end
-	local listing_ok, listing_text = pcall(util.exec, "/bin/tar -tvzf " .. path .. " 2>/dev/null")
+	local listing_ok, listing_text = pcall(util.exec,
+		"/bin/tar -tvzf " .. path .. " 2>/dev/null | head -c 4194305")
 	if not listing_ok or type(listing_text) ~= "string" then
 		return nil, "The configuration archive member list could not be inspected."
 	end
