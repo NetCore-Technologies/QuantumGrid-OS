@@ -145,6 +145,15 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     [[ -s "$NSS_FRAGMENT_PATH" ]] || die "NSS configuration fragment not found: $NSS_FRAGMENT_PATH"
     printf '\nApplying the profile's opt-in NSS configuration fragment...\n'
     cat "$NSS_FRAGMENT_PATH" >> "$OPENWRT_DIR/.config"
+    [[ "$NSS_REQUIRED_CONFIG_SYMBOLS" != "-" ]] || die "Device profile $DEVICE_PROFILE_ID declares no NSS config requirements"
+    IFS=';' read -r -a REQUIRED_NSS_SYMBOLS <<< "$NSS_REQUIRED_CONFIG_SYMBOLS"
+    (("${#REQUIRED_NSS_SYMBOLS[@]}" > 0)) || die "NSS configuration requirements are empty"
+    for symbol in "${REQUIRED_NSS_SYMBOLS[@]}"; do
+        [[ "$symbol" =~ ^CONFIG_[A-Za-z0-9_-]+=[A-Za-z0-9_.+-]+$ ]] || die "Device profile contains an invalid NSS config symbol"
+        if ! grep -Fqx "$symbol" "$OPENWRT_DIR/.config"; then
+            printf '%s\n' "$symbol" >> "$OPENWRT_DIR/.config"
+        fi
+    done
 fi
 cd "$OPENWRT_DIR"
 make defconfig
