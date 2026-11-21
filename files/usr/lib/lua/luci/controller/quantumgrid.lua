@@ -575,6 +575,8 @@ local function wireless_config_inventory(uci, radios)
 						radius_vlan_mappings = vlan_inventory.sections,
 						encryption = tostring(section.encryption or "none"),
 						ieee80211w = tostring(section.ieee80211w or ""),
+						ieee80211k = section.ieee80211k == "1",
+						ieee80211v = section.ieee80211v == "1",
 						hidden = section.hidden == "1",
 						key_set = type(section.key) == "string" and section.key ~= "",
 						radius_auth_server = tostring(section.auth_server or ""),
@@ -1143,6 +1145,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-download-add"}, call("action_sqm_client_qos_download_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
 	entry({"admin", "services", "quantumgrid", "audit"}, call("action_audit_log")).leaf = true
@@ -1414,6 +1417,17 @@ function action_wireless_update()
 		respond(400, { ok = false, error = validation_error })
 		return
 	end
+	local roaming_features, roaming_error = validator.validate_roaming_features(
+		update.encryption,
+		http.formvalue("ieee80211k", true),
+		http.formvalue("ieee80211v", true)
+	)
+	if not roaming_features then
+		respond(400, { ok = false, error = roaming_error })
+		return
+	end
+	update.ieee80211k = roaming_features.ieee80211k
+	update.ieee80211v = roaming_features.ieee80211v
 	if fs.access("/etc/config/network") ~= true or fs.access("/etc/config/firewall") ~= true then
 		respond(503, { ok = false, error = "Network or firewall configuration is unavailable; SSID network binding cannot be verified." })
 		return
@@ -1642,7 +1656,7 @@ function action_wireless_update()
 		end
 		snapshot.radio[option] = value or false
 	end
-	for _, option in ipairs({ "ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w", "dynamic_vlan" }) do
+	for _, option in ipairs({ "ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w", "ieee80211k", "ieee80211v", "dynamic_vlan" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
@@ -1666,7 +1680,9 @@ function action_wireless_update()
 		ssid = update.ssid,
 		network = update.network,
 		encryption = update.encryption,
-		hidden = update.hidden
+		hidden = update.hidden,
+		ieee80211k = update.ieee80211k == "1" and "1" or false,
+		ieee80211v = update.ieee80211v == "1" and "1" or false
 	}
 	if enterprise_encryption then
 		interface_updates.auth_server = update.radius_server
@@ -1799,6 +1815,8 @@ function action_wireless_update()
 		txpower = update.txpower,
 		key_set = update.encryption ~= "none" and not enterprise_encryption,
 		ieee80211w = update.encryption == "wpa3" and "2" or nil,
+		ieee80211k = update.ieee80211k == "1",
+		ieee80211v = update.ieee80211v == "1",
 		radius_auth_server = enterprise_encryption and update.radius_server or nil,
 		radius_auth_port = enterprise_encryption and tonumber(update.radius_port) or nil,
 		radius_secret_set = enterprise_encryption,
