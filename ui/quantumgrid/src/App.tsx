@@ -5523,6 +5523,14 @@ function GamingControlPage({ routerOverview, refresh }: {
     return left.kind.localeCompare(right.kind) || left.handle.localeCompare(right.handle);
   });
   const cakeCount = qdiscs.filter((qdisc) => qdisc.kind.toLowerCase() === "cake").length;
+  const runtimeStateLabel: Record<RouterSqmQueue["runtime_state"], string> = {
+    observed: "ROOT MATCH OBSERVED",
+    not_observed: "ROOT MATCH NOT OBSERVED",
+    unavailable: "RUNTIME UNAVAILABLE",
+    unconfigured: "QDISC TARGET UNCONFIGURED",
+    inventory_truncated: "INVENTORY TRUNCATED",
+    disabled: "QUEUE DISABLED",
+  };
   const queueConfigAvailable = sqm?.config_available === true && sqm.config_readable;
   const runtimeAvailable = sqm?.runtime_available === true;
   const [savingQueue, setSavingQueue] = useState<string | null>(null);
@@ -5572,7 +5580,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         <div>
           <div className="setup-kicker">SMART QUEUE MANAGEMENT · LIVE INSPECTION</div>
           <h1>Gaming & Latency</h1>
-          <p>Inspect configured SQM queues and kernel queue disciplines. Edit existing queue enable state and rates with a guarded restart; advanced classification and per-client priority stay locked.</p>
+          <p>Inspect configured SQM queues and kernel queue disciplines, including a conservative live root-qdisc match for each enabled queue. Edit existing queue enable state and rates with a guarded restart; advanced classification and per-client priority stay locked.</p>
         </div>
       </section>
 
@@ -5601,14 +5609,17 @@ function GamingControlPage({ routerOverview, refresh }: {
                   <div><strong>{queue.name || "Unnamed queue"}</strong><span>{queue.interface || "Interface not set"}</span></div>
                 </div>
                 <div><small>CONFIGURATION</small><b>{queue.enabled ? "ENABLED" : "DISABLED"}</b></div>
-                <div><small>QDISC / SCRIPT</small><b>{queue.qdisc || "N/A"} · {queue.script || "N/A"}</b></div>
+                <div>
+                  <small>QDISC / SCRIPT</small><b>{queue.qdisc || "N/A"} · {queue.script || "N/A"}</b>
+                  <small>LIVE ROOT MATCH</small><b>{runtimeStateLabel[queue.runtime_state]}</b>
+                </div>
                 <div><small>DOWNLOAD</small><b>{formatKbps(queue.download_kbps)}</b></div>
                 <div><small>UPLOAD</small><b>{formatKbps(queue.upload_kbps)}</b></div>
               </div>
             ))}
           </div>
         )}
-        <div className="module-message">Queue rates are configured SQM values in kbit/s. An enabled UCI section alone does not prove that its shaper is attached to the live WAN path.</div>
+        <div className="module-message">Queue rates are configured SQM values in kbit/s. The live check requires a root qdisc whose kind and device both match the enabled queue's configured qdisc and interface. A missing match is not proof of a broken path when the inventory is incomplete; a positive match does not verify the ingress IFB, bandwidth enforcement or end-to-end traffic path.</div>
       </Panel>
 
       <Panel title="SQM queue controls" eyebrow="BOUNDED · EXISTING UCI QUEUES ONLY">
@@ -5673,7 +5684,7 @@ function GamingControlPage({ routerOverview, refresh }: {
           )}
           </>
         )}
-        <div className="module-message">This inventory covers kernel qdiscs across interfaces; entries are not automatically attributed to a particular SQM queue. Compare the configured interface and runtime device before concluding that SQM is shaping the WAN. CSV export follows the visible search result and sort order.</div>
+        <div className="module-message">The queue inventory attributes only exact root-qdisc matches to an enabled SQM queue; child qdiscs and devices that do not match remain inventory-only. This read-only comparison does not validate ingress IFB pairing, effective rate enforcement, packet classification or the full WAN path. CSV export follows the visible search result and sort order.</div>
       </Panel>
 
       <div className="module-grid">
