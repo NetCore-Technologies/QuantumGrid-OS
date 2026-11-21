@@ -97,10 +97,11 @@ function validate(input)
 end
 
 local function non_root_identity(value)
-	if type(value) ~= "string" or value == "" then return false end
+	if type(value) ~= "string" or #value > 32 then return false end
 	local normalized = value:lower():match("^%s*(.-)%s*$")
-	return normalized ~= "root" and normalized ~= "0" and
-		(not tonumber(normalized) or tonumber(normalized) > 0)
+	if not normalized or normalized == "" or normalized == "root" then return false end
+	if normalized:match("^[1-9]%d*$") then return tonumber(normalized) ~= nil end
+	return normalized:match("^[a-z_][a-z0-9_-]*$") ~= nil
 end
 
 function has_non_root_privilege_drop(globals)
