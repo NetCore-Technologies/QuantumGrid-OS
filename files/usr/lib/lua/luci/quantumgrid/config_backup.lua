@@ -61,6 +61,8 @@ function validate_archive_listing(listing)
 	local seen = {}
 	local has_config = false
 	local device_id_path = nil
+	local profile_path = nil
+	local release_path = nil
 	local count = 0
 	local expanded_size = 0
 	for line in listing:gmatch("[^\\r\\n]+") do
@@ -102,16 +104,44 @@ function validate_archive_listing(listing)
 		if path == "etc/quantumgrid/device-id" then
 			if kind ~= "-" then return nil, "The device identity in the archive must be a regular file." end
 			device_id_path = raw_path
+		elseif path == "etc/quantumgrid/device-profile.json" then
+			if kind ~= "-" then return nil, "The hardware profile in the archive must be a regular file." end
+			profile_path = raw_path
+		elseif path == "etc/openwrt_release" then
+			if kind ~= "-" then return nil, "The OpenWrt release marker in the archive must be a regular file." end
+			release_path = raw_path
 		end
 		entries[#entries + 1] = { path = path, kind = kind, size = entry_size }
 	end
 	if count == 0 or not has_config then
 		return nil, "The archive does not contain a native /etc/config backup."
 	end
-	if not device_id_path then
-		return nil, "The archive has no QuantumGrid device identity; create a fresh backup with this firmware before restoring."
+	if not device_id_path or not profile_path or not release_path then
+		return nil, "The archive is missing its device identity, hardware profile or OpenWrt target marker; create a fresh backup with this firmware before restoring."
 	end
-	return { entries = entries, count = count, expanded_size = expanded_size, device_id_path = device_id_path }
+	return {
+		entries = entries,
+		count = count,
+		expanded_size = expanded_size,
+		device_id_path = device_id_path,
+		profile_path = profile_path,
+		release_path = release_path
+	}
+end
+
+function validate_platform_compatibility(archive_target, current_target, archive_arch, current_arch)
+	if type(archive_target) ~= "string" or type(current_target) ~= "string" or
+		type(archive_arch) ~= "string" or type(current_arch) ~= "string" or
+		#archive_target < 1 or #current_target < 1 or #archive_arch < 1 or #current_arch < 1 or
+		#archive_target > 128 or #current_target > 128 or #archive_arch > 128 or #current_arch > 128 or
+		archive_target:find("[%c]") or current_target:find("[%c]") or
+		archive_arch:find("[%c]") or current_arch:find("[%c]") then
+		return nil, "The archive or current firmware target metadata is unavailable or malformed."
+	end
+	if archive_target ~= current_target or archive_arch ~= current_arch then
+		return nil, "This backup targets a different OpenWrt target or architecture. Cross-platform restore is blocked."
+	end
+	return true
 end
 
 function validate_device_identity(archive_id, current_id)
