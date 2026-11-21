@@ -1345,6 +1345,7 @@ export interface RouterRemoteSyslogStatus {
   tls_available?: boolean;
   tls_privilege_drop_configured?: boolean;
   tls_enabled?: boolean;
+  tls_process_running?: boolean;
   tls_status?: "ready" | "review" | "unavailable" | "disabled";
   tls_configured?: boolean;
   tls_identity_verified?: boolean;
