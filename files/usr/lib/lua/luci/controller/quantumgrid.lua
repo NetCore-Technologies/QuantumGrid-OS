@@ -3041,6 +3041,7 @@ local function office_network_status(uci, fs)
 				name = name,
 				protocol = tostring(section.proto or ""),
 				device = device,
+				l3_device = neighbor_device,
 				up = status.up == true,
 				ipv4 = section.ipaddr,
 				netmask = section.netmask,
