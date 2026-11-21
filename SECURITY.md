@@ -112,6 +112,12 @@ but it does not provide a publicly trusted device identity. Administrators shoul
 the certificate fingerprint over a trusted channel and restrict management to trusted
 networks. Do not expose the router's administration service to the public Internet.
 
+QuantumGrid also provisions a random 128-bit device inventory ID in the writable
+`/etc/quantumgrid/device-id` path. This ID is intentionally public and is only a stable
+inventory key. It is not a secret, authenticator, TLS certificate, proof of board identity
+or fleet-enrollment credential. A central management plane must establish trust using
+separately provisioned per-device keys or certificates and an authenticated enrollment flow.
+
 The optional RJ11 FXS packages are sourced from the third-party
 `Perz3us/openwrt-aw1000-phone` repository. QuantumGrid pins the `v0.9.0` feed to
 commit `fe85222e57d1c3e191ffb976b37667bbf221a020`; the upstream commit is unsigned, so
