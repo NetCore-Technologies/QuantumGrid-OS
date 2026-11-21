@@ -73,7 +73,7 @@ grep -Fq 'ssh_authorized_keys = authorized_keys_status(fs)' "$ROOT/files/usr/lib
 grep -Fq 'size_bytes = stat.size' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'group_writable = math.floor(permissions / 16) % 2 == 1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'other_writable = math.floor(permissions / 2) % 2 == 1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
-grep -Fq 'regular_file = file_type == 8' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
+grep -Fq 'return math.floor(mode / 4096) % 16 == mode_number' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'owner_readable = math.floor(permissions / 256) % 2 == 1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'directory_group_writable = math.floor(permissions / 16) % 2 == 1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'directory_other_writable = math.floor(permissions / 2) % 2 == 1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
