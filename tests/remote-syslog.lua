@@ -1,6 +1,24 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local remote = require "luci.quantumgrid.remote_syslog"
 
+assert(remote.has_non_root_privilege_drop({
+  [".type"] = "globals", setuid = "nobody", setgid = "nogroup"
+}), "the package's non-root stunnel identities must be accepted")
+assert(remote.has_non_root_privilege_drop({
+  [".type"] = "globals", setuid = "65534", setgid = "65534"
+}), "explicit non-zero numeric user and group IDs may be used")
+for _, globals in ipairs({
+  {},
+  { [".type"] = "globals", setuid = "root", setgid = "nogroup" },
+  { [".type"] = "globals", setuid = "nobody", setgid = "root" },
+  { [".type"] = "globals", setuid = "0", setgid = "nogroup" },
+  { [".type"] = "globals", setuid = "nobody" },
+  { [".type"] = "service", setuid = "nobody", setgid = "nogroup" },
+}) do
+  assert(not remote.has_non_root_privilege_drop(globals),
+    "missing, root or malformed stunnel privilege settings must be rejected")
+end
+
 local valid = remote.validate({
   confirmed = "1",
   enabled = "1",
