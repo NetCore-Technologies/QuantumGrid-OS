@@ -34,6 +34,8 @@ test("client QoS API creates a fixed DSCP marking and verifies firewall reload",
     });
   };
   const result = await addRouterSqmClientPolicy(baseInput);
+  assert.equal(result.direction, "upload");
+  assert.equal(result.protocol, "all");
   assert.equal(url, "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-add");
   assert.equal(init.method, "POST");
   assert.equal(init.credentials, "same-origin");
