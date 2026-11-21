@@ -25,9 +25,11 @@ assert(backup.validate_restore_confirmation("1", "0") == nil)
 assert(backup.validate_restore_confirmation(nil, nil) == nil)
 
 local rollback_reserve = 64 * 1024 * 1024 + 8 * 1024 * 1024
-assert(backup.validate_restore_temp_capacity(rollback_reserve + 1024, 1024) == rollback_reserve + 1024)
-assert(backup.validate_restore_temp_capacity(rollback_reserve + 1023, 1024) == nil,
-  "restore must reserve space for both uploaded and maximum-sized rollback archives")
+assert(backup.validate_restore_temp_capacity(rollback_reserve, 1024) == rollback_reserve)
+assert(backup.validate_restore_temp_capacity(rollback_reserve - 1, 1024) == nil,
+  "remaining free space must cover the maximum rollback snapshot and reserve")
+assert(backup.validate_restore_temp_capacity(rollback_reserve, 64 * 1024 * 1024) == rollback_reserve,
+  "the staged upload size must not be double-counted against remaining free space")
 assert(backup.validate_restore_temp_capacity("200000000", 1024) == nil)
 assert(backup.validate_restore_temp_capacity(200000000, "1024") == nil)
 assert(backup.validate_restore_temp_capacity(-1, 1024) == nil)
