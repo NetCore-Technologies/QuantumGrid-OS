@@ -28,7 +28,7 @@ test("client QoS API creates a fixed DSCP marking and verifies firewall reload",
     url = String(requestUrl);
     init = requestInit;
     return jsonResponse({
-      ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55",
+      ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55", direction: "upload", protocol: "all",
       source_zone: "corp", destination_zone: "wan", dscp_class: "AF41",
       reloaded: true, rolled_back: false,
     });
@@ -57,7 +57,7 @@ test("client QoS API rejects multicast MACs, malformed MACs, bad zones and arbit
 
 test("client QoS API rejects mismatched router results", async () => {
   globalThis.fetch = async () => jsonResponse({
-    ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55",
+    ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55", direction: "download", protocol: "tcpudp",
     source_zone: "guest", destination_zone: "wan", dscp_class: "AF41",
     reloaded: true, rolled_back: false,
   });
@@ -78,7 +78,7 @@ test("client QoS API removes an owned policy and verifies firewall reload", asyn
     url = String(requestUrl);
     init = requestInit;
     return jsonResponse({
-      ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55",
+      ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55", direction: "upload", protocol: "all",
       source_zone: "corp", destination_zone: "wan", dscp_class: "AF41",
       removed: true, reloaded: true, rolled_back: false,
     });
@@ -94,7 +94,7 @@ test("client QoS API removes an owned policy and verifies firewall reload", asyn
 
 test("client QoS API refuses removal without confirmed firewall reload", async () => {
   globalThis.fetch = async () => jsonResponse({
-    ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55",
+    ok: true, section: "cfg_client_1", mac: "02:11:22:33:44:55", direction: "upload", protocol: "all",
     source_zone: "corp", destination_zone: "wan", dscp_class: "AF41",
     removed: true, reloaded: false, rolled_back: false,
   });
