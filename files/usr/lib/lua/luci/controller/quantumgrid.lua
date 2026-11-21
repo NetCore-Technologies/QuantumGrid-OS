@@ -4199,6 +4199,25 @@ local function ensure_sysupgrade_backup_paths()
 	return true
 end
 
+local CONFIG_ARCHIVE_LOCK_PATH = "/tmp/quantumgrid-config-archive.lock"
+
+local function acquire_config_archive_lock(sys)
+	local ok, status = pcall(sys.call,
+		"/bin/mkdir " .. CONFIG_ARCHIVE_LOCK_PATH .. " >/dev/null 2>&1")
+	if not ok or status ~= 0 then return nil end
+	local released = false
+	return function()
+		if released then return true end
+		local release_ok, release_status = pcall(sys.call,
+			"/bin/rmdir " .. CONFIG_ARCHIVE_LOCK_PATH .. " >/dev/null 2>&1")
+		if release_ok and release_status == 0 then
+			released = true
+			return true
+		end
+		return nil
+	end
+end
+
 function action_config_backup()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
@@ -4248,13 +4267,11 @@ function action_config_backup()
 		respond(503, { ok = false, error = "Atomic configuration archive locking utilities are unavailable." })
 		return
 	end
-	local lock_ok, lock_status = pcall(sys.call,
-		"/bin/mkdir " .. archive_lock_path .. " >/dev/null 2>&1")
-	if not lock_ok or lock_status ~= 0 then
+	local release_archive_lock = acquire_config_archive_lock(sys)
+	if not release_archive_lock then
 		respond(409, { ok = false, error = "A configuration backup or restore is already active. Retry after it finishes." })
 		return
 	end
-	archive_lock_acquired = true
 
 	local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
 	if not backup_paths_ok then
@@ -4297,12 +4314,12 @@ function action_config_backup()
 		respond(503, { ok = false, error = "The router could not create a configuration backup archive." })
 		return
 	end
-	release_archive_lock()
 	local archive_listing, archive_error = inspect_quantumgrid_config_archive(
 		backup_path, context, validator, util, sys)
 	if not archive_listing then
 		record_audit(http, "system.config.backup", "sysupgrade", "failed")
 		os.remove(backup_path)
+		release_archive_lock()
 		respond(503, { ok = false, error = "The native backup did not contain a complete, compatible recovery manifest: " .. tostring(archive_error) })
 		return
 	end
@@ -4310,6 +4327,7 @@ function action_config_backup()
 	local archive, open_error = io.open(backup_path, "rb")
 	if not archive then
 		os.remove(backup_path)
+		release_archive_lock()
 		respond(500, { ok = false, error = "The configuration backup was created but could not be read: " .. tostring(open_error or "unknown error") })
 		return
 	end
@@ -4318,6 +4336,7 @@ function action_config_backup()
 	if not validated_size then
 		archive:close()
 		os.remove(backup_path)
+		release_archive_lock()
 		respond(503, { ok = false, error = size_error })
 		return
 	end
@@ -4325,12 +4344,18 @@ function action_config_backup()
 	if seek_ok ~= 0 then
 		archive:close()
 		os.remove(backup_path)
+		release_archive_lock()
 		respond(500, { ok = false, error = "The configuration backup archive could not be rewound for download." })
 		return
 	end
 	local read_ok, contents = pcall(archive.read, archive, "*a")
 	local close_ok = pcall(archive.close, archive)
 	os.remove(backup_path)
+	local lock_released = release_archive_lock()
+	if not lock_released then
+		respond(503, { ok = false, error = "The backup completed, but the shared archive lock could not be released. Do not retry until the router's archive lock is cleared." })
+		return
+	end
 	if not read_ok or not close_ok or type(contents) ~= "string" or #contents ~= validated_size then
 		respond(500, { ok = false, error = "The configuration backup archive could not be read completely." })
 		return
@@ -4362,7 +4387,7 @@ function action_config_restore()
     local restore_path = nil
     local rollback_path = nil
     local restore_lock_acquired = false
-    local restore_lock_path = "/tmp/quantumgrid-config-archive.lock"
+    local restore_lock_path = CONFIG_ARCHIVE_LOCK_PATH
     local restore_authorized = false
     local restore_audit_attempted = false
     local restore_audit_target = "preflight"
