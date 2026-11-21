@@ -6555,6 +6555,7 @@ function SqmClientQosManager({
                 <strong>{policy.mac}</strong>
                 <span>
                   {(policy.direction ?? "upload").toUpperCase()} · {policy.source_zone} → {policy.destination_zone}
+                  {" · "}{policy.protocol === "all" ? "ALL IP PROTOCOLS" : "TCP/UDP"}
                   {policy.direction === "download" && policy.destination_ip ? " · " + policy.destination_ip : ""}
                   {" · "}{policy.enabled ? policy.dscp_class : "DISABLED · " + policy.dscp_class}
                 </span>
