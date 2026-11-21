@@ -15,6 +15,55 @@ local function valid_ipv4(value)
 	return true
 end
 
+local function normalize_ipv6(value)
+	if type(value) ~= "string" or #value < 2 or #value > 39 or
+		value:find("[^%x:]") or value:find(":::") or value:find("%%", 1, true) then
+		return nil
+	end
+	local compression = value:find("::", 1, true)
+	if compression and value:find("::", compression + 2, true) then return nil end
+	local function parse_side(side)
+		local groups = {}
+		if side == "" then return groups end
+		if side:sub(1, 1) == ":" or side:sub(-1) == ":" then return nil end
+		for part in side:gmatch("[^:]+") do
+			if #part < 1 or #part > 4 or not part:match("^%x+$") then return nil end
+			groups[#groups + 1] = tonumber(part, 16)
+		end
+		return groups
+	end
+	local groups = {}
+	if compression then
+		local left = parse_side(value:sub(1, compression - 1))
+		local right = parse_side(value:sub(compression + 2))
+		if not left or not right or #left + #right >= 8 then return nil end
+		for _, part in ipairs(left) do groups[#groups + 1] = part end
+		for _ = 1, 8 - #left - #right do groups[#groups + 1] = 0 end
+		for _, part in ipairs(right) do groups[#groups + 1] = part end
+	else
+		local parsed = parse_side(value)
+		if not parsed or #parsed ~= 8 then return nil end
+		groups = parsed
+	end
+	if #groups ~= 8 then return nil end
+	local all_zero = true
+	for _, part in ipairs(groups) do if part ~= 0 then all_zero = false break end end
+	if all_zero or (groups[1] == 0 and groups[2] == 0 and groups[3] == 0 and
+		groups[4] == 0 and groups[5] == 0 and groups[6] == 0 and
+		groups[7] == 0 and groups[8] == 1) then return nil end
+	local first = groups[1]
+	local unicast_global = first >= 0x2000 and first <= 0x3fff
+	local unique_local = first >= 0xfc00 and first <= 0xfdff
+	if not unicast_global and not unique_local then return nil end
+	if first == 0x2001 and (groups[2] < 0x0200 or groups[2] == 0x0db8) then return nil end
+	if first == 0x2002 or (first == 0x3fff and groups[2] < 0x1000) then return nil end
+	if groups[1] == 0 and groups[2] == 0 and groups[3] == 0 and
+		groups[4] == 0 and groups[5] == 0 and groups[6] == 0xffff then return nil end
+	local canonical = {}
+	for _, part in ipairs(groups) do canonical[#canonical + 1] = string.format("%04x", part) end
+	return table.concat(canonical, ":")
+end
+
 local function valid_hostname(value)
 	if type(value) ~= "string" or #value < 1 or #value > 253
 		or value:sub(1, 1) == "." or value:sub(-1) == "." then
@@ -43,10 +92,12 @@ function validate(input)
 	end
 
 	local host = input.host
-	if type(host) ~= "string" or #host > 253
-		or (not valid_ipv4(host) and not valid_hostname(host)) then
-		return nil, "Enter a valid IPv4 address or DNS host name for the remote syslog server."
+	local ipv6_host = normalize_ipv6(host)
+	if type(host) ~= "string" or #host > 253 or
+		(not valid_ipv4(host) and not ipv6_host and not valid_hostname(host)) then
+		return nil, "Enter a valid IPv4 address, unicast IPv6 address or DNS host name for the remote syslog server."
 	end
+	if ipv6_host then host = ipv6_host end
 	local port_text = input.port
 	if type(port_text) ~= "string" or #port_text > 5
 		or not port_text:match("^[1-9]%d*$") then
@@ -80,13 +131,21 @@ function validate(input)
 	if protocol == "tls" then
 		local server_name = nil
 		local server_ip = nil
-		if valid_ipv4(host) then server_ip = host else server_name = host end
+		local connect_host = host
+		if valid_ipv4(host) then
+			server_ip = host
+		elseif ipv6_host then
+			server_ip = host
+			connect_host = "[" .. host .. "]"
+		else
+			server_name = host
+		end
 		result.tls = {
 			section = "quantumgrid_syslog",
 			local_host = "127.0.0.1",
 			local_port = "5514",
 			ca_file = "/etc/ssl/certs/ca-certificates.crt",
-			connect = host .. ":" .. tostring(port),
+			connect = connect_host .. ":" .. tostring(port),
 			verify_chain = true,
 			check_host = server_name,
 			check_ip = server_ip,
@@ -213,10 +272,15 @@ function inspect_status(uci, fs, sampled_at, process)
 
 	local connect = only_entry(tunnel.connect)
 	local remote_host, remote_port_text = nil, nil
-	if connect then remote_host, remote_port_text = connect:match("^([^:]+):([1-9]%d*)$") end
+	if connect then
+		remote_host, remote_port_text = connect:match("^%[([%x:]+)%]:([1-9]%d*)$")
+		if not remote_host then remote_host, remote_port_text = connect:match("^([^:]+):([1-9]%d*)$") end
+	end
+	local remote_ipv6 = remote_host and normalize_ipv6(remote_host) or nil
 	local remote_port = tonumber(remote_port_text)
 	local valid_remote_host = remote_host ~= nil and
-		(valid_ipv4(remote_host) or valid_hostname(remote_host))
+		(valid_ipv4(remote_host) or remote_ipv6 ~= nil or valid_hostname(remote_host))
+	if remote_ipv6 then remote_host = remote_ipv6 end
 	if valid_remote_host and remote_port and remote_port <= 65535 then
 		result.host = remote_host
 		result.port = remote_port
@@ -225,9 +289,9 @@ function inspect_status(uci, fs, sampled_at, process)
 		remote_port = nil
 	end
 
-	local is_ipv4 = remote_host ~= nil and valid_ipv4(remote_host)
+	local is_ip = remote_host ~= nil and (valid_ipv4(remote_host) or remote_ipv6 ~= nil)
 	local identity_ok = false
-	if is_ipv4 then
+	if is_ip then
 		identity_ok = only_value(tunnel.checkIP, remote_host) and
 			tunnel.checkHost == nil and tunnel.sni == nil
 	elseif remote_host then
@@ -310,6 +374,10 @@ function stunnel_process_running(pid_contents, comm_contents, cmdline_contents)
 	if type(cmdline_contents) ~= "string" then return false end
 	local executable, config_file, trailing = cmdline_contents:match("^([^%z]+)%z([^%z]+)%z(.*)$")
 	return executable == "/usr/bin/stunnel" and config_file == "/var/etc/stunnel.conf" and trailing == ""
+end
+
+function normalize_ipv6_address(value)
+	return normalize_ipv6(value)
 end
 
 function stunnel_options(update)
