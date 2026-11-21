@@ -174,4 +174,18 @@ assert(wireless.validate_roaming_features("psk2", "2", "0") == nil)
 assert(wireless.validate_roaming_features("psk2", "1", "yes") == nil)
 assert(wireless.validate_roaming_features("psk2", "0", "0"))
 
+assert(wireless.validate_expected_current_channel(nil, "auto") == true,
+  "legacy wireless updates without a channel precondition must remain supported")
+assert(wireless.validate_expected_current_channel("auto", "auto") == true)
+assert(wireless.validate_expected_current_channel("36", "36") == true)
+local stale_channel, stale_channel_error, stale_channel_status =
+  wireless.validate_expected_current_channel("36", "44")
+assert(stale_channel == nil and stale_channel_status == 409)
+assert(stale_channel_error:find("changed after the scan", 1, true))
+for _, expected in ipairs({ "", "0", "234", "001", "1.5", "../wifi", "1;uci" }) do
+  local result, err, status = wireless.validate_expected_current_channel(expected, "1")
+  assert(result == nil and type(err) == "string" and status == 400,
+    "invalid expected channel must be rejected: " .. expected)
+end
+
 print("wireless-controls: all validation tests passed")
