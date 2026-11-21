@@ -71,6 +71,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/static-routes-api.test.mjs
       - name: Test authenticated TLS and native remote syslog API
         run: node --experimental-strip-types --test ../../tests/remote-syslog-api.test.mjs
+      - name: Test authenticated multi-AP usteer roaming API contract
+        run: node --experimental-strip-types --test ../../tests/usteer-api.test.mjs
       - name: Test encrypted configuration backup container and integrity
         run: node --experimental-strip-types --test ../../tests/config-backup-crypto.test.mjs
       - name: Test measured interface throughput rates
@@ -213,6 +215,8 @@ jobs:
         run: lua5.1 tests/conntrack-status.lua
       - name: Test wireless configuration validation
         run: lua5.1 tests/wireless-controls.lua
+      - name: Test validated multi-AP usteer roaming policy and runtime summaries
+        run: lua5.1 tests/usteer-controls.lua
       - name: Test installed APK and OPKG package inventory
         run: lua5.1 tests/packages-inventory.lua
       - name: Test safe APK and OPKG package operations
