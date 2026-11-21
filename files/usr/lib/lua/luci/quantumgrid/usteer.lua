@@ -42,7 +42,16 @@ local function contains_network(networks, wanted)
 end
 
 local function same_security(left, right)
-	if left.encryption ~= right.encryption then return false end
+	if left.encryption ~= right.encryption or
+		left.ieee80211w ~= right.ieee80211w or
+		left.dynamic_vlan ~= right.dynamic_vlan then
+		return false
+	end
+	if (left.acct_server or "") ~= (right.acct_server or "") or
+		(left.acct_port or 1813) ~= (right.acct_port or 1813) or
+		(left.acct_secret or "") ~= (right.acct_secret or "") then
+		return false
+	end
 	if left.encryption == "none" then return false end
 	if left.encryption == "wpa2" or left.encryption == "wpa3" then
 		return type(left.auth_server) == "string" and left.auth_server ~= "" and
