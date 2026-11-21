@@ -125,7 +125,7 @@ def validate(profile_path: Path) -> list[str]:
         require_string(
             item,
             f"capabilities.nss.required_config_symbols[{index}]",
-            re.compile(r"^CONFIG_[A-Z0-9_-]+=[A-Za-z0-9_.+-]+$"),
+            re.compile(r"^CONFIG_[A-Za-z0-9_-]+=[A-Za-z0-9_.+-]+$"),
         )
         for index, item in enumerate(required_nss_symbols)
     ]
