@@ -3343,7 +3343,7 @@ local function remote_syslog_status(uci, fs)
 		and contains_value(tunnel.checkIP, result.host)
 		or not is_ipv4 and contains_value(tunnel.checkHost, result.host) and
 			contains_value(tunnel.sni, result.host)
-	local tls_configured = tunnel.client == "1" and tunnel.verifyChain == "1" and
+	local tls_configured = tunnel.client == "1" and tunnel.verifyChain == "1" and tunnel.sslVersion == "TLSv1.2" and
 		tunnel.CAfile == "/etc/ssl/certs/ca-certificates.crt" and
 		tunnel.accept_host == "127.0.0.1" and tonumber(tunnel.accept_port) == 5514 and
 		remote_port ~= nil and remote_port >= 1 and remote_port <= 65535 and
@@ -7253,7 +7253,7 @@ function action_remote_syslog_update()
 	local tunnel_name = "quantumgrid_syslog"
 	local managed_tunnel_options = {
 		"enabled", "client", "accept_host", "accept_port", "CAfile",
-		"verifyChain", "TIMEOUTconnect", "retry", "connect", "checkHost", "checkIP", "sni"
+		"verifyChain", "sslVersion", "TIMEOUTconnect", "retry", "connect", "checkHost", "checkIP", "sni"
 	}
 	local tunnel_list_options = { connect = true, checkHost = true, checkIP = true, sni = true }
 	local system_log_options = { "log_ip", "log_port", "log_proto", "log_remote", "log_hostname", "log_prefix" }
