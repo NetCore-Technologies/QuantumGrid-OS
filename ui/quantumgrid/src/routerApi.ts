@@ -2343,7 +2343,123 @@ export async function updateRouterLedBrightness(
 }
 
 
-export async function downloadRouterConfigBackup(): Promise<void> {
+const CONFIG_BACKUP_MAGIC = new TextEncoder().encode("QGOSBK01");
+const CONFIG_BACKUP_HEADER_BYTES = 40;
+const CONFIG_BACKUP_MAX_BYTES = 64 * 1024 * 1024;
+const CONFIG_BACKUP_PBKDF2_ITERATIONS = 600_000;
+
+function assertBackupPassphrase(passphrase: string): Uint8Array {
+  if (typeof passphrase !== "string" || Array.from(passphrase).length < 16) {
+    throw new Error("Use a backup passphrase with at least 16 characters.");
+  }
+  const encoded = new TextEncoder().encode(passphrase);
+  if (encoded.byteLength > 1024) {
+    throw new Error("The backup passphrase must not exceed 1,024 UTF-8 bytes.");
+  }
+  return encoded;
+}
+
+function requireBackupCrypto(): Crypto {
+  if (!globalThis.crypto?.subtle || typeof globalThis.crypto.getRandomValues !== "function") {
+    throw new Error("Encrypted backups require a browser with WebCrypto support over a secure connection.");
+  }
+  return globalThis.crypto;
+}
+
+async function deriveConfigBackupKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
+  const cryptoApi = requireBackupCrypto();
+  const passwordBytes = assertBackupPassphrase(passphrase);
+  const material = await cryptoApi.subtle.importKey("raw", passwordBytes, "PBKDF2", false, ["deriveKey"]);
+  return cryptoApi.subtle.deriveKey(
+    { name: "PBKDF2", salt, iterations: CONFIG_BACKUP_PBKDF2_ITERATIONS, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+export async function encryptRouterConfigBackupBytes(
+  archive: ArrayBuffer | Uint8Array,
+  passphrase: string,
+): Promise<Uint8Array> {
+  const plaintext = archive instanceof Uint8Array ? archive : new Uint8Array(archive);
+  if (plaintext.byteLength < 1 || plaintext.byteLength > CONFIG_BACKUP_MAX_BYTES) {
+    throw new Error("The configuration archive is empty or larger than 64 MiB.");
+  }
+  const cryptoApi = requireBackupCrypto();
+  const salt = cryptoApi.getRandomValues(new Uint8Array(16));
+  const nonce = cryptoApi.getRandomValues(new Uint8Array(12));
+  const header = new Uint8Array(CONFIG_BACKUP_HEADER_BYTES);
+  header.set(CONFIG_BACKUP_MAGIC, 0);
+  const view = new DataView(header.buffer);
+  view.setUint32(8, CONFIG_BACKUP_PBKDF2_ITERATIONS, false);
+  header.set(salt, 12);
+  header.set(nonce, 28);
+  const key = await deriveConfigBackupKey(passphrase, salt);
+  const encrypted = await cryptoApi.subtle.encrypt(
+    { name: "AES-GCM", iv: nonce, additionalData: header, tagLength: 128 },
+    key,
+    plaintext,
+  );
+  const container = new Uint8Array(header.byteLength + encrypted.byteLength);
+  container.set(header, 0);
+  container.set(new Uint8Array(encrypted), header.byteLength);
+  return container;
+}
+
+export async function decryptRouterConfigBackupBytes(
+  container: ArrayBuffer | Uint8Array,
+  passphrase: string,
+): Promise<Uint8Array> {
+  const bytes = container instanceof Uint8Array ? container : new Uint8Array(container);
+  if (bytes.byteLength <= CONFIG_BACKUP_HEADER_BYTES + 16 ||
+      bytes.byteLength > CONFIG_BACKUP_MAX_BYTES + CONFIG_BACKUP_HEADER_BYTES + 16) {
+    throw new Error("The encrypted backup is empty, truncated or larger than the supported limit.");
+  }
+  for (let index = 0; index < CONFIG_BACKUP_MAGIC.length; index += 1) {
+    if (bytes[index] !== CONFIG_BACKUP_MAGIC[index]) {
+      throw new Error("This is not a supported QuantumGrid encrypted backup.");
+    }
+  }
+  const header = bytes.slice(0, CONFIG_BACKUP_HEADER_BYTES);
+  const iterations = new DataView(header.buffer, header.byteOffset, header.byteLength).getUint32(8, false);
+  if (iterations !== CONFIG_BACKUP_PBKDF2_ITERATIONS) {
+    throw new Error("The encrypted backup uses an unsupported or unsafe key-derivation setting.");
+  }
+  const salt = header.slice(12, 28);
+  const nonce = header.slice(28, 40);
+  const key = await deriveConfigBackupKey(passphrase, salt);
+  try {
+    const decrypted = await requireBackupCrypto().subtle.decrypt(
+      { name: "AES-GCM", iv: nonce, additionalData: header, tagLength: 128 },
+      key,
+      bytes.slice(CONFIG_BACKUP_HEADER_BYTES),
+    );
+    return new Uint8Array(decrypted);
+  } catch {
+    throw new Error("The passphrase is incorrect or the encrypted backup has been modified.");
+  }
+}
+
+export async function decryptRouterConfigBackup(file: Blob, passphrase: string): Promise<void> {
+  if (file.size > CONFIG_BACKUP_MAX_BYTES + CONFIG_BACKUP_HEADER_BYTES + 16) {
+    throw new Error("The encrypted backup is larger than the supported 64 MiB limit.");
+  }
+  const plaintext = await decryptRouterConfigBackupBytes(await file.arrayBuffer(), passphrase);
+  const archive = new Blob([plaintext], { type: "application/gzip" });
+  const exportedAt = new Date().toISOString();
+  const objectUrl = URL.createObjectURL(archive);
+  const link = document.createElement("a");
+  link.href = objectUrl;
+  link.download = "quantumgrid-config-decrypted-" + exportedAt.replace(/[:.]/g, "-") + ".tar.gz";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
+export async function downloadRouterConfigBackup(passphrase: string): Promise<void> {
   const form = new URLSearchParams();
   form.set("confirmed", "1");
   const response = await fetch(CONFIG_BACKUP_URL, {
@@ -2374,15 +2490,16 @@ export async function downloadRouterConfigBackup(): Promise<void> {
   }
 
   const archive = await response.blob();
-  if (archive.size < 1 || archive.size > 64 * 1024 * 1024) {
+  if (archive.size < 1 || archive.size > CONFIG_BACKUP_MAX_BYTES) {
     throw new Error("The downloaded configuration archive is empty or larger than 64 MiB.");
   }
-
+  const encrypted = await encryptRouterConfigBackupBytes(await archive.arrayBuffer(), passphrase);
+  const secureArchive = new Blob([encrypted], { type: "application/vnd.quantumgrid.backup" });
   const exportedAt = new Date().toISOString();
-  const objectUrl = URL.createObjectURL(archive);
+  const objectUrl = URL.createObjectURL(secureArchive);
   const link = document.createElement("a");
   link.href = objectUrl;
-  link.download = "quantumgrid-config-backup-" + exportedAt.replace(/[:.]/g, "-") + ".tar.gz";
+  link.download = "quantumgrid-config-backup-" + exportedAt.replace(/[:.]/g, "-") + ".qgbak";
   document.body.appendChild(link);
   link.click();
   link.remove();
