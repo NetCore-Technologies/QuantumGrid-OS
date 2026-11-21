@@ -192,7 +192,9 @@ def main() -> int:
         return 2
 
     if args.fields:
-        print("\t".join(fields))
+        print("\\t".join(fields))
+    elif args.lines:
+        print("\\n".join(fields))
     elif not args.check_only:
         print(
             "Valid device profile: "
