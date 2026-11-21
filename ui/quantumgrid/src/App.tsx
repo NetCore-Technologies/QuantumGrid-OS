@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -3095,6 +3095,11 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
   const [backupDecryptPassphrase, setBackupDecryptPassphrase] = useState("");
   const [backupDecryptBusy, setBackupDecryptBusy] = useState(false);
   const [backupDecryptNotice, setBackupDecryptNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const [restoreFile, setRestoreFile] = useState<File | null>(null);
+  const [restorePassphrase, setRestorePassphrase] = useState("");
+  const [restoreConfirmed, setRestoreConfirmed] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restoreNotice, setRestoreNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const createBackup = async () => {
     if (!backupConfirmed || backupBusy || backupPassphrase.length < 16 ||
@@ -3133,6 +3138,29 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
       });
     } finally {
       setBackupDecryptBusy(false);
+    }
+  };
+
+  const restoreBackup = async () => {
+    if (!restoreFile || !restorePassphrase || !restoreConfirmed || restoreBusy) return;
+    setRestoreBusy(true);
+    setRestoreNotice(null);
+    try {
+      const result = await restoreRouterConfigBackup(restoreFile, restorePassphrase);
+      setRestoreNotice({
+        success: true,
+        message: "The " + result.profile_id + " configuration was restored for " + result.target + ". The router reboot is scheduled; this administrator session and network connection will disconnect.",
+      });
+      setRestoreFile(null);
+      setRestorePassphrase("");
+      setRestoreConfirmed(false);
+    } catch (error) {
+      setRestoreNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The configuration restore failed; inspect the router's recovery state before retrying.",
+      });
+    } finally {
+      setRestoreBusy(false);
     }
   };
 
@@ -3238,6 +3266,42 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
         {backupDecryptNotice && (
           <div className={backupDecryptNotice.success ? "module-message config-backup-success" : "module-message config-backup-error"} role={backupDecryptNotice.success ? "status" : "alert"}>
             {backupDecryptNotice.message}
+          </div>
+        )}
+      </Panel>
+      <Panel title="Restore encrypted backup to this router" eyebrow="LOCAL DECRYPTION · SAME-DEVICE CHECK · ROLLBACK SNAPSHOT">
+        <div className="config-backup-warning" role="note">
+          <strong>Restore replaces live router configuration.</strong>
+          <span>The .qgbak is authenticated and decrypted locally in this browser; only the resulting gzip archive is streamed to this router over the current HTTPS administrator session. Before applying it, QuantumGrid checks the device ID, AW1000 profile, OpenWrt target/architecture and archive paths/types, then creates and validates a rollback snapshot. On success the router reboots and this connection will be lost. Credentials, Wi-Fi, VPN, firewall and management settings in the archive replace the current ones.</span>
+        </div>
+        <div className="remote-syslog-fields config-backup-fields">
+          <label>
+            <span>Encrypted .qgbak file</span>
+            <input type="file" accept=".qgbak,application/vnd.quantumgrid.backup" disabled={restoreBusy} onChange={(event) => setRestoreFile(event.target.files?.[0] ?? null)} />
+          </label>
+          <label>
+            <span>Original backup passphrase</span>
+            <input type="password" value={restorePassphrase} onChange={(event) => setRestorePassphrase(event.target.value)} autoComplete="current-password" disabled={restoreBusy} />
+          </label>
+        </div>
+        <label className="config-backup-confirm">
+          <input
+            type="checkbox"
+            checked={restoreConfirmed}
+            disabled={restoreBusy}
+            onChange={(event) => setRestoreConfirmed(event.target.checked)}
+          />
+          <span>I confirm this archive is intended for this exact router, I have an independent recovery path, and I authorize replacing the current configuration and rebooting the router.</span>
+        </label>
+        <div className="config-backup-actions">
+          <button className="hero-button" onClick={() => { void restoreBackup(); }} disabled={!restoreFile || !restorePassphrase || !restoreConfirmed || restoreBusy}>
+            <Upload size={15} /> {restoreBusy ? "Validating & restoring…" : "Restore backup & reboot"}
+          </button>
+          <span>Archives without the required device/profile/target markers are rejected. Cross-device or cross-target restores are not supported.</span>
+        </div>
+        {restoreNotice && (
+          <div className={restoreNotice.success ? "module-message config-backup-success" : "module-message config-backup-error"} role={restoreNotice.success ? "status" : "alert"}>
+            {restoreNotice.message}
           </div>
         )}
       </Panel>
