@@ -75,6 +75,26 @@ continue when that tag resolves to different source. Use both
 `QG_AW1000_PHONE_REF` and `QG_AW1000_PHONE_EXPECTED_SHA` when deliberately selecting
 another feed tag; the manual firmware workflow exposes the same paired inputs.
 
+## Validated hardware device profiles
+
+The firmware build now consumes the declarative device profile
+`profiles/arcadyan-aw1000.json`. The profile binds the OpenWrt target, subtarget and exact
+device symbol to its reviewed configuration file, supported NSS and FXS build inputs, board
+compatibility identifiers, output directory and required factory/initramfs artifact patterns.
+`scripts/verify-device-profile.py` rejects unknown schema fields, unsafe repository paths,
+missing feature inputs, incompatible device symbols and artifact names that do not identify
+the selected device. The build validates this contract before cloning or modifying an OpenWrt
+checkout and verifies the target/subtarget/device symbols again after `make defconfig`.
+
+The AW1000 remains the **only supported hardware profile** today. Its manifest is the first
+profile contract, not a claim of multi-vendor support. Select it explicitly with
+`QG_DEVICE_PROFILE=profiles/arcadyan-aw1000.json ./build.sh`; this is also the default.
+Adding another router requires its own exact upstream target/device configuration, compatible
+package and hardware declarations, recovery-safe image artifacts, profile tests, a completed
+firmware build and physical validation. A JSON profile by itself does not make a board supported.
+The schema and failure modes are covered by `tests/device-profile.py` and the firmware CI gate.
+
+
 The build script fetches the pinned RJ11 source feed, updates OpenWrt feeds, applies
 `configs/aw1000-max.config`, installs QuantumGrid first-boot files and builds the AW1000 target.
 
