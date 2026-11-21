@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6360,6 +6360,8 @@ function GamingControlPage({ routerOverview, refresh }: {
         truncated={sqm?.client_policies_truncated === true || routerOverview?.office_networks?.truncated === true}
         policies={sqm?.client_policies ?? []}
         zones={routerOverview?.office_networks?.zones ?? []}
+        interfaces={routerOverview?.office_networks?.interfaces ?? []}
+        staticLeases={routerOverview?.office_networks?.static_leases ?? []}
         refresh={refresh}
       />
       <Panel title="Kernel qdisc inventory" eyebrow="TC -S QDISC SHOW" action={
@@ -6436,20 +6438,28 @@ function SqmClientQosManager({
   truncated,
   policies,
   zones,
+  interfaces,
+  staticLeases,
   refresh,
 }: {
   available: boolean;
   truncated: boolean;
   policies: RouterSqmClientPolicy[];
   zones: RouterOfficeFirewallZone[];
+  interfaces: RouterOfficeInterface[];
+  staticLeases: RouterOfficeStaticLease[];
   refresh: () => void;
 }) {
   const isExternalZone = (zone: RouterOfficeFirewallZone) =>
     ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
     zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
-  const sourceZones = zones.filter((zone) => !isExternalZone(zone));
-  const destinationZones = zones.filter(isExternalZone);
+  const internalZones = zones.filter((zone) => !isExternalZone(zone));
+  const externalZones = zones.filter(isExternalZone);
+  const [direction, setDirection] = useState<"upload" | "download">("upload");
+  const sourceZones = direction === "upload" ? internalZones : externalZones;
+  const destinationZones = direction === "upload" ? externalZones : internalZones;
   const [mac, setMac] = useState("");
+  const [leaseSection, setLeaseSection] = useState("");
   const [sourceZone, setSourceZone] = useState("");
   const [destinationZone, setDestinationZone] = useState("");
   const [dscpClass, setDscpClass] = useState<RouterSqmClientDscpClass>("BE");
@@ -6460,26 +6470,51 @@ function SqmClientQosManager({
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
   const activeSource = sourceZones.some((zone) => zone.name === sourceZone) ? sourceZone : sourceZones[0]?.name ?? "";
   const activeDestination = destinationZones.some((zone) => zone.name === destinationZone) ? destinationZone : destinationZones[0]?.name ?? "";
+  const validStaticLeases = staticLeases.filter((lease) =>
+    lease.section.length > 0 && lease.mac.length > 0 && lease.ipv4.length > 0);
+  const selectedLease = validStaticLeases.find((lease) => lease.section === leaseSection) ?? validStaticLeases[0];
 
   const add = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!available || truncated || !confirmed || saving || !activeSource || !activeDestination) return;
+    if (direction === "upload" && !mac.trim()) return;
+    if (direction === "download" && !selectedLease) return;
     setSaving(true);
     setNotice(null);
     try {
-      const result = await addRouterSqmClientPolicy({
-        mac: mac.trim(), sourceZone: activeSource, destinationZone: activeDestination, dscpClass,
-      });
-      setNotice({
-        success: true,
-        message: result.mac + " now has " + result.dscp_class + " DSCP marking for upload traffic from " +
-          result.source_zone + " to " + result.destination_zone + "; firewall reload completed.",
-      });
-      setMac("");
+      if (direction === "upload") {
+        const result = await addRouterSqmClientPolicy({
+          mac: mac.trim(), sourceZone: activeSource, destinationZone: activeDestination, dscpClass,
+        });
+        setNotice({
+          success: true,
+          message: result.mac + " now has " + result.dscp_class + " DSCP marking for upload traffic from " +
+            result.source_zone + " to " + result.destination_zone + "; firewall reload completed.",
+        });
+        setMac("");
+      } else {
+        const result = await addRouterSqmClientDownloadPolicy({
+          mac: selectedLease.mac,
+          destinationIp: selectedLease.ipv4,
+          sourceZone: activeSource,
+          destinationZone: activeDestination,
+          dscpClass,
+        });
+        setNotice({
+          success: true,
+          message: result.mac + " (" + result.destination_ip + ") now has " + result.dscp_class +
+            " DSCP marking for download traffic from " + result.source_zone + " to " +
+            result.destination_zone + "; firewall reload completed.",
+        });
+        setLeaseSection("");
+      }
       setConfirmed(false);
       refresh();
     } catch (cause) {
-      setNotice({ success: false, message: cause instanceof Error ? cause.message : "The per-client DSCP policy could not be added." });
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The per-client DSCP policy could not be added.",
+      });
     } finally {
       setSaving(false);
     }
@@ -6502,13 +6537,13 @@ function SqmClientQosManager({
   };
 
   return (
-    <Panel title="Per-client upload marking" eyebrow="FIREWALL4 DSCP · INTERNAL CLIENT → WAN">
+    <Panel title="Per-client traffic marking" eyebrow="FIREWALL4 DSCP · UPLOAD + DOWNLOAD">
       {!available ? (
         <div className="module-message">Firewall configuration is unavailable. Per-client marking controls are disabled.</div>
       ) : truncated ? (
-        <div className="module-message">The client QoS inventory is truncated. Resolve it before adding or removing a policy.</div>
-      ) : sourceZones.length === 0 || destinationZones.length === 0 ? (
-        <div className="module-message">An existing internal zone and WAN/WWAN zone are required before a client upload policy can be created.</div>
+        <div className="module-message">The network, firewall or DHCP inventory is truncated. Resolve it before adding or removing a policy.</div>
+      ) : internalZones.length === 0 || externalZones.length === 0 ? (
+        <div className="module-message">An existing internal zone and WAN/WWAN zone are required before per-client marking can be configured.</div>
       ) : null}
       {policies.length === 0 ? (
         <div className="module-message">No QuantumGrid client DSCP policies are configured.</div>
@@ -6518,7 +6553,11 @@ function SqmClientQosManager({
             <div className="sqm-client-qos-row" key={policy.section}>
               <div>
                 <strong>{policy.mac}</strong>
-                <span>{policy.source_zone} → {policy.destination_zone} · {policy.enabled ? policy.dscp_class : "DISABLED · " + policy.dscp_class}</span>
+                <span>
+                  {(policy.direction ?? "upload").toUpperCase()} · {policy.source_zone} → {policy.destination_zone}
+                  {policy.direction === "download" && policy.destination_ip ? " · " + policy.destination_ip : ""}
+                  {" · "}{policy.enabled ? policy.dscp_class : "DISABLED · " + policy.dscp_class}
+                </span>
               </div>
               {pendingRemoval === policy.section ? (
                 <div className="sqm-client-qos-confirm">
@@ -6539,22 +6578,53 @@ function SqmClientQosManager({
       )}
       <form className="sqm-client-qos-editor" onSubmit={(event) => void add(event)}>
         <div className="sqm-client-qos-heading">
-          <strong>Add a client upload marking</strong>
-          <span>Marks forwarded packets matching one client MAC address as they travel from the internal zone towards the WAN.</span>
+          <strong>Add a client marking policy</strong>
+          <span>
+            {direction === "upload"
+              ? "Marks forwarded packets matching one client source MAC as they travel from an internal zone towards the WAN."
+              : "Marks download packets by the destination IPv4 address of one client with a unique static DHCP reservation."}
+          </span>
         </div>
         <div className="sqm-client-qos-fields">
           <label>
-            <span>CLIENT MAC ADDRESS</span>
-            <input value={mac} onChange={(event) => { setMac(event.target.value); setConfirmed(false); }} maxLength={17} placeholder="02:11:22:33:44:55" disabled={!available || truncated || saving} />
+            <span>TRAFFIC DIRECTION</span>
+            <select value={direction} onChange={(event) => {
+              setDirection(event.target.value as "upload" | "download");
+              setSourceZone("");
+              setDestinationZone("");
+              setConfirmed(false);
+            }} disabled={!available || truncated || saving}>
+              <option value="upload">Upload · client source MAC</option>
+              <option value="download">Download · reserved client IPv4</option>
+            </select>
           </label>
+          {direction === "upload" ? (
+            <label>
+              <span>CLIENT MAC ADDRESS</span>
+              <input value={mac} onChange={(event) => { setMac(event.target.value); setConfirmed(false); }} maxLength={17} placeholder="02:11:22:33:44:55" disabled={!available || truncated || saving} />
+            </label>
+          ) : (
+            <label>
+              <span>STATIC DHCP RESERVATION</span>
+              <select value={selectedLease?.section ?? ""} onChange={(event) => {
+                setLeaseSection(event.target.value);
+                setConfirmed(false);
+              }} disabled={!available || truncated || saving || validStaticLeases.length === 0}>
+                {validStaticLeases.length === 0 ? <option value="">No static reservations available</option> : null}
+                {validStaticLeases.map((lease) => (
+                  <option key={lease.section} value={lease.section}>{lease.name} · {lease.mac} · {lease.ipv4}</option>
+                ))}
+              </select>
+            </label>
+          )}
           <label>
-            <span>INTERNAL SOURCE ZONE</span>
+            <span>{direction === "upload" ? "INTERNAL SOURCE ZONE" : "WAN SOURCE ZONE"}</span>
             <select value={activeSource} onChange={(event) => { setSourceZone(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || sourceZones.length === 0}>
               {sourceZones.map((zone) => <option key={zone.section} value={zone.name}>{zone.name}</option>)}
             </select>
           </label>
           <label>
-            <span>WAN DESTINATION ZONE</span>
+            <span>{direction === "upload" ? "WAN DESTINATION ZONE" : "INTERNAL DESTINATION ZONE"}</span>
             <select value={activeDestination} onChange={(event) => { setDestinationZone(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || destinationZones.length === 0}>
               {destinationZones.map((zone) => <option key={zone.section} value={zone.name}>{zone.name}</option>)}
             </select>
@@ -6569,11 +6639,29 @@ function SqmClientQosManager({
             </select>
           </label>
         </div>
+        {direction === "download" && selectedLease ? (
+          <div className="module-message">Download match: {selectedLease.ipv4} is reserved to {selectedLease.mac}. QuantumGrid rechecks the exact reservation and requires that IP to belong to one routed interface in the selected internal zone before writing the firewall rule.</div>
+        ) : null}
+        {direction === "download" && validStaticLeases.length === 0 ? (
+          <div className="module-message">Create a unique static DHCP reservation for the client first. Dynamic leases are not stable download classifiers.</div>
+        ) : null}
         <label className="office-reservation-confirm">
-          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !mac.trim() || !activeSource || !activeDestination} />
-          <span>I understand this marks upload traffic for {mac.trim() || "this client"} and authorise a firewall rule change and reload.</span>
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+            disabled={!available || truncated || saving ||
+              (direction === "upload" ? !mac.trim() : !selectedLease) ||
+              !activeSource || !activeDestination}
+          />
+          <span>
+            {direction === "upload"
+              ? "I authorise matching this client's source MAC and changing the firewall marking rules."
+              : "I authorise matching this reserved client's IPv4 destination address and changing the firewall marking rules."}
+          </span>
         </label>
-        <button className="hero-button" type="submit" disabled={!available || truncated || !confirmed || saving || !mac.trim() || !activeSource || !activeDestination}>
+        <button className="hero-button" type="submit" disabled={!available || truncated || !confirmed || saving ||
+          (direction === "upload" ? !mac.trim() : !selectedLease) || !activeSource || !activeDestination}>
           {saving ? "Applying…" : "Add client marking"}
         </button>
       </form>
@@ -6582,7 +6670,9 @@ function SqmClientQosManager({
           {notice.message}
         </div>
       ) : null}
-      <div className="module-message">Direction is upload-only: the rule matches the client as the packet source and the WAN as destination. For CAKE tins to interpret DSCP markings, configure the existing egress CAKE profile as DiffServ 4 or DiffServ 8. Best-effort and SQM script-default profiles do not promise separate DSCP tins. Download-side per-client marking, bandwidth caps and rate guarantees are not implemented by this control.</div>
+      <div className="module-message">
+        Upload rules match the client as packet source MAC. Download rules match the destination IPv4 address because firewall4 does not support destination-MAC matches; they require an exact unique static DHCP reservation and one unambiguous routed subnet in the selected internal zone. IPv6 download classification, per-client bandwidth caps or guarantees, and a managed per-client queue scheduler are not implemented by this control. For CAKE tins to interpret DSCP, configure the egress CAKE profile as DiffServ 4 or DiffServ 8; this configuration does not prove end-to-end packet marking or latency improvement.
+      </div>
     </Panel>
   );
 }
