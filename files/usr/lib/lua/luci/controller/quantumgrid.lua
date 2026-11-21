@@ -4375,8 +4375,9 @@ function action_config_restore()
         return
     end
     local content_type = http.getenv("CONTENT_TYPE") or ""
-    if not content_type:lower():find("multipart/form-data", 1, true) then
-        respond(400, { ok = false, error = "The encrypted backup must be submitted as one multipart archive upload." })
+    local normalized_content_type = content_type:lower():match("^%s*([^;%s]+)")
+    if normalized_content_type ~= "application/gzip" and normalized_content_type ~= "application/octet-stream" then
+        respond(400, { ok = false, error = "The decrypted configuration archive must be streamed as application/gzip." })
         return
     end
     local content_length = http.getenv("CONTENT_LENGTH")
@@ -4441,15 +4442,14 @@ function action_config_restore()
     upload_state.file = upload
 
     local handler_ok = pcall(http.setfilehandler, function(field, chunk, eof)
-        if type(field) ~= "table" or field.name ~= "archive" or
-            type(field.file) ~= "string" or #field.file < 1 or #field.file > 128 or
-            not field.file:match("^[%w_.%-]+$") then
-            upload_state.error = "Only one named archive file upload is accepted."
+        if type(field) ~= "table" or field.name ~= "raw" or
+            (field.encoding ~= "application/gzip" and field.encoding ~= "application/octet-stream") then
+            upload_state.error = "Only one raw gzip archive request body is accepted."
         elseif not upload_state.metadata then
             upload_state.metadata = field
             upload_state.count = 1
         elseif upload_state.metadata ~= field then
-            upload_state.error = "Exactly one archive file must be uploaded."
+            upload_state.error = "Multiple archive upload streams are not accepted."
         end
 
         if type(chunk) == "string" and #chunk > 0 then
@@ -4478,8 +4478,13 @@ function action_config_restore()
         return
     end
 
-    local confirmed = http.formvalue("confirmed", true)
-    local same_device_confirmed = http.formvalue("same_device_confirmed", true)
+    local parse_ok = pcall(http.formvalue, "__quantumgrid_stream_body", true)
+    if not parse_ok then
+        fail(400, "The raw configuration archive request body could not be parsed.")
+        return
+    end
+    local confirmed = http.getenv("HTTP_X_QUANTUMGRID_RESTORE_CONFIRMED")
+    local same_device_confirmed = http.getenv("HTTP_X_QUANTUMGRID_SAME_DEVICE")
     local restore_confirmed, confirmation_error =
         validator.validate_restore_confirmation(confirmed, same_device_confirmed)
     if not restore_confirmed then
