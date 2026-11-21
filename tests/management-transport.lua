@@ -1,6 +1,42 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local transport = require "luci.quantumgrid.management_transport"
 
+local function pack_u32(value)
+  return string.char(
+    math.floor(value / 16777216) % 256,
+    math.floor(value / 65536) % 256,
+    math.floor(value / 256) % 256,
+    value % 256
+  )
+end
+
+local function ssh_string(value)
+  return pack_u32(#value) .. value
+end
+
+local function encode_base64(value)
+  local alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  local output = {}
+  for offset = 1, #value, 3 do
+    local a = value:byte(offset)
+    local b = value:byte(offset + 1)
+    local c = value:byte(offset + 2)
+    local packed = a * 65536 + (b or 0) * 256 + (c or 0)
+    local first = math.floor(packed / 262144) % 64 + 1
+    local second = math.floor(packed / 4096) % 64 + 1
+    local third = math.floor(packed / 64) % 64 + 1
+    local fourth = packed % 64 + 1
+    table.insert(output, alphabet:sub(first, first))
+    table.insert(output, alphabet:sub(second, second))
+    table.insert(output, b and alphabet:sub(third, third) or "=")
+    table.insert(output, c and alphabet:sub(fourth, fourth) or "=")
+  end
+  return table.concat(output)
+end
+
+local valid_ed25519_blob = ssh_string("ssh-ed25519") .. ssh_string(string.rep(string.char(1), 32))
+local valid_ed25519_key = "ssh-ed25519 " .. encode_base64(valid_ed25519_blob) .. " quantumgrid-test-key\n"
+
 local function fixture(redirect, overrides)
   local lists = {
     listen_http = { "0.0.0.0:80", "[::]:80" },
@@ -19,6 +55,7 @@ local function fixture(redirect, overrides)
     ["/usr/bin/openssl"] = true
   }
   local stat_overrides = {}
+  local authorized_keys_contents = valid_ed25519_key
   local dropbear_sections = {
     {
       [".name"] = "main",
@@ -43,6 +80,7 @@ local function fixture(redirect, overrides)
     elseif key == "stat_overrides" then stat_overrides = value
     elseif key == "dropbear_sections" then dropbear_sections = value
     elseif key == "firewall_zones" then firewall_zones = value
+    elseif key == "authorized_keys_contents" then authorized_keys_contents = value
     end
   end
 
@@ -69,8 +107,11 @@ local function fixture(redirect, overrides)
     if path == "/etc/dropbear" or path == "/root/.ssh" then
       return { size = 0, uid = 0, mode = 16832, type = "dir" }
     end
+    local size = empty_files[path] and 0 or
+      (path == "/etc/dropbear/authorized_keys" or path == "/root/.ssh/authorized_keys")
+        and #authorized_keys_contents or 128
     return {
-      size = empty_files[path] and 0 or 128,
+      size = size,
       uid = 0,
       mode = 33152,
       type = "reg"
@@ -78,6 +119,12 @@ local function fixture(redirect, overrides)
   end
   local fs = {
     access = function(path) return files[path] == true end,
+    readfile = function(path)
+      if path == "/etc/dropbear/authorized_keys" or path == "/root/.ssh/authorized_keys" then
+        return empty_files[path] and "" or authorized_keys_contents
+      end
+      return nil
+    end,
     stat = stat,
     lstat = stat
   }
@@ -115,6 +162,10 @@ assert(not https_only.ssh_instances[1].password_auth_enabled)
 assert(not https_only.ssh_instances[1].root_password_auth_enabled)
 assert(https_only.ssh_authorized_keys.available)
 assert(https_only.ssh_authorized_keys.status == "present")
+assert(https_only.ssh_authorized_keys.key_inventory_available)
+assert(https_only.ssh_authorized_keys.key_count == 1)
+assert(https_only.ssh_authorized_keys.invalid_line_count == 0)
+assert(https_only.ssh_authorized_keys.key_algorithms[1] == "ssh-ed25519")
 assert(https_only.ssh_authorized_keys.root_owned)
 assert(https_only.ssh_authorized_keys.directory_root_owned)
 assert(https_only.ssh_authorized_keys.directory_valid)
@@ -124,6 +175,35 @@ assert(https_only.ssh_authorized_keys.regular_file)
 assert(https_only.ssh_authorized_keys.owner_readable)
 assert(not https_only.ssh_authorized_keys.group_writable)
 assert(not https_only.ssh_authorized_keys.other_writable)
+
+-- A non-empty file is not a usable SSH trust store unless it contains a valid OpenSSH public-key blob.
+uci, fs = fixture("1", { authorized_keys_contents = "not a public key\\nssh-ed25519 invalid-base64! comment\\n" })
+local malformed_authorized_keys = transport.inspect(uci, fs)
+assert(malformed_authorized_keys.ssh_authorized_keys.key_count == 0)
+assert(malformed_authorized_keys.ssh_authorized_keys.invalid_line_count == 2)
+assert(malformed_authorized_keys.ssh_authorized_keys.status == "review")
+assert(malformed_authorized_keys.ssh_status == "review")
+
+-- Malformed authorized-key options and algorithm/blob mismatches must not create a false positive.
+uci, fs = fixture("1", {
+  authorized_keys_contents = "command=\\\"echo ssh-ed25519 AAAA\\\" ssh-ed25519 " ..
+    encode_base64(ssh_string("ssh-rsa") .. ssh_string("bad")) .. " comment\\n"
+})
+local forged_authorized_keys = transport.inspect(uci, fs)
+assert(forged_authorized_keys.ssh_authorized_keys.key_count == 0)
+assert(forged_authorized_keys.ssh_authorized_keys.status == "review")
+
+-- The parser accepts a valid restricted key line without exposing its key material.
+uci, fs = fixture("1", {
+  authorized_keys_contents = "restrict,from=\\\"192.0.2.0/24\\\" " ..
+    valid_ed25519_key
+})
+local restricted_authorized_keys = transport.inspect(uci, fs)
+assert(restricted_authorized_keys.ssh_authorized_keys.key_count == 1)
+assert(restricted_authorized_keys.ssh_authorized_keys.invalid_line_count == 0)
+assert(restricted_authorized_keys.ssh_authorized_keys.status == "present")
+assert(not restricted_authorized_keys.ssh_authorized_keys.public_key,
+  "public key contents must never be returned in status telemetry")
 
 -- HTTPS private keys must be root-owned, regular and inaccessible to group/other users.
 local private_key = https_only.private_key
