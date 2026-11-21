@@ -3123,7 +3123,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
         <Metric title="Rules / Redirects" value={security?.firewall_config_readable ? `${fmt(security.rules_count)} / ${fmt(security.redirects_count)}` : "N/A"} unit="" detail="Configured firewall entries" icon={Activity} />
       </div>
 
-      <Panel title="Administrator web transport" eyebrow="UHTTPD · TLS · HTTP REDIRECT">
+      <Panel title="Administrator management plane" eyebrow="HTTPS · SSH · ADMIN ACCESS">
         {!security ? (
           <div className="module-message">Waiting for authenticated management-transport telemetry.</div>
         ) : !managementTransport ? (
@@ -3131,7 +3131,7 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
         ) : (
           <>
             <div className="firewall-posture-heading">
-              <div><strong>HTTPS configuration posture</strong><span>Read-only TLS and uHTTPd configuration checks</span></div>
+              <div><strong>Management-plane posture</strong><span>Read-only HTTPS transport and Dropbear SSH configuration checks</span></div>
               <Status active={managementTransport.status === "ready"}>{managementTransport.status.toUpperCase()}</Status>
             </div>
             <InfoRows rows={[
