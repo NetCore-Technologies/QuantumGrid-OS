@@ -127,14 +127,19 @@ from the Wi-Fi page. The
 The Wi-Fi and Network views also show the driver's frequency list, current channel and restricted-channel flags when iwinfo.freqlist reports them, plus the available transmit-power levels when iwinfo.txpowerlist is supported. These are driver-reported capabilities, not a replacement for the full regulatory database or a grant to use every level. Channel and power capability lists are cached for 60 seconds, while live interface state and station counters continue refreshing normally.
 Devices and Wi-Fi views include unexpired DHCP leases and iwinfo station associations. The station inventory summarises current associated/authorized counts and aggregate measured RX/TX throughput for stations with valid counter samples. Connected station rows show driver-reported RX/TX PHY family, MCS, spatial streams, channel width and guard-interval data where available. They also show separate current/average signal, cumulative RX/TX bytes and packets, inactive time and transmit retry/failure counters when reported. Per-station RX/TX throughput is calculated from successive iwinfo byte-counter samples and appears after the second valid sample; counter resets are discarded. Associated clients can be filtered by hostname/MAC/SSID/radio, band and authorization state, sorted by signal, negotiated PHY or measured RX/TX throughput, and exported with their station diagnostics and active filter/sort context in a spreadsheet-safe CSV. Gaming
 reports configured SQM queues and read-only kernel qdisc
-counters. The Gaming page can edit enable state, rate limits and bounded link-layer calibration
-for an existing queue: link-layer type (none, ethernet, atm or ptm), packet overhead
-(-64 to 256 bytes) and minimum packet unit (0 to 256 bytes). The authenticated endpoint changes
-only those fields plus the selected queue's enabled/download/upload values, snapshots every
-modified UCI option, restarts SQM and attempts rollback if the restart fails. The queue interface,
-qdisc, setup script and advanced option strings are preserved. Administrators must choose the
-link layer and framing values from their ISP/connection details; QuantumGrid does not guess them.
-Traffic classification and per-client priority remain unavailable.
+counters. The Gaming page also compares each enabled queue's configured qdisc and interface with
+the live kernel inventory, reporting an observed root match, a missing match, unavailable or
+unconfigured state, or an inconclusive result when the 64-entry inventory is truncated. This is
+an evidence check for the expected root qdisc on the configured interface only: it does not prove
+the ingress IFB pairing, effective rate enforcement, client classification or end-to-end WAN path.
+The Gaming page can edit enable state, rate limits and bounded link-layer calibration for an
+existing queue: link-layer type (none, ethernet, atm or ptm), packet overhead (-64 to 256 bytes)
+and minimum packet unit (0 to 256 bytes). The authenticated endpoint changes only those fields
+plus the selected queue's enabled/download/upload values, snapshots every modified UCI option,
+restarts SQM and attempts rollback if the restart fails. The queue interface, qdisc, setup script
+and advanced option strings are preserved. Administrators must choose the link layer and framing
+values from their ISP/connection details; QuantumGrid does not guess them. Traffic classification
+and per-client priority remain unavailable.
 Diagnostics has a separate on-demand five-packet ICMP test to the fixed target 1.1.1.1,
 reporting the measured received/sent ratio, packet-loss percentage, RTT minimum/average/maximum
 and mean absolute difference between consecutive successful RTT samples (jitter).
@@ -665,11 +670,12 @@ server and define an independent retention policy. Parser and redaction rules ar
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
   settings plus guarded link-layer overhead/MPU calibration with restart and rollback handling,
   Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, and a
-  redacted local administrative audit history with bounded retention.
-- **Active development:** wider UI-to-ubus control wiring, advanced CAKE option profiles and
-  qdisc validation, radio intelligence/scheduling, traffic classification, per-client priority,
-  controlled-load bufferbloat testing and modem observability.
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, a
+  redacted local administrative audit history with bounded retention, and read-only live root-qdisc
+  matching for enabled SQM queues with explicit incomplete/unavailable states.
+- **Active development:** wider UI-to-ubus control wiring, advanced CAKE option profiles,
+  radio intelligence/scheduling, traffic classification, per-client priority, controlled-load
+  bufferbloat testing and modem observability.
 - **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
 
 See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).
