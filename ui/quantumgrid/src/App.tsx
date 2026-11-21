@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -4169,11 +4169,13 @@ function WirelessConfigEditor({
   config,
   radio,
   networkInterfaces,
+  officeInventory,
   refresh,
 }: {
   config: RouterWirelessConfig;
   radio?: RouterWirelessRadio;
   networkInterfaces: RouterOfficeInterface[];
+  officeInventory?: RouterOfficeNetworks;
   refresh: () => void;
 }) {
   const currentNetwork = config.networks.length === 1 ? config.networks[0] : "";
@@ -4193,6 +4195,13 @@ function WirelessConfigEditor({
   const [accountingPort, setAccountingPort] = useState(String(config.accounting_port || 1813));
   const [accountingSecret, setAccountingSecret] = useState("");
   const [accountingEnabled, setAccountingEnabled] = useState(Boolean(config.accounting_server));
+  const [radiusDynamicVlanEnabled, setRadiusDynamicVlanEnabled] = useState(
+    config.dynamic_vlan === 2 && !config.radius_vlan_unmanaged,
+  );
+  const [radiusVlanMappings, setRadiusVlanMappings] = useState<Array<{ vid: string; network: string }>>(
+    config.radius_vlan_mappings.filter((mapping) => mapping.managed)
+      .map((mapping) => ({ vid: String(mapping.vid), network: mapping.network })),
+  );
   const [hidden, setHidden] = useState(config.hidden);
   const [channel, setChannel] = useState(config.channel || "auto");
   const [htmode, setHtmode] = useState(config.htmode || "auto");
@@ -4221,6 +4230,41 @@ function WirelessConfigEditor({
   );
   const networkSupported = eligibleNetworkInterfaces.some((item) => item.name === network);
   const networkChanged = network !== currentNetwork;
+  const eligibleRadiusVlans = (officeInventory?.interfaces ?? []).flatMap((iface) => {
+    const deviceMatch = /^(.+)\.([0-9]{1,4})$/.exec(iface.device);
+    if (!deviceMatch || iface.protocol !== "static") return [];
+    const bridgeName = deviceMatch[1];
+    const vid = Number(deviceMatch[2]);
+    const bridge = officeInventory?.bridges.find((item) =>
+      item.name === bridgeName && item.vlan_filtering && item.ports.length > 0);
+    const vlan = officeInventory?.vlans.find((item) =>
+      item.device === bridgeName && item.vlan_id === vid && item.ports.length > 0);
+    const attachedZones = (officeInventory?.zones ?? []).filter((zone) =>
+      zone.networks.includes(iface.name));
+    if (!bridge || !vlan || attachedZones.length !== 1) return [];
+    const zone = attachedZones[0];
+    if (externalZoneNames.has(zone.name.toLowerCase()) ||
+        zone.networks.some((item) => externalZoneNames.has(item.toLowerCase())) ||
+        !["REJECT", "DROP"].includes(zone.input) ||
+        !["REJECT", "DROP"].includes(zone.forward)) return [];
+    return [{ vid: String(vid), network: iface.name, device: iface.device, zone: zone.name }];
+  });
+  const radiusVlanManaged = !config.radius_vlan_unmanaged;
+  const currentManagedRadiusMappings = config.radius_vlan_mappings
+    .filter((mapping) => mapping.managed)
+    .map((mapping) => ({ vid: String(mapping.vid), network: mapping.network }));
+  const effectiveRadiusMappings = radiusDynamicVlanEnabled ? radiusVlanMappings : [];
+  const radiusVlanMappingsValid = effectiveRadiusMappings.length >= 1 &&
+    effectiveRadiusMappings.length <= 16 &&
+    effectiveRadiusMappings.every((mapping) =>
+      eligibleRadiusVlans.some((item) => item.vid === mapping.vid && item.network === mapping.network)) &&
+    new Set(effectiveRadiusMappings.map((item) => item.vid)).size === effectiveRadiusMappings.length &&
+    new Set(effectiveRadiusMappings.map((item) => item.network)).size === effectiveRadiusMappings.length;
+  const radiusVlanConfigurationChanged = radiusVlanManaged &&
+    (radiusDynamicVlanEnabled !== (config.dynamic_vlan === 2) ||
+      JSON.stringify([...effectiveRadiusMappings].sort((a, b) => Number(a.vid) - Number(b.vid))) !==
+      JSON.stringify([...currentManagedRadiusMappings].sort((a, b) => Number(a.vid) - Number(b.vid))));
+  const radiusVlanReady = !radiusDynamicVlanEnabled || !enterpriseMode || radiusVlanMappingsValid;
   const encryptionChanged = encryption !== config.encryption;
   const pmfNeedsRepair = config.encryption === "wpa3" && config.ieee80211w !== "2";
   const enterpriseMode = encryption === "wpa2" || encryption === "wpa3";
@@ -4264,7 +4308,8 @@ function WirelessConfigEditor({
     (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
       (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
         !/[\u0000-\u001f\u007f]/.test(accountingSecret))));
-  const changed = pmfNeedsRepair || ssid !== config.ssid || networkChanged || encryptionChanged || passphrase.length > 0 ||
+  const changed = pmfNeedsRepair || radiusVlanConfigurationChanged ||
+    ssid !== config.ssid || networkChanged || encryptionChanged || passphrase.length > 0 ||
     (enterpriseMode && (radiusServer !== config.radius_auth_server ||
       radiusPort !== String(config.radius_auth_port || 1812) || radiusSecret.length > 0 ||
       accountingEnabled !== Boolean(config.accounting_server) ||
@@ -4272,7 +4317,7 @@ function WirelessConfigEditor({
         accountingPort !== String(config.accounting_port || 1813) || accountingSecret.length > 0)))) ||
     hidden !== config.hidden || channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
   const ready = changed && channelSupported && htmodeSupported && txpowerSupported &&
-    networkSupported && !passphraseRequired && radiusReady && accountingReady &&
+    networkSupported && !passphraseRequired && radiusReady && accountingReady && radiusVlanReady &&
     (encryption !== "none" || allowOpen) && confirmDisconnect && !saving;
 
   const apply = async () => {
@@ -4290,6 +4335,9 @@ function WirelessConfigEditor({
         radiusServer,
         radiusPort,
         radiusSecret,
+        manageRadiusVlans: radiusVlanManaged,
+        dynamicVlanEnabled: radiusVlanManaged && enterpriseMode && radiusDynamicVlanEnabled,
+        radiusVlans: radiusVlanManaged && enterpriseMode && radiusDynamicVlanEnabled ? radiusVlanMappings : [],
         accountingServer: enterpriseMode && accountingEnabled ? accountingServerValue : "",
         accountingPort,
         accountingSecret,
@@ -4473,6 +4521,103 @@ function WirelessConfigEditor({
             ) : null}
           </>
         ) : null}
+        {enterpriseMode ? (
+          <div className="wireless-radius-vlan">
+            <div className="wireless-radius-vlan-heading">
+              <strong>RADIUS dynamic VLAN assignment</strong>
+              <span>Use RADIUS Tunnel-Type=VLAN, Tunnel-Medium-Type=IEEE-802 and Tunnel-Private-Group-ID matching one configured VLAN ID.</span>
+            </div>
+            {config.radius_vlan_unmanaged ? (
+              <div className="module-message">
+                Existing dynamic VLAN settings are not wholly owned by QuantumGrid. They are left unchanged; edit them through the administrator-managed hostapd configuration or remove the external mapping before using this editor.
+              </div>
+            ) : (
+              <>
+                <label className="wireless-config-field wireless-config-accounting-toggle">
+                  <input
+                    type="checkbox"
+                    checked={radiusDynamicVlanEnabled}
+                    onChange={(event) => {
+                      setRadiusDynamicVlanEnabled(event.target.checked);
+                      setConfirmDisconnect(false);
+                      setNotice(null);
+                    }}
+                    disabled={saving || !enterpriseMode}
+                  />
+                  <span>Require a valid RADIUS VLAN assignment (dynamic_vlan=2)</span>
+                </label>
+                {radiusDynamicVlanEnabled ? (
+                  <>
+                    <small>Only pre-provisioned office VLANs with a VLAN-filtered bridge, switch-port membership and a default-deny internal firewall zone are available. Unlisted RADIUS VLANs are rejected by hostapd.</small>
+                    <div className="wireless-radius-vlan-list">
+                      {radiusVlanMappings.map((mapping, index) => {
+                        const selected = eligibleRadiusVlans.find((item) =>
+                          item.vid === mapping.vid && item.network === mapping.network);
+                        return (
+                          <div className="wireless-radius-vlan-row" key={mapping.vid + ":" + mapping.network}>
+                            <div>
+                              <strong>VLAN {mapping.vid}</strong>
+                              <span>{selected ? selected.device + " · " + selected.zone : mapping.network + " · not eligible"}</span>
+                            </div>
+                            <select
+                              value={mapping.network}
+                              onChange={(event) => {
+                                const candidate = eligibleRadiusVlans.find((item) => item.network === event.target.value);
+                                if (!candidate) return;
+                                setRadiusVlanMappings((current) => current.map((item, position) =>
+                                  position === index ? { vid: candidate.vid, network: candidate.network } : item));
+                                setConfirmDisconnect(false);
+                                setNotice(null);
+                              }}
+                              disabled={saving || eligibleRadiusVlans.length === 0}
+                            >
+                              {eligibleRadiusVlans.map((item) => (
+                                <option value={item.network} key={item.network}>
+                                  VLAN {item.vid} · {item.network} · {item.zone}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              type="button"
+                              className="office-remove-start"
+                              onClick={() => {
+                                setRadiusVlanMappings((current) => current.filter((_, position) => position !== index));
+                                setConfirmDisconnect(false);
+                                setNotice(null);
+                              }}
+                              disabled={saving}
+                            >Remove</button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <button
+                      type="button"
+                      className="office-remove-start"
+                      onClick={() => {
+                        const usedNetworks = new Set(radiusVlanMappings.map((item) => item.network));
+                        const next = eligibleRadiusVlans.find((item) => !usedNetworks.has(item.network) &&
+                          !radiusVlanMappings.some((entry) => entry.vid === item.vid));
+                        if (!next || radiusVlanMappings.length >= 16) return;
+                        setRadiusVlanMappings((current) => [...current, { vid: next.vid, network: next.network }]);
+                        setConfirmDisconnect(false);
+                        setNotice(null);
+                      }}
+                      disabled={saving || radiusVlanMappings.length >= 16 ||
+                        !eligibleRadiusVlans.some((item) =>
+                          !radiusVlanMappings.some((entry) => entry.network === item.network || entry.vid === item.vid))}
+                    >Add VLAN mapping</button>
+                    {eligibleRadiusVlans.length === 0 ? (
+                      <div className="module-message">Create routed office VLAN interfaces and default-deny firewall zones in Office Networks before assigning RADIUS VLANs.</div>
+                    ) : null}
+                  </>
+                ) : (
+                  <small>RADIUS dynamic VLAN assignment is disabled for this AP. Saving removes only QuantumGrid-managed mappings.</small>
+                )}
+              </>
+            )}
+          </div>
+        ) : null}
         <label className="wireless-config-field">
           <span>RADIO CHANNEL</span>
           <select value={channel} onChange={(event) => setChannel(event.target.value)}>
@@ -4526,7 +4671,7 @@ function WirelessConfigEditor({
         ) : null}
       </div>
       <div className="module-message wireless-config-note">
-        The existing AP is edited in place; no new SSID or radio is created. Each AP is attached to one existing static L3 network interface, allowing a dedicated SSID to use an existing routed VLAN. The target network must belong to exactly one internal firewall zone; WAN/WWAN and ambiguous mappings are rejected. A management-route guard prevents moving the AP carrying the current administrator session away from that network. Personal passphrases and RADIUS shared secrets are never returned by the router API. WPA3-Enterprise forces 802.11w Protected Management Frames to required. RADIUS dynamic VLAN assignment remains unsupported; use one SSID per routed VLAN. Channel, width and transmit power remain radio-wide. Applying changes reloads Wi-Fi and can disconnect clients.
+        The existing AP is edited in place; no new SSID or radio is created. Each AP is attached to one existing static L3 network interface. The optional RADIUS dynamic VLAN manager is limited to pre-provisioned bridge VLANs with a routed static interface, switch-port membership and a default-deny firewall zone. It enables hostapd dynamic_vlan=2 (required VLAN assignment), writes explicit native wifi-vlan mappings, and rolls those mappings back with the AP configuration if Wi-Fi reload fails. Unmanaged/custom hostapd VLAN settings are preserved and made read-only. RADIUS dynamic assignment uses one allow-listed VLAN per RADIUS response; it does not create VLANs or subnets dynamically. WPA3-Enterprise requires Protected Management Frames. Channel, width and transmit power remain radio-wide. Applying changes reloads Wi-Fi and can disconnect clients.
       </div>
       <label className="wireless-config-confirm">
         <input type="checkbox" checked={confirmDisconnect} onChange={(event) => setConfirmDisconnect(event.target.checked)} />
@@ -4547,6 +4692,9 @@ function WirelessConfigEditor({
           setAccountingPort(String(config.accounting_port || 1813));
           setAccountingSecret("");
           setAccountingEnabled(Boolean(config.accounting_server));
+          setRadiusDynamicVlanEnabled(config.dynamic_vlan === 2 && !config.radius_vlan_unmanaged);
+          setRadiusVlanMappings(config.radius_vlan_mappings.filter((mapping) => mapping.managed)
+            .map((mapping) => ({ vid: String(mapping.vid), network: mapping.network })));
           setHidden(config.hidden);
           setChannel(currentChannel);
           setHtmode(currentHtmode);
@@ -4568,6 +4716,13 @@ function WirelessConfigEditor({
       {enterpriseMode && encryption === "wpa3" ? <div className="module-message">WPA3-Enterprise enforces Protected Management Frames (802.11w) as required.</div> : null}
       {pmfNeedsRepair ? <div className="module-message">This existing WPA3-Enterprise AP is missing mandatory Protected Management Frames. Saving will set 802.11w to required.</div> : null}
       {enterpriseMode && !radiusServerValid ? <div className="module-message">Enter a valid IPv4 RADIUS server address or DNS hostname.</div> : null}
+      {enterpriseMode && radiusDynamicVlanEnabled && !radiusVlanMappingsValid
+        ? <div className="module-message">Add at least one unique RADIUS VLAN mapping from the pre-provisioned default-deny office VLAN list. Each VLAN ID and routed network may appear only once.</div>
+        : null}
+      {enterpriseMode && config.radius_vlan_unmanaged
+        ? <div className="module-message">This AP has externally managed RADIUS VLAN options. QuantumGrid will preserve them and will not overwrite their UCI mappings.</div>
+        : null}
+
       {enterpriseMode && !radiusPortValid ? <div className="module-message">Enter a RADIUS authentication port from 1 to 65535.</div> : null}
       {radiusSecretRequired ? <div className="module-message">A new RADIUS shared secret is required when enabling enterprise security or changing its server.</div> : null}
       {enterpriseMode && accountingEnabled && !accountingServerValid ? <div className="module-message">Enter a valid accounting server or authentication server fallback.</div> : null}
@@ -4912,6 +5067,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
                     config={config}
                     radio={radios.find((item) => item.name === config.radio)}
                     networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
+                    officeInventory={routerOverview?.office_networks}
                     refresh={refresh}
                   />
                 ))}
