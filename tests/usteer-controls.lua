@@ -5,13 +5,13 @@ local binding = { network = "corp20", device = "br-lan.20", zone_name = "corp" }
 local aps = {
   {
     section = "ap24", radio = "radio0", mode = "ap", ssid = "Corp",
-    networks = { "corp20" }, encryption = "sae", key = "correct-horse-battery",
-    ieee80211k = "1", ieee80211v = "1",
+    networks = { "corp20" }, encryption = "sae", key = "correct-horse-battery", ieee80211w = "2", dynamic_vlan = "0",
+    acct_server = "", acct_port = 1813, acct_secret = "", ieee80211k = "1", ieee80211v = "1",
   },
   {
     section = "ap5", radio = "radio1", mode = "ap", ssid = "Corp",
-    networks = { "corp20" }, encryption = "sae", key = "correct-horse-battery",
-    ieee80211k = "1", ieee80211v = "1",
+    networks = { "corp20" }, encryption = "sae", key = "correct-horse-battery", ieee80211w = "2", dynamic_vlan = "0",
+    acct_server = "", acct_port = 1813, acct_secret = "", ieee80211k = "1", ieee80211v = "1",
   },
   {
     section = "guest24", radio = "radio0", mode = "ap", ssid = "Guest",
@@ -110,6 +110,34 @@ local different_key = {
 }
 assert(usteer.validate(input(), binding, different_key) == nil,
   "same-SSID local APs must use identical security credentials")
+
+local different_pmf = {
+  aps[1],
+  { section = "ap5", radio = "radio1", mode = "ap", ssid = "Corp", networks = { "corp20" },
+    encryption = "sae", key = "correct-horse-battery", ieee80211w = "1", dynamic_vlan = "0",
+    acct_server = "", acct_port = 1813, acct_secret = "", ieee80211k = "1", ieee80211v = "1" },
+}
+assert(usteer.validate(input(), binding, different_pmf) == nil,
+  "same-SSID local APs must use identical protected-management-frame policy")
+
+local different_vlan_mode = {
+  aps[1],
+  { section = "ap5", radio = "radio1", mode = "ap", ssid = "Corp", networks = { "corp20" },
+    encryption = "sae", key = "correct-horse-battery", ieee80211w = "2", dynamic_vlan = "2",
+    acct_server = "", acct_port = 1813, acct_secret = "", ieee80211k = "1", ieee80211v = "1" },
+}
+assert(usteer.validate(input(), binding, different_vlan_mode) == nil,
+  "same-SSID local APs must use the same dynamic VLAN mode")
+
+local different_accounting = {
+  aps[1],
+  { section = "ap5", radio = "radio1", mode = "ap", ssid = "Corp", networks = { "corp20" },
+    encryption = "sae", key = "correct-horse-battery", ieee80211w = "2", dynamic_vlan = "0",
+    acct_server = "accounting.corp.example", acct_port = 1813, acct_secret = "secret-value-16-byte",
+    ieee80211k = "1", ieee80211v = "1" },
+}
+assert(usteer.validate(input(), binding, different_accounting) == nil,
+  "same-SSID local APs must not silently diverge in accounting destinations or credentials")
 
 local disabled_ap = {
   { section = "ap24", radio = "radio0", mode = "ap", ssid = "Corp", networks = { "corp20" },
