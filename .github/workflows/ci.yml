@@ -208,7 +208,7 @@ jobs:
         run: lua5.1 tests/firewall-inventory.lua
       - name: Test live fw4 chain inventory and redaction
         run: lua5.1 tests/firewall-runtime.lua
-      - name: Test administrator HTTPS management transport posture
+      - name: Test administrator HTTPS and SSH management-plane posture
         run: lua5.1 tests/management-transport.lua
       - name: Test secure configuration backup validation
         run: lua5.1 tests/config-backup.lua
