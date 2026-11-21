@@ -8,6 +8,40 @@ export interface RouterDefaultRoute {
   protocol: string;
 }
 
+export interface RouterStaticRoute {
+  section: string;
+  family: "IPv4" | "IPv6";
+  interface: string;
+  target: string;
+  gateway: string;
+  metric?: number;
+  table: string;
+  enabled: boolean;
+}
+
+export interface RouterStaticRouteCreateResult {
+  ok: true;
+  section: string;
+  family: "IPv4" | "IPv6";
+  interface: string;
+  requested_target: string;
+  target: string;
+  gateway: string;
+  metric: number | null;
+  table: string;
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterStaticRouteRemoveResult {
+  ok: true;
+  section: string;
+  family: "IPv4" | "IPv6";
+  removed: true;
+  reloaded: true;
+  rolled_back: false;
+}
+
 export interface RouterPolicyRule {
   family: "IPv4" | "IPv6";
   priority: number;
@@ -1281,6 +1315,11 @@ export interface RouterOverview {
   timestamp: number;
   routes_available?: boolean;
   routes?: RouterDefaultRoute[];
+  static_routes_available?: boolean;
+  static_routes_count?: number;
+  static_routes_truncated?: boolean;
+  static_routes_invalid_count?: number;
+  static_routes?: RouterStaticRoute[];
   policy_rules_available?: boolean;
   policy_rules_count?: number;
   policy_rules_truncated?: boolean;
@@ -1315,6 +1354,8 @@ export interface RouterOverview {
 }
 
 const API_URL = "/cgi-bin/luci/admin/services/quantumgrid/api";
+const STATIC_ROUTE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/static-route-add";
+const STATIC_ROUTE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/static-route-remove";
 const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
@@ -3378,4 +3419,135 @@ export async function removeRouterDhcpScope(section: string): Promise<RouterDhcp
     throw new Error("The router did not confirm DHCP scope removal and dnsmasq restart.");
   }
   return payload as RouterDhcpScopeRemoveResult;
+}
+
+
+export async function createRouterStaticRoute(input: {
+  family: "IPv4" | "IPv6";
+  interface: string;
+  target: string;
+  gateway: string;
+  metric: string;
+  table: string;
+}): Promise<RouterStaticRouteCreateResult> {
+  if (input.family !== "IPv4" && input.family !== "IPv6") {
+    throw new Error("Select IPv4 or IPv6 for the static route.");
+  }
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.interface) ||
+      input.interface === "." || input.interface === "..") {
+    throw new Error("Select a valid existing network interface.");
+  }
+  if (!input.target || input.target.length > 64 || !input.target.includes("/")) {
+    throw new Error("Enter a destination network in explicit CIDR notation.");
+  }
+  if (input.family === "IPv4" &&
+      !/^(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\.(?:0|[1-9][0-9]{0,2})\/(?:[1-9]|[12][0-9]|3[0-2])$/.test(input.target)) {
+    throw new Error("Enter an IPv4 network CIDR with a prefix from /1 to /32.");
+  }
+  if (input.family === "IPv6" &&
+      !/^[0-9A-Fa-f:]+\/(?:[1-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$/.test(input.target)) {
+    throw new Error("Enter an IPv6 network CIDR with a prefix from /1 to /128.");
+  }
+  if (input.gateway.length > 64) {
+    throw new Error("Route gateway is too long.");
+  }
+  if (input.metric !== "" && !/^(?:0|[1-9][0-9]{0,4})$/.test(input.metric)) {
+    throw new Error("Route metric must be a whole number from 0 to 65535.");
+  }
+  if (input.metric !== "" && Number(input.metric) > 65535) {
+    throw new Error("Route metric must be a whole number from 0 to 65535.");
+  }
+  if (input.table !== "" &&
+      (!/^[1-9][0-9]{0,2}$/.test(input.table) ||
+       (Number(input.table) > 252 && Number(input.table) !== 254))) {
+    throw new Error("Custom route table must be a numeric ID from 1 to 252 or 254 (main).");
+  }
+
+  const form = new URLSearchParams();
+  form.set("family", input.family);
+  form.set("interface", input.interface);
+  form.set("target", input.target);
+  form.set("gateway", input.gateway);
+  form.set("metric", input.metric);
+  form.set("table", input.table);
+  form.set("confirmed", "1");
+  const response = await fetch(STATIC_ROUTE_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Static route changes require an active router administrator session."
+      : "The router returned an invalid static route response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid static route response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || typeof payload.section !== "string" ||
+      !/^[A-Za-z0-9_.-]{1,64}$/.test(payload.section) ||
+    !("family" in payload) || payload.family !== input.family ||
+    !("interface" in payload) || payload.interface !== input.interface ||
+    !("requested_target" in payload) || payload.requested_target !== input.target ||
+    !("target" in payload) || typeof payload.target !== "string" || payload.target.length === 0 ||
+    !("gateway" in payload) || typeof payload.gateway !== "string" ||
+    !("metric" in payload) || (payload.metric !== null && typeof payload.metric !== "number") ||
+    !("table" in payload) || typeof payload.table !== "string" ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the static route configuration and network reload.");
+  }
+  return payload as RouterStaticRouteCreateResult;
+}
+
+export async function removeRouterStaticRoute(section: string): Promise<RouterStaticRouteRemoveResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid static route section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(STATIC_ROUTE_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Static route changes require an active router administrator session."
+      : "The router returned an invalid static route removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid static route removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("family" in payload) || (payload.family !== "IPv4" && payload.family !== "IPv6") ||
+    !("removed" in payload) || payload.removed !== true ||
+    !("reloaded" in payload) || payload.reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm static route removal and network reload.");
+  }
+  return payload as RouterStaticRouteRemoveResult;
 }
