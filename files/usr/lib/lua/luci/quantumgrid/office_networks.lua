@@ -480,6 +480,98 @@ local function is_external_zone(zone)
 	return false
 end
 
+function validate_radius_dynamic_vlan_mappings(mappings, interfaces, bridges, vlans, zones)
+	if type(mappings) ~= "table" or #mappings < 1 or #mappings > 16 then
+		return nil, "RADIUS dynamic VLAN requires between 1 and 16 explicit VLAN-to-network mappings."
+	end
+
+	local result, seen_vids, seen_networks = {}, {}, {}
+	for index, mapping in ipairs(mappings) do
+		if type(mapping) ~= "table" then
+			return nil, "RADIUS VLAN mapping " .. tostring(index) .. " must be an object."
+		end
+		local vid = mapping.vid
+		if type(vid) == "number" then vid = tostring(vid) end
+		if type(vid) ~= "string" or #vid > 4 or not vid:match("^[1-9]%d*$") then
+			return nil, "Every RADIUS VLAN ID must be a whole number from 1 to 4094."
+		end
+		local numeric_vid = tonumber(vid)
+		if not numeric_vid or numeric_vid < 1 or numeric_vid > 4094 then
+			return nil, "Every RADIUS VLAN ID must be a whole number from 1 to 4094."
+		end
+		if seen_vids[numeric_vid] then
+			return nil, "Each RADIUS VLAN ID may be mapped only once per SSID."
+		end
+		seen_vids[numeric_vid] = true
+
+		local network = mapping.network
+		if type(network) ~= "string" or #network < 1 or #network > 64
+			or not network:match("^[%w_.%-]+$") or network == "." or network == ".." then
+			return nil, "Each RADIUS VLAN must map to one existing office network interface."
+		end
+		if seen_networks[network] then
+			return nil, "Each RADIUS VLAN must map to a different routed network interface."
+		end
+		seen_networks[network] = true
+
+		local binding, binding_error = validate_wireless_network_binding(network, interfaces, zones)
+		if not binding then return nil, binding_error end
+		local parent_bridge, device_vid = binding.device:match("^(.-)%.(%d+)$")
+		if not parent_bridge or tonumber(device_vid) ~= numeric_vid then
+			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
+				" must map to an existing routed interface whose device is <bridge>." .. tostring(numeric_vid) .. "."
+		end
+		local bridge_found = false
+		for _, bridge in ipairs(type(bridges) == "table" and bridges or {}) do
+			if type(bridge) == "table" and bridge.name == parent_bridge and bridge.vlan_filtering == true then
+				bridge_found = true
+				break
+			end
+		end
+		if not bridge_found then
+			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
+				" must use an existing bridge with VLAN filtering enabled."
+		end
+		local vlan_found = false
+		for _, vlan in ipairs(type(vlans) == "table" and vlans or {}) do
+			if type(vlan) == "table" and vlan.device == parent_bridge
+				and tonumber(vlan.vlan_id) == numeric_vid
+				and type(vlan.ports) == "table" and #vlan.ports > 0 then
+				vlan_found = true
+				break
+			end
+		end
+		if not vlan_found then
+			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
+				" has no existing bridge-VLAN section with explicit switch-port membership."
+		end
+		local zone = nil
+		for _, candidate in ipairs(type(zones) == "table" and zones or {}) do
+			if type(candidate) == "table" and candidate.section == binding.zone_section then
+				zone = candidate
+				break
+			end
+		end
+		if not zone or (zone.input ~= "REJECT" and zone.input ~= "DROP")
+			or (zone.forward ~= "REJECT" and zone.forward ~= "DROP") then
+			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
+				" must use an internal firewall zone with router INPUT and inter-zone FORWARD default-deny."
+		end
+
+		result[#result + 1] = {
+			vid = tostring(numeric_vid),
+			network = network,
+			device = binding.device,
+			bridge = parent_bridge,
+			zone = binding.zone_name,
+			name = "qg" .. tostring(numeric_vid)
+		}
+	end
+
+	table.sort(result, function(left, right) return tonumber(left.vid) < tonumber(right.vid) end)
+	return result
+end
+
 function validate_wireless_network_binding(network_name, interfaces, zones)
 	if type(network_name) ~= "string" or #network_name < 1 or #network_name > 64
 		or not network_name:match("^[%w_.%-]+$") or network_name == "." or network_name == ".." then
