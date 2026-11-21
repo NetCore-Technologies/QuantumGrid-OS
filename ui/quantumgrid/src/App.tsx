@@ -4529,7 +4529,9 @@ function WirelessConfigEditor({
             </div>
             {config.radius_vlan_unmanaged ? (
               <div className="module-message">
-                Existing dynamic VLAN settings are not wholly owned by QuantumGrid. They are left unchanged; edit them through the administrator-managed hostapd configuration or remove the external mapping before using this editor.
+                Existing RADIUS VLAN settings are not wholly owned by QuantumGrid and are left unchanged.
+                {config.dynamic_vlan > 0 ? " The AP currently reports dynamic_vlan=" + config.dynamic_vlan + "." : " Custom hostapd VLAN options or manually defined wifi-vlan mappings were detected."}
+                Edit them through administrator-managed hostapd configuration or remove the external mapping before using this editor.
               </div>
             ) : (
               <>
@@ -5063,7 +5065,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
               <div className="wireless-config-list">
                 {wirelessConfigs.sections.map((config) => (
                   <WirelessConfigEditor
-                    key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.channel, config.htmode, config.txpower, config.key_set].join(":")}
+                    key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.dynamic_vlan, config.radius_vlan_unmanaged, config.radius_vlan_mappings.map((item) => item.vid + ":" + item.network).join(","), config.channel, config.htmode, config.txpower, config.key_set].join(":")}
                     config={config}
                     radio={radios.find((item) => item.name === config.radio)}
                     networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
