@@ -257,9 +257,9 @@ local wifi_aps = {
   { section = "guest_ap", ssid = "Office-Guest", networks = { "guest" } },
 }
 local radius_vlan_interfaces = {
-  { name = "corp20", protocol = "static", device = "br-lan.20" },
-  { name = "guest30", protocol = "static", device = "br-lan.30" },
-  { name = "wan20", protocol = "static", device = "br-wan.20" },
+  { name = "corp20", protocol = "static", device = "br-lan.20", ipv4 = { "192.168.20.1" } },
+  { name = "guest30", protocol = "static", device = "br-lan.30", ipv4 = { "192.168.30.1" } },
+  { name = "wan20", protocol = "static", device = "br-wan.20", ipv4 = { "192.168.40.1" } },
 }
 local radius_vlan_bridges = {
   { name = "br-lan", vlan_filtering = true, ports = { "lan1", "lan2" } },
@@ -309,6 +309,13 @@ reject_radius_vlans({ { vid = "20", network = "corp20" } }, "bridge filtering di
 reject_radius_vlans({ { vid = "20", network = "corp20" } }, "zone without default-deny policy",
   radius_vlan_bridges, radius_vlan_sections,
   { { section = "corp_zone", name = "corp", networks = { "corp20" }, input = "ACCEPT", forward = "REJECT" } })
+local no_ipv4_mapping, no_ipv4_error = office.validate_radius_dynamic_vlan_mappings(
+  { { vid = "20", network = "corp20" } },
+  { { name = "corp20", protocol = "static", device = "br-lan.20" } },
+  radius_vlan_bridges, radius_vlan_sections, radius_vlan_zones)
+assert(no_ipv4_mapping == nil and type(no_ipv4_error) == "string" and
+  no_ipv4_error:find("routed IPv4 office segment", 1, true),
+  "RADIUS dynamic VLAN assignment requires a routed IPv4 gateway")
 local wifi_interfaces = {
   { name = "corp", protocol = "static" },
   { name = "guest", protocol = "static" },
