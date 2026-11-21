@@ -187,6 +187,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireguard.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/conntrack.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireless.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/usteer.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/packages.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/package_operations.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/kernel_modules.lua
