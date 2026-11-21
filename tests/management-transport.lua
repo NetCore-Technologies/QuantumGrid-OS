@@ -304,4 +304,4 @@ assert(response.headers["Cache-Control"] == "no-store")
 assert(response.content_type == "application/json; charset=UTF-8")
 assert(response.body.ok == false and response.body.error:find("HTTPS", 1, true))
 
-print("management-transport: HTTPS readiness and plaintext HTTP posture tests passed")
+print("management-transport: HTTPS and SSH management-plane posture tests passed")
