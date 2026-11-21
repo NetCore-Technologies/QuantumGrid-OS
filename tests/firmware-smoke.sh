@@ -16,6 +16,13 @@ grep -Fq 'management_transport = management_transport.inspect(uci, fs)' "$ROOT/f
 grep -Fq 'local management_transport = require "luci.quantumgrid.management_transport"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'root_password_set = type(root_hash) == "string" and root_hash ~= ""' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'plaintext_http_unredirected' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
+grep -Fq 'local function dropbear_status(uci, fs)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
+grep -Fq 'ssh_password_auth_enabled' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua" && exit 1
+grep -Fq 'ssh_password_authentication' "$ROOT/ui/quantumgrid/src/App.tsx" && exit 1
+grep -Fq 'ssh_status' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
+grep -Fq 'ssh_status?: "ready" | "review" | "unavailable" | "disabled"' "$ROOT/ui/quantumgrid/src/routerApi.ts"
+grep -Fq 'SSH configuration posture' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'SSH root password authentication' "$ROOT/ui/quantumgrid/src/App.tsx"
 CONTROLLER="$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 POST_GUARDS="$(grep -Fc 'if http.getenv("REQUEST_METHOD") ~= "POST" then' "$CONTROLLER")"
 HTTPS_GUARDS="$(grep -Fc 'if not require_https(http) then return end' "$CONTROLLER")"
