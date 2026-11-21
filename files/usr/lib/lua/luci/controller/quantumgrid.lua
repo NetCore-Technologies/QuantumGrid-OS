@@ -3126,8 +3126,11 @@ local function office_network_status(uci, fs)
 			local source_port = tonumber(section.src_dport)
 			local destination_port = tonumber(section.dest_port)
 			local destination_ip = tostring(section.dest_ip or "")
+			local target = tostring(section.target or "DNAT"):upper()
+			local family = tostring(section.family or ""):lower()
 			if section_name:match("^[%w_.%-]+$") and name:match("^[%w_.%-]+$")
 				and source_zone:match("^[%w_.%-]+$") and destination_zone:match("^[%w_.%-]+$")
+				and target == "DNAT" and (family == "" or family == "ipv4")
 				and (protocol == "tcp" or protocol == "udp" or protocol == "tcp udp")
 				and source_port and source_port >= 1 and source_port <= 65535
 				and destination_port and destination_port >= 1 and destination_port <= 65535
@@ -3141,7 +3144,9 @@ local function office_network_status(uci, fs)
 					source_port = source_port,
 					destination_ip = destination_ip,
 					destination_port = destination_port,
-					enabled = section.enabled ~= "0"
+					enabled = section.enabled ~= "0",
+					target = target,
+					family = family
 				})
 			end
 		end)
