@@ -188,9 +188,11 @@ local dependency = qos.find_download_reservation_policy(
 assert(dependency and dependency.direction == "download",
   "a matching downlink rule must be tied to its static reservation")
 assert(qos.find_download_reservation_policy(
-  dependency_policies, "02:11:22:33:44:56", "192.168.20.40") == nil)
+  dependency_policies, "02:11:22:33:44:56", "192.168.20.40") ~= nil,
+  "a reused reserved IP must be treated as a dependency even when the MAC differs")
 assert(qos.find_download_reservation_policy(
-  dependency_policies, "02:11:22:33:44:55", "192.168.20.41") == nil)
+  dependency_policies, "02:11:22:33:44:55", "192.168.20.41") ~= nil,
+  "a client MAC remains a dependency if its reserved IP changes")
 assert(qos.find_download_reservation_policy(dependency_policies, "bad-mac", "192.168.20.40") == nil)
 
 assert(qos.find_download_policy_conflict(
