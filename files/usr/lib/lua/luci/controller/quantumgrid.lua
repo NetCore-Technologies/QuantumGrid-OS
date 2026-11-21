@@ -3326,8 +3326,10 @@ local function remote_syslog_status(uci, fs)
 	end
 
 	local connect = first_value(tunnel.connect)
-	local remote_host, remote_port = type(connect) == "string" and connect:match("^([^:]+):([1-9]%d*)$") or nil, nil
-	if type(connect) == "string" then remote_host, remote_port = connect:match("^([^:]+):([1-9]%d*)$") end
+	local remote_host, remote_port
+	if type(connect) == "string" then
+		remote_host, remote_port = connect:match("^([^:]+):([1-9]%d*)$")
+	end
 	if remote_host then
 		remote_port = tonumber(remote_port)
 		if remote_port and remote_port <= 65535 then
