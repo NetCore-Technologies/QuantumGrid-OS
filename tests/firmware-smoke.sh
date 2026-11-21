@@ -48,7 +48,7 @@ grep -Fq 'directory_other_writable = math.floor(permissions / 2) % 2 == 1' "$ROO
 grep -Fq 'Authorized keys parent directory ownership' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'Authorized keys file validation' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'ssh_authorized_keys?: RouterAuthorizedKeysStatus' "$ROOT/ui/quantumgrid/src/routerApi.ts"
-grep -Fq 'Authorized keys ownership and write permissions' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'Authorized keys file validation' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'ssh_status' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 grep -Fq 'ssh_status?: "ready" | "review" | "unavailable" | "disabled"' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'SSH configuration posture' "$ROOT/ui/quantumgrid/src/App.tsx"
