@@ -122,7 +122,11 @@ local function global_unicast_ipv6(value, allow_prefix)
 	if not parsed then return nil end
 	local first, second = parsed.groups[1], parsed.groups[2]
 	if first < 0x2000 or first > 0x3fff then return nil end
-	if first == 0x2001 and second == 0x0db8 then return nil end
+	-- Reject IANA special-purpose prefixes inside 2000::/3: 2001::/23 (including
+	-- Teredo/benchmarking/ORCHID/documentation) and the 3fff::/20 documentation block.
+	if first == 0x2001 and second < 0x0200 then return nil end
+	if first == 0x2002 then return nil end -- Deprecated 6to4 transition prefix.
+	if first == 0x3fff and second < 0x1000 then return nil end
 	return parsed.canonical
 end
 
