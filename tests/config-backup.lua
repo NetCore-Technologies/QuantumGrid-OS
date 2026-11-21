@@ -19,4 +19,64 @@ assert(backup.validate_archive_size(0) == nil, "empty archive must be rejected")
 assert(backup.validate_archive_size(64 * 1024 * 1024 + 1) == nil, "oversized archive must be rejected")
 assert(backup.validate_archive_size("100") == nil, "string size must be rejected")
 
-print("config-backup: confirmation, temp path and archive size checks passed")
+assert(backup.validate_restore_confirmation("1", "1") == true)
+assert(backup.validate_restore_confirmation("0", "1") == nil)
+assert(backup.validate_restore_confirmation("1", "0") == nil)
+assert(backup.validate_restore_confirmation(nil, nil) == nil)
+
+local valid_listing = table.concat({
+  "drwxr-xr-x root/root 0 2026-11-22 00:00 ./etc/",
+  "drwxr-xr-x root/root 0 2026-11-22 00:00 ./etc/config/",
+  "-rw------- root/root 128 2026-11-22 00:00 ./etc/config/network",
+  "-rw------- root/root 32 2026-11-22 00:00 ./etc/quantumgrid/device-id",
+  "-rw------- root/root 64 2026-11-22 00:00 ./root/.profile",
+}, "\\n")
+local listing, listing_error = backup.validate_archive_listing(valid_listing)
+assert(listing ~= nil, listing_error or "valid native backup listing should pass")
+assert(listing.count == 5 and listing.device_id_path == "./etc/quantumgrid/device-id")
+
+local rejected_listings = {
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+    "lrwxrwxrwx root/root 0 2026-11-22 00:00 etc/config/evil -> /etc/shadow",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 ../etc/config/network",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 /etc/config/network",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 var/spool/cron/root",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+  }, "\\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+    "-rw------- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id",
+  }, "\\n"),
+  table.concat({
+    "-rw------- root/root 128 2026-11-22 00:00 etc/config/network",
+    "hrw-r--r-- root/root 32 2026-11-22 00:00 etc/quantumgrid/device-id link to etc/config/network",
+  }, "\\n"),
+}
+for _, invalid_listing in ipairs(rejected_listings) do
+  assert(backup.validate_archive_listing(invalid_listing) == nil,
+    "unsafe or incomplete restore archive listing must fail closed")
+end
+assert(backup.validate_archive_listing("") == nil)
+assert(backup.validate_archive_listing(string.rep("x", 4 * 1024 * 1024 + 1)) == nil)
+
+local device_id = "0123456789abcdef0123456789abcdef"
+assert(backup.validate_device_identity(device_id .. "\\n", device_id) == true)
+assert(backup.validate_device_identity(device_id, "fedcba9876543210fedcba9876543210") == nil)
+assert(backup.validate_device_identity("not-a-device-id", device_id) == nil)
+assert(backup.validate_device_identity(nil, device_id) == nil)
+
+print("config-backup: backup, archive type/path, same-device and restore confirmation checks passed")
