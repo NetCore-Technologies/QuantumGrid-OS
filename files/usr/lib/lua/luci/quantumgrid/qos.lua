@@ -2,7 +2,14 @@ module("luci.quantumgrid.qos", package.seeall)
 
 local POLICY_PREFIX = "QuantumGrid client QoS: "
 local DEFAULT_LIMIT = 32
-local EXTERNAL_NAMES = { wan = true, wan6 = true, wwan = true, cellular = true, lte = true, ["5g"] = true }
+local EXTERNAL_NAMES = {
+	wan = true, wan6 = true, wwan = true, cellular = true, lte = true, ["5g"] = true,
+	mobile = true, internet = true, upstream = true, public = true, uplink = true
+}
+local EXTERNAL_PROTOCOLS = {
+	dhcp = true, dhcpv6 = true, ppp = true, pppoe = true, qmi = true,
+	mbim = true, ncm = true, ["3g"] = true, wwan = true, modem = true
+}
 local ALLOWED_DSCP = { BE = true, AF41 = true, EF = true, CS1 = true }
 
 local function valid_token(value)
@@ -34,12 +41,21 @@ local function unique_zone(zones, name)
 	return matches == 1 and found or nil
 end
 
-local function is_external_zone(zone)
+local function is_external_zone(zone, interfaces)
 	if type(zone) ~= "table" then return false end
 	local name = type(zone.name) == "string" and zone.name:lower() or ""
 	if EXTERNAL_NAMES[name] or zone.masquerade == true then return true end
+	local networks = {}
 	for _, network in ipairs(zone_network_list(zone.networks)) do
-		if EXTERNAL_NAMES[network:lower()] then return true end
+		local normalized = network:lower()
+		networks[normalized] = true
+		if EXTERNAL_NAMES[normalized] then return true end
+	end
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and type(iface.name) == "string" and networks[iface.name:lower()] then
+			local protocol = type(iface.protocol) == "string" and iface.protocol:lower() or ""
+			if EXTERNAL_PROTOCOLS[protocol] then return true end
+		end
 	end
 	return false
 end
@@ -54,7 +70,7 @@ local function normalize_unicast_mac(value)
 	return mac
 end
 
-function validate_client_policy(mac, source_zone, destination_zone, dscp_class, zones)
+function validate_client_policy(mac, source_zone, destination_zone, dscp_class, zones, interfaces)
 	local normalized_mac = normalize_unicast_mac(mac)
 	if not normalized_mac then
 		return nil, "Choose one unicast client MAC address in six-octet notation."
@@ -74,10 +90,10 @@ function validate_client_policy(mac, source_zone, destination_zone, dscp_class, 
 	if not source or not destination then
 		return nil, "Both firewall zones must already exist in the current inventory."
 	end
-	if is_external_zone(source) then
+	if is_external_zone(source, interfaces) then
 		return nil, "Per-client upload marking must start in an internal LAN/office zone."
 	end
-	if not is_external_zone(destination) then
+	if not is_external_zone(destination, interfaces) then
 		return nil, "Per-client upload marking must target an existing WAN/WWAN zone."
 	end
 	return {

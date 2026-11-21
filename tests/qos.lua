@@ -64,6 +64,22 @@ local custom_external = qos.validate_client_download_policy(
   custom_masquerade_zones, download_interfaces, download_leases)
 assert(custom_external and custom_external.direction == "download",
   "a custom masquerading WAN zone must be classified as external")
+local custom_dhcp_zones = {
+  { name = "fiber-edge", networks = { "fiber0" }, masquerade = false },
+  { name = "corp", networks = { "corp" }, masquerade = false },
+}
+local custom_dhcp_interfaces = {
+  { name = "fiber0", protocol = "dhcp", ipv4 = { "198.51.100.2" }, netmask = "255.255.255.0", firewall_zones = { "fiber-edge" } },
+  { name = "corp", protocol = "static", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0", firewall_zones = { "corp" } },
+}
+local custom_dhcp_download = qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "fiber-edge", "corp", "AF41",
+  custom_dhcp_zones, custom_dhcp_interfaces, download_leases)
+assert(custom_dhcp_download and custom_dhcp_download.direction == "download",
+  "custom-named DHCP uplinks must be detected from attached interface protocol")
+assert(qos.validate_client_policy(
+  "02:11:22:33:44:55", "corp", "fiber-edge", "AF41", custom_dhcp_zones, custom_dhcp_interfaces),
+  "upload policy direction must use the same dynamic-uplink classifier")
 
 local download = qos.validate_client_download_policy(
   "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",

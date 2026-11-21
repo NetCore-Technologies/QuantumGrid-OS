@@ -1328,6 +1328,8 @@ grep -Fq 'function detect_cake_profile(options)' "$ROOT/files/usr/lib/lua/luci/q
 grep -Fq 'function action_sqm_cake_profile()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 test -f "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"
 grep -Fq 'function validate_client_download_policy' "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"
+grep -Fq 'local EXTERNAL_PROTOCOLS' "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"
+grep -Fq 'EXTERNAL_PROTOCOLS[protocol]' "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"
 grep -Fq 'local MANAGED_UPLOAD_OPTIONS' "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"
 grep -Fq 'local MANAGED_DOWNLOAD_OPTIONS' "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"
 grep -Fq 'has_only_managed_policy_options(section, MANAGED_UPLOAD_OPTIONS)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/qos.lua"

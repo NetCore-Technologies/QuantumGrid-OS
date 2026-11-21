@@ -6723,9 +6723,12 @@ function SqmClientQosManager({
   staticLeases: RouterOfficeStaticLease[];
   refresh: () => void;
 }) {
+  const externalProtocols = new Set(["dhcp", "dhcpv6", "ppp", "pppoe", "qmi", "mbim", "ncm", "3g", "wwan", "modem"]);
+  const externalNames = new Set(["wan", "wan6", "wwan", "cellular", "lte", "5g", "mobile", "internet", "upstream", "public", "uplink"]);
   const isExternalZone = (zone: RouterOfficeFirewallZone) =>
-    zone.masquerade || ["wan", "wan6", "wwan", "cellular", "lte", "5g"].includes(zone.name.toLowerCase()) ||
-    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular", "lte", "5g"].includes(network.toLowerCase()));
+    zone.masquerade || externalNames.has(zone.name.toLowerCase()) ||
+    zone.networks.some((network) => externalNames.has(network.toLowerCase()) ||
+      interfaces.some((iface) => iface.name.toLowerCase() === network.toLowerCase() && externalProtocols.has(iface.protocol.toLowerCase())));
   const internalZones = zones.filter((zone) => !isExternalZone(zone));
   const externalZones = zones.filter(isExternalZone);
   const [direction, setDirection] = useState<"upload" | "download">("upload");
