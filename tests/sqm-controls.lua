@@ -71,4 +71,38 @@ assert(queue_state({ enabled = false, qdisc = "cake", interface = "wan" }, {}, t
 assert(queue_state({ enabled = true, qdisc = "", interface = "wan" }, {}, true, false) == "unconfigured",
 	"queues without a configured qdisc must remain unconfigured")
 
-print("sqm-controls: runtime qdisc attribution and validation tests passed")
+
+local runtime_available, parsed_qdiscs, parsed_truncated = sqm.parse_qdisc_inventory(table.concat({
+	"qdisc cake 8001: dev wan root refcnt 2",
+	" Sent 12345 bytes 67 pkt (dropped 3, overlimits 4 requeues 0)",
+	" backlog 128b 2p requeues 0",
+	"qdisc fq_codel 0: dev lan parent 1:10",
+	" Sent 900 bytes 9 pkt (dropped 0, overlimits 1 requeues 0)",
+}, "\\n"))
+assert(runtime_available and not parsed_truncated and #parsed_qdiscs == 2,
+	"recognised tc qdisc output should produce a complete inventory")
+assert(parsed_qdiscs[1].kind == "cake" and parsed_qdiscs[1].handle == "8001:" and
+	parsed_qdiscs[1].device == "wan" and parsed_qdiscs[1].root,
+	"root CAKE header fields should be parsed")
+assert(parsed_qdiscs[1].bytes == 12345 and parsed_qdiscs[1].packets == 67 and
+	parsed_qdiscs[1].dropped == 3 and parsed_qdiscs[1].overlimits == 4 and
+	parsed_qdiscs[1].requeues == 0,
+	"qdisc traffic counters should be parsed as numbers")
+assert(parsed_qdiscs[1].backlog_bytes == 128 and parsed_qdiscs[1].backlog_packets == 2,
+	"qdisc backlog counters should be parsed")
+assert(parsed_qdiscs[2].kind == "fq_codel" and not parsed_qdiscs[2].root and
+	parsed_qdiscs[2].parent == "1:10", "child qdisc parent details should be parsed")
+local empty_available, empty_qdiscs, empty_truncated = sqm.parse_qdisc_inventory("")
+assert(not empty_available and #empty_qdiscs == 0 and not empty_truncated,
+	"empty tc output must not be reported as a successful runtime inventory")
+local invalid_available = sqm.parse_qdisc_inventory("tc: command not found")
+assert(not invalid_available, "unrecognised tc output must remain unavailable")
+local many_headers = {}
+for index = 1, 65 do
+	table.insert(many_headers, "qdisc cake " .. tostring(index) .. ": dev wan root")
+end
+local capped_available, capped_qdiscs, capped_truncated = sqm.parse_qdisc_inventory(table.concat(many_headers, "\\n"))
+assert(capped_available and #capped_qdiscs == 64 and capped_truncated,
+	"runtime qdisc parsing must cap memory and explicitly report truncation")
+
+print("sqm-controls: runtime qdisc parsing, attribution and validation tests passed")
