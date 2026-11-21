@@ -3162,7 +3162,9 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Management transport", "Posture", managementTransport?.status?.toUpperCase() ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTPS readiness", managementTransport?.https_configured ? "CONFIGURED" : "NOT VERIFIED", ""],
       [exportedAt, "Management transport", "HTTPS private key", managementTransport?.private_key?.status?.toUpperCase() ?? "NOT REPORTED",
-        "root_owned=" + (managementTransport?.private_key?.root_owned ?? "unknown") +
+        "path=" + (managementTransport?.private_key?.path ?? "unknown") +
+          "; bytes=" + (managementTransport?.private_key?.size_bytes ?? "unknown") +
+          "; root_owned=" + (managementTransport?.private_key?.root_owned ?? "unknown") +
           "; regular_file=" + (managementTransport?.private_key?.regular_file ?? "unknown") +
           "; group_access=" + (managementTransport?.private_key?.group_access ?? "unknown") +
           "; other_access=" + (managementTransport?.private_key?.other_access ?? "unknown")],
@@ -3310,6 +3312,9 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["TLS runtime library", managementTransport.tls_library_available ? "AVAILABLE" : "MISSING"],
               ["Non-empty certificate and private key", managementTransport.certificate_available ? "PRESENT" : "MISSING"],
               ["HTTPS private key file posture", managementTransport.private_key?.status?.toUpperCase() ?? "UNKNOWN"],
+              ["HTTPS private key file", managementTransport.private_key?.path ?? "UNKNOWN"],
+              ["HTTPS private key type", managementTransport.private_key?.regular_file === true ? "REGULAR FILE" : managementTransport.private_key?.regular_file === false ? "NOT A REGULAR FILE" : "UNKNOWN"],
+              ["HTTPS private key size", managementTransport.private_key?.size_bytes == null ? "UNKNOWN" : fmt(managementTransport.private_key.size_bytes) + " bytes"],
               ["HTTPS private key owner", managementTransport.private_key?.root_owned === true ? "ROOT" : managementTransport.private_key?.root_owned === false ? "NOT ROOT" : "UNKNOWN"],
               ["HTTPS private key permissions", managementTransport.private_key?.group_access === false && managementTransport.private_key?.other_access === false ? "NO GROUP / OTHER ACCESS" : managementTransport.private_key?.group_access === true || managementTransport.private_key?.other_access === true ? "EXPOSED" : "UNKNOWN"],
               ["Certificate SHA-256 fingerprint", managementTransport.certificate_fingerprint?.available ? managementTransport.certificate_fingerprint.value ?? "UNKNOWN" : "UNAVAILABLE"],
