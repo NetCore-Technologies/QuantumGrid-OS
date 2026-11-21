@@ -10466,3 +10466,75 @@ input::placeholder {
     grid-column: 1;
   }
 }
+
+/* Managed dual-stack static route inventory and guarded editor */
+.static-route-manager {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 14px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255,255,255,.018);
+}
+.static-route-manager .office-reservation-confirm {
+  padding-top: 2px;
+}
+.static-route-manager .office-segment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.static-route-manager .office-segment-actions > span {
+  color: var(--muted2);
+  font-size: 8px;
+  line-height: 1.5;
+}
+.static-route-list {
+  margin-top: 10px;
+}
+.static-route-row {
+  grid-template-columns: minmax(190px, 1.6fr) minmax(110px, .9fr) minmax(115px, .9fr) auto;
+}
+.static-route-row > div:not(.device-title) {
+  min-width: 0;
+}
+.static-route-row b,
+.static-route-row small {
+  overflow-wrap: anywhere;
+}
+.static-route-remove {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.static-route-remove .hero-button {
+  padding: 8px 10px;
+  font-size: 8px;
+}
+@media (max-width: 900px) {
+  .static-route-row {
+    grid-template-columns: minmax(170px, 1.3fr) repeat(2, minmax(100px, 1fr));
+  }
+  .static-route-remove {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+}
+@media (max-width: 650px) {
+  .static-route-row {
+    grid-template-columns: 1fr 1fr;
+  }
+  .static-route-row .device-title {
+    grid-column: 1 / -1;
+  }
+  .static-route-remove {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .static-route-manager .office-segment-fields {
+    grid-template-columns: 1fr;
+  }
+}
