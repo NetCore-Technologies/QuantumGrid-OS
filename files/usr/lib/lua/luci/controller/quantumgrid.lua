@@ -355,6 +355,12 @@ local function wireless_vlan_owned_for_ap(section, ap_section)
 	local iface_list = wireless_option_list(section.iface)
 	local network_list = wireless_option_list(section.network)
 	local numeric_vid = tonumber(vid)
+	for option in pairs(section) do
+		if type(option) == "string" and option:sub(1, 1) ~= "." and
+			option ~= "name" and option ~= "vid" and option ~= "iface" and option ~= "network" then
+			return false
+		end
+	end
 	return #ap_section <= 48
 		and vid:match("^[1-9]%d*$") ~= nil
 		and numeric_vid ~= nil and numeric_vid >= 1 and numeric_vid <= 4094
