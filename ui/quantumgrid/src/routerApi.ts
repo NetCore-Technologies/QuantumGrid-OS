@@ -646,8 +646,20 @@ export interface RouterKernelModuleInventory {
   modules: RouterKernelModule[];
 }
 
+export type RouterDeviceProfileCapabilityDeclaration =
+  | "declared-supported"
+  | "not-declared"
+  | "unknown";
+
+export interface RouterDeviceProfileCapabilities {
+  available: boolean;
+  nss: RouterDeviceProfileCapabilityDeclaration;
+  fxs: RouterDeviceProfileCapabilityDeclaration;
+}
+
 export interface RouterRuntimeDeviceProfile {
   available: boolean;
+  capabilities?: RouterDeviceProfileCapabilities;
   status: "matched" | "mismatch" | "unknown" | "unavailable";
   profile_id?: string;
   vendor?: string;
