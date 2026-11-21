@@ -646,6 +646,12 @@ export interface RouterKernelModuleInventory {
   modules: RouterKernelModule[];
 }
 
+export interface RouterDeviceIdentity {
+  available: boolean;
+  status: "available" | "unavailable";
+  id?: string;
+}
+
 export type RouterDeviceProfileCapabilityDeclaration =
   | "declared-supported"
   | "not-declared"
@@ -674,6 +680,7 @@ export interface RouterRuntimeDeviceProfile {
 export interface RouterPlatformStatus {
   available: boolean;
   device_profile?: RouterRuntimeDeviceProfile;
+  device_identity?: RouterDeviceIdentity;
   hostname?: string;
   model?: string;
   board_name?: string;
