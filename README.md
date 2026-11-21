@@ -62,6 +62,11 @@ cd QuantumGrid-OS
 ./build.sh
 ```
 
+The build pins the phone-feed tag `v0.9.0` to commit `fe85222e57d1c3e191ffb976b37667bbf221a020` and refuses to
+continue when that tag resolves to different source. Use both
+`QG_AW1000_PHONE_REF` and `QG_AW1000_PHONE_EXPECTED_SHA` when deliberately selecting
+another feed tag; the manual firmware workflow exposes the same paired inputs.
+
 The build script fetches the pinned RJ11 source feed, updates OpenWrt feeds, applies
 `configs/aw1000-max.config`, installs QuantumGrid first-boot files and builds the AW1000 target.
 

@@ -100,6 +100,13 @@ The Security Center reports configured HTTPS listener entries, TLS runtime avail
 non-empty certificate/key files and HTTP redirect configuration. This is a configuration-
 level check; it does not probe live sockets or external reachability.
 
+The optional RJ11 FXS packages are sourced from the third-party
+`Perz3us/openwrt-aw1000-phone` repository. QuantumGrid pins the `v0.9.0` feed to
+commit `fe85222e57d1c3e191ffb976b37667bbf221a020`; the upstream commit is unsigned, so this pin enforces exact source
+identity but does not cryptographically authenticate the upstream author's identity.
+The FXS service remains disabled by default and still requires the separate Skyworks
+SLIC patch and physical telephony validation.
+
 The default device certificate is self-signed. HTTPS encrypts the management session,
 but it does not provide a publicly trusted device identity. Administrators should verify
 the certificate fingerprint over a trusted channel and keep the management interface

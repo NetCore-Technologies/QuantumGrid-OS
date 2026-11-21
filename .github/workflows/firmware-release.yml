@@ -18,6 +18,16 @@ on:
         required: true
         default: "64900e756efa667774214f9c6b17c113222e01f7"
         type: string
+      phone_ref:
+        description: "AW1000 phone feed tag to build"
+        required: true
+        default: "v0.9.0"
+        type: string
+      phone_expected_sha:
+        description: "Expected full 40-character commit SHA for the selected phone feed tag"
+        required: true
+        default: "fe85222e57d1c3e191ffb976b37667bbf221a020"
+        type: string
       enable_nss:
         description: "Build experimental Qualcomm NSS/EDMA profile (qosmio 25.12-nss fork)"
         required: true
@@ -40,6 +50,8 @@ jobs:
     env:
       QG_OPENWRT_REF: ${{ inputs.openwrt_ref || 'v25.12.6' }}
       QG_OPENWRT_EXPECTED_SHA: ${{ inputs.openwrt_expected_sha || '64900e756efa667774214f9c6b17c113222e01f7' }}
+      QG_AW1000_PHONE_REF: ${{ inputs.phone_ref || 'v0.9.0' }}
+      QG_AW1000_PHONE_EXPECTED_SHA: ${{ inputs.phone_expected_sha || 'fe85222e57d1c3e191ffb976b37667bbf221a020' }}
       QG_ENABLE_NSS: ${{ inputs.enable_nss && '1' || '0' }}
       QG_NSS_OPENWRT_REF: "25.12-nss"
       QG_NSS_EXPECTED_SHA: "d6848fa2ea00193b5b7d3973e3990da7f608027c"
@@ -140,6 +152,8 @@ jobs:
 
           SOURCE_SHA="$(git rev-parse HEAD)"
           OPENWRT_SHA="$(git -C openwrt rev-parse HEAD)"
+          PHONE_REF="${QG_AW1000_PHONE_REF:-v0.9.0}"
+          PHONE_EXPECTED_SHA="${QG_AW1000_PHONE_EXPECTED_SHA:-fe85222e57d1c3e191ffb976b37667bbf221a020}"
           PHONE_SHA="$(git -C third_party/openwrt-aw1000-phone rev-parse HEAD)"
           CONFIG_SHA="$(sha256sum configs/aw1000-max.config | cut -d' ' -f1)"
           NSS_FRAGMENT_SHA="not-used"
@@ -166,7 +180,9 @@ jobs:
             echo "OpenWrt requested ref: $OPENWRT_REQUESTED_REF"
             echo "OpenWrt expected commit: $OPENWRT_EXPECTED_SHA"
             echo "OpenWrt resolved commit: $OPENWRT_SHA"
-            echo "AW1000 phone source commit: $PHONE_SHA"
+            echo "AW1000 phone requested ref: $PHONE_REF"
+            echo "AW1000 phone expected commit: $PHONE_EXPECTED_SHA"
+            echo "AW1000 phone resolved commit: $PHONE_SHA"
             echo "AW1000 config SHA-256: $CONFIG_SHA"
             echo "NSS fragment SHA-256: $NSS_FRAGMENT_SHA"
             echo "Build runner: $RUNNER_OS / $RUNNER_ARCH"

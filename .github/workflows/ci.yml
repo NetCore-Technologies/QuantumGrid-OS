@@ -124,6 +124,8 @@ jobs:
           bash -n build.sh
           bash -n quantumgrid-configure.sh
           bash -n scripts/setup-aw1000-phone-feed.sh
+          bash -n tests/phone-feed-pin-smoke.sh
+          bash tests/phone-feed-pin-smoke.sh
           bash -n scripts/verify-aw1000-ubi.sh
           bash -n scripts/install-aw1000-ubi.sh
           sh -n scripts/inspect-aw1000-install-target.sh
