@@ -1160,6 +1160,8 @@ function index()
 	entry({"admin", "services", "quantumgrid", "office-wifi-network-update"}, call("action_office_wifi_network_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-port-forward-add"}, call("action_office_port_forward_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-port-forward-remove"}, call("action_office_port_forward_remove")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-add"}, call("action_office_ipv6_pinhole_add")).leaf = true
+	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-remove"}, call("action_office_ipv6_pinhole_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-segment-add"}, call("action_office_segment_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "static-route-add"}, call("action_static_route_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "static-route-remove"}, call("action_static_route_remove")).leaf = true
@@ -2992,6 +2994,7 @@ end
 local function office_network_status(uci, fs)
 	local source = {
 		redirects = {},
+		ipv6_pinholes = {},
 		available = false,
 		truncated = false,
 		firewall_available = false,
@@ -3119,6 +3122,36 @@ local function office_network_status(uci, fs)
 					destination = destination_zone,
 					protocol = protocol,
 					source_port = source_port,
+					destination_ip = destination_ip,
+					destination_port = destination_port
+				})
+			end
+		end)
+		uci:foreach("firewall", "rule", function(section)
+			if #source.ipv6_pinholes >= 64 then source.truncated = true return end
+			local section_name = tostring(section[".name"] or "")
+			local raw_name = tostring(section.name or "")
+			local display_name = raw_name:match("^QuantumGrid IPv6 pinhole: ([A-Za-z0-9][A-Za-z0-9_.%-]*)$")
+			local source_zone = tostring(section.src or "")
+			local destination_zone = tostring(section.dest or "")
+			local protocol = section.proto
+			if type(protocol) == "table" then protocol = table.concat(protocol, " ") end
+			protocol = tostring(protocol or "")
+			local destination_port = tonumber(section.dest_port)
+			local destination_ip = tostring(section.dest_ip or "")
+			if display_name and section_name:match("^[%w_.%-]+$")
+				and source_zone:match("^[%w_.%-]+$") and destination_zone:match("^[%w_.%-]+$")
+				and section.family == "ipv6" and section.target == "ACCEPT"
+				and (protocol == "tcp" or protocol == "udp" or protocol == "tcp udp")
+				and destination_port and destination_port >= 1 and destination_port <= 65535
+				and destination_port == math.floor(destination_port)
+				and destination_ip:find(":", 1, true) then
+				table.insert(source.ipv6_pinholes, {
+					section = section_name,
+					name = display_name,
+					source = source_zone,
+					destination = destination_zone,
+					protocol = protocol,
 					destination_ip = destination_ip,
 					destination_port = destination_port
 				})
@@ -5399,6 +5432,233 @@ function action_office_port_forward_remove()
 		return
 	end
 	record_audit(http, "office.port-forward.remove", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		removed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+
+function action_office_ipv6_pinhole_add()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before allowing inbound IPv6 traffic." })
+		return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, { ok = false, error = "Firewall configuration or native reload service is unavailable." })
+		return
+	end
+
+	local inventory = office_network_status(uci, fs)
+	if not inventory.firewall_available or inventory.truncated then
+		respond(409, { ok = false, error = "The network/firewall inventory is unavailable or truncated. Resolve it before adding an Internet-facing IPv6 rule." })
+		return
+	end
+	local protocol = http.formvalue("protocol", true)
+	local update, validation_error = validator.validate_office_ipv6_pinhole(
+		http.formvalue("name", true),
+		http.formvalue("source", true),
+		http.formvalue("destination", true),
+		protocol,
+		http.formvalue("destination_ip", true),
+		http.formvalue("destination_port", true),
+		inventory.zones,
+		inventory.interfaces,
+		inventory.ipv6_pinholes)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+	local proto = {}
+	if protocol == "tcp" or protocol == "tcp udp" then table.insert(proto, "tcp") end
+	if protocol == "udp" or protocol == "tcp udp" then table.insert(proto, "udp") end
+	local section_ok, section = pcall(uci.section, uci, "firewall", "rule", nil, {
+		name = "QuantumGrid IPv6 pinhole: " .. update.name,
+		src = update.source,
+		dest = update.destination,
+		dest_ip = update.destination_ip,
+		dest_port = update.destination_port,
+		proto = proto,
+		family = "ipv6",
+		target = "ACCEPT",
+		enabled = "1"
+	})
+	if not section_ok or type(section) ~= "string" or section == "" then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The scoped IPv6 firewall rule could not be staged in UCI." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The IPv6 pinhole could not be committed; firewall reload was not attempted." })
+		return
+	end
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local delete_ok, deleted = pcall(uci.delete, uci, "firewall", section)
+		local rollback_commit_ok, rollback_committed = false, false
+		if delete_ok and deleted == true then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "firewall")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local rolled_back = delete_ok and deleted == true and rollback_commit_ok
+			and rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.ipv6-pinhole.add", section, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "Firewall reload failed. The new IPv6 pinhole was removed."
+				or "Firewall reload failed and the IPv6 pinhole rollback could not be confirmed. Inspect firewall configuration and service state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+	record_audit(http, "office.ipv6-pinhole.add", section, "success")
+	respond(nil, {
+		ok = true,
+		section = section,
+		name = update.name,
+		source = update.source,
+		destination = update.destination,
+		protocol = update.protocol,
+		destination_ip = update.destination_ip,
+		destination_port = update.destination_port,
+		family = "ipv6",
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+function action_office_ipv6_pinhole_remove()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.office_networks"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before removing an IPv6 firewall rule." })
+		return
+	end
+	if fs.access("/etc/config/firewall") ~= true or fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, { ok = false, error = "Firewall configuration or native reload service is unavailable." })
+		return
+	end
+	local section = http.formvalue("section", true)
+	if type(section) ~= "string" or #section < 1 or #section > 64
+		or not section:match("^[%w_.%-]+$") or section == "." or section == ".." then
+		respond(400, { ok = false, error = "The firewall IPv6 rule section identifier is invalid." })
+		return
+	end
+	local snapshot_ok, snapshot = pcall(uci.get_all, uci, "firewall", section)
+	if not snapshot_ok or type(snapshot) ~= "table" or snapshot[".type"] ~= "rule" then
+		respond(404, { ok = false, error = "The selected firewall rule no longer exists." })
+		return
+	end
+	local previous, snapshot_error = validator.snapshot_office_ipv6_pinhole(snapshot)
+	if not previous then
+		respond(404, { ok = false, error = snapshot_error or "The selected rule is not a QuantumGrid-managed IPv6 pinhole." })
+		return
+	end
+	local delete_ok, deleted = pcall(uci.delete, uci, "firewall", section)
+	if not delete_ok or deleted ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The IPv6 firewall rule could not be staged for removal." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "firewall")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "firewall")
+		respond(500, { ok = false, error = "The IPv6 firewall rule removal could not be committed; firewall reload was not attempted." })
+		return
+	end
+	local reload_ok, reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not reload_ok or reload_status ~= 0 then
+		local restore_ok, restored = pcall(uci.section, uci, "firewall", "rule", section, previous.values)
+		local rollback_commit_ok, rollback_committed = false, false
+		if restore_ok and restored then
+			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "firewall")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if rollback_commit_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
+		local rolled_back = restore_ok and restored and rollback_commit_ok
+			and rollback_committed == true and rollback_reload_ok and rollback_reload_status == 0
+		record_audit(http, "office.ipv6-pinhole.remove", section, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "Firewall reload failed. The original IPv6 pinhole was restored."
+				or "Firewall reload failed and the IPv6 pinhole could not be fully restored. Inspect firewall configuration and service state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+	record_audit(http, "office.ipv6-pinhole.remove", section, "success")
 	respond(nil, {
 		ok = true,
 		section = section,
