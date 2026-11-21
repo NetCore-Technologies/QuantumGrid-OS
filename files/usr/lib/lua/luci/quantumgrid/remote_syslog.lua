@@ -163,7 +163,8 @@ function inspect_status(uci, fs, sampled_at)
 			if section_count == 1 then system_section = section end
 		end)
 	end)
-	result.available = system_ok and section_count == 1 and type(system_section) == "table"
+	result.available = system_ok and section_count == 1 and type(system_section) == "table" and
+		system_section[".type"] == "system"
 	if not result.available then return result end
 
 	result.host = type(system_section.log_ip) == "string" and system_section.log_ip or ""
@@ -171,7 +172,7 @@ function inspect_status(uci, fs, sampled_at)
 	result.protocol = system_section.log_proto == "tcp" and "tcp" or "udp"
 	result.hostname = type(system_section.log_hostname) == "string" and system_section.log_hostname or ""
 	result.prefix = type(system_section.log_prefix) == "string" and system_section.log_prefix or ""
-	result.enabled = result.host ~= "" and system_section.log_remote ~= "0"
+	result.enabled = result.host ~= "" and system_section.log_remote == "1"
 	local local_tls_forwarder = result.host == "127.0.0.1" and
 		result.port == 5514 and result.protocol == "tcp"
 	if not local_tls_forwarder then return result end
