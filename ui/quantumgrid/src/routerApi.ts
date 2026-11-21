@@ -27,7 +27,7 @@ export interface RouterStaticRouteCreateResult {
   requested_target: string;
   target: string;
   gateway: string;
-  metric: number | null;
+  metric: string;
   table: string;
   reloaded: true;
   rolled_back: false;
@@ -3501,7 +3501,8 @@ export async function createRouterStaticRoute(input: {
     !("requested_target" in payload) || payload.requested_target !== input.target ||
     !("target" in payload) || typeof payload.target !== "string" || payload.target.length === 0 ||
     !("gateway" in payload) || typeof payload.gateway !== "string" ||
-    !("metric" in payload) || (payload.metric !== null && typeof payload.metric !== "number") ||
+    !("metric" in payload) || typeof payload.metric !== "string" ||
+      payload.metric !== input.metric ||
     !("table" in payload) || typeof payload.table !== "string" ||
     !("reloaded" in payload) || payload.reloaded !== true ||
     !("rolled_back" in payload) || payload.rolled_back !== false
