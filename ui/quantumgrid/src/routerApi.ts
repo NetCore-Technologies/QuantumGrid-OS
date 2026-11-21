@@ -2180,8 +2180,8 @@ export async function updateRouterUsteer(input: {
     !("status" in payload) || typeof payload.status !== "string" ||
     !("running" in payload) || payload.running !== input.enabled ||
     !("ssid_list" in payload) || !Array.isArray(payload.ssid_list) ||
-    payload.ssid_list.length !== expectedSsids.length ||
-    payload.ssid_list.some((ssid, index) => ssid !== expectedSsids[index]) ||
+    (input.enabled && (payload.ssid_list.length !== expectedSsids.length ||
+      payload.ssid_list.some((ssid, index) => ssid !== expectedSsids[index]))) ||
     (input.enabled && (!("network" in payload) || payload.network !== input.network ||
       !("aggressiveness" in payload) || payload.aggressiveness !== input.aggressiveness ||
       !("band_steering_interval" in payload) || payload.band_steering_interval !== input.bandSteeringInterval ||
