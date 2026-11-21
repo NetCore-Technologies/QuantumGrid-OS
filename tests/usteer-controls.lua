@@ -131,6 +131,55 @@ assert(runtime.running and runtime.local_node_count == 2 and runtime.remote_host
 assert(runtime.associated_clients == 7 and not runtime.local_nodes_truncated)
 assert(runtime.local_nodes[1].ssid == "Corp" and runtime.local_nodes[1].clients >= 0)
 
+local expected_policy = {
+  aggressiveness = 1,
+  assoc_steering = false,
+  probe_steering = false,
+  band_steering_interval = 30000,
+  band_steering_min_snr = -65,
+  band_steering_threshold = 5,
+  load_balancing_threshold = 0,
+  ssid_list = { "Corp" },
+}
+local live_policy = {
+  syslog = true, ipv6 = false, local_mode = false,
+  assoc_steering = false, load_kick_enabled = false,
+  aggressiveness = 1, band_steering_interval = 30000,
+  band_steering_min_snr = -65, band_steering_threshold = 5,
+  load_balancing_threshold = 0, min_snr = 0, min_connect_snr = 0,
+  roam_scan_snr = 0, roam_trigger_snr = 0,
+  aggressiveness_mac_list = {}, ssid_list = { "Corp" },
+}
+assert(usteer.runtime_policy_matches(live_policy, expected_policy),
+  "the live daemon must match the complete persisted safe policy")
+local unsafe_runtime_changes = {
+  { load_kick_enabled = true },
+  { min_snr = -70 },
+  { min_connect_snr = -70 },
+  { roam_scan_snr = -70 },
+  { roam_trigger_snr = -70 },
+  { aggressiveness_mac_list = { "02:00:00:00:00:01,4" } },
+  { assoc_steering = true },
+  { local_mode = true },
+  { ipv6 = true },
+  { syslog = false },
+  { ssid_list = { "Guest" } },
+  { band_steering_interval = 0 },
+  { aggressiveness = 4 },
+}
+for _, change in ipairs(unsafe_runtime_changes) do
+  local changed = {}
+  for key, value in pairs(live_policy) do changed[key] = value end
+  for key, value in pairs(change) do changed[key] = value end
+  assert(not usteer.runtime_policy_matches(changed, expected_policy),
+    "runtime policy drift must be detected for " .. next(change))
+end
+local unsafe_persisted = {}
+for key, value in pairs(expected_policy) do unsafe_persisted[key] = value end
+unsafe_persisted.probe_steering = true
+assert(not usteer.runtime_policy_matches(live_policy, unsafe_persisted),
+  "persisted probe steering must be treated as unsafe even if the daemon does not expose it")
+
 local offline = usteer.summarize_runtime(nil, nil, nil)
 assert(not offline.running and offline.local_node_count == 0 and offline.remote_host_count == 0)
 
