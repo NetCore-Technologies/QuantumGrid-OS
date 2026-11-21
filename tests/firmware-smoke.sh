@@ -1280,6 +1280,8 @@ test -f "$ROOT/tests/sqm-cake-profile-api.test.mjs"
 # Corporate static route CRUD is family-aware and guarded against management lockout.
 grep -Fq 'function validate_static_route(family, interface, target, gateway, metric, table_id, interfaces, existing)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/routing.lua"
 grep -Fq 'function static_route_contains_address(route, address)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/routing.lua"
+grep -Fq 'function ip_address_family(address)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/routing.lua"
+grep -Fq 'routing.ip_address_family(remote_ip)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function snapshot_static_route_section(snapshot, expected_type)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/routing.lua"
 grep -Fq 'function static_route_inventory(uci, fs)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function action_static_route_add()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
