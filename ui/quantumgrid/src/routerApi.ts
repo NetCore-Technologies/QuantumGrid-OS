@@ -448,6 +448,8 @@ export interface RouterAuthorizedKeysStatus {
   path: string;
   size_bytes: number | null;
   root_owned: boolean | null;
+  regular_file: boolean | null;
+  owner_readable: boolean | null;
   group_writable: boolean | null;
   other_writable: boolean | null;
   status: "present" | "missing" | "review" | "unknown" | "unavailable";
