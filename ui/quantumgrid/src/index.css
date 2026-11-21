@@ -8785,6 +8785,29 @@ input::placeholder {
   margin-top: 2px;
   accent-color: var(--blue);
 }
+.config-backup-fields {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  margin: 12px 0 4px;
+}
+.config-backup-fields input[type="file"] {
+  min-height: 38px;
+  padding: 6px;
+  cursor: pointer;
+}
+.config-backup-fields input[type="file"]::file-selector-button {
+  margin-right: 8px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(255,255,255,.06);
+  font-size: 9px;
+  cursor: pointer;
+}
+.config-backup-fields input:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
 .config-backup-actions {
   display: flex;
   align-items: center;
