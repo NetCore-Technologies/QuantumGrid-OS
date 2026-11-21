@@ -65,6 +65,32 @@ test("configures TLS syslog with same-origin POST and confirms verified tunnel r
   assert.equal(result.rolled_back, false);
 });
 
+test("TLS syslog canonicalizes a global-unicast IPv6 collector before sending the request", async () => {
+  let requestInit;
+  const canonical = "2001:4860:4860:0000:0000:0000:0000:8888";
+  globalThis.fetch = async (_url, init) => {
+    requestInit = init;
+    return jsonResponse({ ...tlsSuccess, host: canonical });
+  };
+  const result = await updateRouterRemoteSyslog({ ...tlsInput, host: "2001:4860:4860::8888" });
+  assert.equal(new URLSearchParams(requestInit.body).get("host"), canonical);
+  assert.equal(result.host, canonical);
+});
+
+test("remote syslog accepts an internal ULA IPv6 collector and rejects unsafe IPv6 ranges before fetch", async () => {
+  globalThis.fetch = async (_url, init) => {
+    const form = new URLSearchParams(init.body);
+    assert.equal(form.get("host"), "fd12:3456:0000:0000:0000:0000:0000:0010");
+    return jsonResponse({ ...tlsSuccess, host: "fd12:3456:0000:0000:0000:0000:0000:0010", protocol: "udp", port: 514, tls_status: undefined });
+  };
+  const result = await updateRouterRemoteSyslog({ ...tlsInput, host: "fd12:3456::10", protocol: "udp", port: 514 });
+  assert.equal(result.host, "fd12:3456:0000:0000:0000:0000:0000:0010");
+  globalThis.fetch = async () => { throw new Error("fetch must not run for unsafe IPv6 addresses"); };
+  for (const host of ["::", "::1", "fe80::1", "ff02::1", "2001:db8::10", "2002:c000:0201::1", "3fff::1", "2001:4860:::8888", "2001:4860::1%wan"]) {
+    await assert.rejects(updateRouterRemoteSyslog({ ...tlsInput, host }), /valid IPv4 address, unicast IPv6 address or DNS host name/);
+  }
+});
+
 test("TLS syslog client rejects malformed destinations and unknown transports before fetch", async () => {
   globalThis.fetch = async () => {
     throw new Error("fetch must not be called for invalid input");
