@@ -245,6 +245,19 @@ function inspect_status(uci, fs, sampled_at)
 	return result
 end
 
+function stunnel_process_running(pid_contents, comm_contents, cmdline_contents)
+	if type(pid_contents) ~= "string" then return false end
+	local pid_text = pid_contents:match("^%s*(%d+)%s*$")
+	local pid = pid_text and tonumber(pid_text) or nil
+	if not pid or pid <= 1 or pid ~= math.floor(pid) then return false end
+	if type(comm_contents) ~= "string" or comm_contents:match("^%s*(.-)%s*$") ~= "stunnel" then
+		return false
+	end
+	if type(cmdline_contents) ~= "string" then return false end
+	return cmdline_contents:find("/usr/bin/stunnel", 1, true) ~= nil and
+		cmdline_contents:find("/var/etc/stunnel.conf", 1, true) ~= nil
+end
+
 function stunnel_options(update)
 	if type(update) ~= "table" or update.enabled ~= true or type(update.tls) ~= "table" then
 		return nil
