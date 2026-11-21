@@ -60,12 +60,17 @@ local function authorized_keys_status(fs)
   local result = {
     available = false,
     path = "",
+    directory = "",
     size_bytes = nil,
     root_owned = nil,
     regular_file = nil,
     owner_readable = nil,
     group_writable = nil,
     other_writable = nil,
+    directory_root_owned = nil,
+    directory_valid = nil,
+    directory_group_writable = nil,
+    directory_other_writable = nil,
     status = "missing"
   }
 
@@ -75,27 +80,28 @@ local function authorized_keys_status(fs)
   end
 
   local candidates = {
-    "/etc/dropbear/authorized_keys",
-    "/root/.ssh/authorized_keys"
+    { path = "/etc/dropbear/authorized_keys", directory = "/etc/dropbear" },
+    { path = "/root/.ssh/authorized_keys", directory = "/root/.ssh" }
   }
   local selected = nil
-  for _, path in ipairs(candidates) do
-    if exists(fs, path) then
-      selected = path
+  for _, candidate in ipairs(candidates) do
+    if exists(fs, candidate.path) then
+      selected = candidate
       break
     end
   end
 
   if not selected then return result end
   result.available = true
-  result.path = selected
+  result.path = selected.path
+  result.directory = selected.directory
 
   if type(fs.stat) ~= "function" then
     result.status = "unknown"
     return result
   end
 
-  local ok, stat = pcall(fs.stat, selected)
+  local ok, stat = pcall(fs.stat, selected.path)
   if not ok or type(stat) ~= "table" then
     result.status = "unknown"
     return result
@@ -116,13 +122,31 @@ local function authorized_keys_status(fs)
     result.other_writable = math.floor(permissions / 2) % 2 == 1
   end
 
+  local directory_ok, directory_stat = pcall(fs.stat, selected.directory)
+  if directory_ok and type(directory_stat) == "table" then
+    if type(directory_stat.uid) == "number" then
+      result.directory_root_owned = directory_stat.uid == 0
+    end
+    if type(directory_stat.mode) == "number" then
+      local permissions = directory_stat.mode % 512
+      local file_type = math.floor(directory_stat.mode / 4096) % 16
+      result.directory_valid = file_type == 4
+      result.directory_group_writable = math.floor(permissions / 16) % 2 == 1
+      result.directory_other_writable = math.floor(permissions / 2) % 2 == 1
+    end
+  end
+
   if result.size_bytes == nil or result.root_owned == nil or
     result.regular_file == nil or result.owner_readable == nil or
-    result.group_writable == nil or result.other_writable == nil then
+    result.group_writable == nil or result.other_writable == nil or
+    result.directory_root_owned == nil or result.directory_valid == nil or
+    result.directory_group_writable == nil or result.directory_other_writable == nil then
     result.status = "unknown"
   elseif result.size_bytes == 0 or result.size_bytes > 65536 or
     not result.root_owned or not result.regular_file or not result.owner_readable or
-    result.group_writable or result.other_writable then
+    result.group_writable or result.other_writable or
+    not result.directory_root_owned or not result.directory_valid or
+    result.directory_group_writable or result.directory_other_writable then
     result.status = "review"
   else
     result.status = "present"
