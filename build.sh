@@ -156,7 +156,14 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     done
 fi
 cd "$OPENWRT_DIR"
+printf '\nPre-defconfig target selection from the validated device profile:\n'
+grep -E '^(CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)|CONFIG_TARGET_[A-Za-z0-9_-]+(_[A-Za-z0-9_-]+)?(_DEVICE_[A-Za-z0-9_-]+)?)=|^# CONFIG_TARGET_' .config | head -n 24 || true
 make defconfig
+if ! grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}=y" .config; then
+    printf '\nOpenWrt Kconfig did not retain the selected target. Resolved target symbols:\n' >&2
+    grep -E '^(CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)|CONFIG_TARGET_[A-Za-z0-9_-]+(_[A-Za-z0-9_-]+)?(_DEVICE_[A-Za-z0-9_-]+)?)=|^# CONFIG_TARGET_' .config | head -n 48 >&2 || true
+    die "OpenWrt target $OPENWRT_TARGET was not selected by Kconfig"
+fi
 grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}=y" .config || die "OpenWrt target $OPENWRT_TARGET was not selected"
 grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}=y" .config || die "OpenWrt subtarget $OPENWRT_SUBTARGET was not selected"
 grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}_DEVICE_${OPENWRT_DEVICE}=y" .config || die "OpenWrt device profile $OPENWRT_DEVICE was not selected"
