@@ -288,6 +288,8 @@ export interface RouterSqmClientPolicy {
   source_zone: string;
   destination_zone: string;
   dscp_class: RouterSqmClientDscpClass;
+  direction?: "upload" | "download";
+  destination_ip?: string;
   enabled: boolean;
 }
 
@@ -300,6 +302,11 @@ export interface RouterSqmClientPolicyResult {
   dscp_class: RouterSqmClientDscpClass;
   reloaded: true;
   rolled_back: false;
+}
+
+export interface RouterSqmClientDownloadPolicyResult extends RouterSqmClientPolicyResult {
+  direction: "download";
+  destination_ip: string;
 }
 
 export interface RouterSqmClientPolicyRemoveResult extends RouterSqmClientPolicyResult {
@@ -1431,6 +1438,7 @@ const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const MWAN3_INTERFACE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/mwan3-interface-update";
 const SQM_CAKE_PROFILE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cake-profile";
 const SQM_CLIENT_QOS_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-add";
+const SQM_CLIENT_QOS_DOWNLOAD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-download-add";
 const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
@@ -2254,6 +2262,76 @@ export async function addRouterSqmClientPolicy(input: {
     throw new Error("The router did not confirm the client DSCP rule and firewall reload.");
   }
   return payload as RouterSqmClientPolicyResult;
+}
+
+export async function addRouterSqmClientDownloadPolicy(input: {
+  mac: string;
+  destinationIp: string;
+  sourceZone: string;
+  destinationZone: string;
+  dscpClass: RouterSqmClientDscpClass;
+}): Promise<RouterSqmClientDownloadPolicyResult> {
+  if (!/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(input.mac)) {
+    throw new Error("Choose one unicast client MAC address in six-octet notation.");
+  }
+  const firstOctet = Number.parseInt(input.mac.slice(0, 2), 16);
+  if ((firstOctet & 1) !== 0 || input.mac.toLowerCase() === "00:00:00:00:00:00" ||
+      input.mac.toLowerCase() === "ff:ff:ff:ff:ff:ff") {
+    throw new Error("Choose one unicast client MAC address in six-octet notation.");
+  }
+  const octets = input.destinationIp.split(".");
+  if (octets.length !== 4 || octets.some((part) =>
+    !/^(?:0|[1-9]\d{0,2})$/.test(part) || Number(part) > 255)) {
+    throw new Error("Download marking requires one usable static IPv4 host address.");
+  }
+  const [first, second] = octets.map(Number);
+  if (first === 0 || first === 127 || first >= 224 || (first === 169 && second === 254)) {
+    throw new Error("Download marking requires one usable static IPv4 host address.");
+  }
+  const validZone = (value: string) =>
+    /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
+  if (!validZone(input.sourceZone) || !validZone(input.destinationZone) || input.sourceZone === input.destinationZone) {
+    throw new Error("Choose different existing WAN/WWAN and internal firewall zones.");
+  }
+  if (!["BE", "AF41", "EF", "CS1"].includes(input.dscpClass)) {
+    throw new Error("Choose a supported DSCP class: BE, AF41, EF or CS1.");
+  }
+  const form = new URLSearchParams();
+  form.set("mac", input.mac.toLowerCase());
+  form.set("destination_ip", input.destinationIp);
+  form.set("source_zone", input.sourceZone);
+  form.set("destination_zone", input.destinationZone);
+  form.set("dscp_class", input.dscpClass);
+  form.set("confirmed", "1");
+  const response = await fetch(SQM_CLIENT_QOS_DOWNLOAD_ADD_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Client download QoS changes require an active router administrator session."
+      : "The router returned an invalid client download QoS response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid client download QoS response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || typeof payload.section !== "string" || payload.section.length === 0 ||
+      !("direction" in payload) || payload.direction !== "download" ||
+      !("mac" in payload) || payload.mac !== input.mac.toLowerCase() ||
+      !("destination_ip" in payload) || payload.destination_ip !== input.destinationIp ||
+      !("source_zone" in payload) || payload.source_zone !== input.sourceZone ||
+      !("destination_zone" in payload) || payload.destination_zone !== input.destinationZone ||
+      !("dscp_class" in payload) || payload.dscp_class !== input.dscpClass ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the exact client download DSCP rule and firewall reload.");
+  }
+  return payload as RouterSqmClientDownloadPolicyResult;
 }
 
 export async function removeRouterSqmClientPolicy(section: string): Promise<RouterSqmClientPolicyRemoveResult> {
