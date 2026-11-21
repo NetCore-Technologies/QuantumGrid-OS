@@ -52,6 +52,7 @@ test("configures TLS syslog with same-origin POST and confirms verified tunnel r
   assert.equal(requestInit.credentials, "same-origin");
   assert.equal(requestInit.cache, "no-store");
   const form = new URLSearchParams(requestInit.body);
+  assert.equal(form.get("confirmed"), "1");
   assert.equal(form.get("enabled"), "1");
   assert.equal(form.get("host"), "logs.corp.example");
   assert.equal(form.get("port"), "6514");
