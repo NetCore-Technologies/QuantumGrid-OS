@@ -106,7 +106,7 @@ def validate(profile_path: Path) -> list[str]:
         raise ProfileError("platform.board_compatible contains duplicate board IDs")
 
     capabilities = require_object(root["capabilities"], "capabilities", {"nss", "fxs"})
-    nss = require_object(capabilities["nss"], "capabilities.nss", {"supported", "config_fragment", "feed_pins", "pin_script"})
+    nss = require_object(capabilities["nss"], "capabilities.nss", {"supported", "config_fragment", "feed_pins", "pin_script", "required_config_symbols"})
     fxs = require_object(capabilities["fxs"], "capabilities.fxs", {"supported", "setup_script"})
 
     if not isinstance(nss["supported"], bool):
@@ -117,12 +117,31 @@ def validate(profile_path: Path) -> list[str]:
     nss_fragment = "-"
     nss_feed_pins = "-"
     nss_pin_script = "-"
+    nss_required_config_symbols = "-"
+    required_nss_symbols = nss["required_config_symbols"]
+    if not isinstance(required_nss_symbols, list) or len(required_nss_symbols) > 64:
+        raise ProfileError("capabilities.nss.required_config_symbols must be a list of at most 64 entries")
+    validated_nss_symbols = [
+        require_string(
+            item,
+            f"capabilities.nss.required_config_symbols[{index}]",
+            re.compile(r"^CONFIG_[A-Z0-9_]+=[A-Za-z0-9_.+-]+$"),
+        )
+        for index, item in enumerate(required_nss_symbols)
+    ]
+    if len(set(validated_nss_symbols)) != len(validated_nss_symbols):
+        raise ProfileError("capabilities.nss.required_config_symbols contains duplicates")
     if nss["supported"]:
+        if not validated_nss_symbols:
+            raise ProfileError("a supported NSS capability must declare at least one required config symbol")
         nss_fragment = safe_repo_file(nss["config_fragment"], "capabilities.nss.config_fragment")
         nss_feed_pins = safe_repo_file(nss["feed_pins"], "capabilities.nss.feed_pins")
         nss_pin_script = safe_repo_file(nss["pin_script"], "capabilities.nss.pin_script")
+        nss_required_config_symbols = ";".join(validated_nss_symbols)
     elif any(nss[field] is not None for field in ("config_fragment", "feed_pins", "pin_script")):
         raise ProfileError("unsupported NSS capability must not declare build inputs")
+    elif validated_nss_symbols:
+        raise ProfileError("unsupported NSS capability must not declare required config symbols")
 
     fxs_script = "-"
     if fxs["supported"]:
@@ -165,6 +184,7 @@ def validate(profile_path: Path) -> list[str]:
         nss_fragment,
         nss_feed_pins,
         nss_pin_script,
+        nss_required_config_symbols,
         "1" if fxs["supported"] else "0",
         fxs_script,
         output_directory,
