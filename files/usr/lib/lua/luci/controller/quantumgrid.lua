@@ -7410,13 +7410,9 @@ function action_remote_syslog_update()
 	end
 
 	local function set_list(package, section, option, values)
-		local delete_ok, delete_result = pcall(uci.delete, uci, package, section, option)
-		if not delete_ok or delete_result == false then return false end
-		for _, value in ipairs(values or {}) do
-			local add_ok, add_result = pcall(uci.add_list, uci, package, section, option, value)
-			if not add_ok or add_result ~= true then return false end
-		end
-		return true
+		if type(values) ~= "table" then return false end
+		local ok, result = pcall(uci.set_list, uci, package, section, option, values)
+		return ok and result == true
 	end
 
 	local function restore_system()
