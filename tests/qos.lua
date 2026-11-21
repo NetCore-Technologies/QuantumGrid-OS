@@ -84,6 +84,18 @@ assert(qos.validate_client_download_policy(
 assert(qos.validate_client_download_policy(
   "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
   zones, {
+    { name = "corp", ipv4 = { "192.168.20.1", "192.168.20.2" }, netmask = "255.255.255.0", firewall_zones = { "corp" } },
+  }, download_leases) ~= nil,
+  "multiple router addresses on one routed interface must be counted as one interface match")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, {
+    { name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0", firewall_zones = { "corp", "guest" } },
+  }, download_leases) == nil,
+  "an interface attached to multiple firewall zones must fail closed")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, {
     { name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0", firewall_zones = { "guest" } },
   }, download_leases) == nil, "the target subnet must be attached to the selected internal firewall zone")
 
