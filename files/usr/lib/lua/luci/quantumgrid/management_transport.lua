@@ -140,6 +140,177 @@ local function lstat(fs, path)
   return ok and type(stat) == "table", stat
 end
 
+local BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+local BASE64_LOOKUP = {}
+for index = 1, #BASE64_ALPHABET do
+  BASE64_LOOKUP[BASE64_ALPHABET:sub(index, index)] = index - 1
+end
+
+local SUPPORTED_SSH_KEY_TYPES = {
+  ["ssh-ed25519"] = true,
+  ["ssh-rsa"] = true,
+  ["ecdsa-sha2-nistp256"] = true,
+  ["ecdsa-sha2-nistp384"] = true,
+  ["ecdsa-sha2-nistp521"] = true,
+  ["sk-ssh-ed25519@openssh.com"] = true,
+  ["sk-ecdsa-sha2-nistp256@openssh.com"] = true
+}
+
+local function decode_public_key_blob(encoded)
+  if type(encoded) ~= "string" or #encoded < 44 or #encoded > 16384 or #encoded % 4 ~= 0 then
+    return nil
+  end
+  local output = {}
+  for offset = 1, #encoded, 4 do
+    local a = BASE64_LOOKUP[encoded:sub(offset, offset)]
+    local b = BASE64_LOOKUP[encoded:sub(offset + 1, offset + 1)]
+    local third = encoded:sub(offset + 2, offset + 2)
+    local fourth = encoded:sub(offset + 3, offset + 3)
+    local c = third == "=" and 0 or BASE64_LOOKUP[third]
+    local d = fourth == "=" and 0 or BASE64_LOOKUP[fourth]
+    local last = offset + 3 == #encoded
+    if a == nil or b == nil or c == nil or d == nil then return nil end
+    if third == "=" then
+      if not last or fourth ~= "=" or b % 16 ~= 0 then return nil end
+    elseif fourth == "=" then
+      if not last or c % 4 ~= 0 then return nil end
+    end
+    if not last and (third == "=" or fourth == "=") then return nil end
+
+    local first_byte = a * 4 + math.floor(b / 16)
+    local second_byte = (b % 16) * 16 + math.floor(c / 4)
+    local third_byte = (c % 4) * 64 + d
+    table.insert(output, string.char(first_byte))
+    if third ~= "=" then table.insert(output, string.char(second_byte)) end
+    if fourth ~= "=" then table.insert(output, string.char(third_byte)) end
+  end
+  return table.concat(output)
+end
+
+local function read_ssh_u32(blob, offset)
+  if type(blob) ~= "string" or offset < 1 or offset + 3 > #blob then return nil end
+  local a, b, c, d = blob:byte(offset, offset + 3)
+  return ((a * 256 + b) * 256 + c) * 256 + d, offset + 4
+end
+
+local function read_ssh_string(blob, offset)
+  local length, start = read_ssh_u32(blob, offset)
+  if not length or length > #blob - start + 1 then return nil end
+  return blob:sub(start, start + length - 1), start + length
+end
+
+local function valid_ssh_key_blob(algorithm, encoded)
+  if not SUPPORTED_SSH_KEY_TYPES[algorithm] then return false end
+  local blob = decode_public_key_blob(encoded)
+  if not blob then return false end
+  local embedded_algorithm, offset = read_ssh_string(blob, 1)
+  if embedded_algorithm ~= algorithm or not offset then return false end
+
+  if algorithm == "ssh-ed25519" then
+    local public_key, next_offset = read_ssh_string(blob, offset)
+    return type(public_key) == "string" and #public_key == 32 and next_offset == #blob + 1
+  elseif algorithm == "ssh-rsa" then
+    local exponent, next_offset = read_ssh_string(blob, offset)
+    local modulus, final_offset = next_offset and read_ssh_string(blob, next_offset) or nil, nil
+    if next_offset and type(exponent) == "string" then
+      modulus, final_offset = read_ssh_string(blob, next_offset)
+    end
+    return type(exponent) == "string" and #exponent >= 1 and #exponent <= 8 and
+      type(modulus) == "string" and #modulus >= 256 and final_offset == #blob + 1
+  elseif algorithm:match("^ecdsa%-sha2%-") then
+    local expected_curve = algorithm:match("^ecdsa%-sha2%-(nistp%d+)$")
+    local curve, next_offset = read_ssh_string(blob, offset)
+    local point, final_offset = next_offset and read_ssh_string(blob, next_offset) or nil, nil
+    if next_offset and type(curve) == "string" then point, final_offset = read_ssh_string(blob, next_offset) end
+    local expected_length = expected_curve == "nistp256" and 65 or
+      expected_curve == "nistp384" and 97 or expected_curve == "nistp521" and 133 or nil
+    return curve == expected_curve and type(point) == "string" and #point == expected_length and
+      point:byte(1) == 4 and final_offset == #blob + 1
+  elseif algorithm == "sk-ssh-ed25519@openssh.com" then
+    local public_key, next_offset = read_ssh_string(blob, offset)
+    local application, final_offset = next_offset and read_ssh_string(blob, next_offset) or nil, nil
+    if next_offset and type(public_key) == "string" then application, final_offset = read_ssh_string(blob, next_offset) end
+    return type(public_key) == "string" and #public_key == 32 and
+      type(application) == "string" and #application > 0 and final_offset == #blob + 1
+  elseif algorithm == "sk-ecdsa-sha2-nistp256@openssh.com" then
+    local curve, next_offset = read_ssh_string(blob, offset)
+    local point, point_offset = next_offset and read_ssh_string(blob, next_offset) or nil, nil
+    if next_offset and type(curve) == "string" then point, point_offset = read_ssh_string(blob, next_offset) end
+    local application, final_offset = point_offset and read_ssh_string(blob, point_offset) or nil, nil
+    if point_offset and type(point) == "string" then application, final_offset = read_ssh_string(blob, point_offset) end
+    return curve == "nistp256" and type(point) == "string" and #point == 65 and point:byte(1) == 4 and
+      type(application) == "string" and #application > 0 and final_offset == #blob + 1
+  end
+  return false
+end
+
+local function authorized_key_tokens(line)
+  local tokens, current = {}, {}
+  local in_quotes, escaped = false, false
+  for index = 1, #line do
+    local character = line:sub(index, index)
+    if escaped then
+      table.insert(current, character)
+      escaped = false
+    elseif in_quotes and character == "\\" then
+      escaped = true
+    elseif character == '"' then
+      in_quotes = not in_quotes
+    elseif character:match("%s") and not in_quotes then
+      if #current > 0 then
+        table.insert(tokens, table.concat(current))
+        current = {}
+      end
+    else
+      table.insert(current, character)
+    end
+  end
+  if in_quotes or escaped then return nil end
+  if #current > 0 then table.insert(tokens, table.concat(current)) end
+  return tokens
+end
+
+local function parse_authorized_key_line(line)
+  if type(line) ~= "string" or #line > 16384 then return nil end
+  local trimmed = line:match("^%s*(.-)%s*$")
+  if not trimmed or trimmed == "" or trimmed:sub(1, 1) == "#" then return "comment" end
+  local tokens = authorized_key_tokens(trimmed)
+  if not tokens then return nil end
+  local algorithm_index = SUPPORTED_SSH_KEY_TYPES[tokens[1]] and 1 or
+    SUPPORTED_SSH_KEY_TYPES[tokens[2]] and 2 or nil
+  if not algorithm_index then return nil end
+  local algorithm = tokens[algorithm_index]
+  local encoded = tokens[algorithm_index + 1]
+  if not valid_ssh_key_blob(algorithm, encoded) then return nil end
+  return algorithm
+end
+
+local function inspect_authorized_keys(fs, path, size_bytes)
+  local result = { available = false, key_count = 0, invalid_line_count = 0, key_algorithms = {} }
+  if type(fs) ~= "table" or type(fs.readfile) ~= "function" or
+    type(size_bytes) ~= "number" or size_bytes < 0 or size_bytes > 65536 then
+    return result
+  end
+  local ok, contents = pcall(fs.readfile, path)
+  if not ok or type(contents) ~= "string" or #contents ~= size_bytes then return result end
+  result.available = true
+  local algorithms = {}
+  for line in (contents .. "\n"):gmatch("([^\r\n]*)\r?\n") do
+    local algorithm = parse_authorized_key_line(line)
+    if algorithm == "comment" then
+      -- Blank and comment lines are harmless and do not count as malformed keys.
+    elseif algorithm then
+      result.key_count = result.key_count + 1
+      algorithms[algorithm] = true
+    elseif line ~= "" then
+      result.invalid_line_count = result.invalid_line_count + 1
+    end
+  end
+  for algorithm in pairs(algorithms) do table.insert(result.key_algorithms, algorithm) end
+  table.sort(result.key_algorithms)
+  return result
+end
+
 local function authorized_keys_status(fs)
   local result = {
     available = false,
