@@ -6295,7 +6295,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         <div>
           <div className="setup-kicker">SMART QUEUE MANAGEMENT · LIVE INSPECTION</div>
           <h1>Gaming & Latency</h1>
-          <p>Inspect configured SQM queues and kernel queue disciplines, edit existing queue enable state and rates, and add guarded upload-only per-client DSCP markings. Download-side classification, bandwidth guarantees and full per-client priority remain unavailable.</p>
+          <p>Inspect configured SQM queues and kernel queue disciplines, edit existing queue enable state and rates, and add guarded per-client upload marking plus static-reservation IPv4 download marking. Bandwidth guarantees and a full per-client queue scheduler remain unavailable.</p>
         </div>
       </section>
 
@@ -6417,13 +6417,13 @@ function GamingControlPage({ routerOverview, refresh }: {
             ["LATENCY / JITTER", "NOT MEASURED"],
             ["PACKET LOSS", "NOT MEASURED"],
             ["BUFFERBLOAT GRADE", "NOT MEASURED"],
-            ["UPLOAD DSCP POLICIES", sqm?.client_policy_available ? fmt(sqm.client_policies.length) : "N/A"],
+            ["CLIENT DSCP POLICIES", sqm?.client_policy_available ? fmt(sqm.client_policies.length) : "N/A"],
             ["PER-CLIENT PRIORITY", "NOT CONFIGURED"],
           ]} />
         </Panel>
         <Panel title="Advanced traffic policy" eyebrow="PARTIALLY AVAILABLE">
-          <Status active={true}>UPLOAD DSCP AVAILABLE</Status>
-          <div className="module-message">Per-client upload marking is available through the guarded firewall4 DSCP policy above. It marks one unicast source MAC from an existing internal zone towards a WAN/WWAN zone. Download-side marking, per-client bandwidth caps or guarantees, and a managed per-client queue scheduler are not implemented. Confirm the real packet path and CAKE DiffServ behaviour on the target router before relying on these markings for production traffic.</div>
+          <Status active={true}>UPLOAD + STATIC-IP DOWNLOAD</Status>
+          <div className="module-message">Per-client upload marking matches a unicast client source MAC from an internal zone to WAN/WWAN. Download marking matches a destination IPv4 address only when it belongs to one unique static DHCP reservation and one routed interface in the selected internal zone. firewall4 does not provide destination-MAC matching; IPv6 downlink marking, per-client bandwidth caps or guarantees, and a managed per-client queue scheduler remain unavailable. Confirm the actual packet path and CAKE DiffServ behaviour on the target router before relying on these markings for production traffic.</div>
         </Panel>
       </div>
     </div>
