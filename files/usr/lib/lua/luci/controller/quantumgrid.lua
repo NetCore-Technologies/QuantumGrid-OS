@@ -1148,6 +1148,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
+	entry({"admin", "services", "quantumgrid", "config-restore"}, call("action_config_restore")).leaf = true
 	entry({"admin", "services", "quantumgrid", "audit"}, call("action_audit_log")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-reservation"}, call("action_dhcp_reservation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "dhcp-reservation-update"}, call("action_dhcp_reservation_update")).leaf = true
@@ -4313,6 +4314,277 @@ function action_config_backup()
 	http.header("Content-Length", tostring(validated_size))
 	http.prepare_content("application/gzip")
 	http.write(contents)
+end
+
+
+
+function action_config_restore()
+    local http = require "luci.http"
+    local fs = require "nixio.fs"
+    local sys = require "luci.sys"
+    local util = require "luci.util"
+    local validator = require "luci.quantumgrid.config_backup"
+    local host = http.getenv("HTTP_HOST")
+    local origin = http.getenv("HTTP_ORIGIN")
+    local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+    local MAX_UPLOAD_BYTES = 64 * 1024 * 1024
+    local upload_state = { file = nil, metadata = nil, count = 0, bytes = 0, closed = false, error = nil }
+    local restore_path = nil
+    local rollback_path = nil
+
+    local function respond(status, payload)
+        if status then
+            http.status(status, status == 400 and "Bad Request" or
+                status == 403 and "Forbidden" or status == 405 and "Method Not Allowed" or
+                status == 409 and "Conflict" or status == 413 and "Payload Too Large" or
+                status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+                "Internal Server Error")
+        end
+        http.header("Cache-Control", "no-store")
+        http.prepare_content("application/json; charset=UTF-8")
+        http.write_json(payload)
+    end
+
+    local function cleanup()
+        if upload_state.file and not upload_state.closed then
+            pcall(upload_state.file.close, upload_state.file)
+            upload_state.closed = true
+        end
+        if restore_path then os.remove(restore_path) end
+        if rollback_path then os.remove(rollback_path) end
+    end
+
+    local function fail(status, message, extra)
+        cleanup()
+        local payload = { ok = false, error = message }
+        if type(extra) == "table" then
+            for key, value in pairs(extra) do payload[key] = value end
+        end
+        respond(status, payload)
+    end
+
+    if http.getenv("REQUEST_METHOD") ~= "POST" then
+        respond(405, { ok = false, error = "POST is required." })
+        return
+    end
+    if not require_https(http) then return end
+    if not host or origin ~= scheme .. "://" .. host then
+        respond(403, { ok = false, error = "A same-origin request is required." })
+        return
+    end
+    local content_type = http.getenv("CONTENT_TYPE") or ""
+    if not content_type:lower():find("multipart/form-data", 1, true) then
+        respond(400, { ok = false, error = "The encrypted backup must be submitted as one multipart archive upload." })
+        return
+    end
+    local content_length = http.getenv("CONTENT_LENGTH")
+    if content_length and content_length ~= "" then
+        if not content_length:match("^%d+$") or tonumber(content_length) > MAX_UPLOAD_BYTES + 1024 * 1024 then
+            respond(413, { ok = false, error = "The configuration archive upload exceeds the 64 MiB restore limit." })
+            return
+        end
+    end
+    if fs.access("/sbin/sysupgrade") ~= true or fs.access("/bin/tar") ~= true or
+        fs.access("/sbin/reboot") ~= true or fs.access("/bin/sleep") ~= true then
+        respond(503, { ok = false, error = "Native sysupgrade, tar or reboot utilities are unavailable; no configuration was changed." })
+        return
+    end
+
+    local context, context_error = quantumgrid_backup_context(fs)
+    if not context then
+        respond(503, { ok = false, error = context_error })
+        return
+    end
+    local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
+    if not backup_paths_ok then
+        respond(503, { ok = false, error = backup_paths_error })
+        return
+    end
+
+    local mktemp_command = nil
+    if fs.access("/bin/mktemp") == true then
+        mktemp_command = "/bin/mktemp"
+    elseif fs.access("/usr/bin/mktemp") == true then
+        mktemp_command = "/usr/bin/mktemp"
+    end
+    if not mktemp_command then
+        respond(503, { ok = false, error = "A secure mktemp utility is unavailable; no restore was started." })
+        return
+    end
+
+    local function create_temp(template, validate_path)
+        local ok, output = pcall(util.exec, mktemp_command .. " " .. template)
+        local raw = type(output) == "string" and output:match("^([%w_./%-]+)") or nil
+        if raw then raw = raw:gsub("%s+$", "") end
+        if not ok then raw = nil end
+        local checked, path_error = validate_path(raw)
+        if not checked or fs.access(checked) ~= true then
+            return nil, path_error or "A secure temporary restore file could not be created."
+        end
+        return checked
+    end
+
+    local temp_path, temp_error = create_temp(
+        "/tmp/quantumgrid-config-restore.XXXXXX", validator.validate_restore_temp_path)
+    if not temp_path then
+        respond(503, { ok = false, error = temp_error })
+        return
+    end
+    restore_path = temp_path
+    local upload, upload_open_error = io.open(restore_path, "wb")
+    if not upload then
+        fail(503, "The secure restore upload file could not be opened: " .. tostring(upload_open_error or "unknown error"))
+        return
+    end
+    upload_state.file = upload
+
+    local handler_ok = pcall(http.setfilehandler, function(field, chunk, eof)
+        if type(field) ~= "table" or field.name ~= "archive" or
+            type(field.file) ~= "string" or #field.file < 1 or #field.file > 128 or
+            not field.file:match("^[%w_.%-]+$") then
+            upload_state.error = "Only one named archive file upload is accepted."
+        elseif not upload_state.metadata then
+            upload_state.metadata = field
+            upload_state.count = 1
+        elseif upload_state.metadata ~= field then
+            upload_state.error = "Exactly one archive file must be uploaded."
+        end
+
+        if type(chunk) == "string" and #chunk > 0 then
+            upload_state.bytes = upload_state.bytes + #chunk
+            if upload_state.bytes > MAX_UPLOAD_BYTES then
+                upload_state.error = "The configuration archive upload exceeds the 64 MiB restore limit."
+            elseif not upload_state.error and upload_state.file then
+                local write_ok, write_result = pcall(upload_state.file.write, upload_state.file, chunk)
+                if not write_ok or not write_result then
+                    upload_state.error = "The uploaded configuration archive could not be written to secure temporary storage."
+                end
+            end
+        end
+
+        if eof and upload_state.file and not upload_state.closed then
+            local close_ok, close_result = pcall(upload_state.file.close, upload_state.file)
+            upload_state.closed = close_ok and close_result ~= nil
+            if not upload_state.closed then
+                upload_state.error = "The uploaded configuration archive could not be closed safely."
+            end
+            upload_state.file = nil
+        end
+    end)
+    if not handler_ok then
+        fail(503, "The router HTTP layer cannot safely stream the configuration archive upload.")
+        return
+    end
+
+    local confirmed = http.formvalue("confirmed", true)
+    local same_device_confirmed = http.formvalue("same_device_confirmed", true)
+    local restore_confirmed, confirmation_error =
+        validator.validate_restore_confirmation(confirmed, same_device_confirmed)
+    if not restore_confirmed then
+        fail(400, confirmation_error)
+        return
+    end
+    if upload_state.error then
+        fail(400, upload_state.error)
+        return
+    end
+    if not upload_state.metadata or upload_state.count ~= 1 or not upload_state.closed or
+        upload_state.bytes < 1 or fs.access(restore_path) ~= true then
+        fail(400, "Exactly one complete configuration archive file must be uploaded.")
+        return
+    end
+    local upload_size, size_error = validator.validate_archive_size(upload_state.bytes)
+    if not upload_size then
+        fail(413, size_error)
+        return
+    end
+
+    local statvfs_ok, temp_stats = pcall(fs.statvfs, "/tmp")
+    local available_temp_bytes = statvfs_ok and type(temp_stats) == "table" and
+        tonumber(temp_stats.bavail) and tonumber(temp_stats.frsize) and
+        tonumber(temp_stats.bavail) * tonumber(temp_stats.frsize) or nil
+    if not available_temp_bytes or available_temp_bytes < MAX_UPLOAD_BYTES + 8 * 1024 * 1024 then
+        fail(503, "There is not enough verified free /tmp space to stage a rollback backup safely. No restore was attempted.")
+        return
+    end
+
+    local uploaded_listing, uploaded_error = inspect_quantumgrid_config_archive(
+        restore_path, context, validator, util, sys)
+    if not uploaded_listing then
+        fail(400, uploaded_error)
+        return
+    end
+
+    local rollback_temp, rollback_temp_error = create_temp(
+        "/tmp/quantumgrid-config-rollback.XXXXXX", validator.validate_rollback_temp_path)
+    if not rollback_temp then
+        fail(503, rollback_temp_error)
+        return
+    end
+    rollback_path = rollback_temp
+    local rollback_create_ok, rollback_create_status = pcall(sys.call,
+        "/sbin/sysupgrade -b " .. rollback_path .. " >/dev/null 2>&1")
+    if not rollback_create_ok or rollback_create_status ~= 0 then
+        fail(503, "The router could not create a rollback snapshot. The requested backup was not applied.")
+        return
+    end
+    local rollback_listing, rollback_error = inspect_quantumgrid_config_archive(
+        rollback_path, context, validator, util, sys)
+    if not rollback_listing then
+        fail(503, "The rollback snapshot could not be validated: " .. tostring(rollback_error))
+        return
+    end
+
+    local restore_ok, restore_status = pcall(sys.call,
+        "/sbin/sysupgrade -r " .. restore_path .. " >/dev/null 2>&1")
+    if not restore_ok or restore_status ~= 0 then
+        local rollback_ok, rollback_status = pcall(sys.call,
+            "/sbin/sysupgrade -r " .. rollback_path .. " >/dev/null 2>&1")
+        local rolled_back = rollback_ok and rollback_status == 0
+        record_audit(http, "system.config.restore", context.profile_id, "failed")
+        if rolled_back then
+            cleanup()
+            local reboot_ok, reboot_status = pcall(sys.call,
+                "( /bin/sleep 3; /sbin/reboot ) >/dev/null 2>&1 </dev/null &")
+            local reboot_scheduled = reboot_ok and reboot_status == 0
+            respond(502, {
+                ok = false,
+                error = reboot_scheduled and
+                    "The requested archive could not be applied. The pre-restore configuration was restored and a reboot was scheduled."
+                    or "The requested archive could not be applied. The pre-restore configuration was restored, but a reboot must be started locally.",
+                rolled_back = true,
+                reboot_scheduled = reboot_scheduled
+            })
+            return
+        end
+        fail(502,
+            "The restore failed and the pre-restore configuration could not be restored. Keep the router powered and use an out-of-band recovery path.",
+            { rolled_back = false, reboot_scheduled = false })
+        return
+    end
+
+    record_audit(http, "system.config.restore", context.profile_id, "success")
+    cleanup()
+    local reboot_ok, reboot_status = pcall(sys.call,
+        "( /bin/sleep 3; /sbin/reboot ) >/dev/null 2>&1 </dev/null &")
+    local reboot_scheduled = reboot_ok and reboot_status == 0
+    if not reboot_scheduled then
+        respond(502, {
+            ok = false,
+            error = "The configuration was restored, but the router could not schedule its reboot. Reboot it from an out-of-band management path.",
+            restored = true,
+            reboot_scheduled = false,
+            profile_id = context.profile_id
+        })
+        return
+    end
+    respond(nil, {
+        ok = true,
+        restored = true,
+        reboot_scheduled = true,
+        profile_id = context.profile_id,
+        target = context.target
+    })
 end
 
 
