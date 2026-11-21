@@ -428,16 +428,11 @@ local function wireless_config_inventory(uci, radios)
 					end
 					table.sort(supported_htmodes)
 					local channel = uci:get("wireless", radio, "channel")
-					local networks = {}
-					if type(section.network) == "string" then
-						if section.network:match("^[%w_.%-]+$") then table.insert(networks, section.network) end
-					elseif type(section.network) == "table" then
-						local seen_networks = {}
-						for _, network in ipairs(section.network) do
-							if type(network) == "string" and network:match("^[%w_.%-]+$") and not seen_networks[network] then
-								seen_networks[network] = true
-								table.insert(networks, network)
-							end
+					local networks, seen_networks = {}, {}
+					for _, network in ipairs(wireless_option_list(section.network)) do
+						if network:match("^[%w_.%-]+$") and not seen_networks[network] then
+							seen_networks[network] = true
+							table.insert(networks, network)
 						end
 					end
 					local vlan_inventory = wireless_vlan_sections_for_ap(uci, name)
