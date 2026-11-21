@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -7825,6 +7825,14 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         redirects={inventory?.redirects ?? []}
         refresh={refresh}
       />
+      <OfficeIpv6PinholeManager
+        available={Boolean(inventory?.firewall_available)}
+        truncated={Boolean(inventory?.truncated)}
+        zones={zones}
+        interfaces={interfaces}
+        pinholes={inventory?.ipv6_pinholes ?? []}
+        refresh={refresh}
+      />
       <OfficeWifiNetworkManager
         available={Boolean(inventory?.available)}
         truncated={Boolean(inventory?.truncated)}
@@ -8049,6 +8057,217 @@ function OfficePortForwardManager({
         </div>
       ) : null}
       <div className="module-message">Only existing WAN/WWAN zones can be sources, and only existing internal zones can be destinations. The controller confirms the destination host is inside a static IPv4 subnet attached to that zone and rejects duplicate external port/protocol combinations. This does not configure IPv6 pinholes, TLS, IDS or prove that upstream NAT permits Internet ingress; test the packet path from outside the router.</div>
+    </Panel>
+  );
+}
+
+
+function OfficeIpv6PinholeManager({
+  available,
+  truncated,
+  zones,
+  interfaces,
+  pinholes,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  zones: RouterOfficeFirewallZone[];
+  interfaces: RouterOfficeInterface[];
+  pinholes: RouterOfficeIpv6Pinhole[];
+  refresh: () => void;
+}) {
+  const isExternalZone = (zone: RouterOfficeFirewallZone) =>
+    ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
+    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
+  const sourceZones = zones.filter(isExternalZone);
+  const destinationZones = zones.filter((zone) => !isExternalZone(zone));
+  const [ruleName, setRuleName] = useState("");
+  const [source, setSource] = useState("");
+  const [destination, setDestination] = useState("");
+  const [protocol, setProtocol] = useState<RouterOfficePortForwardProtocol>("tcp");
+  const [destinationIp, setDestinationIp] = useState("");
+  const [destinationPort, setDestinationPort] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState("");
+  const [removing, setRemoving] = useState("");
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const activeSource = sourceZones.some((zone) => zone.name === source)
+    ? source
+    : sourceZones[0]?.name ?? "";
+  const activeDestination = destinationZones.some((zone) => zone.name === destination)
+    ? destination
+    : destinationZones[0]?.name ?? "";
+  const destinationNetworks = destinationZones.find((zone) => zone.name === activeDestination)?.networks ?? [];
+  const isGlobalUnicast = (raw: string) => {
+    const address = raw.split("/")[0]?.trim() ?? "";
+    const first = address.split(":")[0] ?? "";
+    const firstGroup = /^[0-9a-fA-F]{1,4}$/.test(first) ? Number.parseInt(first, 16) : -1;
+    return firstGroup >= 0x2000 && firstGroup <= 0x3fff &&
+      !/^2001:db8:/i.test(address) && !address.includes("%") && !address.includes(".");
+  };
+  const destinationAddresses = interfaces
+    .filter((iface) => destinationNetworks.includes(iface.name))
+    .flatMap((iface) => iface.ipv6
+      .filter(isGlobalUnicast)
+      .map((raw) => ({ network: iface.name, address: raw.split("/")[0].trim() })));
+  const activeDestinationIp = destinationAddresses.some((item) => item.address === destinationIp)
+    ? destinationIp
+    : destinationAddresses[0]?.address ?? "";
+
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!available || truncated || !confirmed || saving || !activeSource || !activeDestination || !activeDestinationIp) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterOfficeIpv6Pinhole({
+        name: ruleName.trim(),
+        source: activeSource,
+        destination: activeDestination,
+        protocol,
+        destinationIp: activeDestinationIp,
+        destinationPort: destinationPort.trim(),
+      });
+      setNotice({
+        success: true,
+        message: result.name + " now allows " + result.protocol.toUpperCase() + " " +
+          result.destination_ip + ":" + result.destination_port + " from " + result.source +
+          " to " + result.destination + "; firewall reload completed.",
+      });
+      setRuleName("");
+      setDestinationPort("");
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The IPv6 pinhole could not be created.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (section: string) => {
+    if (!section || removing) return;
+    setRemoving(section);
+    setNotice(null);
+    try {
+      const result = await removeRouterOfficeIpv6Pinhole(section);
+      if (result.removed) {
+        setPendingRemoval("");
+        setNotice({ success: true, message: "IPv6 pinhole " + section + " was removed and firewall reload completed." });
+        refresh();
+      }
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The IPv6 pinhole could not be removed.",
+      });
+    } finally {
+      setRemoving("");
+    }
+  };
+
+  return (
+    <Panel title="IPv6 WAN pinholes" eyebrow="IPV6 FIREWALL ALLOW RULE · NO NAT · SINGLE HOST AND PORT">
+      {!available ? (
+        <div className="module-message">Firewall configuration is unavailable. IPv6 pinhole changes are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The network or firewall inventory is truncated. Resolve it before changing Internet-facing IPv6 rules.</div>
+      ) : sourceZones.length === 0 || destinationZones.length === 0 ? (
+        <div className="module-message">An existing external WAN zone and internal LAN/office zone are required before a pinhole can be created.</div>
+      ) : null}
+
+      <div className="office-port-forward-list">
+        {pinholes.length === 0 ? (
+          <div className="module-message">No QuantumGrid-managed IPv6 pinholes were found in the firewall configuration.</div>
+        ) : pinholes.map((pinhole) => (
+          <div className="office-port-forward-row" key={pinhole.section}>
+            <div className="office-port-forward-identity">
+              <strong>{pinhole.name}</strong>
+              <span>{pinhole.section} · {pinhole.protocol.toUpperCase()} · {pinhole.source}</span>
+            </div>
+            <div className="office-port-forward-target">
+              <span>{pinhole.destination}</span>
+              <strong>{pinhole.destination_ip}:{pinhole.destination_port}</strong>
+            </div>
+            {pendingRemoval === pinhole.section ? (
+              <div className="office-port-forward-confirm">
+                <span>Remove this inbound IPv6 allowance?</span>
+                <button className="office-remove-start" type="button" onClick={() => void remove(pinhole.section)} disabled={Boolean(removing)}>
+                  {removing === pinhole.section ? "Removing…" : "Confirm removal"}
+                </button>
+                <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing)}>Cancel</button>
+              </div>
+            ) : (
+              <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(pinhole.section)} disabled={!available || truncated || Boolean(removing) || saving}>
+                Remove pinhole
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <form className="office-port-forward-editor" onSubmit={(event) => void create(event)}>
+        <div className="office-port-forward-heading">
+          <strong>Add an inbound IPv6 pinhole</strong>
+          <span>Allows one TCP/UDP service on one configured global IPv6 host. No address translation or inter-zone forwarding is created.</span>
+        </div>
+        <div className="office-port-forward-fields">
+          <label>
+            <span>RULE NAME</span>
+            <input value={ruleName} onChange={(event) => { setRuleName(event.target.value); setConfirmed(false); }} maxLength={64} placeholder="office-https-v6" disabled={!available || truncated || saving} />
+          </label>
+          <label>
+            <span>EXTERNAL WAN ZONE</span>
+            <select value={activeSource} onChange={(event) => { setSource(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || sourceZones.length === 0}>
+              {sourceZones.map((zone) => <option value={zone.name} key={zone.section}>{zone.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>INTERNAL DESTINATION ZONE</span>
+            <select value={activeDestination} onChange={(event) => { setDestination(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || destinationZones.length === 0}>
+              {destinationZones.map((zone) => <option value={zone.name} key={zone.section}>{zone.name} · {zone.networks.join(", ")}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>PROTOCOL</span>
+            <select value={protocol} onChange={(event) => { setProtocol(event.target.value as RouterOfficePortForwardProtocol); setConfirmed(false); }} disabled={!available || truncated || saving}>
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+              <option value="tcp udp">TCP + UDP</option>
+            </select>
+          </label>
+          <label>
+            <span>CONFIGURED GLOBAL IPv6 HOST</span>
+            <select value={activeDestinationIp} onChange={(event) => { setDestinationIp(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || destinationAddresses.length === 0}>
+              {destinationAddresses.map((item) => <option value={item.address} key={item.network + ":" + item.address}>{item.network} · {item.address}</option>)}
+            </select>
+            {destinationAddresses.length === 0 ? <small>No global IPv6 address is configured on an interface in this destination zone. Configure upstream prefix delegation or a static global address first.</small> : null}
+          </label>
+          <label>
+            <span>DESTINATION PORT</span>
+            <input inputMode="numeric" value={destinationPort} onChange={(event) => { setDestinationPort(event.target.value); setConfirmed(false); }} maxLength={5} placeholder="443" disabled={!available || truncated || saving} />
+          </label>
+        </div>
+        <label className="office-reservation-confirm">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !ruleName || !activeSource || !activeDestination || !activeDestinationIp || !destinationPort} />
+          <span>I authorize {activeSource || "the WAN"} to reach only {activeDestinationIp || "the selected global IPv6 host"} on {protocol.toUpperCase()} port {destinationPort || "—"}; router INPUT policy and all other zone traffic remain unchanged.</span>
+        </label>
+        <button className="hero-button" type="submit" disabled={!available || truncated || !confirmed || saving || !activeSource || !activeDestination || !activeDestinationIp}>
+          {saving ? "Applying…" : "Create IPv6 pinhole"}
+        </button>
+      </form>
+      {notice ? (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+      <div className="module-message">Only configured global-unicast addresses on an interface attached to the selected internal zone are accepted. The rule is IPv6-only, port-scoped and restricted to the chosen WAN and LAN zones. No IPv4 NAT, permissive router INPUT policy, ICMP-wide rule or inter-zone forwarding is added; test ingress from an independent external IPv6 network.</div>
     </Panel>
   );
 }
