@@ -4174,9 +4174,11 @@ local function ensure_sysupgrade_backup_paths()
 		local append, append_error = io.open("/etc/sysupgrade.conf", "a")
 		if not append then return nil, "The native sysupgrade backup list could not be updated: " .. tostring(append_error or "unknown error") end
 		local write_ok, write_error = pcall(function()
-			append:write("\n")
-			for _, path in ipairs(missing) do append:write(path, "\n") end
-			append:flush()
+			if not append:write("\n") then error("append failed") end
+			for _, path in ipairs(missing) do
+				if not append:write(path, "\n") then error("append failed") end
+			end
+			if not append:flush() then error("flush failed") end
 		end)
 		local close_ok = pcall(append.close, append)
 		if not write_ok or not close_ok then
