@@ -1343,6 +1343,7 @@ export interface RouterRemoteSyslogStatus {
   stunnel_installed?: boolean;
   stunnel_config_available?: boolean;
   tls_available?: boolean;
+  tls_privilege_drop_configured?: boolean;
   tls_enabled?: boolean;
   tls_status?: "ready" | "review" | "unavailable" | "disabled";
   tls_configured?: boolean;
