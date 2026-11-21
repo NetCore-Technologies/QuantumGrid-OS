@@ -135,8 +135,29 @@ function validate_archive_listing(listing)
 		if not path then
 			return nil, "The archive contains a path outside the permitted etc/ and root/ trees."
 		end
+		if kind == "d" and entry_size ~= 0 then
+			return nil, "Archive directory entries must have a zero-byte payload."
+		end
+		if kind ~= "d" and raw_path:sub(-1) == "/" then
+			return nil, "Regular archive files must not use directory-style paths."
+		end
 		if seen[path] then return nil, "The archive contains duplicate member paths." end
-		seen[path] = true
+		local parent = path
+		while parent:find("/", 1, true) do
+			parent = parent:match("^(.*)/[^/]+$")
+			if seen[parent] == "-" then
+				return nil, "The archive contains a file used as a parent directory."
+			end
+		end
+		if kind == "-" then
+			local child_prefix = path .. "/"
+			for existing in pairs(seen) do
+				if existing:sub(1, #child_prefix) == child_prefix then
+					return nil, "The archive contains a file that conflicts with an existing child path."
+				end
+			end
+		end
+		seen[path] = kind
 		if path:match("^etc/config/[^/]+$") and kind == "-" then has_config = true end
 		if path == "etc/quantumgrid/device-id" then
 			if kind ~= "-" then return nil, "The device identity in the archive must be a regular file." end
