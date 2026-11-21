@@ -867,13 +867,13 @@ local pinhole_zones = {
 }
 local pinhole_interfaces = {
   {
-    name = "corp", device = "br-lan.20", up = true,
+    name = "corp", device = "br-lan.20", l3_device = "br-lan.20", up = true,
     ipv6_neighbors = {
       { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
     },
   },
   {
-    name = "guest", device = "br-lan.30", up = true,
+    name = "guest", device = "br-lan.30", l3_device = "br-lan.30", up = true,
     ipv6_neighbors = {
       { address = "2001:4860:4860::8844", mac = "aa:bb:cc:dd:ee:02", state = "STALE" },
     },
@@ -911,7 +911,7 @@ local normalized_neighbor_inventory = office.build_inventory({
   available = true,
   interfaces = {
     {
-      name = "corp", device = "br-lan.20", up = true,
+      name = "corp", device = "br-lan.20", l3_device = "br-lan.20", up = true,
       ipv6_neighbors = {
         { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
         { address = "2001:4860:4860::9999", mac = "ff:bb:cc:dd:ee:02", state = "REACHABLE" },
@@ -929,7 +929,7 @@ local down_neighbor_inventory = office.build_inventory({
   available = true,
   interfaces = {
     {
-      name = "corp", device = "br-lan.20", up = false,
+      name = "corp", device = "br-lan.20", l3_device = "br-lan.20", up = false,
       ipv6_neighbors = {
         { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
       },
@@ -942,7 +942,7 @@ assert(down_neighbor_inventory.interface_count == 1
 
 local down_pinhole_interface = {
   {
-    name = "corp", device = "br-lan.20", up = false,
+    name = "corp", device = "br-lan.20", l3_device = "br-lan.20", up = false,
     ipv6_neighbors = pinhole_interfaces[1].ipv6_neighbors,
   },
 }
@@ -953,7 +953,7 @@ assert(office.validate_office_ipv6_pinhole(
 
 local unbound_pinhole_interface = {
   {
-    name = "corp", device = "", up = true,
+    name = "corp", device = "br-lan.20", l3_device = "", up = true,
     ipv6_neighbors = pinhole_interfaces[1].ipv6_neighbors,
   },
 }
@@ -965,7 +965,7 @@ assert(office.validate_office_ipv6_pinhole(
 local duplicate_neighbor_interfaces = {
   pinhole_interfaces[1],
   {
-    name = "guest", device = "br-lan.30", up = true,
+    name = "guest", device = "br-lan.30", l3_device = "br-lan.30", up = true,
     ipv6_neighbors = {
       { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:09", state = "REACHABLE" },
     },
