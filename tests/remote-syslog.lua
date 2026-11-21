@@ -339,4 +339,38 @@ local ambiguous_uci, ambiguous_fs, ambiguous_process = status_fixture({
 local ambiguous_status = remote.inspect_status(ambiguous_uci, ambiguous_fs, 6, ambiguous_process)
 assert(not ambiguous_status.available, "ambiguous system UCI sections must not be reported as a verified destination")
 
+local poll_count, wait_count = 0, 0
+local final_ready_status = {
+  enabled = true, protocol = "tls", tls_status = "ready", tls_process_running = true,
+  host = "logs.corp.example", port = 6514,
+}
+local polled_status, polled_ready, polled_attempts = remote.wait_for_ready(function()
+  poll_count = poll_count + 1
+  if poll_count < 3 then
+    return { enabled = false, protocol = "tls", tls_status = "review",
+      tls_process_running = false, host = "logs.corp.example", port = 6514 }
+  end
+  return final_ready_status
+end, function() wait_count = wait_count + 1 end, "logs.corp.example", "6514", 10)
+assert(polled_ready and polled_status == final_ready_status and polled_attempts == 3)
+assert(poll_count == 3 and wait_count == 2, "readiness polling must wait only between failed samples")
+
+local wrong_target_count, wrong_target_waits = 0, 0
+local wrong_target_status, wrong_target_ready, wrong_target_attempts = remote.wait_for_ready(function()
+  wrong_target_count = wrong_target_count + 1
+  return { enabled = true, protocol = "tls", tls_status = "ready",
+    tls_process_running = true, host = "other.corp.example", port = 6514 }
+end, function() wrong_target_waits = wrong_target_waits + 1 end,
+  "logs.corp.example", 6514, 3)
+assert(not wrong_target_ready and wrong_target_attempts == 3 and wrong_target_count == 3)
+assert(wrong_target_status.host == "other.corp.example" and wrong_target_waits == 2)
+
+local error_status, error_ready, error_attempts = remote.wait_for_ready(function()
+  error("telemetry unavailable")
+end, function() end, "logs.corp.example", 6514, 2)
+assert(error_status == nil and not error_ready and error_attempts == 2)
+assert(select(2, remote.wait_for_ready(function() return final_ready_status end,
+  function() end, "logs.corp.example", 6514, 21)) == false,
+  "unbounded poll counts must be rejected")
+
 print("remote-syslog: destination, transport, sender name, prefix and disabled state validation passed")
