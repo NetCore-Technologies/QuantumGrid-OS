@@ -76,7 +76,7 @@ def validate(profile_path: Path) -> list[str]:
         raise ProfileError(f"cannot read profile JSON: {exc}") from exc
 
     root = require_object(data, "profile", {"schema_version", "platform", "capabilities", "artifacts"})
-    if root["schema_version"] != 1 or isinstance(root["schema_version"], bool):
+    if type(root["schema_version"]) is not int or root["schema_version"] != 1:
         raise ProfileError("schema_version must be integer 1")
 
     platform = require_object(
