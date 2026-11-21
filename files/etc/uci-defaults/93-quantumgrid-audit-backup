@@ -9,7 +9,8 @@ touch "$backup_list"
 
 for entry in \
   "/etc/quantumgrid/audit.jsonl" \
-  "/etc/quantumgrid/audit.jsonl.1"; do
+  "/etc/quantumgrid/audit.jsonl.1" \
+  "/etc/quantumgrid/device-id"; do
   if ! grep -qxF "$entry" "$backup_list"; then
     printf '%s\n' "$entry" >> "$backup_list"
   fi
