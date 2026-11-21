@@ -2348,8 +2348,14 @@ const CONFIG_BACKUP_HEADER_BYTES = 40;
 const CONFIG_BACKUP_MAX_BYTES = 64 * 1024 * 1024;
 const CONFIG_BACKUP_PBKDF2_ITERATIONS = 600_000;
 
+function backupBytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+}
+
 function assertBackupPassphrase(passphrase: string): Uint8Array {
-  if (typeof passphrase !== "string" || Array.from(passphrase).length < 16) {
+  if (typeof passphrase !== "string" || passphrase.length < 16) {
     throw new Error("Use a backup passphrase with at least 16 characters.");
   }
   const encoded = new TextEncoder().encode(passphrase);
@@ -2369,9 +2375,9 @@ function requireBackupCrypto(): Crypto {
 async function deriveConfigBackupKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   const cryptoApi = requireBackupCrypto();
   const passwordBytes = assertBackupPassphrase(passphrase);
-  const material = await cryptoApi.subtle.importKey("raw", passwordBytes, "PBKDF2", false, ["deriveKey"]);
+  const material = await cryptoApi.subtle.importKey("raw", backupBytesToArrayBuffer(passwordBytes), "PBKDF2", false, ["deriveKey"]);
   return cryptoApi.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: CONFIG_BACKUP_PBKDF2_ITERATIONS, hash: "SHA-256" },
+    { name: "PBKDF2", salt: backupBytesToArrayBuffer(salt), iterations: CONFIG_BACKUP_PBKDF2_ITERATIONS, hash: "SHA-256" },
     material,
     { name: "AES-GCM", length: 256 },
     false,
@@ -2384,8 +2390,11 @@ export async function encryptRouterConfigBackupBytes(
   passphrase: string,
 ): Promise<Uint8Array> {
   const plaintext = archive instanceof Uint8Array ? archive : new Uint8Array(archive);
-  if (plaintext.byteLength < 1 || plaintext.byteLength > CONFIG_BACKUP_MAX_BYTES) {
+  if (plaintext.byteLength < 2 || plaintext.byteLength > CONFIG_BACKUP_MAX_BYTES) {
     throw new Error("The configuration archive is empty or larger than 64 MiB.");
+  }
+  if (plaintext[0] !== 0x1f || plaintext[1] !== 0x8b) {
+    throw new Error("The router response is not a valid gzip configuration archive.");
   }
   const cryptoApi = requireBackupCrypto();
   const salt = cryptoApi.getRandomValues(new Uint8Array(16));
@@ -2398,9 +2407,9 @@ export async function encryptRouterConfigBackupBytes(
   header.set(nonce, 28);
   const key = await deriveConfigBackupKey(passphrase, salt);
   const encrypted = await cryptoApi.subtle.encrypt(
-    { name: "AES-GCM", iv: nonce, additionalData: header, tagLength: 128 },
+    { name: "AES-GCM", iv: backupBytesToArrayBuffer(nonce), additionalData: backupBytesToArrayBuffer(header), tagLength: 128 },
     key,
-    plaintext,
+    backupBytesToArrayBuffer(plaintext),
   );
   const container = new Uint8Array(header.byteLength + encrypted.byteLength);
   container.set(header, 0);
@@ -2432,9 +2441,9 @@ export async function decryptRouterConfigBackupBytes(
   const key = await deriveConfigBackupKey(passphrase, salt);
   try {
     const decrypted = await requireBackupCrypto().subtle.decrypt(
-      { name: "AES-GCM", iv: nonce, additionalData: header, tagLength: 128 },
+      { name: "AES-GCM", iv: backupBytesToArrayBuffer(nonce), additionalData: backupBytesToArrayBuffer(header), tagLength: 128 },
       key,
-      bytes.slice(CONFIG_BACKUP_HEADER_BYTES),
+      backupBytesToArrayBuffer(bytes.slice(CONFIG_BACKUP_HEADER_BYTES)),
     );
     return new Uint8Array(decrypted);
   } catch {
@@ -2447,7 +2456,10 @@ export async function decryptRouterConfigBackup(file: Blob, passphrase: string):
     throw new Error("The encrypted backup is larger than the supported 64 MiB limit.");
   }
   const plaintext = await decryptRouterConfigBackupBytes(await file.arrayBuffer(), passphrase);
-  const archive = new Blob([plaintext], { type: "application/gzip" });
+  if (plaintext.byteLength < 2 || plaintext[0] !== 0x1f || plaintext[1] !== 0x8b) {
+    throw new Error("The decrypted payload is not a valid gzip configuration archive.");
+  }
+  const archive = new Blob([backupBytesToArrayBuffer(plaintext)], { type: "application/gzip" });
   const exportedAt = new Date().toISOString();
   const objectUrl = URL.createObjectURL(archive);
   const link = document.createElement("a");
@@ -2494,7 +2506,7 @@ export async function downloadRouterConfigBackup(passphrase: string): Promise<vo
     throw new Error("The downloaded configuration archive is empty or larger than 64 MiB.");
   }
   const encrypted = await encryptRouterConfigBackupBytes(await archive.arrayBuffer(), passphrase);
-  const secureArchive = new Blob([encrypted], { type: "application/vnd.quantumgrid.backup" });
+  const secureArchive = new Blob([backupBytesToArrayBuffer(encrypted)], { type: "application/vnd.quantumgrid.backup" });
   const exportedAt = new Date().toISOString();
   const objectUrl = URL.createObjectURL(secureArchive);
   const link = document.createElement("a");
