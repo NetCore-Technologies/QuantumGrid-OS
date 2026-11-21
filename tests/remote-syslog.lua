@@ -108,4 +108,147 @@ for _, input in ipairs(invalid) do
   assert(result == nil, "invalid remote syslog configuration must be rejected")
 end
 
+local function status_fixture(options)
+  options = options or {}
+  local files = {
+    ["/etc/init.d/log"] = true,
+    ["/etc/config/system"] = true,
+    ["/etc/init.d/stunnel"] = true,
+    ["/etc/config/stunnel"] = true,
+    ["/etc/ssl/certs/ca-certificates.crt"] = true,
+  }
+  for path, value in pairs(options.files or {}) do files[path] = value end
+  local system_sections = options.system_sections or {{
+    [".name"] = "system",
+    [".type"] = "system",
+    log_ip = "127.0.0.1",
+    log_port = "5514",
+    log_proto = "tcp",
+    log_remote = "1",
+    log_hostname = "qg-office-router",
+    log_prefix = "office-site1",
+  }}
+  local sections = {
+    globals = options.globals or {
+      [".name"] = "globals",
+      [".type"] = "globals",
+      setuid = "nobody",
+      setgid = "nogroup",
+    },
+    quantumgrid_syslog = options.tunnel or {
+      [".name"] = "quantumgrid_syslog",
+      [".type"] = "service",
+      enabled = "1",
+      client = "1",
+      accept_host = "127.0.0.1",
+      accept_port = "5514",
+      CAfile = "/etc/ssl/certs/ca-certificates.crt",
+      verifyChain = "1",
+      sslVersion = "TLSv1.2",
+      connect = { "logs.corp.example:6514" },
+      checkHost = { "logs.corp.example" },
+      sni = { "logs.corp.example" },
+    },
+  }
+  local uci = {}
+  function uci:foreach(package, section_type, callback)
+    if package == "system" and section_type == "system" then
+      for _, section in ipairs(system_sections) do callback(section) end
+    end
+  end
+  function uci.get_all(_, package, section)
+    if package == "stunnel" then return sections[section] end
+    return nil
+  end
+  local fs = { access = function(path) return files[path] == true end }
+  return uci, fs
+end
+
+local status_uci, status_fs = status_fixture()
+local tls_status = remote.inspect_status(status_uci, status_fs, 123)
+assert(tls_status.available and tls_status.service_installed and tls_status.config_available)
+assert(tls_status.protocol == "tls" and tls_status.host == "logs.corp.example" and tls_status.port == 6514)
+assert(tls_status.tls_available and tls_status.tls_privilege_drop_configured)
+assert(tls_status.tls_configured and tls_status.tls_identity_verified and tls_status.tls_enabled)
+assert(tls_status.tls_status == "ready" and tls_status.enabled)
+assert(tls_status.sampled_at == 123)
+
+local unencrypted_uci, unencrypted_fs = status_fixture({
+  system_sections = {{
+    [".name"] = "system", [".type"] = "system",
+    log_ip = "192.0.2.20", log_port = "514", log_proto = "udp", log_remote = "1",
+  }},
+})
+local unencrypted_status = remote.inspect_status(unencrypted_uci, unencrypted_fs, 456)
+assert(unencrypted_status.available and unencrypted_status.enabled)
+assert(unencrypted_status.protocol == "udp" and unencrypted_status.host == "192.0.2.20")
+assert(unencrypted_status.tls_status == "unavailable", "plain UDP must not be reported as TLS")
+
+local unsafe_globals_uci, unsafe_globals_fs = status_fixture({
+  globals = { [".name"] = "globals", [".type"] = "globals", setuid = "root", setgid = "nogroup" },
+})
+local unsafe_globals = remote.inspect_status(unsafe_globals_uci, unsafe_globals_fs, 1)
+assert(unsafe_globals.tls_status == "review" and not unsafe_globals.tls_privilege_drop_configured)
+assert(not unsafe_globals.enabled)
+
+local wrong_tls_version = status_fixture({
+  tunnel = {
+    [".name"] = "quantumgrid_syslog", [".type"] = "service",
+    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
+    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1",
+    sslVersion = "TLSv1.1", connect = { "logs.corp.example:6514" },
+    checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
+  },
+})
+local weak_tls_status = remote.inspect_status(wrong_tls_version, select(2, status_fixture({
+  tunnel = {
+    [".name"] = "quantumgrid_syslog", [".type"] = "service",
+    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
+    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1",
+    sslVersion = "TLSv1.1", connect = { "logs.corp.example:6514" },
+    checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
+  },
+})), 2)
+assert(weak_tls_status.tls_status == "review" and not weak_tls_status.enabled)
+
+local unverified_identity_uci, unverified_identity_fs = status_fixture({
+  tunnel = {
+    [".name"] = "quantumgrid_syslog", [".type"] = "service",
+    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
+    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1",
+    sslVersion = "TLSv1.2", connect = { "logs.corp.example:6514", "backup.corp.example:6514" },
+    checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
+  },
+})
+local extra_destination = remote.inspect_status(unverified_identity_uci, unverified_identity_fs, 3)
+assert(extra_destination.tls_status == "review" and not extra_destination.tls_identity_verified)
+
+local ip_tls_uci, ip_tls_fs = status_fixture({
+  tunnel = {
+    [".name"] = "quantumgrid_syslog", [".type"] = "service",
+    enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
+    CAfile = "/etc/ssl/certs/ca-certificates.crt", verifyChain = "1",
+    sslVersion = "TLSv1.2", connect = { "192.0.2.15:6514" },
+    checkIP = { "192.0.2.15" },
+  },
+})
+local ip_tls_status = remote.inspect_status(ip_tls_uci, ip_tls_fs, 4)
+assert(ip_tls_status.tls_status == "ready" and ip_tls_status.tls_identity_verified)
+assert(ip_tls_status.host == "192.0.2.15" and ip_tls_status.port == 6514)
+
+local missing_ca_uci, missing_ca_fs = status_fixture({
+  files = { ["/etc/ssl/certs/ca-certificates.crt"] = false },
+})
+local missing_ca = remote.inspect_status(missing_ca_uci, missing_ca_fs, 5)
+assert(missing_ca.tls_status == "unavailable" and not missing_ca.enabled)
+
+local ambiguous_uci, ambiguous_fs = status_fixture({
+  system_sections = {
+    { [".name"] = "system", [".type"] = "system", log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp", log_remote = "1" },
+    { [".name"] = "system2", [".type"] = "system", log_ip = "192.0.2.10", log_port = "514", log_proto = "udp", log_remote = "1" },
+  },
+})
+local ambiguous_status = remote.inspect_status(ambiguous_uci, ambiguous_fs, 6)
+assert(not ambiguous_status.available, "ambiguous system UCI sections must not be reported as a verified destination")
+
 print("remote-syslog: destination, transport, sender name, prefix and disabled state validation passed")
