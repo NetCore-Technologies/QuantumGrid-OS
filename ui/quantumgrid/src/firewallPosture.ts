@@ -1,4 +1,4 @@
-import type { RouterFirewallRedirect, RouterSecurityStatus } from "./routerApi.js";
+import type { RouterFirewallRedirect, RouterManagementTransport, RouterSecurityStatus } from "./routerApi.js";
 
 export type FirewallPostureStatus = "review" | "ok" | "unknown";
 
@@ -154,6 +154,156 @@ function policyCheck(
   };
 }
 
+function managementPlaneChecks(
+  management: RouterManagementTransport | undefined,
+): FirewallPostureCheck[] {
+  if (!management) {
+    return [
+      {
+        id: "management-https",
+        title: "Administrator HTTPS transport",
+        scope: "Management plane",
+        status: "unknown",
+        detail: "HTTPS listener, TLS and private-key posture were not reported. Do not assume the administrator plane is encrypted.",
+      },
+      {
+        id: "ssh-authentication",
+        title: "SSH authentication posture",
+        scope: "Dropbear",
+        status: "unknown",
+        detail: "SSH configuration and authentication controls were not reported.",
+      },
+      {
+        id: "ssh-management-zone",
+        title: "SSH management-network binding",
+        scope: "Dropbear",
+        status: "unknown",
+        detail: "The firewall-zone binding of enabled SSH listeners was not reported. An interface name alone is not proof of a trusted management network.",
+      },
+    ];
+  }
+
+  const checks: FirewallPostureCheck[] = [];
+  const privateKeyStatus = management.private_key?.status;
+  if (!management.https_configured || !management.service_installed || management.plaintext_http_unredirected) {
+    checks.push({
+      id: "management-https",
+      title: "Administrator HTTPS transport",
+      scope: "uHTTPd",
+      status: "review",
+      detail: !management.service_installed || !management.https_configured
+        ? "The HTTPS service, listener, TLS runtime or non-empty certificate/key pair is not fully configured. Keep administrator access off unencrypted HTTP until HTTPS is available."
+        : "An HTTP listener is active without an HTTPS redirect. Use HTTPS for every administrator session and remove or redirect plaintext listeners.",
+    });
+  } else if (privateKeyStatus === "present") {
+    checks.push({
+      id: "management-https",
+      title: "Administrator HTTPS transport",
+      scope: "uHTTPd",
+      status: "ok",
+      detail: "HTTPS listeners, TLS runtime and a root-owned private key with restrictive file permissions are configured; this does not validate certificate trust, hostname coverage or live socket reachability.",
+    });
+  } else {
+    checks.push({
+      id: "management-https",
+      title: "Administrator HTTPS transport",
+      scope: "uHTTPd",
+      status: privateKeyStatus === "review" || privateKeyStatus === "missing" ? "review" : "unknown",
+      detail: privateKeyStatus === "review" || privateKeyStatus === "missing"
+        ? "The HTTPS private-key file is missing or its ownership, type, size or permissions require review."
+        : "HTTPS is configured, but private-key metadata could not be fully verified.",
+    });
+  }
+
+  if (!management.ssh_service_installed || management.ssh_status === "disabled") {
+    checks.push({
+      id: "ssh-authentication",
+      title: "SSH authentication posture",
+      scope: "Dropbear",
+      status: "ok",
+      detail: "Dropbear is not installed or has no enabled listener; no active SSH authentication posture is claimed.",
+    });
+  } else if (management.ssh_status === "ready") {
+    checks.push({
+      id: "ssh-authentication",
+      title: "SSH authentication posture",
+      scope: "Dropbear",
+      status: "ok",
+      detail: "The bounded Dropbear configuration review passed its authentication, key-file, listener and gateway-port checks. This does not establish live reachability or prove that an administrator can authenticate successfully.",
+    });
+  } else if (management.ssh_status === "review") {
+    checks.push({
+      id: "ssh-authentication",
+      title: "SSH authentication posture",
+      scope: "Dropbear",
+      status: "review",
+      detail: "One or more enabled Dropbear listeners have an unsafe or incomplete authentication, key-file, port or interface configuration. Review each reported instance before production use.",
+    });
+  } else {
+    checks.push({
+      id: "ssh-authentication",
+      title: "SSH authentication posture",
+      scope: "Dropbear",
+      status: "unknown",
+      detail: "Dropbear configuration could not be completely inspected; missing telemetry is not treated as a hardened state.",
+    });
+  }
+
+  if (!management.ssh_service_installed || management.ssh_status === "disabled") {
+    checks.push({
+      id: "ssh-management-zone",
+      title: "SSH management-network binding",
+      scope: "Dropbear",
+      status: "ok",
+      detail: "No enabled SSH listener was reported.",
+    });
+  } else if (management.ssh_config_available !== true || !management.ssh_instances) {
+    checks.push({
+      id: "ssh-management-zone",
+      title: "SSH management-network binding",
+      scope: "Dropbear",
+      status: "unknown",
+      detail: "The enabled SSH listener inventory or firewall-zone mapping is unavailable.",
+    });
+  } else {
+    const enabledInstances = management.ssh_instances.filter((instance) => instance.enabled === true);
+    if (enabledInstances.length === 0) {
+      checks.push({
+        id: "ssh-management-zone",
+        title: "SSH management-network binding",
+        scope: "Dropbear",
+        status: "unknown",
+        detail: "No enabled SSH listener could be correlated with a trusted management zone.",
+      });
+    }
+    for (const instance of enabledInstances) {
+      const zoneStatus = instance.interface_zone_status;
+      checks.push({
+        id: "ssh-management-zone:" + instance.name,
+        title: "SSH management-network binding",
+        scope: "Dropbear " + instance.name,
+        status: zoneStatus === "internal" ? "ok" : zoneStatus === "external" ? "review" : "unknown",
+        detail: zoneStatus === "internal"
+          ? "The listener interface maps uniquely to a recognised internal firewall zone. Validate the management VLAN and its effective firewall policy separately."
+          : zoneStatus === "external"
+            ? "The listener interface maps to an external WAN/WWAN firewall zone. Do not expose administrator SSH directly on the external network; move it to a dedicated trusted management network."
+            : "The listener interface could not be mapped uniquely to a recognised internal or external firewall zone. Custom, missing or ambiguous mappings fail closed and require manual review.",
+      });
+    }
+    if (management.ssh_truncated) {
+      checks.push({
+        id: "ssh-management-zone-truncated",
+        title: "SSH management-network inventory is incomplete",
+        scope: "Dropbear",
+        status: "unknown",
+        detail: "The SSH instance list is truncated. Additional listeners were not classified and must be reviewed in the native Dropbear configuration.",
+      });
+    }
+  }
+
+  return checks;
+}
+
 function report(checks: FirewallPostureCheck[]): FirewallPostureReport {
   return {
     checks,
@@ -177,6 +327,7 @@ export function auditFirewallPosture(
   }
 
   const checks: FirewallPostureCheck[] = [];
+  checks.push(...managementPlaneChecks(security.management_transport));
   checks.push({
     id: "firewall-service",
     title: "Firewall service",
