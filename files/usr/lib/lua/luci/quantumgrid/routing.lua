@@ -270,6 +270,12 @@ function validate_static_route(family, interface, target, gateway, metric, table
 	}
 end
 
+function ip_address_family(address)
+	if parse_ipv4(address) then return "IPv4" end
+	if parse_ipv6(address) then return "IPv6" end
+	return nil
+end
+
 function static_route_contains_address(route, address)
 	if type(route) ~= "table" or type(address) ~= "string" then return false end
 	local parsed, err = parse_target(route.family, route.target)
