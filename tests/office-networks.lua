@@ -843,6 +843,7 @@ local parsed_neighbors = office.parse_ipv6_neighbor_inventory(table.concat({
   "2001:4860:4860::8888 dev br-lan.20 lladdr aa:bb:cc:dd:ee:01 REACHABLE",
   "2001:4860:4860::8844 dev br-lan.20 lladdr aa:bb:cc:dd:ee:02 STALE",
   "2001:4860:4860::9999 dev br-other lladdr aa:bb:cc:dd:ee:03 REACHABLE",
+  "2001:db8::1 dev br-lan.20 lladdr aa:bb:cc:dd:ee:11 REACHABLE",
   "fd00::10 dev br-lan.20 lladdr aa:bb:cc:dd:ee:04 REACHABLE",
   "fe80::10 dev br-lan.20 lladdr aa:bb:cc:dd:ee:05 REACHABLE",
   "ff02::1 dev br-lan.20 lladdr aa:bb:cc:dd:ee:06 REACHABLE",
