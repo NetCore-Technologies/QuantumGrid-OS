@@ -367,7 +367,9 @@ local function wireless_vlan_sections_for_ap(uci, ap_section)
 	local ok = pcall(function()
 		uci:foreach("wireless", "wifi-vlan", function(section)
 			local iface_list = wireless_option_list(section.iface)
-			local attached = false
+			local section_name = tostring(section[".name"] or "")
+			local prefix = "qgrid_" .. ap_section .. "_"
+			local attached = section_name:sub(1, #prefix) == prefix
 			for _, iface in ipairs(iface_list) do
 				if iface == ap_section then attached = true break end
 			end
@@ -1090,12 +1092,7 @@ local function restore_wireless_vlan_sections(uci, interface, snapshot)
 	local inspect_ok = pcall(function()
 		uci:foreach("wireless", "wifi-vlan", function(section)
 			local section_name = tostring(section[".name"] or "")
-			local iface_list = wireless_option_list(section.iface)
-			local attached = false
-			for _, iface in ipairs(iface_list) do
-				if iface == interface then attached = true break end
-			end
-			if attached and section_name:sub(1, #prefix) == prefix then
+			if section_name:sub(1, #prefix) == prefix then
 				table.insert(current, section_name)
 			end
 		end)
@@ -1403,7 +1400,97 @@ function action_wireless_update()
 		return
 	end
 
+	local manage_radius_vlans_value = http.formvalue("manage_radius_vlans", true)
+	local dynamic_vlan_value = http.formvalue("dynamic_vlan_enabled", true)
+	local radius_vlan_json = http.formvalue("radius_vlan_mappings", true)
+	if (manage_radius_vlans_value ~= "0" and manage_radius_vlans_value ~= "1")
+		or (dynamic_vlan_value ~= "0" and dynamic_vlan_value ~= "1")
+		or type(radius_vlan_json) ~= "string" or #radius_vlan_json > 8192 then
+		respond(400, { ok = false, error = "Explicit RADIUS dynamic VLAN controls and a bounded mapping list are required." })
+		return
+	end
+	local manage_radius_vlans = manage_radius_vlans_value == "1"
+	local dynamic_vlan_enabled = dynamic_vlan_value == "1"
+	local jsonc = require "luci.jsonc"
+	local mappings_ok, requested_mappings = pcall(jsonc.parse, radius_vlan_json)
+	if not mappings_ok or type(requested_mappings) ~= "table" then
+		respond(400, { ok = false, error = "RADIUS VLAN mappings must be a valid JSON array." })
+		return
+	end
+	local radius_vlan_inventory = wireless_vlan_sections_for_ap(uci, update.section)
+	local current_dynamic_vlan = tonumber(current_ap_config.dynamic_vlan) or 0
+	local has_custom_vlan_options = false
+	for _, option in ipairs({ "vlan_file", "vlan_bridge", "vlan_tagged_interface", "vlan_no_bridge", "vlan_naming" }) do
+		local value = current_ap_config[option]
+		if type(value) == "string" and value ~= "" and value ~= "0" then
+			has_custom_vlan_options = true
+		end
+	end
+	local radius_vlan_unmanaged = radius_vlan_inventory.unmanaged
+		or has_custom_vlan_options
+		or (current_dynamic_vlan > 0 and #radius_vlan_inventory.sections == 0)
+	if manage_radius_vlans and radius_vlan_unmanaged then
+		respond(409, { ok = false, error = "This AP already has RADIUS VLAN settings QuantumGrid cannot safely identify or manage. Its existing wifi-vlan mappings and hostapd options were left untouched." })
+		return
+	end
+	if not manage_radius_vlans then
+		if dynamic_vlan_enabled or #requested_mappings > 0 then
+			respond(400, { ok = false, error = "Unmanaged RADIUS VLAN configuration must not be changed through this editor." })
+			return
+		end
+		if current_dynamic_vlan > 0 and not enterprise_encryption then
+			respond(409, { ok = false, error = "This AP has externally managed dynamic VLAN assignment. Keep Enterprise security enabled or disable its RADIUS VLAN configuration through the administrator-managed hostapd settings." })
+			return
+		end
+	end
+
+	local validated_radius_vlans = {}
+	if manage_radius_vlans then
+		if #update.section > 48 then
+			respond(400, { ok = false, error = "This AP section name is too long for deterministic managed RADIUS VLAN mapping identifiers." })
+			return
+		end
+		if dynamic_vlan_enabled then
+			if not enterprise_encryption then
+				respond(400, { ok = false, error = "RADIUS dynamic VLAN requires WPA2-Enterprise or WPA3-Enterprise security." })
+				return
+			end
+			local validated, mapping_error = office_validator.validate_radius_dynamic_vlan_mappings(
+				requested_mappings, network_inventory.interfaces, network_inventory.bridges,
+				network_inventory.vlans, network_inventory.zones)
+			if not validated then
+				respond(400, { ok = false, error = mapping_error })
+				return
+			end
+			validated_radius_vlans = validated
+		elseif #requested_mappings ~= 0 then
+			respond(400, { ok = false, error = "Disable RADIUS dynamic VLAN by removing all VLAN mappings." })
+			return
+		end
+	else
+		if #requested_mappings ~= 0 then
+			respond(400, { ok = false, error = "VLAN mappings cannot be submitted when their configuration is not managed by QuantumGrid." })
+			return
+		end
+	end
+
 	local snapshot = { radio = {}, interface = {} }
+	snapshot.manage_radius_vlans = manage_radius_vlans
+	snapshot.wifi_vlans = {}
+	if manage_radius_vlans then
+		for _, item in ipairs(radius_vlan_inventory.sections) do
+			if not item.managed or item.section == "" or item.name == "" or item.vid <= 0 or item.network == "" then
+				respond(409, { ok = false, error = "An existing RADIUS VLAN mapping is not a complete QuantumGrid-managed entry. No changes were made." })
+				return
+			end
+			table.insert(snapshot.wifi_vlans, {
+				section = item.section,
+				name = item.name,
+				vid = tostring(item.vid),
+				network = item.network
+			})
+		end
+	end
 	for _, option in ipairs({ "channel", "htmode", "txpower" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.radio, option)
 		if not ok then
@@ -1412,7 +1499,7 @@ function action_wireless_update()
 		end
 		snapshot.radio[option] = value or false
 	end
-	for _, option in ipairs({ "ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w" }) do
+	for _, option in ipairs({ "ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w", "dynamic_vlan" }) do
 		local ok, value = pcall(uci.get, uci, "wireless", update.section, option)
 		if not ok then
 			respond(500, { ok = false, error = "Could not snapshot the selected AP settings." })
@@ -1470,6 +1557,31 @@ function action_wireless_update()
 	elseif update.key_supplied then
 		interface_updates.key = update.key
 	end
+	if manage_radius_vlans then
+		interface_updates.dynamic_vlan = dynamic_vlan_enabled and "2" or false
+	end
+
+	local function stage_radius_vlan_mappings()
+		if not manage_radius_vlans then return true end
+		for _, item in ipairs(radius_vlan_inventory.sections) do
+			local delete_ok, deleted = pcall(uci.delete, uci, "wireless", item.section)
+			if not delete_ok or deleted ~= true then return false end
+		end
+		for _, mapping in ipairs(validated_radius_vlans) do
+			local section_id = "qgrid_" .. update.section .. "_" .. mapping.vid
+			local existing_type = uci:get("wireless", section_id, ".type")
+			if existing_type ~= nil then return false end
+			local section_ok, section = pcall(uci.section, uci, "wireless", "wifi-vlan", section_id, {
+				name = mapping.name,
+				vid = mapping.vid
+			})
+			if not section_ok or section ~= section_id then return false end
+			local iface_ok, iface_set = pcall(uci.set_list, uci, "wireless", section_id, "iface", { update.section })
+			local network_ok, network_set = pcall(uci.set_list, uci, "wireless", section_id, "network", { mapping.network })
+			if not iface_ok or iface_set ~= true or not network_ok or network_set ~= true then return false end
+		end
+		return true
+	end
 
 	local function set_options(section, options)
 		for option, value in pairs(options) do
@@ -1485,7 +1597,8 @@ function action_wireless_update()
 	end
 
 	if not set_options(update.radio, radio_updates)
-		or not set_options(update.section, interface_updates) then
+		or not set_options(update.section, interface_updates)
+		or not stage_radius_vlan_mappings() then
 		pcall(uci.revert, uci, "wireless")
 		respond(500, { ok = false, error = "Wireless settings could not be staged; no reload was attempted." })
 		return
@@ -1537,6 +1650,9 @@ function action_wireless_update()
 		accounting_server = enterprise_encryption and update.accounting_server ~= "" and update.accounting_server or nil,
 		accounting_port = enterprise_encryption and update.accounting_server ~= "" and tonumber(update.accounting_port) or nil,
 		accounting_secret_set = enterprise_encryption and update.accounting_server ~= "",
+		dynamic_vlan = manage_radius_vlans and (dynamic_vlan_enabled and 2 or 0) or current_dynamic_vlan,
+		radius_vlan_count = manage_radius_vlans and #validated_radius_vlans or #radius_vlan_inventory.sections,
+		radius_vlan_mappings = manage_radius_vlans and validated_radius_vlans or radius_vlan_inventory.sections,
 		reloaded = true,
 		rolled_back = false
 	})
