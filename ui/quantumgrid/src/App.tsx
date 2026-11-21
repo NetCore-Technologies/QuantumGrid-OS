@@ -4873,6 +4873,8 @@ function WirelessConfigEditor({
       .map((mapping) => ({ vid: String(mapping.vid), network: mapping.network })),
   );
   const [hidden, setHidden] = useState(config.hidden);
+  const [ieee80211k, setIeee80211k] = useState(config.ieee80211k);
+  const [ieee80211v, setIeee80211v] = useState(config.ieee80211v);
   const [channel, setChannel] = useState(config.channel || "auto");
   const [htmode, setHtmode] = useState(config.htmode || "auto");
   const [txpower, setTxpower] = useState(config.txpower === undefined ? "auto" : String(config.txpower));
@@ -4985,10 +4987,13 @@ function WirelessConfigEditor({
       accountingEnabled !== Boolean(config.accounting_server) ||
       (accountingEnabled && (accountingServerValue !== config.accounting_server ||
         accountingPort !== String(config.accounting_port || 1813) || accountingSecret.length > 0)))) ||
-    hidden !== config.hidden || channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
+    hidden !== config.hidden || ieee80211k !== config.ieee80211k || ieee80211v !== config.ieee80211v ||
+    channel !== currentChannel || htmode !== currentHtmode || txpower !== currentTxpower;
   const ready = changed && channelSupported && htmodeSupported && txpowerSupported &&
     networkSupported && !passphraseRequired && radiusReady && accountingReady && radiusVlanReady &&
-    (encryption !== "none" || allowOpen) && confirmDisconnect && !saving;
+    (encryption !== "none" || allowOpen) &&
+    (!ieee80211v || ieee80211k) && (!(ieee80211k || ieee80211v) || encryption !== "none") &&
+    confirmDisconnect && !saving;
 
   const apply = async () => {
     if (!ready) return;
@@ -5015,6 +5020,8 @@ function WirelessConfigEditor({
         channel,
         htmode,
         txpower,
+        ieee80211k,
+        ieee80211v,
         allowOpen,
       });
       setPassphrase("");
@@ -5084,6 +5091,10 @@ function WirelessConfigEditor({
             setPassphrase("");
             setRadiusSecret("");
             setAllowOpen(false);
+            if (event.target.value === "none") {
+              setIeee80211k(false);
+              setIeee80211v(false);
+            }
           }}>
             <option value="psk2">WPA2-Personal (AES)</option>
             <option value="sae">WPA3-Personal (SAE)</option>
@@ -5332,6 +5343,27 @@ function WirelessConfigEditor({
       </div>
       <div className="wireless-config-options">
         <label>
+          <input
+            type="checkbox"
+            checked={ieee80211k}
+            disabled={saving || encryption === "none"}
+            onChange={(event) => {
+              setIeee80211k(event.target.checked);
+              if (!event.target.checked) setIeee80211v(false);
+            }}
+          />
+          <span>Enable 802.11k neighbor reports</span>
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={ieee80211v}
+            disabled={saving || encryption === "none" || !ieee80211k}
+            onChange={(event) => setIeee80211v(event.target.checked)}
+          />
+          <span>Enable 802.11v BSS transition management</span>
+        </label>
+        <label>
           <input type="checkbox" checked={hidden} onChange={(event) => setHidden(event.target.checked)} />
           <span>Hide network name (SSID)</span>
         </label>
@@ -5343,6 +5375,7 @@ function WirelessConfigEditor({
         ) : null}
       </div>
       <div className="module-message wireless-config-note">
+        802.11k neighbor reports and 802.11v BSS transition management are enabled per AP. Multi-AP policy is managed separately; every local AP broadcasting a selected roaming SSID must use the same trusted network and identical security credentials.
         The existing AP is edited in place; no new SSID or radio is created. Each AP is attached to one existing static L3 network interface. The optional RADIUS dynamic VLAN manager is limited to pre-provisioned bridge VLANs with a routed static interface, switch-port membership and a default-deny firewall zone. It enables hostapd dynamic_vlan=2 (required VLAN assignment), writes explicit native wifi-vlan mappings, and rolls those mappings back with the AP configuration if Wi-Fi reload fails. Unmanaged/custom hostapd VLAN settings are preserved and made read-only. RADIUS dynamic assignment uses one allow-listed VLAN per RADIUS response; it does not create VLANs or subnets dynamically. WPA3-Enterprise requires Protected Management Frames. Channel, width and transmit power remain radio-wide. Applying changes reloads Wi-Fi and can disconnect clients.
       </div>
       <label className="wireless-config-confirm">
@@ -5368,6 +5401,8 @@ function WirelessConfigEditor({
           setRadiusVlanMappings(config.radius_vlan_mappings.filter((mapping) => mapping.managed)
             .map((mapping) => ({ vid: String(mapping.vid), network: mapping.network })));
           setHidden(config.hidden);
+          setIeee80211k(config.ieee80211k);
+          setIeee80211v(config.ieee80211v);
           setChannel(currentChannel);
           setHtmode(currentHtmode);
           setTxpower(currentTxpower);
@@ -5735,7 +5770,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
               <div className="wireless-config-list">
                 {wirelessConfigs.sections.map((config) => (
                   <WirelessConfigEditor
-                    key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.dynamic_vlan, config.radius_vlan_unmanaged, config.radius_vlan_mappings.map((item) => item.vid + ":" + item.network).join(","), config.channel, config.htmode, config.txpower, config.key_set].join(":")}
+                    key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.dynamic_vlan, config.radius_vlan_unmanaged, config.radius_vlan_mappings.map((item) => item.vid + ":" + item.network).join(","), config.channel, config.htmode, config.txpower, config.key_set, config.ieee80211k, config.ieee80211v].join(":")}
                     config={config}
                     radio={radios.find((item) => item.name === config.radio)}
                     networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
