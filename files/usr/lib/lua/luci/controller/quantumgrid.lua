@@ -8082,7 +8082,9 @@ function action_remote_syslog_update()
 			for _, option in ipairs(managed_tunnel_options) do
 				local value = tunnel_snapshot[option]
 				if tunnel_list_options[option] then
-					if not set_list("stunnel", tunnel_name, option, type(value) == "table" and value or {}) then
+					local values = type(value) == "table" and value or
+						(type(value) == "string" and { value } or {})
+					if not set_list("stunnel", tunnel_name, option, values) then
 						restored = false
 					end
 				else
@@ -8160,9 +8162,15 @@ function action_remote_syslog_update()
 		tunnel_commit_ok, tunnel_committed = pcall(uci.commit, uci, "stunnel")
 	end
 	if not tunnel_commit_ok or tunnel_committed ~= true then
-		pcall(uci.revert, uci, "system")
-		pcall(uci.revert, uci, "stunnel")
-		respond(500, { ok = false, error = "The TLS logging configuration could not be committed; the log service was not restarted." })
+		local rolled_back = rollback_all()
+		record_audit(http, "system.syslog.update", "remote-syslog", "failed")
+		respond(500, {
+			ok = false,
+			error = rolled_back and
+				"The TLS logging configuration could not be committed. The previous settings were restored."
+				or "The TLS logging configuration could not be committed and rollback could not be confirmed. Inspect the system and stunnel UCI configurations locally.",
+			rolled_back = rolled_back
+		})
 		return
 	end
 
