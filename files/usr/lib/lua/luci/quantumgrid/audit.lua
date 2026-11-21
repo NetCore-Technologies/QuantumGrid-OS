@@ -10,6 +10,7 @@ local ALLOWED_ACTIONS = {
 	["admin.password.setup"] = true,
 	["wireless.update"] = true,
 	["sqm.update"] = true,
+	["sqm.cake-profile"] = true,
 	["dhcp.reservation.add"] = true,
 	["dhcp.reservation.update"] = true,
 	["dhcp.reservation.remove"] = true,
