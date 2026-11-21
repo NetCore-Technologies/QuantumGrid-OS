@@ -7463,6 +7463,17 @@ function action_remote_syslog_update()
 	end
 
 	local resulting = remote_syslog_status(uci, fs)
+	if update.tls then
+		local nixio = require "nixio"
+		for attempt = 1, 10 do
+			if resulting.enabled == true and resulting.tls_status == "ready" and
+				resulting.host == update.host and resulting.port == tonumber(update.port) then
+				break
+			end
+			if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
+			resulting = remote_syslog_status(uci, fs)
+		end
+	end
 	if update.tls and (resulting.enabled ~= true or resulting.tls_status ~= "ready" or
 		resulting.host ~= update.host or resulting.port ~= tonumber(update.port)) then
 		local rolled_back = rollback_all()
