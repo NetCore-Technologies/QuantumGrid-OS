@@ -7578,19 +7578,18 @@ function action_remote_syslog_update()
 	end
 
 	local resulting = remote_syslog_status(uci, fs)
+	local tls_ready = true
 	if update.tls then
 		local nixio = require "nixio"
-		for attempt = 1, 10 do
-			if resulting.enabled == true and resulting.tls_status == "ready" and
-				resulting.host == update.host and resulting.port == tonumber(update.port) then
-				break
-			end
-			if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
-			resulting = remote_syslog_status(uci, fs)
-		end
+		resulting, tls_ready = validator.wait_for_ready(
+			function() return remote_syslog_status(uci, fs) end,
+			function() return nixio.nanosleep(0, 200000000) end,
+			update.host, update.port, 10
+		)
 	end
-	if update.tls and (resulting.enabled ~= true or resulting.tls_status ~= "ready" or
-		resulting.host ~= update.host or resulting.port ~= tonumber(update.port)) then
+	if update.tls and (not tls_ready or resulting == nil or resulting.enabled ~= true or
+		resulting.tls_status ~= "ready" or resulting.host ~= update.host or
+		resulting.port ~= tonumber(update.port)) then
 		local rolled_back = rollback_all()
 		record_audit(http, "system.syslog.update", "remote-syslog", "failed")
 		respond(502, {
