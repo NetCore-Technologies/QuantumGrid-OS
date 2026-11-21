@@ -246,10 +246,33 @@ local redirect_snapshot = office.snapshot_firewall_redirect_section({
   dest_ip = "192.168.20.30",
   dest_port = "8443",
   target = "DNAT",
+  enabled = "0",
 })
 assert(redirect_snapshot and redirect_snapshot.name == "cfg443")
 assert(redirect_snapshot.values.dest_ip == "192.168.20.30")
 assert(redirect_snapshot.values.target == "DNAT")
+assert(redirect_snapshot.values.enabled == "0",
+  "the redirect snapshot must preserve a disabled rule state for rollback")
+
+local port_forward_state_inventory = office.build_inventory({
+  firewall_available = true,
+  redirects = {
+    {
+      section = "cfg_disabled", name = "Office-HTTPS", source = "wan", destination = "corp",
+      protocol = "tcp", source_port = "443", destination_ip = "192.168.20.30",
+      destination_port = "8443", enabled = false,
+    },
+    {
+      section = "cfg_enabled", name = "Office-DNS", source = "wan", destination = "corp",
+      protocol = "udp", source_port = "5353", destination_ip = "192.168.20.31",
+      destination_port = "53", enabled = true,
+    },
+  },
+})
+assert(#port_forward_state_inventory.redirects == 2
+  and port_forward_state_inventory.redirects[1].enabled == false
+  and port_forward_state_inventory.redirects[2].enabled == true,
+  "office inventory must expose enabled and disabled IPv4 DNAT redirect state")
 assert(office.snapshot_firewall_redirect_section({ [".name"] = "cfg", [".type"] = "forwarding" }) == nil)
 
 local wifi_aps = {
