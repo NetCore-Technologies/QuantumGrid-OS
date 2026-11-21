@@ -445,9 +445,12 @@ local function wireless_config_inventory(uci, radios)
 					local radius_vlan_unmanaged = vlan_inventory.unmanaged or not vlan_inventory.available
 					if dynamic_vlan > 0 and dynamic_vlan ~= 2 then radius_vlan_unmanaged = true end
 					if dynamic_vlan > 0 and #vlan_inventory.sections == 0 then radius_vlan_unmanaged = true end
-					if type(section.vlan_file) == "string" and section.vlan_file ~= "" then radius_vlan_unmanaged = true end
-					if type(section.vlan_bridge) == "string" and section.vlan_bridge ~= "" then radius_vlan_unmanaged = true end
-					if type(section.vlan_tagged_interface) == "string" and section.vlan_tagged_interface ~= "" then radius_vlan_unmanaged = true end
+					for _, option in ipairs({ "vlan_file", "vlan_bridge", "vlan_tagged_interface", "vlan_no_bridge", "vlan_naming" }) do
+						local value = section[option]
+						if type(value) == "string" and value ~= "" and value ~= "0" then
+							radius_vlan_unmanaged = true
+						end
+					end
 					table.insert(result, {
 						section = name,
 						radio = radio,
