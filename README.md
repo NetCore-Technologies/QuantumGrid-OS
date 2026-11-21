@@ -508,6 +508,23 @@ multiple simultaneous network bindings, mesh topology or downstream managed-swit
 Validate the switch port membership, firewall segmentation and DHCP/IPv6 client operation after
 moving a corporate, guest or IoT SSID.
 
+## WAN port forwarding (DNAT)
+
+The Office Networks page can create and remove explicit IPv4 DNAT rules from an existing
+WAN/WWAN firewall zone to an internal host. A rule accepts one external port, one destination
+port and TCP, UDP or TCP+UDP. The destination address must be a usable host inside a static IPv4
+subnet attached to the selected internal firewall zone. The controller rejects internal source
+zones, external destination zones, WAN-to-WAN paths, out-of-subnet targets, invalid ports and
+duplicate external source-port/protocol combinations.
+
+Rules are native `firewall.redirect` sections, committed and followed by firewall reload.
+Creation rolls back the new section if reload fails; removal snapshots and restores the complete
+redirect section if reload fails. Both operations require same-origin administrator POSTs and
+explicit confirmation, and write redacted audit events. This is IPv4 port forwarding only; it
+does not configure the internal service's host firewall, application authentication, TLS, IDS,
+reverse proxy, IPv6 firewall pinholes or external DNS. Only expose a host/service after a separate
+security review and verify it from an external network.
+
 ## Office network inventory
 
 The authenticated **Office Networks** page provides a correlated inventory and guarded configuration tools for
