@@ -1065,6 +1065,7 @@ export interface RouterOfficePortForward {
   source_port: number;
   destination_ip: string;
   destination_port: number;
+  enabled: boolean;
 }
 
 export interface RouterOfficeIpv6Pinhole {
@@ -1118,6 +1119,15 @@ export interface RouterOfficePortForwardRemoveResult {
   section: string;
   removed: true;
   reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficePortForwardToggleResult {
+  ok: true;
+  section: string;
+  enabled: boolean;
+  changed: boolean;
+  reloaded: boolean;
   rolled_back: false;
 }
 
@@ -1428,6 +1438,7 @@ const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/offi
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
 const OFFICE_PORT_FORWARD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-add";
 const OFFICE_PORT_FORWARD_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-remove";
+const OFFICE_PORT_FORWARD_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-toggle";
 const OFFICE_IPV6_PINHOLE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-add";
 const OFFICE_IPV6_PINHOLE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-remove";
 const OFFICE_IPV6_PINHOLE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-toggle";
@@ -3196,6 +3207,51 @@ export async function removeRouterOfficePortForward(section: string): Promise<Ro
     throw new Error("The router did not confirm port-forward removal and firewall reload.");
   }
   return payload as RouterOfficePortForwardRemoveResult;
+}
+
+export async function setRouterOfficePortForwardEnabled(
+  section: string,
+  enabled: boolean,
+): Promise<RouterOfficePortForwardToggleResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid firewall redirect section identifier.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("enabled", enabled ? "1" : "0");
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_PORT_FORWARD_TOGGLE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "WAN port-forward changes require an active router administrator session."
+      : "The router returned an invalid WAN port-forward state response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid WAN port-forward state response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("enabled" in payload) || payload.enabled !== enabled ||
+    !("changed" in payload) || typeof payload.changed !== "boolean" ||
+    !("reloaded" in payload) || payload.reloaded !== payload.changed ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the requested port-forward state and firewall reload.");
+  }
+  return payload as RouterOfficePortForwardToggleResult;
 }
 
 export async function createRouterOfficeIpv6Pinhole(input: {
