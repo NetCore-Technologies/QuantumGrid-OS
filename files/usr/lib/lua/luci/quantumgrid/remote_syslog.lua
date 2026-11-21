@@ -275,6 +275,30 @@ function inspect_status(uci, fs, sampled_at, process)
 	return result
 end
 
+function wait_for_ready(sample, wait, host, port, max_attempts)
+	if type(sample) ~= "function" or type(host) ~= "string" then return nil, false, 0 end
+	local expected_port = tonumber(port)
+	local attempts = tonumber(max_attempts) or 1
+	if not expected_port or expected_port < 1 or expected_port > 65535 or
+		attempts < 1 or attempts > 20 or attempts ~= math.floor(attempts) then
+		return nil, false, 0
+	end
+	local last = nil
+	for attempt = 1, attempts do
+		local sample_ok, status = pcall(sample)
+		if sample_ok and type(status) == "table" then
+			last = status
+			if status.enabled == true and status.protocol == "tls" and
+				status.tls_status == "ready" and status.tls_process_running == true and
+				status.host == host and tonumber(status.port) == expected_port then
+				return status, true, attempt
+			end
+		end
+		if attempt < attempts and type(wait) == "function" then pcall(wait) end
+	end
+	return last, false, attempts
+end
+
 function stunnel_process_running(pid_contents, comm_contents, cmdline_contents)
 	if type(pid_contents) ~= "string" then return false end
 	local pid_text = pid_contents:match("^%s*(%d+)%s*$")
