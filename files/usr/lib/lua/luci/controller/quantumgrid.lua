@@ -1957,9 +1957,60 @@ function action_usteer_update()
 	end)
 	if not sections_ok or section_count ~= 1 or
 		type(section_name) ~= "string" or not section_name:match("^[%w_.%-]+$") then
+		if not update.enabled then
+			local stop_ok, stop_status = pcall(sys.call,
+				"/etc/init.d/usteer stop >/dev/null 2>&1 && /etc/init.d/usteer disable >/dev/null 2>&1")
+			if not stop_ok or stop_status ~= 0 then
+				respond(502, {
+					ok = false,
+					error = "The usteer configuration is ambiguous and the daemon could not be stopped and disabled. Inspect service state locally.",
+					rolled_back = false
+				})
+				return
+			end
+			local nixio = require "nixio"
+			local stopped = false
+			for attempt = 1, 10 do
+				if type(ubus_call("usteer", "get_config", {})) ~= "table" then
+					stopped = true
+					break
+				end
+				if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
+			end
+			if not stopped then
+				respond(502, {
+					ok = false,
+					error = "The usteer service did not disappear from ubus after the stop request. Startup was disabled; verify the daemon locally.",
+					rolled_back = false
+				})
+				return
+			end
+			record_audit(http, "wireless.usteer.update", "ambiguous-config", "success")
+			respond(nil, {
+				ok = true,
+				enabled = false,
+				network = "",
+				ssid_list = {},
+				aggressiveness = 0,
+				assoc_steering = false,
+				probe_steering = false,
+				band_steering_interval = 0,
+				band_steering_min_snr = -60,
+				band_steering_threshold = 5,
+				load_balancing_threshold = 0,
+				status = "disabled",
+				running = false,
+				local_node_count = 0,
+				remote_host_count = 0,
+				associated_clients = 0,
+				service_action_completed = true,
+				rolled_back = false
+			})
+			return
+		end
 		respond(409, {
 			ok = false,
-			error = "QuantumGrid requires exactly one existing usteer configuration section. Resolve duplicate or missing sections before changing the service."
+			error = "QuantumGrid requires exactly one existing usteer configuration section before enabling roaming. Resolve duplicate or missing sections first; the service can still be stopped and disabled."
 		})
 		return
 	end
