@@ -96,21 +96,33 @@ function validate_archive_listing(listing)
 		local tokens = {}
 		for token in line:gmatch("%S+") do tokens[#tokens + 1] = token end
 		local mode = tokens[1]
-		if type(mode) ~= "string" or #mode ~= 10 or
-			(mode:sub(1, 1) ~= "-" and mode:sub(1, 1) ~= "d") or
-			mode:find("[sStT]") then
+		local mode_pattern = kind == "-" and
+			"^%-[r%-][w%-][x%-][r%-][w%-][x%-][r%-][w%-][x%-]$" or
+			"^d[r%-][w%-][x%-][r%-][w%-][x%-][r%-][w%-][x%-]$"
+		if type(mode) ~= "string" or not mode:match(mode_pattern) then
 			return nil, "The archive contains an invalid, set-ID or sticky permission mode."
 		end
+		if type(tokens[2]) ~= "string" or not tokens[2]:match("^[%w_.%-]+/[%w_.%-]+$") then
+			return nil, "The archive listing owner/group fields are malformed; restore was refused."
+		end
 		local entry_size = nil
+		local date_index = nil
 		for index, token in ipairs(tokens) do
 			if token:match("^%d%d%d%d%-%d%d%-%d%d$") then
 				local candidate = tokens[index - 1]
-				if candidate and candidate:match("^%d+$") then entry_size = tonumber(candidate) end
+				if candidate and candidate:match("^%d+$") then
+					entry_size = tonumber(candidate)
+					date_index = index
+				end
 				break
 			end
 		end
-		if entry_size == nil or entry_size < 0 then
-			return nil, "The archive listing format is not recognised; restore was refused."
+		if entry_size == nil or entry_size < 0 or not date_index or
+			not tokens[date_index + 1] or
+			(not tokens[date_index + 1]:match("^%d%d:%d%d$") and
+			 not tokens[date_index + 1]:match("^%d%d:%d%d:%d%d$")) or
+			#tokens ~= date_index + 2 then
+			return nil, "The archive listing format or member path is not recognised; restore was refused."
 		end
 		if kind == "-" then
 			expanded_size = expanded_size + entry_size
@@ -118,7 +130,7 @@ function validate_archive_listing(listing)
 				return nil, "The uncompressed archive exceeds the 128 MiB restore safety limit."
 			end
 		end
-		local raw_path = line:match("%s([^%s]+)$")
+		local raw_path = tokens[date_index + 2]
 		local path = valid_archive_path(raw_path)
 		if not path then
 			return nil, "The archive contains a path outside the permitted etc/ and root/ trees."
