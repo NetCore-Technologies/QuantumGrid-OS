@@ -922,6 +922,20 @@ assert(office.validate_office_ipv6_pinhole(
   pinhole_zones, unbound_pinhole_interface, {}) == nil,
   "NDP data without a valid kernel L3 device binding must not authorize an IPv6 pinhole")
 
+local duplicate_neighbor_interfaces = {
+  pinhole_interfaces[1],
+  {
+    name = "guest", device = "br-lan.30", up = true,
+    ipv6_neighbors = {
+      { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:09", state = "REACHABLE" },
+    },
+  },
+}
+assert(office.validate_office_ipv6_pinhole(
+  "ambiguous-host", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
+  pinhole_zones, duplicate_neighbor_interfaces, {}) == nil,
+  "duplicate live NDP observations across L3 interfaces must fail closed instead of creating an ambiguous pinhole")
+
 local valid_pinhole, pinhole_error = office.validate_office_ipv6_pinhole(
   "office-https-v6", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
   pinhole_zones, pinhole_interfaces, {})
