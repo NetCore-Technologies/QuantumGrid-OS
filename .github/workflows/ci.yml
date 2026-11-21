@@ -31,6 +31,8 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+      - name: Test mandatory first-boot root password setup
+        run: node --experimental-strip-types --test ../../tests/firstboot-password.test.mjs
       - name: Test guarded IPv4 office segment provisioning API requests
         run: node --experimental-strip-types --test ../../tests/office-segment-api.test.mjs
       - name: Test guarded bridge VLAN API requests and response verification

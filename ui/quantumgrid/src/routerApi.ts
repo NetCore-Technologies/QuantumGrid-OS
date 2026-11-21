@@ -1133,6 +1133,7 @@ export interface RouterRemoteSyslogUpdateResult {
 
 export interface RouterOverview {
   ok: true;
+  root_password_set: boolean;
   platform?: RouterPlatformStatus;
   hardware_io?: RouterHardwareIoStatus;
   office_networks?: RouterOfficeNetworks;
@@ -1224,6 +1225,14 @@ async function decodeOverview(response: Response): Promise<RouterOverview> {
   ) {
     throw new Error("The router returned an invalid telemetry response.");
   }
+  if (
+    !("root_password_set" in payload) ||
+    typeof payload.root_password_set !== "boolean"
+  ) {
+    throw new Error(
+      "This firmware cannot verify whether the root password is set. Update QuantumGrid firmware before signing in.",
+    );
+  }
 
   return payload as RouterOverview;
 }
@@ -1283,23 +1292,29 @@ export async function loginToRouter(
   username: string,
   password: string,
 ): Promise<RouterOverview> {
+  let overview: RouterOverview;
   try {
-    return await authenticate(username, password);
+    overview = await authenticate(username, password);
   } catch (originalError) {
-    // A blank password is accepted only on a router that has not been secured yet.
-    // If an existing password is wrong, the blank-password attempt also fails and
-    // the original authentication error is preserved.
+    // rpcd accepts a session on an unconfigured root account because its password
+    // hash is empty. Only retry with an empty password when the supplied login fails;
+    // the API's root_password_set flag below decides whether setup is still required.
     if (!password) throw originalError;
 
     try {
-      await authenticate(username, "");
+      overview = await authenticate(username, "");
     } catch {
       throw originalError;
     }
+  }
 
+  // Never mistake rpcd's empty-hash bootstrap session for a secured administrator.
+  if (!overview.root_password_set) {
     await setInitialRootPassword(password);
     return fetchRouterOverview();
   }
+
+  return overview;
 }
 
 export async function fetchRouterOverview(): Promise<RouterOverview> {

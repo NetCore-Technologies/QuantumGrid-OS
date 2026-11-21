@@ -85,6 +85,12 @@ Security fixes will be included in supported releases whenever practical.
 Release notes and security advisories will identify affected versions and recommended upgrade or mitigation steps when appropriate.
 
 ## Administrator web transport
+On first login, the API reports whether the root password hash is configured. The
+control centre sets the chosen password before opening the dashboard when rpcd has
+created a bootstrap session for an empty root password. Do not attach an unconfigured
+router to an untrusted network; the first administrator on the trusted LAN can claim
+the initial account.
+
 
 The stable AW1000 image includes uHTTPd, the mbedTLS ustream runtime and the OpenSSL
 key-generation utility. On first boot, QuantumGrid removes the default plaintext HTTP

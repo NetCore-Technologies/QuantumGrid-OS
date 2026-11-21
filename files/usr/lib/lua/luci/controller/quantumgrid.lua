@@ -6432,6 +6432,8 @@ end
 
 function action_api()
 	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local root_hash = sys.user.getpasswd("root")
 	local fs = require "nixio.fs"
 	local uci = require("luci.model.uci").cursor()
 	local uptime = read_number("/proc/uptime") or 0
@@ -6458,6 +6460,7 @@ function action_api()
 	http.prepare_content("application/json; charset=UTF-8")
 	http.write_json({
 		ok = true,
+		root_password_set = type(root_hash) == "string" and root_hash ~= "",
 		timestamp = os.time(),
 		system = {
 			uptime_seconds = uptime,
