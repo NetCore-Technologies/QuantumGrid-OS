@@ -1001,6 +1001,11 @@ export interface RouterOfficeSegmentCreateResult {
   ra_flags: string[];
   ra_slaac: "0" | "1";
   ra_dns: "0" | "1";
+  ra_preference: "medium" | "high" | "low";
+  ra_lifetime: number;
+  dhcpv6_na: "0" | "1";
+  dhcpv6_pd: "0" | "1";
+  dhcpv6_assignall: "0" | "1";
   ndp: "disabled";
   network_reloaded: true;
   firewall_reloaded: true;
@@ -2929,6 +2934,11 @@ export async function createRouterOfficeSegment(input: {
       )) ||
     !("ra_slaac" in payload) || payload.ra_slaac !== (ipv6Enabled ? "1" : "0") ||
     !("ra_dns" in payload) || payload.ra_dns !== (ipv6Enabled ? "1" : "0") ||
+    !("ra_preference" in payload) || payload.ra_preference !== (ipv6Enabled ? "medium" : "medium") ||
+    !("ra_lifetime" in payload) || payload.ra_lifetime !== (ipv6Enabled ? 2700 : 0) ||
+    !("dhcpv6_na" in payload) || payload.dhcpv6_na !== (ipv6Enabled ? "1" : "0") ||
+    !("dhcpv6_pd" in payload) || payload.dhcpv6_pd !== "0" ||
+    !("dhcpv6_assignall" in payload) || payload.dhcpv6_assignall !== "0" ||
     !("ndp" in payload) || payload.ndp !== "disabled" ||
     !("network_reloaded" in payload) || payload.network_reloaded !== true ||
     !("firewall_reloaded" in payload) || payload.firewall_reloaded !== true ||
