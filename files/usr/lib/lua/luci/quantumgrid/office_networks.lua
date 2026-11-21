@@ -65,6 +65,67 @@ local function parse_port(value)
 	}
 end
 
+local function parse_ipv6_address(value, allow_prefix)
+	if type(value) ~= "string" or #value == 0 or #value > 64 then return nil end
+	local address = value
+	if allow_prefix then
+		local raw, prefix = value:match("^([^/]+)/(%d+)$")
+		if raw then
+			local number = tonumber(prefix)
+			if not number or number < 1 or number > 128 then return nil end
+			address = raw
+		elseif value:find("/", 1, true) then
+			return nil
+		end
+	elseif value:find("/", 1, true) then
+		return nil
+	end
+	if address:find("[^%x:]") or address:find("::: ", 1, true) or address:find(":::", 1, true) then
+		return nil
+	end
+	local compression = address:find("::", 1, true)
+	if compression and address:find("::", compression + 2, true) then return nil end
+	local function parse_side(side)
+		local groups = {}
+		if side == "" then return groups end
+		if side:sub(1, 1) == ":" or side:sub(-1) == ":" then return nil end
+		for part in side:gmatch("[^:]+") do
+			if #part < 1 or #part > 4 or not part:match("^%x+$") then return nil end
+			groups[#groups + 1] = tonumber(part, 16)
+		end
+		return groups
+	end
+	local groups = {}
+	if compression then
+		local left = parse_side(address:sub(1, compression - 1))
+		local right = parse_side(address:sub(compression + 2))
+		if not left or not right or (#left + #right) >= 8 then return nil end
+		for _, part in ipairs(left) do groups[#groups + 1] = part end
+		for _ = 1, 8 - #left - #right do groups[#groups + 1] = 0 end
+		for _, part in ipairs(right) do groups[#groups + 1] = part end
+	else
+		if address:sub(1, 1) == ":" or address:sub(-1) == ":" then return nil end
+		local parsed = parse_side(address)
+		if not parsed or #parsed ~= 8 then return nil end
+		groups = parsed
+	end
+	if #groups ~= 8 then return nil end
+	local canonical_parts = {}
+	for _, part in ipairs(groups) do
+		canonical_parts[#canonical_parts + 1] = string.format("%04x", part)
+	end
+	return { groups = groups, canonical = table.concat(canonical_parts, ":") }
+end
+
+local function global_unicast_ipv6(value, allow_prefix)
+	local parsed = parse_ipv6_address(value, allow_prefix)
+	if not parsed then return nil end
+	local first, second = parsed.groups[1], parsed.groups[2]
+	if first < 0x2000 or first > 0x3fff then return nil end
+	if first == 0x2001 and second == 0x0db8 then return nil end
+	return parsed.canonical
+end
+
 local function valid_ipv4(value)
 	if type(value) ~= "string" then return false end
 	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
@@ -859,6 +920,112 @@ function validate_office_port_forward(
 	}
 end
 
+function validate_office_ipv6_pinhole(
+	name, source, destination, protocol, destination_ip, destination_port,
+	zones, interfaces, existing)
+	if type(name) ~= "string" or #name < 1 or #name > 64
+		or not name:match("^[A-Za-z0-9][A-Za-z0-9_.%-]*$") then
+		return nil, "Rule name must be 1–64 letters, digits, dots, underscores or hyphens and start with a letter or digit."
+	end
+	if type(source) ~= "string" or #source > 64 or not source:match("^[%w_.%-]+$") then
+		return nil, "Select an existing external source firewall zone."
+	end
+	if type(destination) ~= "string" or #destination > 64 or not destination:match("^[%w_.%-]+$") then
+		return nil, "Select an existing internal destination firewall zone."
+	end
+	if source == destination then return nil, "Source and destination zones must be different." end
+	local source_zone, destination_zone
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			if zone.name == source then source_zone = zone end
+			if zone.name == destination then destination_zone = zone end
+		end
+	end
+	if not source_zone or not destination_zone then
+		return nil, "Both firewall zones must already exist in the current configuration."
+	end
+	if not is_external_zone(source_zone) then
+		return nil, "An IPv6 pinhole must originate from an external WAN/WWAN zone."
+	end
+	if is_external_zone(destination_zone) then
+		return nil, "The IPv6 pinhole destination must be an internal LAN/office firewall zone."
+	end
+	local protocols = protocol_set(protocol)
+	if not protocols then return nil, "Protocol must be TCP, UDP or TCP + UDP." end
+	local port, port_error = port_number(destination_port, "Destination port")
+	if not port then return nil, port_error end
+	local canonical_ip = global_unicast_ipv6(destination_ip, false)
+	if not canonical_ip then
+		return nil, "Destination must be a global-unicast IPv6 address (2000::/3), not a private, link-local, multicast, documentation or unspecified address."
+	end
+	local configured = false
+	local destination_networks = zone_networks(destination_zone.networks)
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and contains(destination_networks, iface.name) then
+			for _, configured_address in ipairs(values(iface.ipv6, 8)) do
+				if global_unicast_ipv6(configured_address, true) == canonical_ip then
+					configured = true
+					break
+				end
+			end
+		end
+		if configured then break end
+	end
+	if not configured then
+		return nil, "Destination IPv6 address must exactly match a configured global-unicast address on an interface attached to the selected internal zone."
+	end
+	for _, pinhole in ipairs(type(existing) == "table" and existing or {}) do
+		if type(pinhole) == "table" and pinhole.source == source
+			and pinhole.destination_ip and global_unicast_ipv6(pinhole.destination_ip, false) == canonical_ip
+			and tonumber(pinhole.destination_port) == port then
+			local existing_protocols = protocol_set(pinhole.protocol)
+			if existing_protocols and
+				((protocols.tcp and existing_protocols.tcp) or (protocols.udp and existing_protocols.udp)) then
+				return nil, "An existing IPv6 pinhole already allows this WAN zone, address, port and protocol."
+			end
+		end
+		if type(pinhole) == "table" and pinhole.name == name then
+			return nil, "An IPv6 pinhole with this name already exists."
+		end
+	end
+	return {
+		name = name,
+		source = source,
+		destination = destination,
+		protocol = protocol,
+		destination_ip = canonical_ip,
+		destination_port = port
+	}
+end
+
+function snapshot_office_ipv6_pinhole(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "rule"
+		or type(snapshot[".name"]) ~= "string" or snapshot[".name"] == "" then
+		return nil, "A named firewall rule section is required."
+	end
+	local name = type(snapshot.name) == "string" and snapshot.name or ""
+	if not name:match("^QuantumGrid IPv6 pinhole: [A-Za-z0-9][A-Za-z0-9_.%-]*$") then
+		return nil, "The selected firewall rule is not a QuantumGrid-managed IPv6 pinhole."
+	end
+	if snapshot.family ~= "ipv6" or snapshot.target ~= "ACCEPT"
+		or type(snapshot.src) ~= "string" or type(snapshot.dest) ~= "string"
+		or type(snapshot.dest_ip) ~= "string"
+		or not global_unicast_ipv6(snapshot.dest_ip, false)
+		or not port_number(tostring(snapshot.dest_port or ""), "Destination port") then
+		return nil, "The IPv6 pinhole rule does not match the managed firewall rule format."
+	end
+	local protocol = snapshot.proto
+	if type(protocol) == "table" then protocol = table.concat(protocol, " ") end
+	if protocol ~= "tcp" and protocol ~= "udp" and protocol ~= "tcp udp" then
+		return nil, "The IPv6 pinhole rule protocol is invalid."
+	end
+	local values_copy = {}
+	for key, value in pairs(snapshot) do
+		if type(key) == "string" and key:sub(1, 1) ~= "." then values_copy[key] = value end
+	end
+	return { name = snapshot[".name"], values = values_copy }
+end
+
 function snapshot_firewall_redirect_section(snapshot)
 	if type(snapshot) ~= "table" or snapshot[".type"] ~= "redirect"
 		or type(snapshot[".name"]) ~= "string" or snapshot[".name"] == "" then
@@ -1334,6 +1501,8 @@ function build_inventory(source)
 		forwarding_count = 0,
 		redirects = {},
 		redirect_count = 0,
+		ipv6_pinholes = {},
+		ipv6_pinhole_count = 0,
 		dhcp_available = source.dhcp_available == true,
 		dhcp_scopes = {},
 		static_leases = {},
@@ -1410,6 +1579,34 @@ function build_inventory(source)
 	end
 	result.redirect_count = #result.redirects
 	if #source_redirects > #result.redirects then result.truncated = true end
+
+	local source_pinholes = type(source.ipv6_pinholes) == "table" and source.ipv6_pinholes or {}
+	for _, item in ipairs(source_pinholes) do
+		if type(item) == "table" and #result.ipv6_pinholes < 64 then
+			local section = token(item.section, 64)
+			local name = clean(item.name, 64)
+			local source_zone = token(item.source, 64)
+			local destination_zone = token(item.destination, 64)
+			local protocol = item.protocol == "tcp" or item.protocol == "udp" or item.protocol == "tcp udp"
+			local destination_ip = global_unicast_ipv6(item.destination_ip, false)
+			local destination_port = tonumber(item.destination_port)
+			if section and name ~= "" and source_zone and destination_zone and protocol
+				and destination_ip and destination_port and destination_port >= 1
+				and destination_port <= 65535 and destination_port == math.floor(destination_port) then
+				table.insert(result.ipv6_pinholes, {
+					section = section,
+					name = name,
+					source = source_zone,
+					destination = destination_zone,
+					protocol = item.protocol,
+					destination_ip = destination_ip,
+					destination_port = destination_port
+				})
+			end
+		end
+	end
+	result.ipv6_pinhole_count = #result.ipv6_pinholes
+	if #source_pinholes > #result.ipv6_pinholes then result.truncated = true end
 
 	local source_forwardings = type(source.forwardings) == "table" and source.forwardings or {}
 	for _, item in ipairs(source_forwardings) do
