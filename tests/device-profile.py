@@ -71,6 +71,8 @@ class DeviceProfileTests(unittest.TestCase):
     def test_device_must_be_selected_by_the_profile_config(self) -> None:
         profile = self.profile()
         profile["platform"]["openwrt_device"] = "another_device"
+        profile["artifacts"]["factory_glob"] = "*another_device-squashfs-factory.ubi"
+        profile["artifacts"]["initramfs_glob"] = "*another_device-initramfs-uImage.itb"
         with self.assertRaisesRegex(VALIDATOR.ProfileError, "must contain exactly one"):
             VALIDATOR.validate(self.write_profile(profile))
 
