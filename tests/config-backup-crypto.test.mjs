@@ -4,6 +4,7 @@ import { gzipSync } from "node:zlib";
 import {
   decryptRouterConfigBackupBytes,
   encryptRouterConfigBackupBytes,
+  restoreRouterConfigBackup,
 } from "../ui/quantumgrid/src/routerApi.ts";
 
 const passphrase = "violet-river-quantum-grid-2026";
@@ -91,3 +92,77 @@ test("backup encryption rejects short passphrases, oversized secrets and invalid
   );
 });
 
+
+const originalFetch = globalThis.fetch;
+function jsonResponse(payload, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { "Content-Type": "application/json; charset=UTF-8" },
+  });
+}
+
+test("restore decrypts locally and streams only the gzip archive over same-origin HTTPS", async () => {
+  const plaintext = gzipArchive("QGOS same-device recovery fixture\\0private data");
+  const encrypted = await encryptRouterConfigBackupBytes(plaintext, passphrase);
+  const file = new Blob([encrypted], { type: "application/vnd.quantumgrid.backup" });
+  let requestUrl = "";
+  let requestInit;
+  let uploadedBytes;
+  globalThis.fetch = async (url, init) => {
+    requestUrl = String(url);
+    requestInit = init;
+    uploadedBytes = new Uint8Array(init.body).slice();
+    return jsonResponse({
+      ok: true,
+      restored: true,
+      reboot_scheduled: true,
+      profile_id: "arcadyan-aw1000",
+      target: "qualcommax/ipq807x",
+    });
+  };
+  try {
+    const result = await restoreRouterConfigBackup(file, passphrase);
+    assert.equal(requestUrl, "/cgi-bin/luci/admin/services/quantumgrid/config-restore");
+    assert.equal(requestInit.method, "POST");
+    assert.equal(requestInit.credentials, "same-origin");
+    assert.equal(requestInit.cache, "no-store");
+    assert.equal(requestInit.headers["Content-Type"], "application/gzip");
+    assert.equal(requestInit.headers["X-QuantumGrid-Restore-Confirmed"], "1");
+    assert.equal(requestInit.headers["X-QuantumGrid-Same-Device"], "1");
+    assert.deepEqual(uploadedBytes, plaintext);
+    assert.equal(result.restored, true);
+    assert.equal(result.reboot_scheduled, true);
+    assert.equal(result.profile_id, "arcadyan-aw1000");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("restore rejects an incorrect passphrase before contacting the router", async () => {
+  const encrypted = await encryptRouterConfigBackupBytes(gzipArchive("private configuration"), passphrase);
+  globalThis.fetch = async () => { throw new Error("fetch must not be called for unauthenticated archives"); };
+  try {
+    await assert.rejects(
+      restoreRouterConfigBackup(new Blob([encrypted]), "incorrect passphrase for backup"),
+      /passphrase is incorrect or the encrypted backup has been modified/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("restore rejects an API response without an explicit reboot confirmation", async () => {
+  const encrypted = await encryptRouterConfigBackupBytes(gzipArchive("recovery fixture"), passphrase);
+  globalThis.fetch = async () => jsonResponse({
+    ok: true, restored: true, reboot_scheduled: false,
+    profile_id: "arcadyan-aw1000", target: "qualcommax/ipq807x",
+  }, 502);
+  try {
+    await assert.rejects(
+      restoreRouterConfigBackup(new Blob([encrypted]), passphrase),
+      /did not confirm a completed restore and scheduled reboot/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
