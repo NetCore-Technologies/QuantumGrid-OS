@@ -79,40 +79,42 @@ local function management_zone_kind(name)
   return "unknown"
 end
 
-local function section_contains_network(value, wanted)
+local function add_zone_networks(index, value, kind)
+  local function add(network)
+    if type(network) ~= "string" or network == "" then return end
+    index[network] = index[network] or {}
+    table.insert(index[network], kind)
+  end
+
   if type(value) == "string" then
-    for token in value:gmatch("%S+") do
-      if token == wanted then return true end
-    end
-    return false
+    for token in value:gmatch("%S+") do add(token) end
+  elseif type(value) == "table" then
+    for _, network in ipairs(value) do add(network) end
   end
-  if type(value) ~= "table" then return false end
-  for _, network in ipairs(value) do
-    if type(network) == "string" and network == wanted then return true end
-  end
-  return false
 end
 
-local function management_interface_zone(uci, interface)
-  local direct_kind = management_zone_kind(interface)
-  if direct_kind == "external" then return direct_kind end
-  if type(uci) ~= "table" or type(uci.foreach) ~= "function" or interface == "" then
-    return "unknown"
-  end
-
-  local matches = 0
-  local matched_kind = "unknown"
+local function management_zone_index(uci)
+  if type(uci) ~= "table" or type(uci.foreach) ~= "function" then return nil end
+  local index = {}
   local ok = pcall(function()
     uci:foreach("firewall", "zone", function(zone)
-      if type(zone) == "table" and section_contains_network(zone.network or zone.networks, interface) then
-        matches = matches + 1
+      if type(zone) == "table" then
         local name = zone.name or zone[".name"]
-        matched_kind = management_zone_kind(name)
+        add_zone_networks(index, zone.network or zone.networks, management_zone_kind(name))
       end
     end)
   end)
-  if not ok or matches ~= 1 then return "unknown" end
-  return matched_kind
+  if not ok then return nil end
+  return index
+end
+
+local function management_interface_zone(index, interface)
+  local direct_kind = management_zone_kind(interface)
+  if direct_kind == "external" then return direct_kind end
+  if type(index) ~= "table" or interface == "" then return "unknown" end
+  local matches = index[interface]
+  if type(matches) ~= "table" or #matches ~= 1 then return "unknown" end
+  return matches[1]
 end
 
 local function permission_bits(stat)
@@ -322,6 +324,7 @@ local function dropbear_status(uci, fs)
 
   local secure = true
   local has_unknown_enable = false
+  local zone_index = management_zone_index(uci)
   local config_ok = type(uci) == "table" and type(uci.foreach) == "function"
   if config_ok then
     config_ok = pcall(function()
@@ -357,7 +360,7 @@ local function dropbear_status(uci, fs)
         local password_auth_enabled = boolean_option(section.PasswordAuth, true)
         local root_password_auth_enabled = boolean_option(section.RootPasswordAuth, true)
         local gateway_ports_enabled = boolean_option(section.GatewayPorts, false)
-        local interface_zone_status = management_interface_zone(uci, interface)
+        local interface_zone_status = management_interface_zone(zone_index, interface)
 
         if enabled == true then
           result.ssh_enabled_instance_count = result.ssh_enabled_instance_count + 1
