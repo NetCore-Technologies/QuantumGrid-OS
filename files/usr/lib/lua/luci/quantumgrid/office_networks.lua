@@ -142,7 +142,7 @@ end
 function parse_ipv6_neighbor_inventory(contents, device)
 	if type(contents) ~= "string" or #contents > 65536
 		or type(device) ~= "string" or #device < 1 or #device > 64
-		or not device:match("^[%w_.%-]+$") then
+		or not device:match("^[%w][%w_.%-]*$") then
 		return {}
 	end
 	local allowed_states = {
