@@ -1414,6 +1414,12 @@ export interface RouterUsteerStatus {
   aggressiveness: number;
   assoc_steering: boolean;
   probe_steering: boolean;
+  load_kick_enabled: boolean;
+  min_snr: number;
+  min_connect_snr: number;
+  roam_scan_snr: number;
+  roam_trigger_snr: number;
+  aggressiveness_override_count: number;
   local_mode: boolean;
   band_steering_interval: number;
   band_steering_min_snr: number;
