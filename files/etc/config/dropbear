@@ -1,0 +1,9 @@
+# Keep SSH management on the trusted LAN only.
+# Do not bind Dropbear to WAN or all network interfaces.
+config dropbear main
+	option enable '1'
+	option PasswordAuth 'on'
+	option RootPasswordAuth 'on'
+	option Interface 'lan'
+	option Port '22'
+	option GatewayPorts 'off'

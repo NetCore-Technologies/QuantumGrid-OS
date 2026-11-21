@@ -85,6 +85,10 @@ Security fixes will be included in supported releases whenever practical.
 Release notes and security advisories will identify affected versions and recommended upgrade or mitigation steps when appropriate.
 
 ## Administrator web transport
+Dropbear SSH is explicitly bound to the logical `lan` interface on TCP port 22.
+It is not configured to listen on WAN or all interfaces. Keep any SSH port-forward
+or separate WAN firewall exposure disabled.
+
 Every administrator POST action also checks the uHTTPd TLS environment server-side
 and returns a forbidden response when the request did not arrive over HTTPS. The first-boot policy also removes the default plaintext HTTP listeners entirely and
 keeps the redirect setting enabled as defence in depth. This avoids creating LuCI's
@@ -95,11 +99,11 @@ trusted-network firewall policy.
 
 
 The stable AW1000 image includes uHTTPd, the mbedTLS ustream runtime and the OpenSSL
-key-generation utility. On first boot, QuantumGrid sets uHTTPd's `redirect_https`
-option so requests arriving on the default HTTP listeners are redirected to HTTPS.
-The Security Center reports configured HTTPS listener entries, TLS runtime availability,
-non-empty certificate/key files and HTTP redirect configuration. This is a configuration-
-level check; it does not probe live sockets or external reachability.
+key-generation utility. On first boot, QuantumGrid removes the default HTTP listener
+and enables `redirect_https` as defence in depth. The Security Center reports configured
+HTTPS listener entries, TLS runtime availability, non-empty certificate/key files and
+the HTTP redirect setting. This configuration-level check does not probe live sockets
+or external reachability.
 
 The optional RJ11 FXS packages are sourced from the third-party
 `Perz3us/openwrt-aw1000-phone` repository. QuantumGrid pins the `v0.9.0` feed to
