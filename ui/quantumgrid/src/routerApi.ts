@@ -1431,6 +1431,7 @@ export interface RouterUsteerStatus {
   local_nodes_truncated: boolean;
   local_nodes_invalid_count: number;
   policy_verified: boolean;
+  local_ess_verified: boolean;
   remote_host_count: number;
   remote_hosts_truncated: boolean;
   remote_hosts_available: boolean;
@@ -1454,6 +1455,7 @@ export interface RouterUsteerUpdateResult {
   status: RouterUsteerRuntimeStatus;
   running: boolean;
   policy_verified: boolean;
+  local_ess_verified: boolean;
   local_node_count: number;
   remote_host_count: number;
   associated_clients: number;
@@ -2199,7 +2201,9 @@ export async function updateRouterUsteer(input: {
     (input.enabled && (payload.ssid_list.length !== expectedSsids.length ||
       payload.ssid_list.some((ssid, index) => ssid !== expectedSsids[index]))) ||
     (input.enabled && (!("policy_verified" in payload) || payload.policy_verified !== true)) ||
+    (input.enabled && (!("local_ess_verified" in payload) || payload.local_ess_verified !== true)) ||
     (!input.enabled && (!("policy_verified" in payload) || payload.policy_verified !== false)) ||
+    (!input.enabled && (!("local_ess_verified" in payload) || payload.local_ess_verified !== false)) ||
     (input.enabled && (!("network" in payload) || payload.network !== input.network ||
       !("aggressiveness" in payload) || payload.aggressiveness !== input.aggressiveness ||
       !("band_steering_interval" in payload) || payload.band_steering_interval !== input.bandSteeringInterval ||
