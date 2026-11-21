@@ -3282,15 +3282,9 @@ local function remote_syslog_status(uci, fs)
 	if not result.config_available then return result end
 
 	local globals_ok, globals = pcall(uci.get_all, uci, "stunnel", "globals")
-	local function non_root_identity(value)
-		if type(value) ~= "string" or value == "" then return false end
-		local normalized = value:lower():match("^%s*(.-)%s*$")
-		return normalized ~= "root" and normalized ~= "0" and
-			(not tonumber(normalized) or tonumber(normalized) > 0)
-	end
-	result.tls_privilege_drop_configured = globals_ok and type(globals) == "table" and
-		globals[".type"] == "globals" and non_root_identity(globals.setuid) and
-		non_root_identity(globals.setgid)
+	local tunnel_validator = require "luci.quantumgrid.remote_syslog"
+	result.tls_privilege_drop_configured = globals_ok and
+		tunnel_validator.has_non_root_privilege_drop(globals)
 
 	local section_found = false
 	local ok = pcall(function()
@@ -7342,14 +7336,7 @@ function action_remote_syslog_update()
 	end
 	if update.tls then
 		local globals_ok, globals = pcall(uci.get_all, uci, "stunnel", "globals")
-		local function non_root_identity(value)
-			if type(value) ~= "string" or value == "" then return false end
-			local normalized = value:lower():match("^%s*(.-)%s*$")
-			return normalized ~= "root" and normalized ~= "0" and
-				(not tonumber(normalized) or tonumber(normalized) > 0)
-		end
-		if not globals_ok or type(globals) ~= "table" or globals[".type"] ~= "globals" or
-			not non_root_identity(globals.setuid) or not non_root_identity(globals.setgid) then
+		if not globals_ok or not validator.has_non_root_privilege_drop(globals) then
 			respond(503, {
 				ok = false,
 				error = "TLS syslog requires stunnel global setuid and setgid options to name non-root identities. No logging settings were changed."
