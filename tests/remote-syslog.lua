@@ -203,6 +203,7 @@ assert(tls_status.available and tls_status.service_installed and tls_status.conf
 assert(tls_status.protocol == "tls" and tls_status.host == "logs.corp.example" and tls_status.port == 6514)
 assert(tls_status.tls_available and tls_status.tls_privilege_drop_configured)
 assert(tls_status.tls_configured and tls_status.tls_identity_verified and tls_status.tls_enabled)
+assert(tls_status.tls_process_running, "ready TLS posture must include the live stunnel process")
 assert(tls_status.tls_status == "ready" and tls_status.enabled)
 assert(tls_status.sampled_at == 123)
 
