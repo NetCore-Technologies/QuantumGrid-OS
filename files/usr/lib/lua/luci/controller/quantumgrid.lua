@@ -4535,9 +4535,10 @@ function action_config_restore()
             (field.encoding ~= "application/gzip" and field.encoding ~= "application/octet-stream") then
             upload_state.error = "Only one raw gzip archive request body is accepted."
         elseif not upload_state.metadata then
-            upload_state.metadata = field
+            upload_state.metadata = { name = field.name, encoding = field.encoding }
             upload_state.count = 1
-        elseif upload_state.metadata ~= field then
+        elseif upload_state.metadata.name ~= field.name or
+            upload_state.metadata.encoding ~= field.encoding then
             upload_state.error = "Multiple archive upload streams are not accepted."
         end
 
