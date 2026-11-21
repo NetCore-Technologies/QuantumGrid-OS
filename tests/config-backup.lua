@@ -24,6 +24,14 @@ assert(backup.validate_restore_confirmation("0", "1") == nil)
 assert(backup.validate_restore_confirmation("1", "0") == nil)
 assert(backup.validate_restore_confirmation(nil, nil) == nil)
 
+local rollback_reserve = 64 * 1024 * 1024 + 8 * 1024 * 1024
+assert(backup.validate_restore_temp_capacity(rollback_reserve + 1024, 1024) == rollback_reserve + 1024)
+assert(backup.validate_restore_temp_capacity(rollback_reserve + 1023, 1024) == nil,
+  "restore must reserve space for both uploaded and maximum-sized rollback archives")
+assert(backup.validate_restore_temp_capacity("200000000", 1024) == nil)
+assert(backup.validate_restore_temp_capacity(200000000, "1024") == nil)
+assert(backup.validate_restore_temp_capacity(-1, 1024) == nil)
+
 local valid_listing = table.concat({
   "drwxr-xr-x root/root 0 2026-11-22 00:00 ./etc/",
   "drwxr-xr-x root/root 0 2026-11-22 00:00 ./etc/config/",
