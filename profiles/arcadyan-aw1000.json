@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "platform": {
+    "id": "arcadyan-aw1000",
+    "vendor": "Arcadyan",
+    "model": "AW1000",
+    "openwrt_device": "arcadyan_aw1000",
+    "openwrt_target": "qualcommax",
+    "openwrt_subtarget": "ipq807x",
+    "config_file": "configs/aw1000-max.config",
+    "board_compatible": [
+      "arcadyan,aw1000"
+    ]
+  },
+  "capabilities": {
+    "nss": {
+      "supported": true,
+      "config_fragment": "configs/aw1000-nss.fragment",
+      "feed_pins": "configs/aw1000-nss-feeds.conf"
+    },
+    "fxs": {
+      "supported": true,
+      "setup_script": "scripts/setup-aw1000-phone-feed.sh"
+    }
+  },
+  "artifacts": {
+    "output_directory": "qualcommax/ipq807x",
+    "factory_glob": "*arcadyan_aw1000-squashfs-factory.ubi",
+    "initramfs_glob": "*arcadyan_aw1000-initramfs-uImage.itb"
+  }
+}
