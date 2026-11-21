@@ -2993,6 +2993,8 @@ end
 
 
 local function office_network_status(uci, fs)
+	local util = require "luci.util"
+	local validator = require "luci.quantumgrid.office_networks"
 	local source = {
 		redirects = {},
 		ipv6_pinholes = {},
@@ -3022,6 +3024,14 @@ local function office_network_status(uci, fs)
 				device = type(section.ifname) == "string" and section.ifname or ""
 			end
 			if type(device) ~= "string" or not device:match("^[%w_.%-]+$") then device = "" end
+			local ipv6_neighbors = {}
+			if device ~= "" and fs.access("/sbin/ip") == true then
+				local command = "/sbin/ip -6 neigh show dev " .. device .. " 2>/dev/null"
+				local command_ok, output = pcall(util.exec, command)
+				if command_ok and type(output) == "string" then
+					ipv6_neighbors = validator.parse_ipv6_neighbor_inventory(output, device)
+				end
+			end
 			table.insert(source.interfaces, {
 				name = name,
 				protocol = tostring(section.proto or ""),
@@ -3030,7 +3040,8 @@ local function office_network_status(uci, fs)
 				ipv4 = section.ipaddr,
 				netmask = section.netmask,
 				ip6assign = section.ip6assign,
-				ipv6 = section.ip6addr
+				ipv6 = section.ip6addr,
+				ipv6_neighbors = ipv6_neighbors
 			})
 		end)
 		uci:foreach("network", "device", function(section)
