@@ -63,6 +63,24 @@ Before writing or removing a route, QuantumGrid checks the current browser admin
 
 Routes are persisted in the OpenWrt network UCI configuration. A network reload is required after commit. If reload fails, QuantumGrid attempts to remove the added section or restore the complete removed section, commits the previous configuration and reloads it; the API reports whether rollback was confirmed. The static-route list shows configured route sections, not proof that a route is installed in the live kernel or that its next hop is reachable. Validate live IPv4/IPv6 route tables and client reachability separately.
 
+## IPv6 WAN pinholes (not NAT)
+
+Office Networks can add and remove **QuantumGrid-managed IPv6 pinholes** for services hosted on a device with an already configured global-unicast IPv6 address. IPv6 is routed end-to-end; this is a firewall allowance, not IPv4-style address/port translation.
+
+A pinhole is limited to:
+- One existing external WAN/WWAN source zone.
+- One existing internal destination zone.
+- One exact global-unicast IPv6 address already configured on an interface attached to that destination zone.
+- TCP, UDP or TCP+UDP and one destination port (1–65535).
+
+The validator rejects ULA, link-local, multicast, unspecified and documentation addresses, malformed IPv6, unconfigured addresses, unsupported protocols, invalid ports, duplicate names and overlapping zone/address/port/protocol allowances. The controller re-reads the live UCI inventory on every request and refuses changes if inventory is unavailable or truncated.
+
+The generated rule is an IPv6 firewall rule with the explicit source zone, destination zone, destination host, protocol, destination port, IPv6 family and ACCEPT target. It does **not** add an IPv6 redirect/NAT rule, change zone INPUT/OUTPUT/FORWARD defaults, open all ports, add ICMP-wide access, or create inter-zone forwarding. Existing default-deny policy remains in control of all unrelated traffic.
+
+Create and remove operations require an authenticated HTTPS, same-origin administrator POST and explicit confirmation. A firewall reload is checked; failure triggers an attempted UCI rollback and a second reload. The API verifies the exact address, zones, protocol, port and service result before the control centre reports success. Only rules bearing QuantumGrid's managed marker and expected IPv6 rule structure are shown as managed pinholes or eligible for removal; administrator-created firewall rules remain outside this lifecycle. Add/remove successes and failures are written to the bounded local audit log.
+
+**A configured address is not proof of public reachability.** The selected host must have a delegated or otherwise correctly routed global IPv6 address, the upstream network must carry inbound IPv6, and host firewall/service policy must allow the selected traffic. Test from a separate external IPv6 network. The UI inventory and a successful firewall reload are not proof that an ISP route, remote peer, host service or end-to-end connection is working.
+
 ## Transaction and recovery
 
 Provisioning uses an authenticated, same-origin HTTPS POST and requires explicit confirmation. QuantumGrid snapshots the selected zone's existing network list, stages network/DHCP/firewall UCI changes, commits all three configuration packages and reloads the affected services. If staging, commit or a required reload fails, it removes the partial segment, restores the previous zone attachment and attempts to commit and reload the previous state. The API reports whether rollback was confirmed; a failed rollback must be investigated locally.
