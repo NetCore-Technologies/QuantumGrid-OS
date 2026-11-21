@@ -72,6 +72,7 @@ local function dropbear_status(uci, fs)
   end
 
   local secure = true
+  local has_unknown_enable = false
   local config_ok = type(uci) == "table" and type(uci.foreach) == "function"
   if config_ok then
     config_ok = pcall(function()
@@ -118,6 +119,7 @@ local function dropbear_status(uci, fs)
           end
         elseif enabled == nil then
           secure = false
+          has_unknown_enable = true
         end
 
         if #result.ssh_instances < 8 then
@@ -144,8 +146,10 @@ local function dropbear_status(uci, fs)
     result.ssh_status = "unavailable"
   elseif result.ssh_instance_count == 0 then
     result.ssh_status = "unavailable"
-  elseif result.ssh_enabled_instance_count == 0 then
+  elseif result.ssh_enabled_instance_count == 0 and not has_unknown_enable then
     result.ssh_status = "disabled"
+  elseif result.ssh_enabled_instance_count == 0 then
+    result.ssh_status = "review"
   elseif result.ssh_truncated or not secure then
     result.ssh_status = "review"
   else
