@@ -981,7 +981,7 @@ function validate_office_ipv6_pinhole(
 	for _, pinhole in ipairs(type(existing) == "table" and existing or {}) do
 		if type(pinhole) == "table" and pinhole.source == source
 			and pinhole.destination_ip and global_unicast_ipv6(pinhole.destination_ip, false) == canonical_ip
-			and tonumber(pinhole.destination_port) == port then
+			and tonumber(pinhole.destination_port) == tonumber(port) then
 			local existing_protocols = protocol_set(pinhole.protocol)
 			if existing_protocols and
 				((protocols.tcp and existing_protocols.tcp) or (protocols.udp and existing_protocols.udp)) then
