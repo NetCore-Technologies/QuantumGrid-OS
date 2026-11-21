@@ -94,6 +94,7 @@ local download_summary = qos.summarize_client_policy({
   target = "dscp", set_dscp = "AF41", enabled = "1",
 })
 assert(download_summary and download_summary.direction == "download")
+assert(download_summary.protocol == "tcpudp")
 assert(download_summary.destination_ip == "192.168.20.40")
 assert(download_summary.mac == "02:11:22:33:44:55" and download_summary.enabled)
 assert(qos.summarize_client_policy({
@@ -108,6 +109,27 @@ assert(qos.summarize_client_policy({
   src = "wan", dest = "corp", dest_ip = "not-an-ip", target = "dscp", set_dscp = "AF41",
 }) == nil, "malformed downlink destination addresses must not be inventoried")
 
+local all_protocol_upload = qos.summarize_client_policy({
+  [".name"] = "cfg_client_all_upload", [".type"] = "rule",
+  name = "QuantumGrid client QoS: 02:11:22:33:44:55",
+  src = "corp", dest = "wan", src_mac = "02:11:22:33:44:55",
+  proto = "all", target = "dscp", set_dscp = "AF41",
+})
+assert(all_protocol_upload and all_protocol_upload.protocol == "all")
+local all_protocol_download = qos.summarize_client_policy({
+  [".name"] = "cfg_client_all_download", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  proto = "all", target = "dscp", set_dscp = "AF41",
+})
+assert(all_protocol_download and all_protocol_download.protocol == "all")
+assert(qos.summarize_client_policy({
+  [".name"] = "cfg_client_bad_proto", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  proto = "sctp", target = "dscp", set_dscp = "AF41",
+}) == nil, "unrecognized protocol restrictions must not be reported as complete traffic marking")
+
 local summary = qos.summarize_client_policy({
 	[".name"] = "cfg_client_1", [".type"] = "rule",
 	name = "QuantumGrid client QoS: 02:11:22:33:44:55",
@@ -115,6 +137,7 @@ local summary = qos.summarize_client_policy({
 	target = "dscp", set_dscp = "AF41", enabled = "1"
 })
 assert(summary and summary.section == "cfg_client_1" and summary.enabled)
+assert(summary.protocol == "tcpudp", "legacy policies without an explicit protocol retain firewall4's TCP/UDP default")
 assert(summary.mac == "02:11:22:33:44:55" and summary.dscp_class == "AF41")
 assert(qos.summarize_client_policy({
 	[".name"] = "user_rule", [".type"] = "rule", name = "User firewall rule",
@@ -179,6 +202,13 @@ assert(qos.find_download_policy_conflict(
 assert(qos.find_download_policy_conflict(
   dependency_policies, "02:aa:bb:cc:dd:ef", "192.168.20.41") == nil,
   "unrelated reservations must not be blocked")
+assert(qos.find_download_reservation_policy(
+  dependency_policies, "02:11:22:33:44:55", "192.168.20.41") ~= nil,
+  "changing a reserved IP for a client with a downlink policy must be blocked by the client identity")
+assert(qos.find_download_reservation_policy(
+  { { direction = "download", mac = "02:aa:bb:cc:dd:ee", destination_ip = "192.168.20.40" } },
+  "02:11:22:33:44:55", "192.168.20.40") ~= nil,
+  "reusing a reserved IP referenced by a different downlink identity must also be blocked")
 assert(qos.find_download_policy_conflict({}, "02:11:22:33:44:55", "192.168.20.40") == nil)
 
 local download_snapshot = qos.snapshot_client_policy_section({
