@@ -2474,12 +2474,16 @@ local function platform_status(fs)
 	local stat_ok, profile_stat = pcall(fs.stat, profile_path)
 	if stat_ok and type(profile_stat) == "table" and
 		type(profile_stat.size) == "number" and profile_stat.size > 0 and profile_stat.size <= 32768 then
-		local profile_contents = read_file(profile_path)
-		if type(profile_contents) == "string" and #profile_contents <= 32768 then
-			local parse_ok, parsed = pcall(function()
-				return require("luci.jsonc").parse(profile_contents)
-			end)
-			if parse_ok and type(parsed) == "table" then profile_data = parsed end
+		local profile_file = io.open(profile_path, "r")
+		if profile_file then
+			local profile_contents = profile_file:read(32769) or ""
+			profile_file:close()
+			if #profile_contents > 0 and #profile_contents <= 32768 then
+				local parse_ok, parsed = pcall(function()
+					return require("luci.jsonc").parse(profile_contents)
+				end)
+				if parse_ok and type(parsed) == "table" then profile_data = parsed end
+			end
 		end
 	end
 	local device_profile = require("luci.quantumgrid.device_profile").inspect(
