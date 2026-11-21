@@ -14,9 +14,10 @@ local latency_test_cache_at = 0
 local cellular_cache = nil
 local cellular_cache_at = 0
 
+local management_transport = require "luci.quantumgrid.management_transport"
+
 local function require_https(http)
-	local transport = require "luci.quantumgrid.management_transport"
-	return transport.require_https(http)
+	return management_transport.require_https(http)
 end
 
 local function read_file(path)
