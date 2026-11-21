@@ -2306,6 +2306,18 @@ function action_index()
 end
 
 local function security_status(uci, fs)
+	local certificate_fingerprint_output = nil
+	if fs.access("/usr/bin/openssl") == true then
+		local util_ok, util = pcall(require, "luci.util")
+		if util_ok and type(util) == "table" and type(util.exec) == "function" then
+			-- Fixed certificate path and fixed read-only arguments; never return PEM/key contents.
+			local exec_ok, output = pcall(util.exec,
+				"/usr/bin/openssl x509 -in /etc/uhttpd.crt -noout -fingerprint -sha256 2>/dev/null")
+			if exec_ok and type(output) == "string" and #output <= 4096 then
+				certificate_fingerprint_output = output
+			end
+		end
+	end
 	local firewall_inventory = require "luci.quantumgrid.firewall_inventory"
 	local firewall_runtime = require "luci.quantumgrid.firewall_runtime"
 	local result = {
@@ -2321,7 +2333,7 @@ local function security_status(uci, fs)
 		nft_available = false,
 		nft_tables = {},
 		nft_runtime = firewall_runtime.unavailable(os.time(), false),
-		management_transport = management_transport.inspect(uci, fs),
+		management_transport = management_transport.inspect(uci, fs, certificate_fingerprint_output),
 		adblock_fast = {
 			installed = fs.access("/etc/init.d/adblock-fast") == true,
 			config_available = fs.access("/etc/config/adblock-fast") == true,
