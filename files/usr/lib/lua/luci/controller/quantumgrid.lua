@@ -4056,6 +4056,77 @@ function action_led_update()
 	})
 end
 
+local function backup_release_identity(contents)
+	if type(contents) ~= "string" or #contents < 1 or #contents > 16384 then return nil end
+	local target = contents:match("DISTRIB_TARGET=['\"]([^'\"]+)['\"]")
+	local architecture = contents:match("DISTRIB_ARCH=['\"]([^'\"]+)['\"]")
+	if type(target) ~= "string" or type(architecture) ~= "string" or
+		not target:match("^[%w_%.%-/]+$") or not architecture:match("^[%w_%.%-]+$") then
+		return nil
+	end
+	return { target = target, architecture = architecture }
+end
+
+local function quantumgrid_backup_context(fs)
+	local platform = platform_status(fs)
+	local profile = type(platform) == "table" and platform.device_profile or nil
+	local identity = type(platform) == "table" and platform.device_identity or nil
+	if type(profile) ~= "table" or profile.available ~= true or profile.status ~= "matched" or
+		type(profile.profile_id) ~= "string" or type(platform.board_name) ~= "string" or
+		type(identity) ~= "table" or identity.available ~= true or
+		type(identity.id) ~= "string" then
+		return nil, "A matched QuantumGrid hardware profile and stable device identity are required for safe backup and restore."
+	end
+	local release = backup_release_identity(read_file("/etc/openwrt_release"))
+	if not release then
+		return nil, "The current OpenWrt target and architecture could not be verified."
+	end
+	return {
+		profile_id = profile.profile_id,
+		board_name = platform.board_name,
+		device_id = identity.id,
+		target = release.target,
+		architecture = release.architecture
+	}
+end
+
+local function ensure_sysupgrade_backup_paths()
+	local required = {
+		"/etc/quantumgrid/audit.jsonl",
+		"/etc/quantumgrid/audit.jsonl.1",
+		"/etc/quantumgrid/device-id",
+		"/etc/quantumgrid/device-profile.json",
+		"/etc/openwrt_release"
+	}
+	local present = {}
+	local current = io.open("/etc/sysupgrade.conf", "r")
+	if current then
+		for line in current:lines() do
+			present[line:gsub("\\r$", "")] = true
+		end
+		local close_ok = pcall(current.close, current)
+		if not close_ok then return nil, "The existing sysupgrade backup list could not be closed safely." end
+	end
+	local missing = {}
+	for _, path in ipairs(required) do
+		if not present[path] then missing[#missing + 1] = path end
+	end
+	if #missing > 0 then
+		local append, append_error = io.open("/etc/sysupgrade.conf", "a")
+		if not append then return nil, "The native sysupgrade backup list could not be updated: " .. tostring(append_error or "unknown error") end
+		local write_ok, write_error = pcall(function()
+			append:write("\\n")
+			for _, path in ipairs(missing) do append:write(path, "\\n") end
+			append:flush()
+		end)
+		local close_ok = pcall(append.close, append)
+		if not write_ok or not close_ok then
+			return nil, "The required device/profile metadata could not be added to the native sysupgrade backup list."
+		end
+	end
+	return true
+end
+
 function action_config_backup()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
@@ -4094,6 +4165,16 @@ function action_config_backup()
 	end
 	if fs.access("/sbin/sysupgrade") ~= true then
 		respond(503, { ok = false, error = "The native sysupgrade backup utility is unavailable." })
+		return
+	end
+	local context, context_error = quantumgrid_backup_context(fs)
+	if not context then
+		respond(503, { ok = false, error = context_error })
+		return
+	end
+	local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
+	if not backup_paths_ok then
+		respond(503, { ok = false, error = backup_paths_error })
 		return
 	end
 
