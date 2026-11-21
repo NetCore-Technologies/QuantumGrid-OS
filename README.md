@@ -696,7 +696,8 @@ The parser and correlation rules, including IP/MAC validation, are covered by `t
 ## Remote syslog forwarding
 
 The System page configures the native OpenWrt remote log forwarder through the existing
-`system` UCI section. It supports an IPv4 address or DNS name, a destination port, UDP, TCP or
+`system` UCI section. It supports an IPv4 address, a scoped-safe unicast IPv6 address (global or ULA),
+or a DNS name, a destination port, UDP, TCP or
 authenticated TLS, an optional sender hostname and a message prefix. Changes require an authenticated
 same-origin HTTPS POST and explicit confirmation. The local log buffer remains enabled.
 
@@ -704,7 +705,9 @@ For TLS, the firmware includes OpenWrt's `stunnel` client and the system CA bund
 creates or updates only its reserved `stunnel.quantumgrid_syslog` service section, binds the
 plaintext side exclusively to `127.0.0.1:5514`, and forwards to the configured collector over TLS.
 The client pins the TLS protocol to TLS 1.2, requires certificate-chain verification and an
-exact DNS hostname or IPv4 subject alternative name match; DNS destinations also use SNI. The
+exact DNS hostname, IPv4 subject alternative name or IPv6 subject alternative name match; DNS
+destinations also use SNI. IPv6 collector literals are encoded in bracketed stunnel endpoint syntax
+and are normalized before policy matching. The
 control refuses to enable TLS unless the stunnel global configuration explicitly drops privileges
 to a non-root user and group (the upstream package defaults are `nobody` and `nogroup`). It does
 not disable certificate verification or permit a user-supplied arbitrary stunnel configuration.
@@ -725,7 +728,9 @@ the collector, and verify message receipt and parsing independently.
 UDP and TCP modes remain unencrypted and do not authenticate the collector; use a trusted management
 VLAN or VPN for those transports. The TLS mode uses the firmware's installed public CA bundle and
 does not currently support private-CA import, mutual-TLS client certificates, certificate pinning,
-RFC 5425 octet-counting, IPv6 literal destinations, collector health probes or multiple destinations. A production deployment
+RFC 5425 octet-counting, collector health probes or multiple destinations. IPv6 unspecified, loopback,
+link-local, multicast, documentation and transition addresses are rejected; ULA and ordinary global
+unicast collectors are supported. A production deployment
 must verify the collector's certificate chain, DNS, firewall policy, receipt and retention from the
 collector side. Lua validation is covered by `tests/remote-syslog.lua`, and the browser API contract
 by `tests/remote-syslog-api.test.mjs` in CI.
