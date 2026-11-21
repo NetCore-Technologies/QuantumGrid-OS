@@ -40,6 +40,7 @@ const running = {
   load_balancing_threshold: 0,
   status: "cluster",
   running: true,
+  policy_verified: true,
   local_node_count: 2,
   remote_host_count: 2,
   associated_clients: 7,
@@ -100,6 +101,7 @@ test("roaming API rejects altered destination, SSID set, service state and rollb
     { ...running, ssid_list: ["Guest"] },
     { ...running, running: false },
     { ...running, status: "review" },
+    { ...running, policy_verified: false },
     { ...running, service_action_completed: false },
     { ...running, rolled_back: true },
   ];
@@ -134,6 +136,7 @@ test("disabling usteer accepts its persisted SSID list and confirms stopped stat
       ssid_list: ["Corp"],
       status: "disabled",
       running: false,
+      policy_verified: false,
       local_node_count: 0,
       remote_host_count: 0,
       associated_clients: 0,

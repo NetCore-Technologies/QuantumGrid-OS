@@ -2162,19 +2162,11 @@ function action_usteer_update()
 	local nixio = require "nixio"
 	local runtime = nil
 	local ready = false
-	local function local_ess_ready(status)
-		if type(status.local_nodes) ~= "table" or status.local_node_count < 1 then return false end
-		local observed = {}
-		for _, node in ipairs(status.local_nodes) do
-			if type(node.ssid) == "string" and node.ssid ~= "" then observed[node.ssid] = true end
-		end
-		for _, ssid in ipairs(update.ssids) do if not observed[ssid] then return false end end
-		return true
-	end
 	for attempt = 1, 10 do
 		local status = usteer_status(uci, fs)
 		if update.enabled then
-			if status.running and status.local_node_count > 0 and local_ess_ready(status) and
+			if status.running and manager.local_ess_ready(update.ssids, access_point_inventory.access_points, status) and
+				status.policy_verified == true and
 				(status.status == "cluster" or status.status == "local_only") and
 				status.network == update.network and #status.ssid_list == #update.ssids then
 					runtime = status
@@ -2228,6 +2220,7 @@ function action_usteer_update()
 		local_node_count = runtime.local_node_count,
 		remote_host_count = runtime.remote_host_count,
 		associated_clients = runtime.associated_clients,
+		policy_verified = runtime.policy_verified == true,
 		service_action_completed = true,
 		rolled_back = false
 	})
@@ -3714,9 +3707,19 @@ local function usteer_access_point_inventory(uci)
 				acct_server = type(section.acct_server) == "string" and section.acct_server or "",
 				acct_port = tonumber(section.acct_port) or 1813,
 				acct_secret = type(section.acct_secret) == "string" and section.acct_secret or "",
+				auth_server2 = type(section.auth_server2) == "string" and section.auth_server2 or "",
+				auth_port2 = tonumber(section.auth_port2) or 1812,
+				auth_secret2 = type(section.auth_secret2) == "string" and section.auth_secret2 or "",
+				acct_server2 = type(section.acct_server2) == "string" and section.acct_server2 or "",
+				acct_port2 = tonumber(section.acct_port2) or 1813,
+				acct_secret2 = type(section.acct_secret2) == "string" and section.acct_secret2 or "",
 				nasid = type(section.nasid) == "string" and section.nasid or "",
 				ieee80211w = type(section.ieee80211w) == "string" and section.ieee80211w or "",
 				dynamic_vlan = type(section.dynamic_vlan) == "string" and section.dynamic_vlan or "0",
+				ieee80211r = type(section.ieee80211r) == "string" and section.ieee80211r or "0",
+				mobility_domain = type(section.mobility_domain) == "string" and section.mobility_domain or "",
+				ft_over_ds = type(section.ft_over_ds) == "string" and section.ft_over_ds or "0",
+				ft_psk_generate_local = type(section.ft_psk_generate_local) == "string" and section.ft_psk_generate_local or "0",
 				ieee80211k = section.ieee80211k == "1" and "1" or "0",
 				ieee80211v = section.ieee80211v == "1" and "1" or "0",
 				disabled = section.disabled == "1",
@@ -3778,6 +3781,8 @@ local function usteer_status(uci, fs)
 		aggressiveness_override_count = #wireless_option_list(section and section.aggressiveness_mac_list),
 		local_node_count = 0,
 		local_nodes_truncated = false,
+		local_nodes_invalid_count = 0,
+		policy_verified = false,
 		remote_host_count = 0,
 		remote_hosts_truncated = false,
 		associated_clients = 0,
@@ -3805,6 +3810,7 @@ local function usteer_status(uci, fs)
 	result.running = type(runtime_config) == "table" and type(local_nodes) == "table"
 	result.local_node_count = runtime.local_node_count
 	result.local_nodes_truncated = runtime.local_nodes_truncated
+	result.local_nodes_invalid_count = runtime.local_nodes_invalid_count
 	result.remote_host_count = runtime.remote_host_count
 	result.remote_hosts_truncated = runtime.remote_hosts_truncated
 	result.associated_clients = runtime.associated_clients
@@ -3816,6 +3822,7 @@ local function usteer_status(uci, fs)
 	end
 
 	local runtime_matches = manager.runtime_policy_matches(runtime_config, result)
+	result.policy_verified = runtime_matches
 	if not runtime_matches then
 		result.status = "review"
 	elseif result.remote_host_count > 0 then

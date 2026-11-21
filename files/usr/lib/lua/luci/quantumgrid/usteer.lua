@@ -41,23 +41,66 @@ local function contains_network(networks, wanted)
 	return false
 end
 
+local function same_option(left, right, name)
+	local a, b = left[name], right[name]
+	if a == nil then a = "" end
+	if b == nil then b = "" end
+	return tostring(a) == tostring(b)
+end
+
+local function has_radius_configuration(ap)
+	local encryption = type(ap.encryption) == "string" and ap.encryption:lower() or ""
+	return encryption:find("eap", 1, true) ~= nil or
+		(type(ap.auth_server) == "string" and ap.auth_server ~= "") or
+		(type(ap.auth_server2) == "string" and ap.auth_server2 ~= "") or
+		(type(ap.auth_secret) == "string" and ap.auth_secret ~= "") or
+		(type(ap.acct_server) == "string" and ap.acct_server ~= "")
+end
+
+local function valid_radius_endpoint(server, port, secret, required)
+	if type(server) ~= "string" or server == "" then return not required end
+	local number = tonumber(port)
+	return number ~= nil and number >= 1 and number <= 65535 and number == math.floor(number) and
+		type(secret) == "string" and #secret >= 16
+end
+
 local function same_security(left, right)
-	if left.encryption ~= right.encryption or
-		left.ieee80211w ~= right.ieee80211w or
-		left.dynamic_vlan ~= right.dynamic_vlan then
-		return false
+	if type(left) ~= "table" or type(right) ~= "table" or
+		type(left.encryption) ~= "string" or left.encryption == "none" or
+		left.encryption ~= right.encryption then return false end
+	for _, field in ipairs({
+		"ieee80211w", "dynamic_vlan", "ieee80211r", "mobility_domain",
+		"ft_over_ds", "ft_psk_generate_local"
+	}) do
+		if not same_option(left, right, field) then return false end
 	end
-	if (left.acct_server or "") ~= (right.acct_server or "") or
-		(left.acct_port or 1813) ~= (right.acct_port or 1813) or
-		(left.acct_secret or "") ~= (right.acct_secret or "") then
-		return false
+
+	local left_enterprise, right_enterprise = has_radius_configuration(left), has_radius_configuration(right)
+	if left_enterprise ~= right_enterprise then return false end
+	if left_enterprise then
+		local radius_fields = {
+			"auth_server", "auth_port", "auth_secret",
+			"auth_server2", "auth_port2", "auth_secret2",
+			"acct_server", "acct_port", "acct_secret",
+			"acct_server2", "acct_port2", "acct_secret2"
+		}
+		for _, field in ipairs(radius_fields) do
+			if not same_option(left, right, field) then return false end
+		end
+		if not valid_radius_endpoint(left.auth_server, left.auth_port, left.auth_secret, true) then return false end
+		if left.auth_server2 ~= nil and left.auth_server2 ~= "" and
+			not valid_radius_endpoint(left.auth_server2, left.auth_port2, left.auth_secret2, true) then return false end
+		if left.acct_server ~= nil and left.acct_server ~= "" and
+			not valid_radius_endpoint(left.acct_server, left.acct_port, left.acct_secret, true) then return false end
+		if left.acct_server2 ~= nil and left.acct_server2 ~= "" and
+			not valid_radius_endpoint(left.acct_server2, left.acct_port2, left.acct_secret2, true) then return false end
+		return true
 	end
-	if left.encryption == "none" then return false end
-	if left.encryption == "wpa2" or left.encryption == "wpa3" then
-		return type(left.auth_server) == "string" and left.auth_server ~= "" and
-			left.auth_server == right.auth_server and left.auth_port == right.auth_port and
-			type(left.auth_secret) == "string" and #left.auth_secret >= 16 and
-			left.auth_secret == right.auth_secret
+	for _, field in ipairs({
+		"auth_server", "auth_secret", "auth_server2", "auth_secret2",
+		"acct_server", "acct_secret", "acct_server2", "acct_secret2"
+	}) do
+		if not same_option(left, right, field) then return false end
 	end
 	return type(left.key) == "string" and #left.key >= 8 and left.key == right.key
 end
@@ -183,27 +226,77 @@ function validate(input, network_binding, access_points)
 	}
 end
 
+local function valid_bssid(value)
+	if type(value) ~= "string" or #value ~= 17 or
+		not value:match("^(%x%x):(%x%x):(%x%x):(%x%x):(%x%x):(%x%x)$") then return false end
+	local first = tonumber(value:sub(1, 2), 16)
+	local normalized = value:lower()
+	return first ~= nil and first % 2 == 0 and
+		normalized ~= "00:00:00:00:00:00" and normalized ~= "ff:ff:ff:ff:ff:ff"
+end
+
+local function bounded_integer(value, minimum, maximum)
+	local number = tonumber(value)
+	if not number or number ~= math.floor(number) or number < minimum or number > maximum then return nil end
+	return number
+end
+
 local function map_count(value, maximum)
-	if type(value) ~= "table" then return 0, {}, false end
-	local total = 0
-	local rows = {}
+	if type(value) ~= "table" then return 0, {}, false, 0 end
+	local total, valid_count, invalid_count = 0, 0, 0
+	local rows, seen_bssids = {}, {}
 	for key, item in pairs(value) do
 		total = total + 1
-		if #rows < maximum and type(item) == "table" then
-				local row = {
-					name = type(key) == "string" and key or "",
-					ssid = type(item.ssid) == "string" and item.ssid or "",
-					bssid = type(item.bssid) == "string" and item.bssid:lower() or "",
-					frequency_mhz = tonumber(item.freq),
-					clients = tonumber(item.n_assoc) or 0,
-					channel_load = tonumber(item.load),
-					noise_dbm = tonumber(item.noise)
-				}
-			table.insert(rows, row)
+		local bssid = type(item) == "table" and type(item.bssid) == "string" and item.bssid:lower() or ""
+		local ssid = type(item) == "table" and item.ssid or nil
+		local frequency = type(item) == "table" and bounded_integer(item.freq, 2300, 7125) or nil
+		local clients = type(item) == "table" and bounded_integer(item.n_assoc, 0, 4096) or nil
+		local load = type(item) == "table" and bounded_integer(item.load, 0, 255) or nil
+		local noise = type(item) == "table" and bounded_integer(item.noise, -127, 0) or nil
+		local key_matches = type(key) == "string" and valid_bssid(key) and key:lower() == bssid
+		if type(item) ~= "table" or not key_matches or not valid_bssid(bssid) or
+			not valid_ssid(ssid) or not frequency or clients == nil or seen_bssids[bssid] then
+			invalid_count = invalid_count + 1
+		else
+			seen_bssids[bssid] = true
+			valid_count = valid_count + 1
+			if valid_count <= maximum then
+				table.insert(rows, {
+					name = bssid, ssid = ssid, bssid = bssid,
+					frequency_mhz = frequency, clients = clients,
+					channel_load = load, noise_dbm = noise
+				})
+			end
 		end
 	end
-	table.sort(rows, function(left, right) return left.name < right.name end)
-	return math.min(total, maximum), rows, total > maximum
+	table.sort(rows, function(left, right) return left.bssid < right.bssid end)
+	return math.min(valid_count, maximum), rows, total > maximum or invalid_count > 0, invalid_count
+end
+
+function local_ess_ready(selected_ssids, access_points, runtime)
+	if type(selected_ssids) ~= "table" or #selected_ssids < 1 or #selected_ssids > 8 or
+		type(access_points) ~= "table" or type(runtime) ~= "table" or
+		type(runtime.local_nodes) ~= "table" or runtime.local_nodes_truncated == true or
+		(runtime.local_nodes_invalid_count or 0) > 0 then return false end
+	local selected, expected, observed, seen_bssids = {}, {}, {}, {}
+	for _, ssid in ipairs(selected_ssids) do
+		if not valid_ssid(ssid) or selected[ssid] then return false end
+		selected[ssid], expected[ssid], observed[ssid] = true, 0, 0
+	end
+	for _, ap in ipairs(access_points) do
+		if type(ap) == "table" and ap.mode == "ap" and selected[ap.ssid] and
+			ap.disabled ~= true and ap.radio_disabled ~= true then expected[ap.ssid] = expected[ap.ssid] + 1 end
+	end
+	for ssid in pairs(selected) do if expected[ssid] < 1 then return false end end
+	for _, node in ipairs(runtime.local_nodes) do
+		if type(node) ~= "table" or not valid_ssid(node.ssid) or not valid_bssid(node.bssid) then return false end
+		local bssid = node.bssid:lower()
+		if seen_bssids[bssid] then return false end
+		seen_bssids[bssid] = true
+		if selected[node.ssid] then observed[node.ssid] = observed[node.ssid] + 1 end
+	end
+	for ssid in pairs(selected) do if observed[ssid] ~= expected[ssid] then return false end end
+	return true
 end
 
 local function same_numeric(value, expected)
@@ -231,7 +324,8 @@ end
 function runtime_policy_matches(runtime, persisted)
 	if type(runtime) ~= "table" or type(persisted) ~= "table" then return false end
 	if runtime.syslog ~= true or runtime.ipv6 ~= false or runtime.local_mode ~= false or
-		runtime.assoc_steering ~= false or runtime.load_kick_enabled ~= false or
+		runtime.assoc_steering ~= false or runtime.probe_steering ~= false or
+		runtime.load_kick_enabled ~= false or
 		persisted.syslog ~= true or persisted.ipv6 ~= false or persisted.local_mode ~= false or
 		persisted.assoc_steering ~= false or persisted.probe_steering ~= false or
 		persisted.load_kick_enabled ~= false or persisted.min_snr ~= 0 or
@@ -259,17 +353,18 @@ function runtime_policy_matches(runtime, persisted)
 end
 
 function summarize_runtime(config, local_nodes, remote_hosts)
-	local local_count, nodes, local_truncated = map_count(local_nodes, 32)
+	local local_count, nodes, local_truncated, invalid_count = map_count(local_nodes, 32)
 	local remote_count = 0
 	if type(remote_hosts) == "table" then
 		for _ in pairs(remote_hosts) do remote_count = remote_count + 1 end
 	end
 	local clients = 0
-	for _, node in ipairs(nodes) do clients = clients + math.max(0, node.clients) end
+	for _, node in ipairs(nodes) do clients = clients + node.clients end
 	return {
 		running = type(config) == "table",
 		local_node_count = local_count,
 		local_nodes_truncated = local_truncated,
+		local_nodes_invalid_count = invalid_count,
 		remote_host_count = math.min(remote_count, 64),
 		remote_hosts_truncated = remote_count > 64,
 		associated_clients = clients,

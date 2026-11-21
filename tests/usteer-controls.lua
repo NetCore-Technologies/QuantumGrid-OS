@@ -148,6 +148,48 @@ local disabled_ap = {
 assert(usteer.validate(input(), binding, disabled_ap) == nil,
   "a disabled AP must not satisfy the local ESS prerequisite")
 
+local enterprise_aps = {
+  {
+    section = "eap24", radio = "radio0", mode = "ap", ssid = "Corp",
+    networks = { "corp20" }, encryption = "wpa2",
+    key = "", auth_server = "192.0.2.10", auth_port = 1812, auth_secret = "primary-secret-value",
+    auth_server2 = "", auth_port2 = 1812, auth_secret2 = "",
+    acct_server = "192.0.2.12", acct_port = 1813, acct_secret = "accounting-secret-value",
+    acct_server2 = "", acct_port2 = 1813, acct_secret2 = "",
+    nasid = "office-ess", ieee80211w = "1", dynamic_vlan = "0",
+    ieee80211r = "1", mobility_domain = "a1b2", ft_over_ds = "1",
+    ft_psk_generate_local = "0", ieee80211k = "1", ieee80211v = "1",
+  },
+  {
+    section = "eap5", radio = "radio1", mode = "ap", ssid = "Corp",
+    networks = { "corp20" }, encryption = "wpa2",
+    key = "", auth_server = "192.0.2.10", auth_port = 1812, auth_secret = "primary-secret-value",
+    auth_server2 = "", auth_port2 = 1812, auth_secret2 = "",
+    acct_server = "192.0.2.12", acct_port = 1813, acct_secret = "accounting-secret-value",
+    acct_server2 = "", acct_port2 = 1813, acct_secret2 = "",
+    nasid = "office-ess", ieee80211w = "1", dynamic_vlan = "0",
+    ieee80211r = "1", mobility_domain = "a1b2", ft_over_ds = "1",
+    ft_psk_generate_local = "0", ieee80211k = "1", ieee80211v = "1",
+  },
+}
+assert(usteer.validate(input(), binding, enterprise_aps),
+  "identical WPA-EAP APs must compare RADIUS, accounting, 802.11r and MFP settings")
+local different_radius_secret = { enterprise_aps[1], {} }
+for key, value in pairs(enterprise_aps[2]) do different_radius_secret[2][key] = value end
+different_radius_secret[2].auth_secret = "changed-primary-secret"
+assert(usteer.validate(input(), binding, different_radius_secret) == nil,
+  "same-SSID enterprise APs must have identical RADIUS secrets")
+local different_mfp = { enterprise_aps[1], {} }
+for key, value in pairs(enterprise_aps[2]) do different_mfp[2][key] = value end
+different_mfp[2].ieee80211w = "0"
+assert(usteer.validate(input(), binding, different_mfp) == nil,
+  "same-SSID APs must use matching management-frame-protection policy")
+local different_ft = { enterprise_aps[1], {} }
+for key, value in pairs(enterprise_aps[2]) do different_ft[2][key] = value end
+different_ft[2].mobility_domain = "c3d4"
+assert(usteer.validate(input(), binding, different_ft) == nil,
+  "same-SSID APs must use the same 802.11r mobility domain")
+
 local nodes = {
   ["02:00:00:00:00:01"] = { ssid = "Corp", bssid = "02:00:00:00:00:01", freq = 5180, n_assoc = 4, load = 32, noise = -96 },
   ["02:00:00:00:00:02"] = { ssid = "Corp", bssid = "02:00:00:00:00:02", freq = 2412, n_assoc = 3, load = 20, noise = -95 },
@@ -183,7 +225,7 @@ local expected_policy = {
 }
 local live_policy = {
   syslog = true, ipv6 = false, local_mode = false,
-  assoc_steering = false, load_kick_enabled = false,
+  assoc_steering = false, probe_steering = false, load_kick_enabled = false,
   aggressiveness = 1, band_steering_interval = 30000,
   band_steering_min_snr = -65, band_steering_threshold = 5,
   load_balancing_threshold = 0, min_snr = 0, min_connect_snr = 0,
@@ -200,6 +242,7 @@ local unsafe_runtime_changes = {
   { roam_trigger_snr = -70 },
   { aggressiveness_mac_list = { "02:00:00:00:00:01,4" } },
   { assoc_steering = true },
+  { probe_steering = true },
   { local_mode = true },
   { ipv6 = true },
   { syslog = false },
@@ -219,6 +262,32 @@ for key, value in pairs(expected_policy) do unsafe_persisted[key] = value end
 unsafe_persisted.probe_steering = true
 assert(not usteer.runtime_policy_matches(live_policy, unsafe_persisted),
   "persisted probe steering must be treated as unsafe even if the daemon does not expose it")
+
+local local_ess = usteer.summarize_runtime({ aggressiveness = 1 }, nodes, {})
+assert(usteer.local_ess_ready({ "Corp" }, aps, local_ess),
+  "every active configured BSS in the selected ESS must have a unique live BSSID")
+local partial = usteer.summarize_runtime({ aggressiveness = 1 }, {
+  ["02:00:00:00:00:01"] = nodes["02:00:00:00:00:01"],
+}, {})
+assert(not usteer.local_ess_ready({ "Corp" }, aps, partial),
+  "one reported BSS must not satisfy a two-AP ESS")
+local malformed = usteer.summarize_runtime({ aggressiveness = 1 }, {
+  ["02:00:00:00:00:01"] = { ssid = "Corp", bssid = "ff:ff:ff:ff:ff:ff", freq = 5180, n_assoc = 1 },
+}, {})
+assert(malformed.local_nodes_invalid_count == 1 and malformed.local_nodes_truncated)
+assert(not usteer.local_ess_ready({ "Corp" }, aps, malformed),
+  "invalid BSSID telemetry must never satisfy ESS readiness")
+local duplicate = usteer.summarize_runtime({ aggressiveness = 1 }, {
+  ["02:00:00:00:00:01"] = nodes["02:00:00:00:00:01"],
+  ["02:00:00:00:00:03"] = { ssid = "Corp", bssid = "02:00:00:00:00:01", freq = 2412, n_assoc = 1 },
+}, {})
+assert(not usteer.local_ess_ready({ "Corp" }, aps, duplicate),
+  "duplicate live BSSIDs must fail ESS readiness")
+local truncated = {}
+for key, value in pairs(local_ess) do truncated[key] = value end
+truncated.local_nodes_truncated = true
+assert(not usteer.local_ess_ready({ "Corp" }, aps, truncated),
+  "truncated local BSS inventory must not satisfy ESS readiness")
 
 local offline = usteer.summarize_runtime(nil, nil, nil)
 assert(not offline.running and offline.local_node_count == 0 and offline.remote_host_count == 0)

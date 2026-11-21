@@ -5501,7 +5501,8 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
     .every((value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number.isInteger(Number(value)));
   const safeReady = !enabled || (network !== "" && allSelectedAvailable && !missingKOrV &&
     !wrongNetwork && numericSettingsValid && networkOptions.some((item) => item.name === network));
-  const statusLabel = !status ? "WAITING" : status.status === "cluster" ? "CLUSTER PEERS" :
+  const statusLabel = !status ? "WAITING" : status.running && !status.policy_verified ? "POLICY REVIEW" :
+    status.status === "cluster" ? "CLUSTER PEERS" :
     status.status === "local_only" ? "LOCAL ONLY" : status.status.replace(/_/g, " ").toUpperCase();
   const markDirty = () => { setDirty(true); setNotice(null); };
 
@@ -5578,6 +5579,7 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
               <strong>Live service view</strong>
               <div>{status.running ? "Daemon responds over ubus." : status.status === "disabled" ? "Daemon is stopped or disabled at boot." : "Daemon runtime is not currently observable."}</div>
               <div>{status.local_node_count} local BSS · {status.associated_clients} associated client(s) · {status.remote_host_count} remote AP peer(s)</div>
+              <div>Managed daemon policy: {status.policy_verified ? "verified" : status.running ? "review required" : "not running"} · invalid BSS samples: {status.local_nodes_invalid_count}</div>
               <div>Load kicks: {status.load_kick_enabled ? "enabled · review required" : "off"} · SNR kick thresholds: {status.min_snr}/{status.min_connect_snr} dBm · per-client overrides: {status.aggressiveness_override_count}</div>
               <div>Roam scan/trigger thresholds: {status.roam_scan_snr}/{status.roam_trigger_snr} dBm · probe/association steering: {status.probe_steering || status.assoc_steering ? "enabled · review required" : "off"}</div>
               {status.local_nodes_truncated || status.remote_hosts_truncated
@@ -5592,12 +5594,12 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
             <div className="module-message">
               <strong>Steering safety</strong>
               <div>Probe rejection, association rejection, load-based client kicks, minimum-SNR kicks and per-client aggressiveness overrides are disabled in the managed profile. Aggressiveness is capped below forced disassociation. The daemon is opt-in and is never enabled on first boot.</div>
-              <div>Each local AP in a selected ESS must use one trusted network, identical security credentials, and 802.11k plus 802.11v.</div>
+              <div>Every active local BSS in a selected ESS must report a unique live BSSID, use one trusted network, identical PSK/RADIUS, 802.11r and management-frame-protection settings, and enable 802.11k plus 802.11v.</div>
             </div>
           </div>
           {status.status === "review" ? (
             <div className="module-message" role="alert">
-              The live usteer configuration does not match the managed safe policy. Check for load-kick settings, SNR kick thresholds, per-client aggressiveness overrides or runtime drift; applying the managed profile clears those unsafe policy paths.
+              The live usteer configuration does not match the managed safe policy, or local BSS telemetry is incomplete/invalid. Check probe steering, IPv6, syslog, load-kick and SNR thresholds, per-client overrides, and daemon runtime drift; applying the managed profile clears the unsafe policy paths.
             </div>
           ) : null}
           <div className="wireless-config-options">
