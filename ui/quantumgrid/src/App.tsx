@@ -8251,6 +8251,7 @@ function OfficeSegmentManager({
   const [dhcpStart, setDhcpStart] = useState("100");
   const [dhcpLimit, setDhcpLimit] = useState("100");
   const [leaseTime, setLeaseTime] = useState("12h");
+  const [ipv6Enabled, setIpv6Enabled] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
@@ -8268,6 +8269,7 @@ function OfficeSegmentManager({
     (zone.forward === "REJECT" || zone.forward === "DROP")
   );
   const selectedZone = eligibleZones.find((zone) => zone.section === zoneSection) ?? eligibleZones[0];
+  const ipv6ZoneOutputValid = !ipv6Enabled || selectedZone?.output === "ACCEPT";
   const nameValid = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(name) &&
     !["lan", "wan", "wan6", "loopback", "wwan", "cellular"].includes(name);
   const nameUnique = !interfaces.some((item) => item.name === name);
@@ -8294,7 +8296,7 @@ function OfficeSegmentManager({
     /^[1-9][0-9]{0,8}[smhdw]?$/.test(leaseTime);
   const ready = available && !truncated && Boolean(selectedVlan) && Boolean(selectedZone) &&
     nameValid && nameUnique && privateAddress && maskValid && dhcpValid &&
-    confirmed && !saving;
+    ipv6ZoneOutputValid && confirmed && !saving;
 
   const updateField = (setter: (value: string) => void) => (value: string) => {
     setter(value);
@@ -8316,13 +8318,18 @@ function OfficeSegmentManager({
         dhcpStart,
         dhcpLimit,
         leaseTime,
+        ipv6Enabled,
       });
       setNotice({
         success: true,
         message: result.name + " is configured on " + result.device + " at " +
           result.address + "/" + maskBits.replace(/0/g, "").length +
           ". DHCP serves " + result.pool_start_ip + " – " + result.pool_end_ip +
-          "; DHCP/DNS firewall rules were installed and all three services reloaded.",
+          "; " + result.firewall_rules + " narrowly scoped firewall rules were installed. " +
+          (result.ipv6_enabled
+            ? "IPv6 prefix delegation requests a /64 and enables DHCPv6, SLAAC router advertisements and neighbour discovery; the upstream WAN must supply IPv6-PD."
+            : "IPv6 remains disabled.") +
+          " Network, firewall, DHCP and required address services reloaded successfully.",
       });
       setConfirmed(false);
       refresh();
@@ -8337,7 +8344,7 @@ function OfficeSegmentManager({
   };
 
   return (
-    <Panel title="Provision an IPv4 office network" eyebrow="EXISTING VLAN · STATIC GATEWAY · DHCP · DEFAULT-DENY FIREWALL">
+    <Panel title="Provision an office network" eyebrow="EXISTING VLAN · DUAL-STACK ROUTING · DHCP · DEFAULT-DENY FIREWALL">
       {!available ? (
         <div className="module-message">Network, firewall or DHCP configuration is unavailable. Segment provisioning is disabled.</div>
       ) : truncated ? (
@@ -8401,10 +8408,29 @@ function OfficeSegmentManager({
             <input value={leaseTime} onChange={(event) => updateField(setLeaseTime)(event.target.value)} maxLength={16} placeholder="12h" />
           </label>
         </div>
+        <label className="office-reservation-confirm office-segment-ipv6-toggle">
+          <input
+            type="checkbox"
+            checked={ipv6Enabled}
+            onChange={(event) => {
+              setIpv6Enabled(event.target.checked);
+              setConfirmed(false);
+              setNotice(null);
+            }}
+            disabled={saving || !available || truncated}
+          />
+          <span>Enable IPv6 on this VLAN — request a delegated /64 from the upstream WAN, provide DHCPv6 and SLAAC router advertisements, and add scoped IPv6 DNS, DHCPv6 and neighbour-discovery firewall rules. The selected firewall zone must allow router output. No WAN forwarding or permissive zone policy is added.</span>
+        </label>
+        {ipv6Enabled && !ipv6ZoneOutputValid ? (
+          <div className="module-message" role="alert">IPv6 requires the selected zone output policy to be ACCEPT so the router can send Router Advertisements. Change that policy explicitly before provisioning.</div>
+        ) : null}
+        {ipv6Enabled ? (
+          <div className="module-message">A /64 is requested through OpenWrt prefix delegation. The upstream connection must supply an IPv6 delegated prefix; the control centre does not claim a global prefix is active until the router reports one.</div>
+        ) : null}
         <div className="office-segment-policy">
           <div>
             <strong>Built-in isolation baseline</strong>
-            <span>The selected firewall zone must already reject router INPUT and inter-zone FORWARD by default. QuantumGrid leaves those zone policies unchanged and adds only three IPv4 rules: DHCP UDP/67 and DNS TCP/UDP 53, each limited to this gateway address.</span>
+            <span>The selected firewall zone must already reject router INPUT and inter-zone FORWARD by default. QuantumGrid leaves those zone policies unchanged; IPv4 DHCP/DNS rules are restricted to the new subnet and gateway, and optional IPv6 rules are limited to the selected zone and required control-plane ports.</span>
           </div>
           <div>
             <strong>Provisioning transaction</strong>
@@ -8431,7 +8457,7 @@ function OfficeSegmentManager({
           </div>
         ) : null}
       </div>
-      <div className="module-message">This provisions IPv4 only and requires a pre-existing bridge VLAN. It does not add Wi-Fi SSIDs, DHCPv6/RA, static leases, IPv6 addresses, inter-zone forwarding or downstream switch configuration. Validate the switch/AP path from an out-of-band management connection before production use.</div>
+      <div className="module-message">Provisioning requires an existing VLAN-filtered bridge and explicit switch-port membership. IPv6 mode uses upstream DHCPv6 prefix delegation; it does not invent a static global prefix or create inter-zone forwarding. Static DHCP reservations and downstream switch configuration remain separate controls. Validate the switch/AP path from an out-of-band management connection before production use.</div>
     </Panel>
   );
 }
