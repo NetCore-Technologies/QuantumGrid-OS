@@ -4223,6 +4223,7 @@ function WirelessConfigEditor({
   const currentTxpower = config.txpower === undefined ? "auto" : String(config.txpower);
   const supportedTxPower = [...new Set((config.txpower_levels ?? []).map((item) => item.dbm))].sort((left, right) => left - right);
   const txpowerSupported = txpower === "auto" || supportedTxPower.includes(Number(txpower)) || txpower === currentTxpower;
+  const enterpriseMode = encryption === "wpa2" || encryption === "wpa3";
   const externalZoneNames = new Set(["wan", "wan6", "wwan", "cellular"]);
   const eligibleNetworkInterfaces = networkInterfaces.filter((item) =>
     item.protocol === "static" && item.device.length > 0 && item.firewall_zones.length > 0 &&
@@ -4267,7 +4268,6 @@ function WirelessConfigEditor({
   const radiusVlanReady = !radiusDynamicVlanEnabled || !enterpriseMode || radiusVlanMappingsValid;
   const encryptionChanged = encryption !== config.encryption;
   const pmfNeedsRepair = config.encryption === "wpa3" && config.ieee80211w !== "2";
-  const enterpriseMode = encryption === "wpa2" || encryption === "wpa3";
   const passphraseRequired = encryption !== "none" && !enterpriseMode &&
     (encryptionChanged || !config.key_set) && passphrase.length === 0;
   const radiusLabels = radiusServer.split(".");
