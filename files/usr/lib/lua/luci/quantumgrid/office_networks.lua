@@ -657,6 +657,107 @@ local function protocol_set(value)
 	return nil
 end
 
+function validate_office_vlan_segment(
+	section, zone_name, bridge_name, vlan_id, address, netmask,
+	dhcp_start, dhcp_limit, lease_time, interfaces, bridges, vlans, zones, dhcp_ranges)
+	local function valid_section(value, label)
+		if type(value) ~= "string" or #value < 1 or #value > 32
+			or not value:match("^[A-Za-z][A-Za-z0-9_%-]*$") then
+				return nil, label .. " must start with a letter and contain only letters, digits, underscores or hyphens."
+		end
+		return value
+	end
+	local valid_name, name_error = valid_section(section, "Network section name")
+	if not valid_name then return nil, name_error end
+	local valid_zone, zone_error = valid_section(zone_name, "Firewall zone name")
+	if not valid_zone then return nil, zone_error end
+	local vid = tonumber(vlan_id)
+	if type(vlan_id) ~= "string" or not vlan_id:match("^%d+$")
+		or not vid or vid < 1 or vid > 4094 then
+		return nil, "A VLAN ID from 1 to 4094 is required."
+	end
+	if type(bridge_name) ~= "string" or #bridge_name < 1 or #bridge_name > 64
+		or not bridge_name:match("^[%w_.%-]+$") then
+		return nil, "Select an existing VLAN-filtered bridge."
+	end
+	local filtering = false
+	for _, bridge in ipairs(type(bridges) == "table" and bridges or {}) do
+		if type(bridge) == "table" and bridge.name == bridge_name then
+			filtering = bridge.vlan_filtering == true
+			break
+		end
+	end
+	if not filtering then
+		return nil, "The selected bridge must already have VLAN filtering enabled."
+	end
+	local vlan_found = false
+	for _, vlan in ipairs(type(vlans) == "table" and vlans or {}) do
+		if type(vlan) == "table" and vlan.device == bridge_name and tonumber(vlan.vlan_id) == vid then
+			vlan_found = true
+			break
+		end
+	end
+	if not vlan_found then
+		return nil, "The selected bridge VLAN must already exist before a Layer-3 interface can be created."
+	end
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and iface.name == valid_name then
+			return nil, "A network interface with this section name already exists."
+		end
+	end
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" and zone.name == valid_zone then
+			return nil, "A firewall zone with this name already exists."
+		end
+	end
+	if not valid_ipv4(address) then
+		return nil, "A valid static IPv4 gateway address is required."
+	end
+	local router = ipv4_number(address)
+	local prefix = ipv4_prefix(netmask)
+	if not router or not prefix then
+		return nil, "The subnet mask must be contiguous and between /1 and /30."
+	end
+	local size = 2 ^ (32 - prefix)
+	local network_address = math.floor(router / size) * size
+	local broadcast = network_address + size - 1
+	if router <= network_address or router >= broadcast then
+		return nil, "The router IPv4 address must be a usable host address, not the subnet or broadcast address."
+	end
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		local other_addresses = values(iface.ipv4, 8)
+		for _, other_address in ipairs(other_addresses) do
+			local other_router = ipv4_number(other_address)
+			local other_prefix = ipv4_prefix(iface.netmask)
+			if other_router and other_prefix then
+				local other_size = 2 ^ (32 - other_prefix)
+				local other_first = math.floor(other_router / other_size) * other_size
+				local other_last = other_first + other_size - 1
+				if network_address <= other_last and other_first <= broadcast then
+					return nil, "The new office subnet overlaps an existing interface subnet."
+				end
+			end
+		end
+	end
+	local pool, pool_error = validate_dhcp_scope_update(
+		dhcp_start, dhcp_limit, lease_time, address, netmask, dhcp_ranges)
+	if not pool then return nil, pool_error end
+	return {
+		section = valid_name,
+		zone_name = valid_zone,
+		bridge = bridge_name,
+		vlan_id = tostring(vid),
+		device = bridge_name .. "." .. tostring(vid),
+		address = address,
+		netmask = netmask,
+		start = pool.start,
+		limit = pool.limit,
+		lease_time = pool.lease_time,
+		pool_start_ip = pool.pool_start_ip,
+		pool_end_ip = pool.pool_end_ip
+	}
+end
+
 function validate_office_port_forward(
 	name, source, destination, protocol, source_port, destination_ip, destination_port,
 	zones, interfaces, existing)
