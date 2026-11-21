@@ -668,14 +668,17 @@ server and define an independent retention policy. Parser and redaction rules ar
 - **Integrated:** AW1000 target profile, existing React control centre, pinned RJ11 source feed,
   safe first-boot default for the FXS service, Pages workflow, release build workflow, read-only
   IPv4/IPv6 route and policy-rule inventory, bounded edits to existing SQM queue enable/rate
-  settings plus guarded link-layer overhead/MPU calibration with restart and rollback handling,
+  settings plus guarded link-layer overhead/MPU calibration and curated CAKE best-effort/DiffServ
+  profiles with same-origin validation, preserved unrelated qdisc options, restart checks and
+  rollback handling,
   Hardware I/O with read-only GPIO/button inventory
   and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, a
   redacted local administrative audit history with bounded retention, and read-only live root-qdisc
   matching for enabled SQM queues with explicit incomplete/unavailable states.
-- **Active development:** wider UI-to-ubus control wiring, advanced CAKE option profiles,
-  radio intelligence/scheduling, traffic classification, per-client priority, controlled-load
-  bufferbloat testing and modem observability.
+- **Active development:** wider UI-to-ubus control wiring, traffic classification, per-client
+  priority and bandwidth policies, controlled-load bufferbloat testing, radio intelligence/
+  scheduling and modem observability. Curated CAKE profiles are configuration presets; they do
+  not prove ingress/egress shaping or measured latency improvement without hardware testing.
 - **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
 
 See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).

@@ -10249,3 +10249,11 @@ input::placeholder {
     grid-template-columns: 1fr;
   }
 }
+
+
+.sqm-policy-action-buttons {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

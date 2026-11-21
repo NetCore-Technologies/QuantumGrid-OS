@@ -105,4 +105,21 @@ local capped_available, capped_qdiscs, capped_truncated = sqm.parse_qdisc_invent
 assert(capped_available and #capped_qdiscs == 64 and capped_truncated,
 	"runtime qdisc parsing must cap memory and explicitly report truncation")
 
-print("sqm-controls: runtime qdisc parsing, attribution and validation tests passed")
+
+local profile_update = sqm.validate_cake_profile_update("wan_main", "diffserv4")
+assert(profile_update and profile_update.section == "wan_main" and profile_update.profile == "diffserv4")
+assert(sqm.validate_cake_profile_update("../wan", "diffserv4") == nil)
+assert(sqm.validate_cake_profile_update("wan", "custom") == nil)
+assert(sqm.validate_cake_profile_update("wan", "diffserv9") == nil)
+local preserved_options = sqm.build_cake_profile_options(
+	"overhead 18 rtt 100ms diffserv8 dual-dsthost nat wash", "besteffort")
+assert(preserved_options == "overhead 18 rtt 100ms wash besteffort triple-isolate nat ack-filter")
+assert(sqm.detect_cake_profile(preserved_options) == "besteffort")
+assert(sqm.detect_cake_profile("diffserv4 dual-dsthost nat wash") == "custom")
+assert(sqm.detect_cake_profile("overhead 18 rtt 100ms") == "default")
+assert(sqm.detect_cake_profile(nil) == "default")
+assert(sqm.build_cake_profile_options("overhead 18 rtt 100ms diffserv8 nat", "default") == "overhead 18 rtt 100ms")
+assert(sqm.build_cake_profile_options(string.rep("x", 1025), "diffserv4") == nil)
+assert(sqm.build_cake_profile_options({}, "diffserv4") == nil)
+
+print("sqm-controls: runtime qdisc parsing, attribution, CAKE profiles and validation tests passed")

@@ -212,6 +212,9 @@ export interface RouterWirelessClient {
   tx_failed?: number;
 }
 
+export type RouterSqmCakeProfile = "default" | "besteffort" | "diffserv4" | "diffserv8" | "custom";
+export type RouterSqmCakeProfileChoice = Exclude<RouterSqmCakeProfile, "custom">;
+
 export interface RouterSqmQueue {
   name: string;
   enabled: boolean;
@@ -223,6 +226,7 @@ export interface RouterSqmQueue {
   linklayer: string;
   overhead?: number;
   tc_mpu?: number;
+  cake_profile?: RouterSqmCakeProfile;
   runtime_state: "observed" | "not_observed" | "unavailable" | "unconfigured" | "inventory_truncated" | "disabled";
 }
 
@@ -309,6 +313,14 @@ export interface RouterSqmQueueUpdateResult {
   linklayer: string;
   overhead_bytes: number;
   tc_mpu_bytes: number;
+  restarted: true;
+  rolled_back: false;
+}
+
+export interface RouterSqmCakeProfileUpdateResult {
+  ok: true;
+  section: string;
+  profile: RouterSqmCakeProfileChoice;
   restarted: true;
   rolled_back: false;
 }
@@ -1084,6 +1096,7 @@ const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
+const SQM_CAKE_PROFILE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cake-profile";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
@@ -1656,6 +1669,37 @@ export async function updateRouterSqmQueue(
   return payload as RouterSqmQueueUpdateResult;
 }
 
+
+export async function updateRouterCakeProfile(
+  section: string,
+  profile: RouterSqmCakeProfileChoice,
+): Promise<RouterSqmCakeProfileUpdateResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(section)) throw new Error("Invalid SQM queue section name.");
+  if (!["default", "besteffort", "diffserv4", "diffserv8"].includes(profile)) throw new Error("Choose a supported CAKE profile.");
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("profile", profile);
+  const response = await fetch(SQM_CAKE_PROFILE_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403 ? "CAKE profile changes require an active router administrator session." : "The router returned an invalid CAKE profile response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid CAKE profile response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("profile" in payload) || payload.profile !== profile ||
+      !("restarted" in payload) || payload.restarted !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the CAKE profile update and service restart.");
+  }
+  return payload as RouterSqmCakeProfileUpdateResult;
+}
 
 export async function updateRouterLedBrightness(
   name: string,

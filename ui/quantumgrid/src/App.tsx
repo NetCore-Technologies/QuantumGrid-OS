@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -110,6 +110,13 @@ const nav = [
   ["hardware", "Hardware I/O", Cpu],
   ["apps", "OpenWrt Apps", Monitor],
 ] as const;
+
+function hasAsciiControlCharacters(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 0x20 || code === 0x7f;
+  });
+}
 
 function fmt(value: number, digits = 0) {
   return value.toLocaleString("en-US", {
@@ -4288,7 +4295,7 @@ function WirelessConfigEditor({
   const radiusReady = !enterpriseMode ||
     (radiusServerValid && radiusPortValid && !radiusSecretRequired &&
       (radiusSecret.length === 0 || (radiusSecretBytes >= 16 && radiusSecretBytes <= 128 &&
-        !/[\u0000-\u001f\u007f]/.test(radiusSecret))));
+        !hasAsciiControlCharacters(radiusSecret))));
   const accountingServerValue = accountingServer || radiusServer;
   const accountingLabels = accountingServerValue.split(".");
   const accountingServerValid = accountingServerValue.length >= 1 && accountingServerValue.length <= 253 &&
@@ -4307,7 +4314,7 @@ function WirelessConfigEditor({
   const accountingReady = !enterpriseMode || !accountingEnabled ||
     (accountingServerValid && accountingPortValid && !accountingSecretRequired &&
       (accountingSecret.length === 0 || (accountingSecretBytes >= 16 && accountingSecretBytes <= 128 &&
-        !/[\u0000-\u001f\u007f]/.test(accountingSecret))));
+        !hasAsciiControlCharacters(accountingSecret))));
   const changed = pmfNeedsRepair || radiusVlanConfigurationChanged ||
     ssid !== config.ssid || networkChanged || encryptionChanged || passphrase.length > 0 ||
     (enterpriseMode && (radiusServer !== config.radius_auth_server ||
@@ -4731,10 +4738,10 @@ function WirelessConfigEditor({
       {enterpriseMode && accountingEnabled && !accountingPortValid ? <div className="module-message">Enter a RADIUS accounting port from 1 to 65535.</div> : null}
       {accountingSecretRequired ? <div className="module-message">A new accounting shared secret is required when enabling accounting or changing its server.</div> : null}
       {enterpriseMode && accountingEnabled && accountingSecret.length > 0 &&
-        (accountingSecretBytes < 16 || accountingSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(accountingSecret))
+        (accountingSecretBytes < 16 || accountingSecretBytes > 128 || hasAsciiControlCharacters(accountingSecret))
         ? <div className="module-message">Accounting shared secret must be 16–128 bytes and contain no control characters.</div> : null}
       {enterpriseMode && radiusSecret.length > 0 &&
-        (radiusSecretBytes < 16 || radiusSecretBytes > 128 || /[\u0000-\u001f\u007f]/.test(radiusSecret))
+        (radiusSecretBytes < 16 || radiusSecretBytes > 128 || hasAsciiControlCharacters(radiusSecret))
         ? <div className="module-message">RADIUS shared secret must be 16–128 bytes and contain no control characters.</div> : null}
     </div>
   );
@@ -5420,10 +5427,12 @@ function SqmQueueEditor({
   queue,
   saving,
   onApply,
+  onApplyCakeProfile,
 }: {
   queue: RouterSqmQueue;
   saving: boolean;
   onApply: (section: string, enabled: boolean, download: number, upload: number, linklayer: string, overhead: number, tcMpu: number) => Promise<void>;
+  onApplyCakeProfile: (section: string, profile: RouterSqmCakeProfileChoice) => Promise<void>;
 }) {
   const [enabled, setEnabled] = useState(queue.enabled);
   const [download, setDownload] = useState(queue.download_kbps === undefined ? "" : String(queue.download_kbps));
@@ -5431,6 +5440,9 @@ function SqmQueueEditor({
   const [linklayer, setLinklayer] = useState(queue.linklayer || "none");
   const [overhead, setOverhead] = useState(String(queue.overhead ?? 0));
   const [tcMpu, setTcMpu] = useState(String(queue.tc_mpu ?? 0));
+  const [cakeProfile, setCakeProfile] = useState<RouterSqmCakeProfile>(
+    queue.cake_profile ?? "default",
+  );
   const [acknowledged, setAcknowledged] = useState(false);
   const parseRate = (value: string) => /^\d+$/.test(value) ? Number(value) : NaN;
   const parseInteger = (value: string) => /^-?\d+$/.test(value) ? Number(value) : NaN;
@@ -5487,6 +5499,25 @@ function SqmQueueEditor({
             onChange={(event) => { setTcMpu(event.target.value); setAcknowledged(false); }} />
         </label>
       </div>
+
+      {queue.qdisc.toLowerCase() === "cake" ? (
+        <div className="sqm-policy-cake-profile">
+          <label>
+            <span>CAKE traffic profile</span>
+            <select value={cakeProfile} onChange={(event) => {
+              setCakeProfile(event.target.value as RouterSqmCakeProfile);
+              setAcknowledged(false);
+            }}>
+              {queue.cake_profile === "custom" ? <option value="custom" disabled>Custom · preserved</option> : null}
+              <option value="default">Native CAKE defaults</option>
+              <option value="besteffort">Best effort · host fairness · ACK filter</option>
+              <option value="diffserv4">DiffServ 4 · host fairness · NAT-aware</option>
+              <option value="diffserv8">DiffServ 8 · host fairness · NAT-aware</option>
+            </select>
+          </label>
+          <p className="sqm-policy-help">DiffServ profiles use packet DSCP markings. Choose them only when those markings are managed and trusted. Other CAKE options, including RTT, overhead and minimum packet unit, are preserved.</p>
+        </div>
+      ) : null}
       <p className="sqm-policy-help">Choose the link layer from your ISP connection details. Incorrect framing assumptions can reduce throughput or weaken latency control; QuantumGrid does not infer these values.</p>
       <label className="sqm-policy-ack">
         <input type="checkbox" checked={acknowledged} onChange={(event) => setAcknowledged(event.target.checked)} />
@@ -5494,10 +5525,18 @@ function SqmQueueEditor({
       </label>
       <div className="sqm-policy-actions">
         <span>Interface, queue discipline and setup script stay unchanged. Link-layer calibration affects packet-size accounting.</span>
-        <button className="hero-button" disabled={!changed || !validRates || !validTuning || !acknowledged || saving}
-          onClick={() => { void onApply(queue.name, enabled, downloadRate, uploadRate, linklayer, overheadBytes, mpuBytes); }}>
-          {saving ? "Applying…" : "Apply & restart SQM"}
-        </button>
+        <div className="sqm-policy-action-buttons">
+          <button className="hero-button" disabled={!changed || !validRates || !validTuning || !acknowledged || saving}
+            onClick={() => { void onApply(queue.name, enabled, downloadRate, uploadRate, linklayer, overheadBytes, mpuBytes); }}>
+            {saving ? "Applying…" : "Apply queue settings"}
+          </button>
+          {queue.qdisc.toLowerCase() === "cake" ? (
+            <button className="hero-button" disabled={cakeProfile === (queue.cake_profile ?? "default") || cakeProfile === "custom" || !acknowledged || saving}
+              onClick={() => { if (cakeProfile !== "custom") void onApplyCakeProfile(queue.name, cakeProfile); }}>
+              {saving ? "Applying…" : "Apply CAKE profile"}
+            </button>
+          ) : null}
+        </div>
       </div>
     </div>
   );
@@ -5547,6 +5586,19 @@ function GamingControlPage({ routerOverview, refresh }: {
         success: false,
         message: error instanceof Error ? error.message : "SQM queue update failed.",
       });
+    } finally {
+      setSavingQueue(null);
+    }
+  };
+  const applyCakeProfile = async (section: string, profile: RouterSqmCakeProfileChoice) => {
+    setSavingQueue(section);
+    setSqmNotice(null);
+    try {
+      await updateRouterCakeProfile(section, profile);
+      setSqmNotice({ success: true, message: "CAKE profile was saved and SQM restarted." });
+      refresh();
+    } catch (error) {
+      setSqmNotice({ success: false, message: error instanceof Error ? error.message : "CAKE profile update failed." });
     } finally {
       setSavingQueue(null);
     }
@@ -5630,7 +5682,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         ) : (
           <div className="sqm-policy-list">
             {queues.map((queue) => (
-              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "") + "-" + queue.linklayer + "-" + (queue.overhead ?? "") + "-" + (queue.tc_mpu ?? "")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} />
+              <SqmQueueEditor key={queue.name + "-" + queue.enabled + "-" + (queue.download_kbps ?? "") + "-" + (queue.upload_kbps ?? "") + "-" + queue.linklayer + "-" + (queue.overhead ?? "") + "-" + (queue.tc_mpu ?? "")} queue={queue} saving={savingQueue === queue.name} onApply={applySqmQueue} onApplyCakeProfile={applyCakeProfile} />
             ))}
           </div>
         )}
@@ -7204,7 +7256,7 @@ function OfficeFirewallZoneManager({
         <div className="office-zone-policy-list">
           {zones.map((zone) => (
             <OfficeFirewallZoneEditor
-              key={zone.section}
+              key={`${zone.section}-${zone.output || "inherited"}-${zone.forward || "inherited"}-${zone.masquerade ? "1" : "0"}`}
               zone={zone}
               disabled={!available || truncated}
               refresh={refresh}
@@ -7239,13 +7291,6 @@ function OfficeFirewallZoneEditor({
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
-  useEffect(() => {
-    setOutput(initialOutput);
-    setForward(initialForward);
-    setMasquerade(zone.masquerade);
-    setConfirmed(false);
-    setNotice(null);
-  }, [zone.section, zone.output, zone.forward, zone.masquerade]);
 
   const changed = output !== initialOutput || forward !== initialForward || masquerade !== zone.masquerade;
   const ready = changed && confirmed && !disabled && !saving;

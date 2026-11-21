@@ -1025,6 +1025,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "latency-test"}, call("action_latency_test")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "sqm-cake-profile"}, call("action_sqm_cake_profile")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
@@ -1814,6 +1815,72 @@ function action_sqm_update()
 	})
 end
 
+
+function action_sqm_cake_profile()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	local function respond(status, payload)
+		if status then http.status(status, status == 400 and "Bad Request" or status == 403 and "Forbidden" or
+			status == 404 and "Not Found" or status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+			status == 503 and "Service Unavailable" or status == 502 and "Bad Gateway" or "Internal Server Error") end
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+	if http.getenv("REQUEST_METHOD") ~= "POST" then respond(405, { ok = false, error = "POST is required." }); return end
+	if not host or origin ~= scheme .. "://" .. host then respond(403, { ok = false, error = "A same-origin request is required." }); return end
+	if fs.access("/etc/init.d/sqm") ~= true or fs.access("/etc/config/sqm") ~= true then
+		respond(503, { ok = false, error = "SQM service or configuration is not installed." }); return
+	end
+	local validator = require "luci.quantumgrid.sqm"
+	local update, validation_error = validator.validate_cake_profile_update(http.formvalue("section", true), http.formvalue("profile", true))
+	if not update then respond(400, { ok = false, error = validation_error }); return end
+	local section_type_ok, section_type = pcall(uci.get, uci, "sqm", update.section, ".type")
+	if not section_type_ok then respond(500, { ok = false, error = "Could not read SQM queue configuration." }); return end
+	if section_type ~= "queue" then respond(404, { ok = false, error = "Only an existing SQM queue section can be edited." }); return end
+	local qdisc_ok, qdisc = pcall(uci.get, uci, "sqm", update.section, "qdisc")
+	if not qdisc_ok then respond(500, { ok = false, error = "Could not read the SQM queue discipline." }); return end
+	if type(qdisc) ~= "string" or qdisc:lower() ~= "cake" then
+		respond(409, { ok = false, error = "CAKE profiles can only be applied to an existing CAKE queue." }); return
+	end
+	local snapshot_ok, previous = pcall(uci.get, uci, "sqm", update.section, "qdisc_opts")
+	if not snapshot_ok then respond(500, { ok = false, error = "Could not snapshot the existing CAKE options." }); return end
+	local options, options_error = validator.build_cake_profile_options(previous, update.profile)
+	if options == nil then respond(400, { ok = false, error = options_error }); return end
+	local snapshot = {}
+	if previous == nil then snapshot.qdisc_opts = false else snapshot.qdisc_opts = previous end
+	local write_ok, written = true, true
+	if options == "" then
+		if previous ~= nil then write_ok, written = pcall(uci.delete, uci, "sqm", update.section, "qdisc_opts") end
+	else
+		write_ok, written = pcall(uci.set, uci, "sqm", update.section, "qdisc_opts", options)
+	end
+	if not write_ok or written ~= true then
+		pcall(uci.revert, uci, "sqm")
+		respond(500, { ok = false, error = "CAKE options could not be staged; no restart was attempted." }); return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "sqm")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "sqm")
+		respond(500, { ok = false, error = "CAKE options could not be committed; no restart was attempted." }); return
+	end
+	if not sqm_restart(sys) then
+		local rollback_saved = restore_sqm_queue(uci, update.section, snapshot)
+		local rollback_restarted = rollback_saved and sqm_restart(sys)
+		record_audit(http, "sqm.cake-profile", update.section, "failed")
+		respond(502, { ok = false,
+			error = rollback_restarted and "SQM restart failed. The previous CAKE options were restored."
+				or "SQM restart failed and rollback could not be confirmed. Inspect SQM configuration and service state before further changes.",
+			rolled_back = rollback_restarted }); return
+	end
+	record_audit(http, "sqm.cake-profile", update.section, "success")
+	respond(nil, { ok = true, section = update.section, profile = update.profile, restarted = true, rolled_back = false })
+end
+
 function action_set_password()
 	local http = require "luci.http"
 	local sys = require "luci.sys"
@@ -2234,10 +2301,11 @@ local function sqm_status(uci, fs)
 		qdiscs = {},
 		qdiscs_truncated = false
 	}
+	local sqm_validator = require "luci.quantumgrid.sqm"
 	local ok = pcall(function()
 		uci:foreach("sqm", "queue", function(section)
 			if #result.queues < 16 then
-				table.insert(result.queues, {
+				local queue = {
 					name = tostring(section[".name"] or ""),
 					enabled = section.enabled == "1",
 					interface = tostring(section.interface or ""),
@@ -2248,7 +2316,9 @@ local function sqm_status(uci, fs)
 					linklayer = tostring(section.linklayer or ""),
 					overhead = tonumber(section.overhead),
 					tc_mpu = tonumber(section.tcMPU)
-				})
+				}
+				if queue.qdisc:lower() == "cake" then queue.cake_profile = sqm_validator.detect_cake_profile(section.qdisc_opts) end
+				table.insert(result.queues, queue)
 			end
 		end)
 	end)
@@ -2256,7 +2326,6 @@ local function sqm_status(uci, fs)
 
 	-- Fixed read-only command; no request or UCI value is passed to a shell.
 	local util = require "luci.util"
-	local sqm_validator = require "luci.quantumgrid.sqm"
 	local exec_ok, output = pcall(util.exec, "tc -s qdisc show")
 	if exec_ok then
 		result.runtime_available, result.qdiscs, result.qdiscs_truncated =

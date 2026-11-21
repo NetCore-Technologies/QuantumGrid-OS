@@ -62,6 +62,62 @@ function validate_queue_update(section, enabled, download, upload, linklayer, ov
 end
 
 
+local CAKE_PROFILE_OPTIONS = {
+	default = {},
+	besteffort = { "besteffort", "triple-isolate", "nat", "ack-filter" },
+	diffserv4 = { "diffserv4", "triple-isolate", "nat" },
+	diffserv8 = { "diffserv8", "triple-isolate", "nat" }
+}
+local CAKE_PROFILE_MANAGED = {
+	besteffort = true, diffserv3 = true, diffserv4 = true, diffserv8 = true,
+	["triple-isolate"] = true, ["dual-srchost"] = true, ["dual-dsthost"] = true,
+	srchost = true, dsthost = true, hosts = true, flowblind = true, flows = true,
+	nat = true, ["ack-filter"] = true, ["ack-filter-aggressive"] = true
+}
+
+function validate_cake_profile_update(section, profile)
+	if type(section) ~= "string" or #section < 1 or #section > 32
+		or not section:match("^[%w_%-]+$") then return nil, "Invalid SQM queue section name." end
+	if type(profile) ~= "string" or CAKE_PROFILE_OPTIONS[profile] == nil then return nil, "Choose a supported CAKE profile." end
+	return { section = section, profile = profile }
+end
+
+function build_cake_profile_options(existing, profile)
+	if CAKE_PROFILE_OPTIONS[profile] == nil then return nil, "Choose a supported CAKE profile." end
+	if existing ~= nil and type(existing) ~= "string" then return nil, "Existing CAKE options are not a supported string." end
+	existing = existing or ""
+	if #existing > 1024 or existing:find("%c") then return nil, "Existing CAKE options are too large or contain control characters." end
+	local tokens = {}
+	for token in existing:gmatch("%S+") do
+		if not CAKE_PROFILE_MANAGED[token] then table.insert(tokens, token) end
+	end
+	for _, token in ipairs(CAKE_PROFILE_OPTIONS[profile]) do table.insert(tokens, token) end
+	local result = table.concat(tokens, " ")
+	if #result > 1024 then return nil, "Updated CAKE options exceed the supported size." end
+	return result
+end
+
+function detect_cake_profile(options)
+	if options == nil then options = "" end
+	if type(options) ~= "string" or #options > 1024 or options:find("%c") then return "custom" end
+	local observed = {}
+	for token in options:gmatch("%S+") do
+		if CAKE_PROFILE_MANAGED[token] then
+			if observed[token] then return "custom" end
+			observed[token] = true
+		end
+	end
+	for profile, expected_tokens in pairs(CAKE_PROFILE_OPTIONS) do
+		local expected, matches = {}, true
+		for _, token in ipairs(expected_tokens) do expected[token] = true end
+		for token in pairs(observed) do if not expected[token] then matches = false; break end end
+		if matches then for token in pairs(expected) do if not observed[token] then matches = false; break end end end
+		if matches then return profile end
+	end
+	return "custom"
+end
+
+
 local MAX_QDISCS = 64
 
 -- Parse the fixed, read-only output of "tc -s qdisc show". Unrecognised or

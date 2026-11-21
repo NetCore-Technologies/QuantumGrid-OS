@@ -86,7 +86,7 @@ local rollback_snapshot = office.snapshot_dhcp_scope_options({
   start = "100",
   leasetime = "12h",
 })
-assert(rollback_snapshot and #rollback_snapshot == 6)
+assert(rollback_snapshot and #rollback_snapshot == 15)
 assert(rollback_snapshot[1].name == "start" and rollback_snapshot[1].present and rollback_snapshot[1].value == "100")
 assert(rollback_snapshot[2].name == "limit" and not rollback_snapshot[2].present and rollback_snapshot[2].value == nil,
   "rollback snapshots must preserve the absence of optional UCI values")
