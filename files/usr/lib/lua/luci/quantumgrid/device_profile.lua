@@ -20,7 +20,12 @@ function M.inspect(profile, observed_board_name)
     openwrt_target = nil,
     openwrt_subtarget = nil,
     board_compatible = {},
-    observed_board_name = nil
+    observed_board_name = nil,
+    capabilities = {
+      available = false,
+      nss = "unknown",
+      fxs = "unknown"
+    }
   }
 
   if type(profile) ~= "table" or type(profile.platform) ~= "table" then
@@ -68,6 +73,25 @@ function M.inspect(profile, observed_board_name)
   result.openwrt_device = device
   result.openwrt_target = target
   result.openwrt_subtarget = subtarget
+
+  -- Capability values are declarations from the embedded build manifest,
+  -- not evidence that a driver, datapath or peripheral is operational.
+  local capability_data = profile.capabilities
+  if type(capability_data) == "table" then
+    local function declaration(value)
+      if type(value) ~= "table" or type(value.supported) ~= "boolean" then
+        return "unknown"
+      end
+      return value.supported and "declared-supported" or "not-declared"
+    end
+    local nss = declaration(capability_data.nss)
+    local fxs = declaration(capability_data.fxs)
+    result.capabilities = {
+      available = nss ~= "unknown" and fxs ~= "unknown",
+      nss = nss,
+      fxs = fxs
+    }
+  end
 
   local observed = bounded_string(observed_board_name, 128, "^[%w,._%-]+$")
   if not observed then
