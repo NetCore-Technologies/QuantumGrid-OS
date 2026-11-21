@@ -1469,7 +1469,6 @@ export async function updateRouterWirelessConfig(input: {
       typeof input.dynamicVlanEnabled !== "boolean" || !Array.isArray(input.radiusVlans)) {
     throw new Error("RADIUS VLAN control settings are invalid.");
   }
-  const enterpriseMode = input.encryption === "wpa2" || input.encryption === "wpa3";
   if (!input.manageRadiusVlans && (input.dynamicVlanEnabled || input.radiusVlans.length !== 0)) {
     throw new Error("Externally managed RADIUS VLAN settings cannot be changed through QuantumGrid.");
   }
