@@ -1556,9 +1556,15 @@ const USTEER_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/usteer-updat
 
 function isRemoteSyslogIpv4(value: string): boolean {
   const octets = value.split(".");
-  return octets.length === 4 && octets.every((octet) =>
+  if (octets.length !== 4 || !octets.every((octet) =>
     /^(?:0|[1-9][0-9]{0,2})$/.test(octet) && Number(octet) <= 255,
-  );
+  )) return false;
+  const [first, second, third] = octets.map(Number);
+  return first !== 0 && first !== 127 && first < 224 &&
+    !(first === 169 && second === 254) &&
+    !(first === 192 && second === 0 && third === 2) &&
+    !(first === 198 && (second === 18 || second === 19 || (second === 51 && third === 100))) &&
+    !(first === 203 && second === 0 && third === 113);
 }
 
 function isRemoteSyslogHostname(value: string): boolean {
