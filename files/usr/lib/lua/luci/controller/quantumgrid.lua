@@ -4478,7 +4478,7 @@ function action_config_restore()
         return
     end
 
-    local parse_ok = pcall(http.formvalue, "__quantumgrid_stream_body", true)
+    local parse_ok = pcall(http.formvalue, "__quantumgrid_stream_body")
     if not parse_ok then
         fail(400, "The raw configuration archive request body could not be parsed.")
         return
