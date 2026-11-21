@@ -1841,8 +1841,9 @@ function build_inventory(source)
 					end
 				end
 				local ipv6_neighbors, neighbor_seen = {}, {}
-				local live_device = item.up == true and type(item.device) == "string"
-					and #item.device <= 64 and item.device:match("^[%w][%w_.%-]*$") ~= nil
+				local l3_device = token(item.l3_device, 64) or ""
+				local live_device = item.up == true and l3_device ~= ""
+					and l3_device:match("^[%w][%w_.%-]*$") ~= nil
 				local source_neighbors = live_device and type(item.ipv6_neighbors) == "table"
 					and item.ipv6_neighbors or {}
 				for _, neighbor in ipairs(source_neighbors) do
@@ -1866,6 +1867,7 @@ function build_inventory(source)
 					name = name,
 					protocol = clean(item.protocol, 24),
 					device = device,
+					l3_device = l3_device,
 					up = item.up == true,
 					ipv4 = values(item.ipv4, 8),
 					netmask = clean(item.netmask, 32),
