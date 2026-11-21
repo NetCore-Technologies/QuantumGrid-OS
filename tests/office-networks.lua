@@ -785,7 +785,7 @@ local closed_output_segment = office.validate_office_segment(
   "100", "100", "12h",
   {
     { name = "lan", protocol = "static", device = "br-lan",
-      ipv4 = { "192.168.1.1" }, netmask = "255.255.255.0 }
+      ipv4 = { "192.168.1.1" }, netmask = "255.255.255.0" }
   },
   { { name = "br-lan", vlan_filtering = true } },
   { { name = "vlan30", device = "br-lan", vlan_id = 30, ports = { "lan2:t" } } },
