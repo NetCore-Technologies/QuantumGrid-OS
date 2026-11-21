@@ -61,3 +61,23 @@ function validate_queue_update(section, enabled, download, upload, linklayer, ov
 	return update
 end
 
+-- Compare an enabled queue's configured root discipline with the live kernel
+-- inventory. This is deliberately an observation, not a claim that ingress
+-- shaping or end-to-end bandwidth/latency behaviour has been verified.
+function queue_runtime_state(queue, qdiscs, runtime_available, inventory_truncated)
+	if type(queue) ~= "table" then return "unconfigured" end
+	if queue.enabled ~= true then return "disabled" end
+	if runtime_available ~= true then return "unavailable" end
+	local expected_kind = type(queue.qdisc) == "string" and queue.qdisc:lower() or ""
+	local expected_device = type(queue.interface) == "string" and queue.interface or ""
+	if expected_kind == "" or expected_device == "" then return "unconfigured" end
+	for _, qdisc in ipairs(type(qdiscs) == "table" and qdiscs or {}) do
+		if type(qdisc) == "table" and qdisc.root == true
+			and type(qdisc.kind) == "string" and qdisc.kind:lower() == expected_kind
+			and qdisc.device == expected_device then
+			return "observed"
+		end
+	end
+	if inventory_truncated == true then return "inventory_truncated" end
+	return "not_observed"
+end
