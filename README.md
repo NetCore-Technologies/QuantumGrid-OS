@@ -697,7 +697,12 @@ the existing uHTTPd HTTPS review. It reports service/config availability, enable
 configured interface bindings and ports, password and root-password authentication settings,
 gateway-port forwarding state, and whether the bounded eight-instance detail list is truncated.
 Unknown or malformed enabled-instance settings are treated as a review item rather than as a secure
-setting. Missing SSH configuration is not reported as a successful hardened state.
+setting. Missing SSH configuration is not reported as a successful hardened state. For key-only
+Dropbear configurations, the inventory also checks the metadata of the standard
+`/etc/dropbear/authorized_keys` and `/root/.ssh/authorized_keys` locations: file presence, size,
+root ownership, and group/other write bits. The inspection never returns public-key contents, and
+files that are empty, larger than 64 KiB, not root-owned, writable by group/others, or impossible to
+inspect are not treated as a ready key-file posture.
 
 The current AW1000 first-boot Dropbear profile deliberately keeps password and root-password
 authentication enabled for initial access while binding the daemon to the LAN interface. QuantumGrid
@@ -708,9 +713,10 @@ administrator SSH key using a trusted console or independent recovery path, then
 both `PasswordAuth` and `RootPasswordAuth` for every enabled Dropbear instance. Keep SSH bound to
 the dedicated trusted management interface and leave `GatewayPorts` disabled.
 
-These are configuration inventory checks, not a live socket scan, firewall reachability test, proof
-that an authorized key is installed or usable, certificate-chain validation, compliance assessment
-or security certification. Confirm SSH access from a separate management host and validate the
+These are configuration inventory checks, not a live socket scan, firewall reachability test,
+cryptographic validation of authorized-key contents, proof that a key is installed on an administrator's
+client or usable for a successful login, certificate-chain validation, compliance assessment or
+security certification. Confirm SSH access from a separate management host and validate the
 effective firewall and management VLAN path before deploying a change to a remote device. The
 reported posture must not be interpreted as proof that a service is or is not reachable from WAN.
 
