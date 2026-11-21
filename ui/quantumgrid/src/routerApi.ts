@@ -144,6 +144,8 @@ export interface RouterWirelessConfig {
   radius_vlan_mappings: RouterWirelessRadiusVlan[];
   encryption: string;
   ieee80211w: string;
+  ieee80211k: boolean;
+  ieee80211v: boolean;
   hidden: boolean;
   key_set: boolean;
   radius_auth_server: string;
@@ -174,6 +176,8 @@ export interface RouterWirelessUpdateResult {
   network: string;
   encryption: string;
   ieee80211w?: string;
+  ieee80211k: boolean;
+  ieee80211v: boolean;
   hidden: boolean;
   channel: string;
   htmode: string;
@@ -1814,6 +1818,8 @@ export async function updateRouterWirelessConfig(input: {
   channel: string;
   htmode: string;
   txpower: string;
+  ieee80211k: boolean;
+  ieee80211v: boolean;
   allowOpen: boolean;
 }): Promise<RouterWirelessUpdateResult> {
   const validSection = (value: string) => /^[A-Za-z0-9_-]{1,32}$/.test(value);
@@ -1832,6 +1838,15 @@ export async function updateRouterWirelessConfig(input: {
       (input.key.length < 8 || new TextEncoder().encode(input.key).length > 63 ||
        hasControlCharacters(input.key))) {
     throw new Error("The wireless passphrase must be 8–63 bytes and cannot contain control characters.");
+  }
+  if (typeof input.ieee80211k !== "boolean" || typeof input.ieee80211v !== "boolean") {
+    throw new Error("802.11k and 802.11v settings must be explicit boolean values.");
+  }
+  if (input.ieee80211v && !input.ieee80211k) {
+    throw new Error("802.11v BSS transitions require 802.11k neighbor reports.");
+  }
+  if ((input.ieee80211k || input.ieee80211v) && input.encryption === "none") {
+    throw new Error("802.11k/v roaming features require an encrypted Wi-Fi network.");
   }
   if (input.encryption === "none" && (!input.allowOpen || input.key !== "")) {
     throw new Error("An open wireless network requires explicit confirmation and no passphrase.");
@@ -1951,6 +1966,8 @@ export async function updateRouterWirelessConfig(input: {
   form.set("htmode", input.htmode);
   form.set("txpower", input.txpower);
   form.set("allow_open", input.allowOpen ? "1" : "0");
+  form.set("ieee80211k", input.ieee80211k ? "1" : "0");
+  form.set("ieee80211v", input.ieee80211v ? "1" : "0");
   form.set("confirmed", "1");
 
   const response = await fetch(WIRELESS_UPDATE_URL, {
@@ -1990,6 +2007,8 @@ export async function updateRouterWirelessConfig(input: {
     !("channel" in payload) || payload.channel !== input.channel ||
     !("htmode" in payload) || payload.htmode !== input.htmode ||
     !("txpower" in payload) || payload.txpower !== input.txpower ||
+    !("ieee80211k" in payload) || payload.ieee80211k !== input.ieee80211k ||
+    !("ieee80211v" in payload) || payload.ieee80211v !== input.ieee80211v ||
     !("reloaded" in payload) || payload.reloaded !== true ||
     !("rolled_back" in payload) || payload.rolled_back !== false ||
     (input.encryption === "wpa3" && (!("ieee80211w" in payload) || payload.ieee80211w !== "2")) ||
