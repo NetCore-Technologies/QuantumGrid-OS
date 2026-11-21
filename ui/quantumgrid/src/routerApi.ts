@@ -838,6 +838,17 @@ export interface RouterOfficeForwarding {
   destination: string;
 }
 
+export interface RouterOfficePortForward {
+  section: string;
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficePortForwardProtocol;
+  source_port: number;
+  destination_ip: string;
+  destination_port: number;
+}
+
 export interface RouterOfficeForwardingCreateResult {
   ok: true;
   section: string;
@@ -932,6 +943,8 @@ export interface RouterOfficeNetworks {
   wifi_aps: RouterOfficeWifiAp[];
   forwardings: RouterOfficeForwarding[];
   forwarding_count: number;
+  redirects: RouterOfficePortForward[];
+  redirect_count: number;
   interface_count: number;
   bridge_count: number;
   vlan_count: number;

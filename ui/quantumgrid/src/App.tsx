@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -6694,6 +6694,11 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         exportedAt, "Firewall forwarding", item.name, "", item.source + " → " + item.destination,
         "CONFIGURED", "", "", "", "", "", "",
       ]),
+      ...(inventory.redirects ?? []).map((item) => [
+        exportedAt, "WAN port forward", item.name, item.destination_ip,
+        item.protocol + " " + item.source_port + " → " + item.destination_port,
+        "DNAT", item.source + " → " + item.destination, "", "", "", "", "",
+      ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
         "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore + "; dhcpv6=" + item.dhcpv6 + "; ra=" + item.ra + "; pool=" + (item.range_valid ? item.pool_start_ip + "-" + item.pool_end_ip : item.range_error) + "; overlaps=" + item.overlap,
@@ -6739,6 +6744,7 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         <Metric title="Bridge Devices" value={inventory?.available ? fmt(inventory.bridge_count) : "N/A"} unit="" detail={inventory ? inventory.vlan_filtering_bridge_count + " with VLAN filtering" : "Waiting for router inventory"} icon={Database} />
         <Metric title="Bridge VLANs" value={inventory?.available ? fmt(inventory.vlan_count) : "N/A"} unit="" detail={inventory ? inventory.segmented_interface_count + " L3 interfaces linked to a VLAN" : "Waiting for router inventory"} icon={SlidersHorizontal} />
         <Metric title="Wi-Fi Access Points" value={inventory?.available ? fmt(inventory.wifi_ap_count) : "N/A"} unit="" detail="Configured AP sections, including disabled entries" icon={Wifi} />
+        <Metric title="WAN Port Forwards" value={inventory?.firewall_available ? fmt(inventory.redirect_count) : "N/A"} unit="" detail="Validated IPv4 DNAT redirect summaries" icon={Shield} />
         <Metric title="DHCP / Reservations" value={inventory?.dhcp_available ? fmt(inventory.dhcp_scope_count) + " / " + fmt(inventory.static_lease_count) : "N/A"} unit="" detail="Scopes / static host mappings" icon={Database} />
       </div>
 
@@ -7073,6 +7079,14 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         forwardings={inventory?.forwardings ?? []}
         refresh={refresh}
       />
+      <OfficePortForwardManager
+        available={Boolean(inventory?.firewall_available)}
+        truncated={Boolean(inventory?.truncated)}
+        zones={zones}
+        interfaces={interfaces}
+        redirects={inventory?.redirects ?? []}
+        refresh={refresh}
+      />
       <OfficeWifiNetworkManager
         available={Boolean(inventory?.available)}
         truncated={Boolean(inventory?.truncated)}
@@ -7096,6 +7110,210 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
   );
 }
 
+
+function OfficePortForwardManager({
+  available,
+  truncated,
+  zones,
+  interfaces,
+  redirects,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  zones: RouterOfficeFirewallZone[];
+  interfaces: RouterOfficeInterface[];
+  redirects: RouterOfficePortForward[];
+  refresh: () => void;
+}) {
+  const isExternalZone = (zone: RouterOfficeFirewallZone) =>
+    ["wan", "wan6", "wwan", "cellular"].includes(zone.name.toLowerCase()) ||
+    zone.networks.some((network) => ["wan", "wan6", "wwan", "cellular"].includes(network.toLowerCase()));
+  const sourceZones = zones.filter(isExternalZone);
+  const destinationZones = zones.filter((zone) => !isExternalZone(zone));
+  const [ruleName, setRuleName] = useState("");
+  const [source, setSource] = useState("");
+  const [destination, setDestination] = useState("");
+  const [protocol, setProtocol] = useState<RouterOfficePortForwardProtocol>("tcp");
+  const [sourcePort, setSourcePort] = useState("");
+  const [destinationIp, setDestinationIp] = useState("");
+  const [destinationPort, setDestinationPort] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState("");
+  const [removing, setRemoving] = useState("");
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const activeSource = sourceZones.some((zone) => zone.name === source)
+    ? source
+    : sourceZones[0]?.name ?? "";
+  const activeDestination = destinationZones.some((zone) => zone.name === destination)
+    ? destination
+    : destinationZones[0]?.name ?? "";
+  const destinationNetworks = destinationZones.find((zone) => zone.name === activeDestination)?.networks ?? [];
+  const destinationAddresses = interfaces
+    .filter((iface) => destinationNetworks.includes(iface.name))
+    .flatMap((iface) => iface.ipv4.map((address) => ({ network: iface.name, address })));
+
+  const create = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!available || truncated || !confirmed || saving || !activeSource || !activeDestination) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterOfficePortForward({
+        name: ruleName.trim(),
+        source: activeSource,
+        destination: activeDestination,
+        protocol,
+        sourcePort: sourcePort.trim(),
+        destinationIp: destinationIp.trim(),
+        destinationPort: destinationPort.trim(),
+      });
+      setNotice({
+        success: true,
+        message: result.name + " now forwards " + result.protocol.toUpperCase() + " " +
+          result.source_port + " from " + result.source + " to " + result.destination_ip +
+          ":" + result.destination_port + "; firewall reload completed.",
+      });
+      setRuleName("");
+      setSourcePort("");
+      setDestinationIp("");
+      setDestinationPort("");
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The WAN port-forward could not be created.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const remove = async (section: string) => {
+    if (!section || removing) return;
+    setRemoving(section);
+    setNotice(null);
+    try {
+      const result = await removeRouterOfficePortForward(section);
+      if (result.removed) {
+        setPendingRemoval("");
+        setNotice({ success: true, message: "Port-forward " + section + " was removed and firewall reload completed." });
+        refresh();
+      }
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The WAN port-forward could not be removed.",
+      });
+    } finally {
+      setRemoving("");
+    }
+  };
+
+  return (
+    <Panel title="WAN port forwarding" eyebrow="FIREWALL DNAT · WAN → INTERNAL SERVICE">
+      {!available ? (
+        <div className="module-message">Firewall configuration is unavailable. WAN port-forward changes are disabled.</div>
+      ) : truncated ? (
+        <div className="module-message">The firewall inventory is truncated. Resolve it before adding or removing WAN port-forward rules.</div>
+      ) : sourceZones.length === 0 || destinationZones.length === 0 ? (
+        <div className="module-message">An existing external WAN zone and internal LAN/office zone are required before a DNAT rule can be created.</div>
+      ) : null}
+
+      <div className="office-port-forward-list">
+        {redirects.length === 0 ? (
+          <div className="module-message">No validated IPv4 DNAT redirects were returned by the current firewall inventory.</div>
+        ) : redirects.map((redirect) => (
+          <div className="office-port-forward-row" key={redirect.section}>
+            <div className="office-port-forward-identity">
+              <strong>{redirect.name}</strong>
+              <span>{redirect.section} · {redirect.protocol.toUpperCase()} · {redirect.source}:{redirect.source_port}</span>
+            </div>
+            <div className="office-port-forward-target">
+              <span>{redirect.destination}</span>
+              <strong>{redirect.destination_ip}:{redirect.destination_port}</strong>
+            </div>
+            {pendingRemoval === redirect.section ? (
+              <div className="office-port-forward-confirm">
+                <span>Remove this Internet-facing DNAT rule?</span>
+                <button className="office-remove-start" type="button" onClick={() => void remove(redirect.section)} disabled={Boolean(removing)}>
+                  {removing === redirect.section ? "Removing…" : "Confirm removal"}
+                </button>
+                <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing)}>Cancel</button>
+              </div>
+            ) : (
+              <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(redirect.section)} disabled={!available || truncated || Boolean(removing) || saving}>
+                Remove port-forward
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <form className="office-port-forward-editor" onSubmit={(event) => void create(event)}>
+        <div className="office-port-forward-heading">
+          <strong>Add a WAN-to-LAN IPv4 port-forward</strong>
+          <span>Creates a firewall DNAT redirect to a host address in the selected internal zone.</span>
+        </div>
+        <div className="office-port-forward-fields">
+          <label>
+            <span>RULE NAME</span>
+            <input value={ruleName} onChange={(event) => { setRuleName(event.target.value); setConfirmed(false); }} maxLength={64} placeholder="office-https" disabled={!available || truncated || saving} />
+          </label>
+          <label>
+            <span>EXTERNAL WAN ZONE</span>
+            <select value={activeSource} onChange={(event) => { setSource(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || sourceZones.length === 0}>
+              {sourceZones.map((zone) => <option value={zone.name} key={zone.section}>{zone.name}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>INTERNAL DESTINATION ZONE</span>
+            <select value={activeDestination} onChange={(event) => { setDestination(event.target.value); setConfirmed(false); }} disabled={!available || truncated || saving || destinationZones.length === 0}>
+              {destinationZones.map((zone) => <option value={zone.name} key={zone.section}>{zone.name} · {zone.networks.join(", ")}</option>)}
+            </select>
+          </label>
+          <label>
+            <span>PROTOCOL</span>
+            <select value={protocol} onChange={(event) => { setProtocol(event.target.value as RouterOfficePortForwardProtocol); setConfirmed(false); }} disabled={!available || truncated || saving}>
+              <option value="tcp">TCP</option>
+              <option value="udp">UDP</option>
+              <option value="tcp udp">TCP + UDP</option>
+            </select>
+          </label>
+          <label>
+            <span>EXTERNAL PORT</span>
+            <input inputMode="numeric" value={sourcePort} onChange={(event) => { setSourcePort(event.target.value); setConfirmed(false); }} maxLength={5} placeholder="443" disabled={!available || truncated || saving} />
+          </label>
+          <label>
+            <span>DESTINATION IPv4</span>
+            <input inputMode="decimal" value={destinationIp} onChange={(event) => { setDestinationIp(event.target.value); setConfirmed(false); }} maxLength={15} placeholder="192.168.20.30" disabled={!available || truncated || saving} />
+            {destinationAddresses.length > 0 ? <small>Zone gateway addresses: {destinationAddresses.map((item) => item.network + " " + item.address).join(" · ")}</small> : null}
+          </label>
+          <label>
+            <span>DESTINATION PORT</span>
+            <input inputMode="numeric" value={destinationPort} onChange={(event) => { setDestinationPort(event.target.value); setConfirmed(false); }} maxLength={5} placeholder="8443" disabled={!available || truncated || saving} />
+          </label>
+        </div>
+        <label className="office-reservation-confirm">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available || truncated || saving || !ruleName || !activeSource || !activeDestination || !sourcePort || !destinationIp || !destinationPort} />
+          <span>I understand this exposes an internal service through {activeSource || "the WAN"} on port {sourcePort || "—"} and authorise the firewall DNAT change and reload.</span>
+        </label>
+        <button className="hero-button" type="submit" disabled={!available || truncated || !confirmed || saving || !activeSource || !activeDestination}>
+          {saving ? "Applying…" : "Create WAN port-forward"}
+        </button>
+      </form>
+      {notice ? (
+        <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+      <div className="module-message">Only existing WAN/WWAN zones can be sources, and only existing internal zones can be destinations. The controller confirms the destination host is inside a static IPv4 subnet attached to that zone and rejects duplicate external port/protocol combinations. This does not configure IPv6 pinholes, TLS, IDS or prove that upstream NAT permits Internet ingress; test the packet path from outside the router.</div>
+    </Panel>
+  );
+}
 
 function OfficeWifiNetworkManager({
   available,
