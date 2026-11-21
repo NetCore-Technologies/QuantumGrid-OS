@@ -443,6 +443,7 @@ local function wireless_config_inventory(uci, radios)
 					local vlan_inventory = wireless_vlan_sections_for_ap(uci, name)
 					local dynamic_vlan = tonumber(section.dynamic_vlan) or 0
 					local radius_vlan_unmanaged = vlan_inventory.unmanaged or not vlan_inventory.available
+					if dynamic_vlan > 0 and dynamic_vlan ~= 2 then radius_vlan_unmanaged = true end
 					if dynamic_vlan > 0 and #vlan_inventory.sections == 0 then radius_vlan_unmanaged = true end
 					if type(section.vlan_file) == "string" and section.vlan_file ~= "" then radius_vlan_unmanaged = true end
 					if type(section.vlan_bridge) == "string" and section.vlan_bridge ~= "" then radius_vlan_unmanaged = true end
@@ -1415,6 +1416,18 @@ function action_wireless_update()
 	local mappings_ok, requested_mappings = pcall(jsonc.parse, radius_vlan_json)
 	if not mappings_ok or type(requested_mappings) ~= "table" then
 		respond(400, { ok = false, error = "RADIUS VLAN mappings must be a valid JSON array." })
+		return
+	end
+	local mapping_count = 0
+	for key in pairs(requested_mappings) do
+		if type(key) ~= "number" or key < 1 or key ~= math.floor(key) then
+			respond(400, { ok = false, error = "RADIUS VLAN mappings must be a JSON array, not an object." })
+			return
+		end
+		mapping_count = mapping_count + 1
+	end
+	if mapping_count ~= #requested_mappings then
+		respond(400, { ok = false, error = "RADIUS VLAN mappings must be a contiguous JSON array." })
 		return
 	end
 	local radius_vlan_inventory = wireless_vlan_sections_for_ap(uci, update.section)
