@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -7858,12 +7858,6 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
           <div><strong>Wireless mapping</strong><span>{inventory?.wireless_available ? (inventory.wifi_ap_count + " configured AP section(s); inspect the SSID-to-network associations above.") : "Wireless configuration inventory unavailable."}</span></div>
         </div>
         <div className="module-message">QuantumGrid now provides guarded bridge VLAN membership and explicit inter-zone forwarding controls, with confirmed UCI writes, service reload checks, rollback attempts and audit events. L3 interface/address provisioning, complete firewall zone/rule/NAT management, RADIUS/802.1X, site-to-site VPN policy, Wi-Fi SSID-to-VLAN provisioning and downstream switch configuration remain separate tasks. The inventory and configured rules are not proof that a network is safe for production office deployment.</div>
-      </Panel>
-    </div>
-  );
-}
-
-
 function OfficePortForwardManager({
   available,
   truncated,
@@ -7895,6 +7889,8 @@ function OfficePortForwardManager({
   const [saving, setSaving] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState("");
   const [removing, setRemoving] = useState("");
+  const [pendingToggle, setPendingToggle] = useState("");
+  const [toggling, setToggling] = useState("");
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const activeSource = sourceZones.some((zone) => zone.name === source)
@@ -7966,6 +7962,29 @@ function OfficePortForwardManager({
     }
   };
 
+  const toggle = async (section: string, enabled: boolean) => {
+    if (!section || toggling) return;
+    setToggling(section);
+    setNotice(null);
+    try {
+      const result = await setRouterOfficePortForwardEnabled(section, enabled);
+      setPendingToggle("");
+      setNotice({
+        success: true,
+        message: "Port-forward " + section + " is now " + (result.enabled ? "enabled" : "disabled") +
+          (result.reloaded ? "; firewall reload completed." : "; no firewall reload was needed."),
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The WAN port-forward state could not be changed.",
+      });
+    } finally {
+      setToggling("");
+    }
+  };
+
   return (
     <Panel title="WAN port forwarding" eyebrow="FIREWALL DNAT · WAN → INTERNAL SERVICE">
       {!available ? (
@@ -7983,13 +8002,21 @@ function OfficePortForwardManager({
           <div className="office-port-forward-row" key={redirect.section}>
             <div className="office-port-forward-identity">
               <strong>{redirect.name}</strong>
-              <span>{redirect.section} · {redirect.protocol.toUpperCase()} · {redirect.source}:{redirect.source_port}</span>
+              <span>{redirect.enabled ? "Enabled" : "Disabled"} · {redirect.section} · {redirect.protocol.toUpperCase()} · {redirect.source}:{redirect.source_port}</span>
             </div>
             <div className="office-port-forward-target">
               <span>{redirect.destination}</span>
               <strong>{redirect.destination_ip}:{redirect.destination_port}</strong>
             </div>
-            {pendingRemoval === redirect.section ? (
+            {pendingToggle === redirect.section ? (
+              <div className="office-port-forward-confirm">
+                <span>{redirect.enabled ? "Disable" : "Enable"} this Internet-facing DNAT rule?</span>
+                <button className="office-remove-start" type="button" onClick={() => void toggle(redirect.section, !redirect.enabled)} disabled={Boolean(toggling)}>
+                  {toggling === redirect.section ? "Applying…" : "Confirm " + (redirect.enabled ? "disable" : "enable")}
+                </button>
+                <button className="office-remove-start" type="button" onClick={() => setPendingToggle("")} disabled={Boolean(toggling)}>Cancel</button>
+              </div>
+            ) : pendingRemoval === redirect.section ? (
               <div className="office-port-forward-confirm">
                 <span>Remove this Internet-facing DNAT rule?</span>
                 <button className="office-remove-start" type="button" onClick={() => void remove(redirect.section)} disabled={Boolean(removing)}>
@@ -7998,9 +8025,14 @@ function OfficePortForwardManager({
                 <button className="office-remove-start" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing)}>Cancel</button>
               </div>
             ) : (
-              <button className="office-remove-start" type="button" onClick={() => setPendingRemoval(redirect.section)} disabled={!available || truncated || Boolean(removing) || saving}>
-                Remove port-forward
-              </button>
+              <div className="office-port-forward-confirm">
+                <button className="office-remove-start" type="button" onClick={() => { setPendingRemoval(""); setPendingToggle(redirect.section); }} disabled={!available || truncated || Boolean(toggling) || Boolean(removing) || saving}>
+                  {redirect.enabled ? "Disable port-forward" : "Enable port-forward"}
+                </button>
+                <button className="office-remove-start" type="button" onClick={() => { setPendingToggle(""); setPendingRemoval(redirect.section); }} disabled={!available || truncated || Boolean(toggling) || Boolean(removing) || saving}>
+                  Remove port-forward
+                </button>
+              </div>
             )}
           </div>
         ))}
@@ -8064,6 +8096,12 @@ function OfficePortForwardManager({
         </div>
       ) : null}
       <div className="module-message">Only existing WAN/WWAN zones can be sources, and only existing internal zones can be destinations. The controller confirms the destination host is inside a static IPv4 subnet attached to that zone and rejects duplicate external port/protocol combinations. This does not configure IPv6 pinholes, TLS, IDS or prove that upstream NAT permits Internet ingress; test the packet path from outside the router.</div>
+    </Panel>
+  );
+}
+
+
+outer.</div>
     </Panel>
   );
 }
