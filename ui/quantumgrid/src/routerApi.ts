@@ -993,10 +993,16 @@ export interface RouterOfficeSegmentCreateResult {
   zone: string;
   pool_start_ip: string;
   pool_end_ip: string;
-  firewall_rules: 3;
+  firewall_rules: 3 | 7;
+  ipv6_enabled: boolean;
+  ipv6_assign: "" | "64";
+  dhcpv6: "disabled" | "server";
+  ra: "disabled" | "server";
+  ndp: "disabled";
   network_reloaded: true;
   firewall_reloaded: true;
   dhcp_restarted: true;
+  odhcpd_restarted: boolean;
   rolled_back: false;
 }
 
@@ -2814,7 +2820,12 @@ export async function createRouterOfficeSegment(input: {
   dhcpStart: string;
   dhcpLimit: string;
   leaseTime: string;
+  ipv6Enabled?: boolean;
 }): Promise<RouterOfficeSegmentCreateResult> {
+  if (input.ipv6Enabled !== undefined && typeof input.ipv6Enabled !== "boolean") {
+    throw new Error("IPv6 enablement must be a boolean choice.");
+  }
+  const ipv6Enabled = input.ipv6Enabled === true;
   const validName = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(input.name) &&
     !["lan", "wan", "wan6", "loopback", "wwan", "cellular"].includes(input.name);
   if (!validName) {
@@ -2870,6 +2881,7 @@ export async function createRouterOfficeSegment(input: {
   form.set("start", input.dhcpStart);
   form.set("limit", input.dhcpLimit);
   form.set("leasetime", input.leaseTime);
+  form.set("ipv6_enabled", ipv6Enabled ? "1" : "0");
   form.set("confirmed", "1");
   const response = await fetch(OFFICE_SEGMENT_ADD_URL, {
     method: "POST",
@@ -2901,10 +2913,16 @@ export async function createRouterOfficeSegment(input: {
     !("zone" in payload) || typeof payload.zone !== "string" || payload.zone.length === 0 ||
     !("pool_start_ip" in payload) || typeof payload.pool_start_ip !== "string" ||
     !("pool_end_ip" in payload) || typeof payload.pool_end_ip !== "string" ||
-    !("firewall_rules" in payload) || payload.firewall_rules !== 3 ||
+    !("firewall_rules" in payload) || payload.firewall_rules !== (ipv6Enabled ? 7 : 3) ||
+    !("ipv6_enabled" in payload) || payload.ipv6_enabled !== ipv6Enabled ||
+    !("ipv6_assign" in payload) || payload.ipv6_assign !== (ipv6Enabled ? "64" : "") ||
+    !("dhcpv6" in payload) || payload.dhcpv6 !== (ipv6Enabled ? "server" : "disabled") ||
+    !("ra" in payload) || payload.ra !== (ipv6Enabled ? "server" : "disabled") ||
+    !("ndp" in payload) || payload.ndp !== "disabled" ||
     !("network_reloaded" in payload) || payload.network_reloaded !== true ||
     !("firewall_reloaded" in payload) || payload.firewall_reloaded !== true ||
     !("dhcp_restarted" in payload) || payload.dhcp_restarted !== true ||
+    !("odhcpd_restarted" in payload) || payload.odhcpd_restarted !== ipv6Enabled ||
     !("rolled_back" in payload) || payload.rolled_back !== false
   ) {
     throw new Error("The router did not confirm the complete office network, firewall and DHCP transaction.");
