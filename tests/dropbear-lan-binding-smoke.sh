@@ -10,8 +10,6 @@ grep -Fqx "	option RootPasswordAuth 'on'" "$CONFIG"
 grep -Fqx "	option Interface 'lan'" "$CONFIG"
 grep -Fqx "	option Port '22'" "$CONFIG"
 grep -Fqx "	option GatewayPorts 'off'" "$CONFIG"
-if grep -Eq "option[[:space:]]+Interface[[:space:]]+['\"]?(wan|any|\\*)" "$CONFIG"; then
-  echo 'ERROR: Dropbear must not bind to WAN or all interfaces.' >&2
-  exit 1
-fi
+test "$(grep -Fc "option Interface" "$CONFIG")" -eq 1
+grep -Fqx "	option Interface 'lan'" "$CONFIG"
 echo 'Dropbear LAN-only management binding tests passed.'
