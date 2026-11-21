@@ -4244,8 +4244,21 @@ function action_config_backup()
 		respond(503, { ok = false, error = context_error })
 		return
 	end
+	if fs.access("/bin/mkdir") ~= true or fs.access("/bin/rmdir") ~= true then
+		respond(503, { ok = false, error = "Atomic configuration archive locking utilities are unavailable." })
+		return
+	end
+	local lock_ok, lock_status = pcall(sys.call,
+		"/bin/mkdir " .. archive_lock_path .. " >/dev/null 2>&1")
+	if not lock_ok or lock_status ~= 0 then
+		respond(409, { ok = false, error = "A configuration backup or restore is already active. Retry after it finishes." })
+		return
+	end
+	archive_lock_acquired = true
+
 	local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
 	if not backup_paths_ok then
+		release_archive_lock()
 		respond(503, { ok = false, error = backup_paths_error })
 		return
 	end
@@ -4258,6 +4271,7 @@ function action_config_backup()
 		mktemp_command = "/usr/bin/mktemp"
 	end
 	if not mktemp_command then
+		release_archive_lock()
 		respond(503, { ok = false, error = "A secure mktemp utility is unavailable; no backup was created." })
 		return
 	end
@@ -4269,6 +4283,7 @@ function action_config_backup()
 	if not temp_ok then generated_path = nil end
 	local backup_path, path_error = validator.validate_temp_path(generated_path)
 	if not backup_path or fs.access(backup_path) ~= true then
+		release_archive_lock()
 		respond(500, { ok = false, error = path_error or "The secure temporary backup file was not created." })
 		return
 	end
@@ -4276,11 +4291,13 @@ function action_config_backup()
 	local command_ok, command_status = pcall(sys.call,
 		"/sbin/sysupgrade -b " .. backup_path .. " >/dev/null 2>&1")
 	if not command_ok or command_status ~= 0 then
+		release_archive_lock()
 		record_audit(http, "system.config.backup", "sysupgrade", "failed")
 		os.remove(backup_path)
 		respond(503, { ok = false, error = "The router could not create a configuration backup archive." })
 		return
 	end
+	release_archive_lock()
 	local archive_listing, archive_error = inspect_quantumgrid_config_archive(
 		backup_path, context, validator, util, sys)
 	if not archive_listing then
