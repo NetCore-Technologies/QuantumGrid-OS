@@ -215,7 +215,7 @@ function managementPlaneChecks(
     });
   }
 
-  if (!management.ssh_service_installed || management.ssh_status === "disabled") {
+  if (management.ssh_service_installed === false || management.ssh_status === "disabled") {
     checks.push({
       id: "ssh-authentication",
       title: "SSH authentication posture",
@@ -249,7 +249,7 @@ function managementPlaneChecks(
     });
   }
 
-  if (!management.ssh_service_installed || management.ssh_status === "disabled") {
+  if (management.ssh_service_installed === false || management.ssh_status === "disabled") {
     checks.push({
       id: "ssh-management-zone",
       title: "SSH management-network binding",
