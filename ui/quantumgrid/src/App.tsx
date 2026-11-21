@@ -3026,7 +3026,7 @@ function RemoteSyslogSettings({ status, refresh }: {
           {enabled && (
             <div className="remote-syslog-fields">
               <label>
-                <span>Server IPv4 / DNS name</span>
+                <span>Server IPv4 / IPv6 / DNS name</span>
                 <input type="text" value={host} onChange={(event) => setHost(event.target.value)} placeholder="syslog.office.example" maxLength={253} required />
               </label>
               <label>
