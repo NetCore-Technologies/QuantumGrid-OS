@@ -106,6 +106,7 @@ test("plain TCP and UDP remote syslog remain supported", async () => {
   for (const protocol of ["tcp", "udp"]) {
     globalThis.fetch = async () => jsonResponse({
       ...tlsSuccess,
+      port: 514,
       protocol,
       tls_status: undefined,
     });
