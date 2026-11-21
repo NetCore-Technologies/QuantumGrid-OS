@@ -18,7 +18,9 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
 else
     OPENWRT_REPO="${QG_OPENWRT_REPO:-https://github.com/openwrt/openwrt.git}"
     OPENWRT_REF="${QG_OPENWRT_REF:-v25.12.6}"
-    OPENWRT_EXPECTED_SHA=""
+    # The default v25.12.6 annotated tag is GPG-verified upstream and is
+    # pinned here to its reviewed commit. Custom refs must supply their own SHA.
+    OPENWRT_EXPECTED_SHA="${QG_OPENWRT_EXPECTED_SHA:-64900e756efa667774214f9c6b17c113222e01f7}"
     BUILD_PROFILE="AW1000 stable OpenWrt"
 fi
 BUILD_JOBS="${QG_BUILD_JOBS:-$(getconf _NPROCESSORS_ONLN 2>/dev/null || nproc)}"
@@ -41,6 +43,7 @@ printf '==============================================\n'
 printf 'Build profile: %s\n' "$BUILD_PROFILE"
 printf 'OpenWrt repo: %s\n' "$OPENWRT_REPO"
 printf 'OpenWrt ref:  %s\n' "$OPENWRT_REF"
+printf 'Expected SHA: %s\n' "$OPENWRT_EXPECTED_SHA"
 printf 'Build jobs:   %s\n' "$BUILD_JOBS"
 
 printf '\n[1/9] Preparing OpenWrt source...\n'
@@ -64,9 +67,7 @@ git -C "$OPENWRT_DIR" remote get-url origin >/dev/null 2>&1 || die "OpenWrt chec
 git -C "$OPENWRT_DIR" fetch --depth 1 origin "$OPENWRT_REF"
 git -C "$OPENWRT_DIR" checkout --detach FETCH_HEAD
 OPENWRT_SHA="$(git -C "$OPENWRT_DIR" rev-parse HEAD)"
-if [[ "$QG_ENABLE_NSS" == "1" && "$OPENWRT_SHA" != "$OPENWRT_EXPECTED_SHA" ]]; then
-    die "NSS source ref resolved to $OPENWRT_SHA, expected the reviewed commit $OPENWRT_EXPECTED_SHA"
-fi
+sh "$PROJECT_ROOT/scripts/verify-openwrt-source.sh" "$OPENWRT_DIR" "$OPENWRT_EXPECTED_SHA"
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 
 printf '\n[3/9] Registering pinned AW1000 RJ11 phone feed...\n'
