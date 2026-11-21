@@ -762,4 +762,23 @@ end
 local capped = office.build_inventory(oversized)
 assert(capped.interface_count == 64 and capped.vlan_count == 64 and capped.truncated)
 
+local ipv4_segment_mode, ipv4_segment_mode_error = office.validate_office_segment_ipv6("0")
+assert(ipv4_segment_mode and ipv4_segment_mode.enabled == false
+  and ipv4_segment_mode.ip6assign == "" and ipv4_segment_mode.dhcpv6 == "disabled"
+  and ipv4_segment_mode.ra == "disabled" and ipv4_segment_mode.ndp == "disabled",
+  ipv4_segment_mode_error or "IPv4-only segments must leave IPv6 services disabled")
+
+local dual_stack_segment_mode, dual_stack_segment_mode_error = office.validate_office_segment_ipv6("1")
+assert(dual_stack_segment_mode and dual_stack_segment_mode.enabled == true
+  and dual_stack_segment_mode.ip6assign == "64"
+  and dual_stack_segment_mode.dhcpv6 == "server"
+  and dual_stack_segment_mode.ra == "server"
+  and dual_stack_segment_mode.ndp == "disabled",
+  dual_stack_segment_mode_error or "dual-stack segments must use delegated /64 prefixes and server RA/DHCPv6")
+
+for _, invalid_mode in ipairs({ "", "true", "2", "1;uci", "server" }) do
+  local invalid = office.validate_office_segment_ipv6(invalid_mode)
+  assert(invalid == nil, "invalid office IPv6 mode must be rejected: " .. invalid_mode)
+end
+
 print("office-networks: VLANs, bridges, DHCP reservation and scope lifecycle validation, firewall forwarding and SSID tests passed")
