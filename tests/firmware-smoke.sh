@@ -1083,3 +1083,8 @@ grep -Fq 'Require a valid RADIUS VLAN assignment (dynamic_vlan=2)' "$ROOT/ui/qua
 grep -Fq 'Tunnel-Private-Group-ID' "$ROOT/ui/quantumgrid/src/App.tsx"
 test -f "$ROOT/tests/wireless-vlan-api.test.mjs"
 echo "QuantumGrid AW1000 target, guarded hardware I/O, office DHCP management, redacted audit log, firewall NAT review, live fw4 runtime inventory and firmware integration checks passed."
+grep -Fq 'queue_runtime_state' "$ROOT/files/usr/lib/lua/luci/quantumgrid/sqm.lua"
+grep -Fq 'result.qdiscs_truncated = true' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'runtime_state: "observed"' "$ROOT/ui/quantumgrid/src/routerApi.ts"
+grep -Fq 'LIVE ROOT MATCH' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'inventory_truncated' "$ROOT/tests/sqm-controls.lua"
