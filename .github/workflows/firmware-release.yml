@@ -13,6 +13,11 @@ on:
         required: true
         default: "v25.12.6"
         type: string
+      openwrt_expected_sha:
+        description: "Expected full 40-character commit SHA for the selected OpenWrt ref"
+        required: true
+        default: "64900e756efa667774214f9c6b17c113222e01f7"
+        type: string
       enable_nss:
         description: "Build experimental Qualcomm NSS/EDMA profile (qosmio 25.12-nss fork)"
         required: true
@@ -32,6 +37,7 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       QG_OPENWRT_REF: ${{ inputs.openwrt_ref || 'v25.12.6' }}
+      QG_OPENWRT_EXPECTED_SHA: ${{ inputs.openwrt_expected_sha || '64900e756efa667774214f9c6b17c113222e01f7' }}
       QG_ENABLE_NSS: ${{ inputs.enable_nss && '1' || '0' }}
       QG_NSS_OPENWRT_REF: "25.12-nss"
       QG_NSS_EXPECTED_SHA: "d6848fa2ea00193b5b7d3973e3990da7f608027c"
@@ -145,7 +151,7 @@ jobs:
             BUILD_PROFILE="AW1000 stable upstream OpenWrt"
             OPENWRT_REQUESTED_REPO="${QG_OPENWRT_REPO:-https://github.com/openwrt/openwrt.git}"
             OPENWRT_REQUESTED_REF="$QG_OPENWRT_REF"
-            OPENWRT_EXPECTED_SHA="not-pinned-by-QuantumGrid"
+            OPENWRT_EXPECTED_SHA="$QG_OPENWRT_EXPECTED_SHA"
           fi
 
           {
