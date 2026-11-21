@@ -44,6 +44,11 @@ const success = {
   ra_flags: [],
   ra_slaac: "0",
   ra_dns: "0",
+  ra_preference: "medium",
+  ra_lifetime: 0,
+  dhcpv6_na: "0",
+  dhcpv6_pd: "0",
+  dhcpv6_assignall: "0",
   ndp: "disabled",
   network_reloaded: true,
   firewall_reloaded: true,
@@ -95,6 +100,11 @@ test("office segment client provisions IPv6-PD, DHCPv6, RA and scoped IPv6 firew
     ra_flags: ["managed-config", "other-config"],
     ra_slaac: "1",
     ra_dns: "1",
+    ra_preference: "medium",
+    ra_lifetime: 2700,
+    dhcpv6_na: "1",
+    dhcpv6_pd: "0",
+    dhcpv6_assignall: "0",
     ndp: "disabled",
     odhcpd_restarted: true,
   };
@@ -113,6 +123,11 @@ test("office segment client provisions IPv6-PD, DHCPv6, RA and scoped IPv6 firew
   assert.deepEqual(result.ra_flags, ["managed-config", "other-config"]);
   assert.equal(result.ra_slaac, "1");
   assert.equal(result.ra_dns, "1");
+  assert.equal(result.ra_preference, "medium");
+  assert.equal(result.ra_lifetime, 2700);
+  assert.equal(result.dhcpv6_na, "1");
+  assert.equal(result.dhcpv6_pd, "0");
+  assert.equal(result.dhcpv6_assignall, "0");
   assert.equal(result.firewall_rules, 7);
   assert.equal(result.odhcpd_restarted, true);
 });
@@ -148,6 +163,11 @@ test("office segment client rejects incomplete IPv6 service confirmation", async
     ra_flags: ["managed-config", "other-config"],
     ra_slaac: "1",
     ra_dns: "1",
+    ra_preference: "medium",
+    ra_lifetime: 2700,
+    dhcpv6_na: "1",
+    dhcpv6_pd: "0",
+    dhcpv6_assignall: "0",
     ndp: "disabled",
     odhcpd_restarted: false,
   });
