@@ -18,7 +18,7 @@ POST_GUARDS="$(grep -Fc 'if http.getenv("REQUEST_METHOD") ~= "POST" then' "$CONT
 HTTPS_GUARDS="$(grep -Fc 'if not require_https(http) then return end' "$CONTROLLER")"
 test "$POST_GUARDS" -gt 0
 test "$POST_GUARDS" -eq "$HTTPS_GUARDS"
-grep -Fq 'return transport.require_https(http)' "$CONTROLLER"
+grep -Fq 'return management_transport.require_https(http)' "$CONTROLLER"
 grep -Fq 'function M.require_https(http)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/management_transport.lua"
 RELEASE_WORKFLOW="$ROOT/.github/workflows/firmware-release.yml"
 test -s "$ROOT/configs/aw1000-nss-feeds.conf"
