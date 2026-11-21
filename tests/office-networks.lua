@@ -827,13 +827,13 @@ local pinhole_zones = {
 }
 local pinhole_interfaces = {
   {
-    name = "corp",
+    name = "corp", device = "br-lan.20", up = true,
     ipv6_neighbors = {
       { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
     },
   },
   {
-    name = "guest",
+    name = "guest", device = "br-lan.30", up = true,
     ipv6_neighbors = {
       { address = "2001:4860:4860::8844", mac = "aa:bb:cc:dd:ee:02", state = "STALE" },
     },
@@ -884,6 +884,43 @@ assert(normalized_neighbor_inventory.interface_count == 1
   and #normalized_neighbor_inventory.interfaces[1].ipv6_neighbors == 1
   and normalized_neighbor_inventory.interfaces[1].ipv6_neighbors[1].state == "REACHABLE",
   "office inventory must revalidate and normalize NDP neighbour MACs and states")
+
+local down_neighbor_inventory = office.build_inventory({
+  available = true,
+  interfaces = {
+    {
+      name = "corp", device = "br-lan.20", up = false,
+      ipv6_neighbors = {
+        { address = "2001:4860:4860::8888", mac = "aa:bb:cc:dd:ee:01", state = "REACHABLE" },
+      },
+    },
+  },
+})
+assert(down_neighbor_inventory.interface_count == 1
+  and #down_neighbor_inventory.interfaces[1].ipv6_neighbors == 0,
+  "a down L3 interface must not publish stale NDP entries as eligible hosts")
+
+local down_pinhole_interface = {
+  {
+    name = "corp", device = "br-lan.20", up = false,
+    ipv6_neighbors = pinhole_interfaces[1].ipv6_neighbors,
+  },
+}
+assert(office.validate_office_ipv6_pinhole(
+  "down-host", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
+  pinhole_zones, down_pinhole_interface, {}) == nil,
+  "a neighbour attached to a down L3 interface must not authorize an IPv6 pinhole")
+
+local unbound_pinhole_interface = {
+  {
+    name = "corp", device = "", up = true,
+    ipv6_neighbors = pinhole_interfaces[1].ipv6_neighbors,
+  },
+}
+assert(office.validate_office_ipv6_pinhole(
+  "unbound-host", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
+  pinhole_zones, unbound_pinhole_interface, {}) == nil,
+  "NDP data without a valid kernel L3 device binding must not authorize an IPv6 pinhole")
 
 local valid_pinhole, pinhole_error = office.validate_office_ipv6_pinhole(
   "office-https-v6", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
