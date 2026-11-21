@@ -833,7 +833,7 @@ local valid_pinhole, pinhole_error = office.validate_office_ipv6_pinhole(
   "office-https-v6", "wan", "corp", "tcp", "2001:4860:4860::8888", "443",
   pinhole_zones, pinhole_interfaces, {})
 assert(valid_pinhole and valid_pinhole.destination_ip == "2001:4860:4860:0000:0000:0000:0000:8888"
-  and valid_pinhole.destination_port == 443,
+  and valid_pinhole.destination_port == "443",
   pinhole_error or "IPv6 pinholes must normalize a configured GUA host and port")
 
 local invalid_ipv6_pinhole_addresses = {
