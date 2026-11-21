@@ -17,6 +17,22 @@ function validate_temp_path(path)
 	return path
 end
 
+function validate_restore_temp_path(path)
+	if type(path) ~= "string" or #path > 128
+		or not path:match("^/tmp/quantumgrid%-config%-restore%.[%w]+$") then
+		return nil, "The temporary restore path is not a reserved QuantumGrid /tmp file name."
+	end
+	return path
+end
+
+function validate_rollback_temp_path(path)
+	if type(path) ~= "string" or #path > 128
+		or not path:match("^/tmp/quantumgrid%-config%-rollback%.[%w]+$") then
+		return nil, "The temporary rollback path is not a reserved QuantumGrid /tmp file name."
+	end
+	return path
+end
+
 function validate_archive_size(size)
 	if type(size) ~= "number" or size ~= math.floor(size)
 		or size < 1 or size > MAX_ARCHIVE_BYTES then
