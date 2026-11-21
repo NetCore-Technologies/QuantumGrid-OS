@@ -93,6 +93,13 @@ board identifiers with the live `system.board` response and reports `matched`, `
 comparison; it is not a secure hardware attestation or proof of physical flash, radio, modem,
 peripheral, or recovery compatibility.
 
+The same read-only inventory exposes the profile's NSS and FXS capability declarations as
+**manifest declarations**, separately from live module, firmware, acceleration and voice-service
+observations. A declared capability is not proof that a driver is loaded, packet offload works,
+a telephone line is operational, or physical validation has passed. Missing or malformed
+capability declarations remain `unknown`; they are never silently treated as unsupported or
+operational.
+
 The AW1000 remains the **only supported hardware profile** today. Its manifest is the first
 profile contract, not a claim of multi-vendor support. Select it explicitly with
 `QG_DEVICE_PROFILE=profiles/arcadyan-aw1000.json ./build.sh`; this is also the default.
