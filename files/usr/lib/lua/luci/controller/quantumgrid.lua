@@ -354,8 +354,10 @@ local function wireless_vlan_owned_for_ap(section, ap_section)
 	local prefix = "qgrid_" .. ap_section .. "_"
 	local iface_list = wireless_option_list(section.iface)
 	local network_list = wireless_option_list(section.network)
+	local numeric_vid = tonumber(vid)
 	return #ap_section <= 48
 		and vid:match("^[1-9]%d*$") ~= nil
+		and numeric_vid ~= nil and numeric_vid >= 1 and numeric_vid <= 4094
 		and section_name == prefix .. vid
 		and section.name == "qg" .. vid
 		and #iface_list == 1 and iface_list[1] == ap_section
