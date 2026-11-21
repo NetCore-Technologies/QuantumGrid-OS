@@ -5632,7 +5632,7 @@ function GamingControlPage({ routerOverview, refresh }: {
         <div>
           <div className="setup-kicker">SMART QUEUE MANAGEMENT · LIVE INSPECTION</div>
           <h1>Gaming & Latency</h1>
-          <p>Inspect configured SQM queues and kernel queue disciplines, including a conservative live root-qdisc match for each enabled queue. Edit existing queue enable state and rates with a guarded restart; advanced classification and per-client priority stay locked.</p>
+          <p>Inspect configured SQM queues and kernel queue disciplines, edit existing queue enable state and rates, and add guarded upload-only per-client DSCP markings. Download-side classification, bandwidth guarantees and full per-client priority remain unavailable.</p>
         </div>
       </section>
 
@@ -5752,12 +5752,13 @@ function GamingControlPage({ routerOverview, refresh }: {
             ["LATENCY / JITTER", "NOT MEASURED"],
             ["PACKET LOSS", "NOT MEASURED"],
             ["BUFFERBLOAT GRADE", "NOT MEASURED"],
+            ["UPLOAD DSCP POLICIES", sqm?.client_policy_available ? fmt(sqm.client_policies.length) : "N/A"],
             ["PER-CLIENT PRIORITY", "NOT CONFIGURED"],
           ]} />
         </Panel>
-        <Panel title="Advanced traffic policy" eyebrow="NOT YET AVAILABLE">
-          <Status active={false}>CLASSIFICATION LOCKED</Status>
-          <div className="module-message">This first write-capable SQM control changes only existing queue enable state and rate limits. CAKE tuning, firewall marks, per-client priority and traffic classification remain locked until their packet-path and rollback behaviour can be tested.</div>
+        <Panel title="Advanced traffic policy" eyebrow="PARTIALLY AVAILABLE">
+          <Status active={true}>UPLOAD DSCP AVAILABLE</Status>
+          <div className="module-message">Per-client upload marking is available through the guarded firewall4 DSCP policy above. It marks one unicast source MAC from an existing internal zone towards a WAN/WWAN zone. Download-side marking, per-client bandwidth caps or guarantees, and a managed per-client queue scheduler are not implemented. Confirm the real packet path and CAKE DiffServ behaviour on the target router before relying on these markings for production traffic.</div>
         </Panel>
       </div>
     </div>

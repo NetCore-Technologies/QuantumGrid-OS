@@ -138,8 +138,11 @@ and minimum packet unit (0 to 256 bytes). The authenticated endpoint changes onl
 plus the selected queue's enabled/download/upload values, snapshots every modified UCI option,
 restarts SQM and attempts rollback if the restart fails. The queue interface, qdisc, setup script
 and advanced option strings are preserved. Administrators must choose the link layer and framing
-values from their ISP/connection details; QuantumGrid does not guess them. Traffic classification
-and per-client priority remain unavailable.
+values from their ISP/connection details; QuantumGrid does not guess them. The Gaming page also
+supports audited, upload-only DSCP marking for one unicast client MAC on an existing internal-zone
+to WAN/WWAN-zone path, using fixed BE, AF41, EF or CS1 classes. It does not mark downloads or
+provide bandwidth caps/guarantees; an existing CAKE egress profile must use DiffServ 4 or 8 for
+DSCP tin selection, and actual packet-path effectiveness still requires hardware testing.
 Diagnostics has a separate on-demand five-packet ICMP test to the fixed target 1.1.1.1,
 reporting the measured received/sent ratio, packet-loss percentage, RTT minimum/average/maximum
 and mean absolute difference between consecutive successful RTT samples (jitter).
@@ -673,12 +676,14 @@ server and define an independent retention policy. Parser and redaction rules ar
   rollback handling,
   Hardware I/O with read-only GPIO/button inventory
   and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, a
-  redacted local administrative audit history with bounded retention, and read-only live root-qdisc
-  matching for enabled SQM queues with explicit incomplete/unavailable states.
-- **Active development:** wider UI-to-ubus control wiring, traffic classification, per-client
-  priority and bandwidth policies, controlled-load bufferbloat testing, radio intelligence/
-  scheduling and modem observability. Curated CAKE profiles are configuration presets; they do
-  not prove ingress/egress shaping or measured latency improvement without hardware testing.
+  redacted local administrative audit history with bounded retention, read-only live root-qdisc
+  matching for enabled SQM queues with explicit incomplete/unavailable states, and guarded,
+  audited upload-only per-client DSCP marking on validated internal-to-WAN firewall-zone paths.
+- **Active development:** wider UI-to-ubus control wiring, download-side client classification,
+  per-client bandwidth and priority policies, controlled-load bufferbloat testing, radio
+  intelligence/scheduling and modem observability. Curated CAKE profiles and upload-side DSCP
+  policies are configuration controls; they do not prove ingress/egress shaping or measured
+  latency improvement without hardware testing.
 - **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
 
 See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).
