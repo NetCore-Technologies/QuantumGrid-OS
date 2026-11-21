@@ -289,6 +289,7 @@ export interface RouterSqmClientPolicy {
   destination_zone: string;
   dscp_class: RouterSqmClientDscpClass;
   direction?: "upload" | "download";
+  protocol?: "all" | "tcpudp";
   destination_ip?: string;
   enabled: boolean;
 }
@@ -300,6 +301,9 @@ export interface RouterSqmClientPolicyResult {
   source_zone: string;
   destination_zone: string;
   dscp_class: RouterSqmClientDscpClass;
+  direction: "upload" | "download";
+  protocol: "all" | "tcpudp";
+  destination_ip?: string;
   reloaded: true;
   rolled_back: false;
 }
@@ -2257,6 +2261,8 @@ export async function addRouterSqmClientPolicy(input: {
       !("source_zone" in payload) || payload.source_zone !== input.sourceZone ||
       !("destination_zone" in payload) || payload.destination_zone !== input.destinationZone ||
       !("dscp_class" in payload) || payload.dscp_class !== input.dscpClass ||
+      !("direction" in payload) || payload.direction !== "upload" ||
+      !("protocol" in payload) || payload.protocol !== "all" ||
       !("reloaded" in payload) || payload.reloaded !== true ||
       !("rolled_back" in payload) || payload.rolled_back !== false) {
     throw new Error("The router did not confirm the client DSCP rule and firewall reload.");
@@ -2327,6 +2333,7 @@ export async function addRouterSqmClientDownloadPolicy(input: {
       !("source_zone" in payload) || payload.source_zone !== input.sourceZone ||
       !("destination_zone" in payload) || payload.destination_zone !== input.destinationZone ||
       !("dscp_class" in payload) || payload.dscp_class !== input.dscpClass ||
+      !("protocol" in payload) || payload.protocol !== "all" ||
       !("reloaded" in payload) || payload.reloaded !== true ||
       !("rolled_back" in payload) || payload.rolled_back !== false) {
     throw new Error("The router did not confirm the exact client download DSCP rule and firewall reload.");
@@ -2361,6 +2368,8 @@ export async function removeRouterSqmClientPolicy(section: string): Promise<Rout
       !("source_zone" in payload) || typeof payload.source_zone !== "string" ||
       !("destination_zone" in payload) || typeof payload.destination_zone !== "string" ||
       !("dscp_class" in payload) || !["BE", "AF41", "EF", "CS1"].includes(String(payload.dscp_class)) ||
+      !("direction" in payload) || (payload.direction !== "upload" && payload.direction !== "download") ||
+      !("protocol" in payload) || (payload.protocol !== "all" && payload.protocol !== "tcpudp") ||
       !("removed" in payload) || payload.removed !== true ||
       !("reloaded" in payload) || payload.reloaded !== true ||
       !("rolled_back" in payload) || payload.rolled_back !== false) {
