@@ -4602,6 +4602,11 @@ function action_office_segment_add()
 		dhcp_options.ra_flags = ipv6.ra_flags
 		dhcp_options.ra_slaac = ipv6.ra_slaac
 		dhcp_options.ra_dns = ipv6.ra_dns
+		dhcp_options.ra_preference = ipv6.ra_preference
+		dhcp_options.ra_lifetime = ipv6.ra_lifetime
+		dhcp_options.dhcpv6_na = ipv6.dhcpv6_na
+		dhcp_options.dhcpv6_pd = ipv6.dhcpv6_pd
+		dhcp_options.dhcpv6_assignall = ipv6.dhcpv6_assignall
 		dhcp_options.ndp = ipv6.ndp
 	else
 		dhcp_options.dhcpv6 = "disabled"
@@ -4729,6 +4734,11 @@ function action_office_segment_add()
 		ra_flags = ipv6.ra_flags or {},
 		ra_slaac = ipv6.ra_slaac or "0",
 		ra_dns = ipv6.ra_dns or "0",
+		ra_preference = ipv6.ra_preference or "medium",
+		ra_lifetime = tonumber(ipv6.ra_lifetime) or 0,
+		dhcpv6_na = ipv6.dhcpv6_na or "0",
+		dhcpv6_pd = ipv6.dhcpv6_pd or "0",
+		dhcpv6_assignall = ipv6.dhcpv6_assignall or "0",
 		ndp = ipv6.ndp,
 		network_reloaded = true,
 		firewall_reloaded = true,
