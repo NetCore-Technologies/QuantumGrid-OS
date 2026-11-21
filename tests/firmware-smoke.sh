@@ -895,6 +895,7 @@ grep -Fq 'office-port-forward-toggle' "$ROOT/files/usr/lib/lua/luci/controller/q
 grep -Fq 'function action_office_port_forward_add()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function action_office_port_forward_remove()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function action_office_port_forward_toggle()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'target == "DNAT" and (family == "" or family == "ipv4")' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'validate_office_port_forward' "$ROOT/files/usr/lib/lua/luci/quantumgrid/office_networks.lua"
 grep -Fq 'snapshot_firewall_redirect_section' "$ROOT/files/usr/lib/lua/luci/quantumgrid/office_networks.lua"
 grep -Fq 'office.port-forward.add' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
