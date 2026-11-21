@@ -5562,7 +5562,7 @@ function action_office_ipv6_pinhole_add()
 		destination = update.destination,
 		protocol = update.protocol,
 		destination_ip = update.destination_ip,
-		destination_port = update.destination_port,
+		destination_port = tonumber(update.destination_port),
 		family = "ipv6",
 		reloaded = true,
 		rolled_back = false
