@@ -1008,7 +1008,14 @@ function validate_office_ipv6_pinhole(
 	local observed = false
 	local destination_networks = zone_networks(destination_zone.networks)
 	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
-		if type(iface) == "table" and contains(destination_networks, iface.name) then
+		-- A neighbour retained on a down interface (or attached to an invalid
+		-- device identifier) must never authorize an Internet-facing pinhole.
+		-- The controller only collects NDP data for an active kernel L3 device;
+		-- enforce that invariant again at the policy boundary.
+		local live_device = type(iface) == "table" and iface.up == true
+			and type(iface.device) == "string" and #iface.device <= 64
+			and iface.device:match("^[%w][%w_.%-]*$") ~= nil
+		if live_device and contains(destination_networks, iface.name) then
 			for _, neighbor in ipairs(type(iface.ipv6_neighbors) == "table" and iface.ipv6_neighbors or {}) do
 				if type(neighbor) == "table"
 					and global_unicast_ipv6(neighbor.address, false) == canonical_ip
@@ -1829,7 +1836,10 @@ function build_inventory(source)
 					end
 				end
 				local ipv6_neighbors, neighbor_seen = {}, {}
-				local source_neighbors = type(item.ipv6_neighbors) == "table" and item.ipv6_neighbors or {}
+				local live_device = item.up == true and type(item.device) == "string"
+					and #item.device <= 64 and item.device:match("^[%w][%w_.%-]*$") ~= nil
+				local source_neighbors = live_device and type(item.ipv6_neighbors) == "table"
+					and item.ipv6_neighbors or {}
 				for _, neighbor in ipairs(source_neighbors) do
 					if type(neighbor) == "table" and #ipv6_neighbors < 64 then
 						local address = global_unicast_ipv6(neighbor.address, false)
