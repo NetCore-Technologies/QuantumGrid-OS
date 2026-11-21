@@ -3161,6 +3161,14 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
       [exportedAt, "Firewall", "Init service", security.firewall_installed ? "INSTALLED" : "MISSING", ""],
       [exportedAt, "Management transport", "Posture", managementTransport?.status?.toUpperCase() ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTPS readiness", managementTransport?.https_configured ? "CONFIGURED" : "NOT VERIFIED", ""],
+      [exportedAt, "Management transport", "HTTPS private key", managementTransport?.private_key?.status?.toUpperCase() ?? "NOT REPORTED",
+        "root_owned=" + (managementTransport?.private_key?.root_owned ?? "unknown") +
+          "; regular_file=" + (managementTransport?.private_key?.regular_file ?? "unknown") +
+          "; group_access=" + (managementTransport?.private_key?.group_access ?? "unknown") +
+          "; other_access=" + (managementTransport?.private_key?.other_access ?? "unknown")],
+      [exportedAt, "Management transport", "HTTPS certificate SHA-256 fingerprint",
+        managementTransport?.certificate_fingerprint?.available ? "AVAILABLE" : "UNAVAILABLE",
+        managementTransport?.certificate_fingerprint?.value ?? ""],
       [exportedAt, "Management transport", "HTTP listeners", managementTransport?.http_listener_count ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTPS listeners", managementTransport?.https_listener_count ?? "UNKNOWN", ""],
       [exportedAt, "Management transport", "HTTP redirect", managementTransport?.http_redirect_enabled ? "ENABLED" : "DISABLED / UNKNOWN", ""],
@@ -3301,6 +3309,11 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
               ["Configured HTTPS listeners", fmt(managementTransport.https_listener_count)],
               ["TLS runtime library", managementTransport.tls_library_available ? "AVAILABLE" : "MISSING"],
               ["Non-empty certificate and private key", managementTransport.certificate_available ? "PRESENT" : "MISSING"],
+              ["HTTPS private key file posture", managementTransport.private_key?.status?.toUpperCase() ?? "UNKNOWN"],
+              ["HTTPS private key owner", managementTransport.private_key?.root_owned === true ? "ROOT" : managementTransport.private_key?.root_owned === false ? "NOT ROOT" : "UNKNOWN"],
+              ["HTTPS private key permissions", managementTransport.private_key?.group_access === false && managementTransport.private_key?.other_access === false ? "NO GROUP / OTHER ACCESS" : managementTransport.private_key?.group_access === true || managementTransport.private_key?.other_access === true ? "EXPOSED" : "UNKNOWN"],
+              ["Certificate SHA-256 fingerprint", managementTransport.certificate_fingerprint?.available ? managementTransport.certificate_fingerprint.value ?? "UNKNOWN" : "UNAVAILABLE"],
+              ["Certificate fingerprint verification", "COMPARE WITH A TRUSTED OUT-OF-BAND SOURCE"],
               ["Certificate key generator", managementTransport.key_generator_available ? "AVAILABLE" : "MISSING"],
               ["Configured HTTP listeners", fmt(managementTransport.http_listener_count)],
               ["HTTP → HTTPS redirect", managementTransport.http_redirect_enabled ? "ENABLED" : "DISABLED"],
