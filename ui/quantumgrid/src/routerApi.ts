@@ -2518,8 +2518,12 @@ export async function downloadRouterConfigBackup(passphrase: string): Promise<vo
     throw new Error("The downloaded configuration archive is empty or larger than 64 MiB.");
   }
   const archiveBytes = new Uint8Array(await archive.arrayBuffer());
-  const encrypted = await encryptRouterConfigBackupBytes(archiveBytes, passphrase);
-  archiveBytes.fill(0);
+  let encrypted: Uint8Array;
+  try {
+    encrypted = await encryptRouterConfigBackupBytes(archiveBytes, passphrase);
+  } finally {
+    archiveBytes.fill(0);
+  }
   const secureArchive = new Blob([backupBytesToArrayBuffer(encrypted)], { type: "application/vnd.quantumgrid.backup" });
   const exportedAt = new Date().toISOString();
   const objectUrl = URL.createObjectURL(secureArchive);
