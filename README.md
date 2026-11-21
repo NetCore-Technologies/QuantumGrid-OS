@@ -86,6 +86,13 @@ missing feature inputs, incompatible device symbols and artifact names that do n
 the selected device. The build validates this contract before cloning or modifying an OpenWrt
 checkout and verifies the target/subtarget/device symbols again after `make defconfig`.
 
+At first boot, the selected profile is embedded at
+`/etc/quantumgrid/device-profile.json`. The authenticated Advanced view compares its allowed
+board identifiers with the live `system.board` response and reports `matched`, `mismatch`,
+`unknown` or `unavailable`. A match is explicitly only a software-reported board identity
+comparison; it is not a secure hardware attestation or proof of physical flash, radio, modem,
+peripheral, or recovery compatibility.
+
 The AW1000 remains the **only supported hardware profile** today. Its manifest is the first
 profile contract, not a claim of multi-vendor support. Select it explicitly with
 `QG_DEVICE_PROFILE=profiles/arcadyan-aw1000.json ./build.sh`; this is also the default.
