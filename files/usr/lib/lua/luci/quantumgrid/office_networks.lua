@@ -1005,7 +1005,7 @@ function validate_office_ipv6_pinhole(
 	if not canonical_ip then
 		return nil, "Destination must be a global-unicast IPv6 address (2000::/3), not a private, link-local, multicast, documentation or unspecified address."
 	end
-	local observed = false
+	local observed_count, selected_zone_observed = 0, false
 	local destination_networks = zone_networks(destination_zone.networks)
 	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
 		-- A neighbour retained on a down interface (or attached to an invalid
@@ -1015,21 +1015,22 @@ function validate_office_ipv6_pinhole(
 		local live_device = type(iface) == "table" and iface.up == true
 			and type(iface.device) == "string" and #iface.device <= 64
 			and iface.device:match("^[%w][%w_.%-]*$") ~= nil
-		if live_device and contains(destination_networks, iface.name) then
+		if live_device then
 			for _, neighbor in ipairs(type(iface.ipv6_neighbors) == "table" and iface.ipv6_neighbors or {}) do
 				if type(neighbor) == "table"
 					and global_unicast_ipv6(neighbor.address, false) == canonical_ip
 					and valid_unicast_neighbor_mac(neighbor.mac)
 					and ({ REACHABLE = true, STALE = true, DELAY = true, PROBE = true, PERMANENT = true })[neighbor.state] then
-					observed = true
-					break
+					observed_count = observed_count + 1
+					if contains(destination_networks, iface.name) then
+						selected_zone_observed = true
+					end
 				end
 			end
 		end
-		if observed then break end
 	end
-	if not observed then
-		return nil, "Destination must be a currently observed global-unicast NDP neighbour with a valid unicast MAC on an interface attached to the selected internal zone."
+	if observed_count ~= 1 or not selected_zone_observed then
+		return nil, "Destination must be a single, unambiguous global-unicast NDP neighbour on an active L3 device attached to the selected internal zone."
 	end
 	for _, pinhole in ipairs(type(existing) == "table" and existing or {}) do
 		if type(pinhole) == "table" and pinhole.source == source
