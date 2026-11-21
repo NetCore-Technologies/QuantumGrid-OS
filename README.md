@@ -765,10 +765,11 @@ configuration to the router. **Treat both the encrypted backup and decrypted arc
 The System page also supports a guarded restore of the encrypted `.qgbak` to the router that
 created it. The passphrase is used only in browser-local WebCrypto; the decrypted gzip bytes are
 streamed to the same-origin router over the authenticated HTTPS administrator session. The
-restore preflight checks the archive's gzip/tar integrity, member count, individual paths and
-types, set-ID/sticky permission modes, duplicate paths and expanded size. It rejects absolute or
-traversal paths, symlinks, hardlinks, special files and members outside the `etc/` and `root/`
-trees. The archive must contain the matching device inventory ID, exact AW1000 hardware profile,
+restore preflight checks the archive's gzip/tar integrity, exact verbose-listing metadata
+layout, member count, individual paths and types, permission mode characters, parent/child path
+conflicts, duplicate paths and expanded size. It rejects ambiguous filenames containing whitespace,
+absolute or traversal paths, symlinks, hardlinks, special files and members outside the `etc/` and
+`root/` trees. Backup snapshot creation and restore share an atomic lock so they cannot overlap. The archive must contain the matching device inventory ID, exact AW1000 hardware profile,
 and exact OpenWrt target and architecture. Cross-device and cross-target restores are not
 supported; old backups without these markers must be recreated.
 
@@ -776,7 +777,10 @@ Before applying the uploaded archive, QuantumGrid creates and validates a second
 snapshot. It then uses `sysupgrade -r` to restore and schedules a reboot so services and network
 configuration start from a clean boot. If the restore command fails, the controller attempts to
 reapply the rollback snapshot and schedules a reboot when rollback succeeds. If rollback cannot
-be confirmed, do not power-cycle repeatedly; use a trusted out-of-band recovery route.
+be confirmed, the validated rollback archive is preserved under `/tmp` and its path is reported;
+retrieve it through a trusted recovery path before a reboot clears temporary storage. If reboot
+scheduling fails after restore, the rollback archive is also retained. Do not power-cycle repeatedly
+when rollback cannot be confirmed; use a trusted out-of-band recovery route.
 
 The stable device ID is public inventory metadata, not a secret, hardware attestation or
 cryptographic publisher signature. It prevents accidental cross-device restore but must not be
