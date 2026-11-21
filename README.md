@@ -739,13 +739,15 @@ must verify the collector's certificate chain, DNS, firewall policy, receipt and
 collector side. Lua validation is covered by `tests/remote-syslog.lua`, and the browser API contract
 by `tests/remote-syslog-api.test.mjs` in CI.
 
-## Configuration backup
+## Configuration backup and restore
 
-The authenticated System page creates a configuration archive using the router's native
+The authenticated System page creates a configuration archive with the native
 `sysupgrade -b` operation. It requires a same-origin administrator HTTPS POST and explicit
-confirmation, returns a no-store `.tar.gz` response capped at 64 MiB, validates the router-side
-temporary path under `/tmp`, and removes that file after the response is read. It does not reboot
-the router or modify its configuration.
+confirmation, returns a no-store gzip tar archive capped at 64 MiB, validates the router-side
+temporary path under `/tmp`, and removes that file after it has been read. The backup includes
+the stable QuantumGrid inventory ID, the matched hardware-profile manifest and the OpenWrt
+release target metadata so a later restore can detect accidental cross-device or cross-target
+selection.
 
 The browser immediately encrypts the archive before offering a download. The versioned `.qgbak`
 container uses PBKDF2-HMAC-SHA-256 with 600,000 iterations and a random 16-byte salt to derive a
@@ -759,10 +761,30 @@ The System page can decrypt a `.qgbak` file locally in the browser. It verifies 
 version, fixed KDF policy and AES-GCM authentication before releasing the original gzip archive;
 wrong passphrases and tampered files fail closed. Decryption does not upload the file or restore
 configuration to the router. **Treat both the encrypted backup and decrypted archive as secrets.**
-The feature does not provide one-click restore/import: restore only to compatible hardware and
-firmware using the documented recovery process, and preserve an independent recovery route.
-Cryptographic container tests are covered by `tests/config-backup-crypto.test.mjs`; router-side
-archive validation remains covered by `tests/config-backup.lua` and the normal firmware CI gate.
+
+The System page also supports a guarded restore of the encrypted `.qgbak` to the router that
+created it. The passphrase is used only in browser-local WebCrypto; the decrypted gzip bytes are
+streamed to the same-origin router over the authenticated HTTPS administrator session. The
+restore preflight checks the archive's gzip/tar integrity, member count, individual paths and
+types, set-ID/sticky permission modes, duplicate paths and expanded size. It rejects absolute or
+traversal paths, symlinks, hardlinks, special files and members outside the `etc/` and `root/`
+trees. The archive must contain the matching device inventory ID, exact AW1000 hardware profile,
+and exact OpenWrt target and architecture. Cross-device and cross-target restores are not
+supported; old backups without these markers must be recreated.
+
+Before applying the uploaded archive, QuantumGrid creates and validates a second native rollback
+snapshot. It then uses `sysupgrade -r` to restore and schedules a reboot so services and network
+configuration start from a clean boot. If the restore command fails, the controller attempts to
+reapply the rollback snapshot and schedules a reboot when rollback succeeds. If rollback cannot
+be confirmed, do not power-cycle repeatedly; use a trusted out-of-band recovery route.
+
+The stable device ID is public inventory metadata, not a secret, hardware attestation or
+cryptographic publisher signature. It prevents accidental cross-device restore but must not be
+treated as proof of device authenticity. AES-GCM authenticates the encrypted `.qgbak` to its
+passphrase; it does not certify who created the underlying configuration archive. A production
+recovery plan must retain an independent backup, passphrase and out-of-band access method.
+Crypto container tests are covered by `tests/config-backup-crypto.test.mjs`; archive, compatibility
+and path validation are covered by `tests/config-backup.lua` in the firmware CI gate.
 
 ## Administrative audit history
 
