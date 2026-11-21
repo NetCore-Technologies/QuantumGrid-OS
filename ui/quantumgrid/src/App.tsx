@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -1985,6 +1985,7 @@ function NetworkControlPage({
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
   const routes = routerOverview?.routes ?? [];
+  const staticRoutes = routerOverview?.static_routes ?? [];
   const policyRules = routerOverview?.policy_rules ?? [];
   const mwan3 = routerOverview?.mwan3;
   const mwan3Interfaces = mwan3?.interfaces ?? [];
@@ -2233,6 +2234,16 @@ function NetworkControlPage({
         )}
         <div className="module-message">Byte, packet, error and drop values are cumulative kernel interface counters since the driver or interface counters were reset; they are not instantaneous link speeds. Short-interval error/drop deltas compare successive API samples, remain N/A on the first sample or after a counter reset, and do not estimate packet loss. Counters the driver does not expose remain N/A. CSV export includes the active scope and sort filters.</div>
       </Panel>
+
+      <StaticRouteManager
+        available={Boolean(routerOverview?.static_routes_available)}
+        truncated={Boolean(routerOverview?.static_routes_truncated)}
+        invalidCount={routerOverview?.static_routes_invalid_count ?? 0}
+        totalCount={routerOverview?.static_routes_count ?? staticRoutes.length}
+        routes={staticRoutes}
+        interfaces={interfaces}
+        refresh={refresh}
+      />
 
       <Panel
         title="Default routes"
@@ -2555,6 +2566,281 @@ function NetworkControlPage({
     </div>
   );
 }
+
+
+function StaticRouteManager({
+  available,
+  truncated,
+  invalidCount,
+  totalCount,
+  routes,
+  interfaces,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  invalidCount: number;
+  totalCount: number;
+  routes: RouterStaticRoute[];
+  interfaces: RouterInterface[];
+  refresh: () => void;
+}) {
+  const [family, setFamily] = useState<"IPv4" | "IPv6">("IPv4");
+  const [interfaceName, setInterfaceName] = useState("");
+  const [target, setTarget] = useState("");
+  const [gateway, setGateway] = useState("");
+  const [metric, setMetric] = useState("");
+  const [table, setTable] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState("");
+  const [pendingRemoval, setPendingRemoval] = useState("");
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const routeInterfaces = interfaces
+    .filter((item) => item.name && /^[A-Za-z0-9_.-]{1,64}$/.test(item.name))
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name));
+  const selectedInterface = routeInterfaces.find((item) => item.name === interfaceName) ?? routeInterfaces[0];
+  const sortedRoutes = routes.slice().sort((left, right) =>
+    left.family.localeCompare(right.family) ||
+    left.table.localeCompare(right.table, undefined, { numeric: true }) ||
+    left.target.localeCompare(right.target)
+  );
+  const targetValid = target.trim().length > 0 && target.trim().length <= 64 && target.includes("/");
+  const gatewayValid = gateway.trim().length <= 64;
+  const metricValid = metric === "" || (/^(0|[1-9][0-9]{0,4})$/.test(metric) && Number(metric) <= 65535);
+  const tableNumber = Number(table);
+  const tableValid = table === "" ||
+    (/^[1-9][0-9]{0,2}$/.test(table) && tableNumber <= 252 || table === "254");
+  const ready = available && !truncated && invalidCount === 0 &&
+    Boolean(selectedInterface) && targetValid && gatewayValid &&
+    metricValid && tableValid && confirmed && !saving;
+
+  const updateField = (setter: (value: string) => void) => (value: string) => {
+    setter(value);
+    setConfirmed(false);
+    setNotice(null);
+  };
+
+  const createRoute = async () => {
+    if (!ready || !selectedInterface) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterStaticRoute({
+        family,
+        interface: selectedInterface.name,
+        target: target.trim(),
+        gateway: gateway.trim(),
+        metric,
+        table,
+      });
+      setNotice({
+        success: true,
+        message: result.family + " route " + result.target +
+          " was committed on " + result.interface +
+          (result.gateway ? " via " + result.gateway : " as an on-link route") +
+          (result.metric === null ? "" : " · metric " + result.metric) +
+          (result.table ? " · table " + result.table : " · main table") +
+          ". Network reload completed.",
+      });
+      setTarget("");
+      setGateway("");
+      setMetric("");
+      setTable("");
+      setConfirmed(false);
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The static route could not be added.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeRoute = async (route: RouterStaticRoute) => {
+    if (removing) return;
+    setRemoving(route.section);
+    setNotice(null);
+    try {
+      const result = await removeRouterStaticRoute(route.section);
+      setPendingRemoval("");
+      setNotice({
+        success: true,
+        message: result.family + " static route " + route.target +
+          " was removed and the network reload completed.",
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The static route could not be removed.",
+      });
+    } finally {
+      setRemoving("");
+    }
+  };
+
+  return (
+    <Panel
+      title="Static routes"
+      eyebrow="IPV4 / IPV6 · UCI-PERSISTENT · GUARDED NETWORK RELOAD"
+      action={<Status active={available && !truncated && invalidCount === 0}>{!available ? "UNAVAILABLE" : truncated || invalidCount > 0 ? "REVIEW REQUIRED" : "MANAGED"}</Status>}
+    >
+      {!available ? (
+        <div className="module-message">The router could not read the configured static-route inventory. Route changes are disabled until network configuration is available.</div>
+      ) : truncated ? (
+        <div className="module-message">The static-route inventory is truncated at the router limit. Resolve the inventory before creating or removing routes.</div>
+      ) : invalidCount > 0 ? (
+        <div className="module-message">{invalidCount} existing static route section(s) are malformed or unsupported. Review them in native LuCI before modifying route configuration.</div>
+      ) : null}
+      <div className="static-route-manager">
+        <div className="office-segment-fields">
+          <label>
+            <span>ADDRESS FAMILY</span>
+            <select
+              value={family}
+              onChange={(event) => {
+                setFamily(event.target.value as "IPv4" | "IPv6");
+                setTarget("");
+                setGateway("");
+                setConfirmed(false);
+                setNotice(null);
+              }}
+              disabled={saving || !available}
+            >
+              <option value="IPv4">IPv4</option>
+              <option value="IPv6">IPv6</option>
+            </select>
+          </label>
+          <label>
+            <span>EGRESS INTERFACE</span>
+            <select
+              value={selectedInterface?.name ?? ""}
+              onChange={(event) => updateField(setInterfaceName)(event.target.value)}
+              disabled={saving || routeInterfaces.length === 0}
+            >
+              {routeInterfaces.map((item) => (
+                <option key={item.name} value={item.name}>{item.name} · {item.device || "logical interface"}</option>
+              ))}
+            </select>
+            {routeInterfaces.length === 0 ? <small>No configured logical interfaces are available.</small> : null}
+          </label>
+          <label>
+            <span>DESTINATION NETWORK / CIDR</span>
+            <input
+              value={target}
+              onChange={(event) => updateField(setTarget)(event.target.value)}
+              maxLength={64}
+              placeholder={family === "IPv4" ? "10.40.0.0/16" : "2001:db8:40::/48"}
+              autoComplete="off"
+            />
+            {target.length > 0 && !targetValid ? <small>Enter an explicit non-default destination prefix.</small> : null}
+          </label>
+          <label>
+            <span>NEXT-HOP GATEWAY (OPTIONAL)</span>
+            <input
+              value={gateway}
+              onChange={(event) => updateField(setGateway)(event.target.value)}
+              maxLength={64}
+              placeholder={family === "IPv4" ? "192.168.1.254" : "fe80::1"}
+              autoComplete="off"
+            />
+            {!gatewayValid ? <small>Gateway value is too long.</small> : null}
+          </label>
+          <label>
+            <span>METRIC (OPTIONAL)</span>
+            <input
+              value={metric}
+              onChange={(event) => updateField(setMetric)(event.target.value)}
+              maxLength={5}
+              inputMode="numeric"
+              placeholder="100"
+            />
+            {!metricValid ? <small>Use a whole number from 0 to 65535.</small> : null}
+          </label>
+          <label>
+            <span>ROUTING TABLE (OPTIONAL)</span>
+            <input
+              value={table}
+              onChange={(event) => updateField(setTable)(event.target.value)}
+              maxLength={3}
+              inputMode="numeric"
+              placeholder="main (default)"
+            />
+            {!tableValid ? <small>Use table 1–252 or 254 (main).</small> : null}
+          </label>
+        </div>
+        <label className="office-reservation-confirm">
+          <input
+            type="checkbox"
+            checked={confirmed}
+            onChange={(event) => setConfirmed(event.target.checked)}
+            disabled={!available || truncated || invalidCount > 0 || saving}
+          />
+          <span>I confirm this destination, interface and gateway are correct. The firmware blocks a route that would cover the current administrator's client address; use out-of-band access for management-network changes.</span>
+        </label>
+        <div className="office-segment-actions">
+          <button className="hero-button" type="button" onClick={createRoute} disabled={!ready}>
+            {saving ? "Applying route…" : "Add static route"}
+          </button>
+          <span>{totalCount} configured route section(s) reported · default routes and policy rules are managed separately.</span>
+        </div>
+      </div>
+      {notice ? (
+        <div className={"module-message " + (notice.success ? "office-reservation-success" : "office-reservation-error")} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+      <div className="module-message">Static routes persist in the network configuration. The router validates canonical IPv4/IPv6 prefixes and gateways, rejects duplicate destinations in the same table, and snapshots configuration for rollback if network reload fails. Routes covering the active administrator address cannot be created or removed from that session; no default route, firewall forwarding or policy-routing rule is silently changed.</div>
+      {sortedRoutes.length === 0 ? (
+        <div className="module-message">No configured static route sections were reported.</div>
+      ) : (
+        <div className="device-list static-route-list">
+          {sortedRoutes.map((route) => (
+            <div className="device-row static-route-row" key={route.section}>
+              <div className="device-title">
+                <div className="device-icon"><Globe2 size={17} /></div>
+                <div>
+                  <strong>{route.family} · {route.target}</strong>
+                  <span>{route.section} · {route.enabled ? "Enabled" : "Disabled"}</span>
+                </div>
+              </div>
+              <div>
+                <small>EGRESS</small>
+                <b>{route.interface}</b>
+                <small>{route.gateway || "Direct / on-link"}</small>
+              </div>
+              <div>
+                <small>METRIC / TABLE</small>
+                <b>{route.metric === undefined ? "Default metric" : fmt(route.metric)}</b>
+                <small>{route.table || "main table"}</small>
+              </div>
+              <div className="static-route-remove">
+                {pendingRemoval === route.section ? (
+                  <>
+                    <button className="hero-button" type="button" onClick={() => removeRoute(route)} disabled={Boolean(removing)}>
+                      {removing === route.section ? "Removing…" : "Confirm remove"}
+                    </button>
+                    <button className="hero-button" type="button" onClick={() => setPendingRemoval("")} disabled={Boolean(removing)}>Cancel</button>
+                  </>
+                ) : (
+                  <button className="hero-button" type="button" onClick={() => { setPendingRemoval(route.section); setNotice(null); }} disabled={!available || truncated || invalidCount > 0 || Boolean(removing)}>
+                    Remove
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
 
 function DiagnosticsControlPage({
   stats,
