@@ -2216,7 +2216,8 @@ local function sqm_status(uci, fs)
 		config_available = fs.access("/etc/config/sqm") == true,
 		queues = {},
 		runtime_available = false,
-		qdiscs = {}
+		qdiscs = {},
+		qdiscs_truncated = false
 	}
 	local ok = pcall(function()
 		uci:foreach("sqm", "queue", function(section)
@@ -2257,6 +2258,7 @@ local function sqm_status(uci, fs)
 				if #result.qdiscs < 64 then
 					table.insert(result.qdiscs, current)
 				else
+					result.qdiscs_truncated = true
 					current = nil
 				end
 			elseif current then
@@ -2276,6 +2278,12 @@ local function sqm_status(uci, fs)
 				end
 			end
 		end
+	end
+
+	local sqm_validator = require "luci.quantumgrid.sqm"
+	for _, queue in ipairs(result.queues) do
+		queue.runtime_state = sqm_validator.queue_runtime_state(
+			queue, result.qdiscs, result.runtime_available, result.qdiscs_truncated)
 	end
 	return result
 end
