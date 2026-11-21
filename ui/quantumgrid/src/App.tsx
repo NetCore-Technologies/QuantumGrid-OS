@@ -3008,7 +3008,7 @@ function RemoteSyslogSettings({ status, refresh }: {
           {protocol === "tls" ? (
             <div className="remote-syslog-warning" role="note">
               <strong>Authenticated TLS transport</strong>
-              <span>QuantumGrid uses a loopback-only stunnel client with the system CA bundle, certificate-chain validation, and hostname or IPv4 subject-alternative-name verification. This confirms the configured TLS checks and local service restart, not collector reachability or message receipt. Private certificate authorities and mutual-TLS client certificates are not configured by this control.</span>
+              <span>QuantumGrid uses a loopback-only stunnel client running under configured non-root identities, with the system CA bundle, TLS 1.2, certificate-chain validation, and hostname or IPv4 subject-alternative-name verification. This confirms the configured TLS checks and local service restart, not collector reachability or message receipt. Private certificate authorities and mutual-TLS client certificates are not configured by this control.</span>
             </div>
           ) : (
             <div className="remote-syslog-warning" role="note">
@@ -3040,7 +3040,7 @@ function RemoteSyslogSettings({ status, refresh }: {
                 }}>
                   <option value="udp">UDP · unencrypted</option>
                   <option value="tcp">TCP · unencrypted</option>
-                  <option value="tls" disabled={!status?.tls_available && protocol !== "tls"}>TLS · verified server identity{status?.tls_available ? "" : " · firmware support unavailable"}</option>
+                  <option value="tls" disabled={(!status?.tls_available || status.tls_privilege_drop_configured !== true) && protocol !== "tls"}>TLS · verified server identity{!status?.tls_available ? " · firmware support unavailable" : status.tls_privilege_drop_configured !== true ? " · non-root service required" : ""}</option>
                 </select>
               </label>
               <label>
