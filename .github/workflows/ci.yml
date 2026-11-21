@@ -136,6 +136,9 @@ jobs:
           bash -n scripts/verify-aw1000-release-manifest.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
           sh -n scripts/verify-openwrt-source.sh
+          bash -n scripts/verify-openwrt-feeds.sh
+          bash -n tests/openwrt-feed-pin-smoke.sh
+          bash tests/openwrt-feed-pin-smoke.sh
           bash -n tests/openwrt-source-pin-smoke.sh
           bash tests/openwrt-source-pin-smoke.sh
           sh -n files/usr/bin/quantumgrid-hardware-io

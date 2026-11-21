@@ -76,6 +76,7 @@ printf '\n[3/9] Registering pinned AW1000 RJ11 phone feed...\n'
 printf '\n[4/9] Updating and installing OpenWrt feeds...\n'
 cd "$OPENWRT_DIR"
 ./scripts/feeds update -a
+bash "$PROJECT_ROOT/scripts/verify-openwrt-feeds.sh" "$OPENWRT_DIR"
 ./scripts/feeds install -a
 
 printf '\n[5/10] Building and installing the QuantumGrid control centre...\n'

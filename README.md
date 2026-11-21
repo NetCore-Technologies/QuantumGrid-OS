@@ -62,6 +62,10 @@ cd QuantumGrid-OS
 ./build.sh
 ```
 
+The build also verifies that every Git package feed remains at the full commit SHA declared
+by the pinned OpenWrt release, with the configured repository origin and a clean working tree.
+Locally modified or untracked feed files are refused before package installation.
+
 The build pins the phone-feed tag `v0.9.0` to commit `fe85222e57d1c3e191ffb976b37667bbf221a020` and refuses to
 continue when that tag resolves to different source. Use both
 `QG_AW1000_PHONE_REF` and `QG_AW1000_PHONE_EXPECTED_SHA` when deliberately selecting
