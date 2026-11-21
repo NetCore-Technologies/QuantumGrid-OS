@@ -7248,6 +7248,12 @@ function action_remote_syslog_update()
 	local host_header = http.getenv("HTTP_HOST")
 	local origin = http.getenv("HTTP_ORIGIN")
 	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	local tunnel_name = "quantumgrid_syslog"
+	local managed_tunnel_options = {
+		"enabled", "client", "accept_host", "accept_port", "CAfile",
+		"verifyChain", "TIMEOUTconnect", "retry", "connect", "checkHost", "checkIP", "sni"
+	}
+	local tunnel_list_options = { connect = true, checkHost = true, checkIP = true, sni = true }
 
 	local function respond(status, payload)
 		if status then
@@ -7305,6 +7311,38 @@ function action_remote_syslog_update()
 		return
 	end
 
+	local stunnel_installed = fs.access("/etc/init.d/stunnel") == true
+	local stunnel_config_available = fs.access("/etc/config/stunnel") == true
+	local ca_bundle_available = fs.access("/etc/ssl/certs/ca-certificates.crt") == true
+	if update.tls and (not stunnel_installed or not stunnel_config_available or not ca_bundle_available) then
+		respond(503, {
+			ok = false,
+			error = "Authenticated TLS syslog requires the stunnel service, its UCI configuration and the trusted CA bundle. No logging settings were changed."
+		})
+		return
+	end
+
+	local tunnel_snapshot = nil
+	local tunnel_snapshot_exists = false
+	if stunnel_config_available then
+		local tunnel_read_ok, tunnel_value = pcall(uci.get_all, uci, "stunnel", tunnel_name)
+		if not tunnel_read_ok then
+			respond(503, { ok = false, error = "The managed TLS logging section could not be inspected safely." })
+			return
+		end
+		if type(tunnel_value) == "table" then
+			if tunnel_value[".type"] ~= "service" then
+				respond(503, { ok = false, error = "The reserved QuantumGrid TLS logging section exists with an incompatible UCI type." })
+				return
+			end
+			tunnel_snapshot_exists = true
+			tunnel_snapshot = {}
+			for _, option in ipairs(managed_tunnel_options) do
+				tunnel_snapshot[option] = tunnel_value[option]
+			end
+		end
+	end
+
 	local previous = {
 		log_ip = snapshot.log_ip,
 		log_port = snapshot.log_port,
@@ -7313,38 +7351,52 @@ function action_remote_syslog_update()
 		log_hostname = snapshot.log_hostname,
 		log_prefix = snapshot.log_prefix
 	}
+	local previous_tunnel_enabled = tunnel_snapshot_exists and tunnel_snapshot.enabled == "1"
+	local tunnel_changed = update.tls == true or previous_tunnel_enabled
+	local tunnel_restart_required = tunnel_changed and stunnel_installed
+	local tunnel_options = update.tls and validator.stunnel_options(update) or nil
+	if update.tls and (type(tunnel_options) ~= "table" or type(tunnel_options.scalars) ~= "table" or
+		type(tunnel_options.lists) ~= "table") then
+		respond(400, { ok = false, error = "The TLS syslog client configuration could not be generated safely." })
+		return
+	end
+
 	local desired = { log_remote = update.enabled and "1" or "0" }
 	if update.enabled then
-		desired.log_ip = update.host
-		desired.log_port = update.port
-		desired.log_proto = update.protocol
+		if update.tls then
+			desired.log_ip = "127.0.0.1"
+			desired.log_port = "5514"
+			desired.log_proto = "tcp"
+		else
+			desired.log_ip = update.host
+			desired.log_port = update.port
+			desired.log_proto = update.protocol
+		end
 		desired.log_hostname = update.hostname
 		desired.log_prefix = update.prefix
 	end
 
-	for option, value in pairs(desired) do
-		local option_ok, option_result
-		if value == "" then
-			option_ok, option_result = pcall(uci.delete, uci, "system", section_name, option)
+	local function set_option(package, section, option, value)
+		local ok, result
+		if value == nil or value == "" then
+			ok, result = pcall(uci.delete, uci, package, section, option)
 		else
-			option_ok, option_result = pcall(uci.set, uci, "system", section_name, option, value)
+			ok, result = pcall(uci.set, uci, package, section, option, value)
 		end
-		if not option_ok or option_result ~= true then
-			pcall(uci.revert, uci, "system")
-			respond(500, { ok = false, error = "Remote syslog settings could not be staged; the log service was not restarted." })
-			return
-		end
+		return ok and result == true
 	end
 
-	local commit_ok, committed = pcall(uci.commit, uci, "system")
-	if not commit_ok or committed ~= true then
-		pcall(uci.revert, uci, "system")
-		respond(500, { ok = false, error = "Remote syslog settings could not be committed; the log service was not restarted." })
-		return
+	local function set_list(package, section, option, values)
+		local delete_ok, delete_result = pcall(uci.delete, uci, package, section, option)
+		if not delete_ok or delete_result == false then return false end
+		for _, value in ipairs(values or {}) do
+			local add_ok, add_result = pcall(uci.add_list, uci, package, section, option, value)
+			if not add_ok or add_result ~= true then return false end
+		end
+		return true
 	end
 
-	local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/log restart >/dev/null 2>&1")
-	if not restart_ok or restart_status ~= 0 then
+	local function restore_system()
 		local restored = true
 		for option, value in pairs(previous) do
 			local option_ok, option_result
@@ -7353,38 +7405,161 @@ function action_remote_syslog_update()
 			else
 				option_ok, option_result = pcall(uci.set, uci, "system", section_name, option, value)
 			end
-			if not option_ok or option_result ~= true then restored = false break end
+			if not option_ok or option_result ~= true then restored = false end
 		end
-		local rollback_commit_ok, rollback_committed = false, false
-		if restored then
-			rollback_commit_ok, rollback_committed = pcall(uci.commit, uci, "system")
+		local commit_ok, committed = false, false
+		if restored then commit_ok, committed = pcall(uci.commit, uci, "system") end
+		return restored and commit_ok and committed == true
+	end
+
+	local function restore_stunnel()
+		if not tunnel_changed then return true end
+		local restored = true
+		if not tunnel_snapshot_exists then
+			local delete_ok, delete_result = pcall(uci.delete, uci, "stunnel", tunnel_name)
+			restored = delete_ok and delete_result == true
+		else
+			for _, option in ipairs(managed_tunnel_options) do
+				local value = tunnel_snapshot[option]
+				if tunnel_list_options[option] then
+					if not set_list("stunnel", tunnel_name, option, type(value) == "table" and value or {}) then
+						restored = false
+					end
+				else
+					if not set_option("stunnel", tunnel_name, option, value) then restored = false end
+				end
+			end
 		end
-		local rollback_restart_ok, rollback_restart_status = false, -1
-		if rollback_commit_ok and rollback_committed == true then
-			rollback_restart_ok, rollback_restart_status = pcall(sys.call, "/etc/init.d/log restart >/dev/null 2>&1")
+		local commit_ok, committed = false, false
+		if restored then commit_ok, committed = pcall(uci.commit, uci, "stunnel") end
+		return restored and commit_ok and committed == true
+	end
+
+	local function rollback_all()
+		pcall(uci.revert, uci, "system")
+		if tunnel_changed then pcall(uci.revert, uci, "stunnel") end
+		local tunnel_restored = restore_stunnel()
+		local system_restored = restore_system()
+		local tunnel_restarted = true
+		if tunnel_restart_required then
+			local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/stunnel restart >/dev/null 2>&1")
+			tunnel_restarted = restart_ok and restart_status == 0
 		end
-		local rolled_back = restored and rollback_commit_ok and rollback_committed == true
-			and rollback_restart_ok and rollback_restart_status == 0
+		local log_ok, log_status = pcall(sys.call, "/etc/init.d/log restart >/dev/null 2>&1")
+		local log_restarted = log_ok and log_status == 0
+		return tunnel_restored and system_restored and tunnel_restarted and log_restarted
+	end
+
+	for option, value in pairs(desired) do
+		if not set_option("system", section_name, option, value) then
+			pcall(uci.revert, uci, "system")
+			respond(500, { ok = false, error = "Remote syslog settings could not be staged; services were not restarted." })
+			return
+		end
+	end
+
+	if tunnel_changed then
+		if update.tls then
+			if not tunnel_snapshot_exists then
+				local section_ok, section_result = pcall(uci.section, uci, "stunnel", "service", tunnel_name, {})
+				if not section_ok or not section_result then
+					pcall(uci.revert, uci, "system")
+					pcall(uci.revert, uci, "stunnel")
+					respond(500, { ok = false, error = "The managed TLS logging service section could not be created." })
+					return
+				end
+			end
+			for option, value in pairs(tunnel_options.scalars) do
+				if not set_option("stunnel", tunnel_name, option, value) then
+					pcall(uci.revert, uci, "system")
+					pcall(uci.revert, uci, "stunnel")
+					respond(500, { ok = false, error = "The TLS logging service options could not be staged." })
+					return
+				end
+			end
+			for option, values in pairs(tunnel_options.lists) do
+				if not set_list("stunnel", tunnel_name, option, values) then
+					pcall(uci.revert, uci, "system")
+					pcall(uci.revert, uci, "stunnel")
+					respond(500, { ok = false, error = "The TLS server identity or connection list could not be staged." })
+					return
+				end
+			end
+		else
+			if not set_option("stunnel", tunnel_name, "enabled", "0") then
+				pcall(uci.revert, uci, "system")
+				pcall(uci.revert, uci, "stunnel")
+				respond(500, { ok = false, error = "The previous TLS logging tunnel could not be disabled safely." })
+				return
+			end
+		end
+	end
+
+	local tunnel_commit_ok, tunnel_committed = true, true
+	if tunnel_changed then
+		tunnel_commit_ok, tunnel_committed = pcall(uci.commit, uci, "stunnel")
+	end
+	if not tunnel_commit_ok or tunnel_committed ~= true then
+		pcall(uci.revert, uci, "system")
+		pcall(uci.revert, uci, "stunnel")
+		respond(500, { ok = false, error = "The TLS logging configuration could not be committed; the log service was not restarted." })
+		return
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "system")
+	if not commit_ok or committed ~= true then
+		local rolled_back = rollback_all()
+		respond(500, {
+			ok = false,
+			error = rolled_back and
+				"The remote logging configuration could not be committed; the previous settings were restored."
+				or "The remote logging commit and rollback could not be confirmed. Inspect the system and stunnel UCI configurations locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	if tunnel_restart_required then
+		local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/stunnel restart >/dev/null 2>&1")
+		if not restart_ok or restart_status ~= 0 then
+			local rolled_back = rollback_all()
+			record_audit(http, "system.syslog.update", "remote-syslog", "failed")
+			respond(502, {
+				ok = false,
+				error = rolled_back and
+					"The TLS tunnel could not start. The previous remote logging settings were restored."
+					or "The TLS tunnel failed to start and rollback could not be confirmed. Inspect the stunnel and system logging services locally.",
+				rolled_back = rolled_back
+			})
+			return
+		end
+	end
+
+	local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/log restart >/dev/null 2>&1")
+	if not restart_ok or restart_status ~= 0 then
+		local rolled_back = rollback_all()
 		record_audit(http, "system.syslog.update", "remote-syslog", "failed")
 		respond(502, {
 			ok = false,
-			error = rolled_back
-				and "The log service could not restart. The previous remote syslog settings were restored."
-				or "The log service failed to restart and its previous settings could not be fully restored. Inspect /etc/config/system and log service state locally.",
+			error = rolled_back and
+				"The log service could not restart. The previous remote syslog settings were restored."
+				or "The log service failed to restart and its previous settings could not be fully restored. Inspect the system and stunnel services locally.",
 			rolled_back = rolled_back
 		})
 		return
 	end
 
 	record_audit(http, "system.syslog.update", "remote-syslog", "success")
+	local resulting = remote_syslog_status(uci, fs)
 	respond(nil, {
 		ok = true,
-		enabled = update.enabled,
-		host = update.enabled and update.host or (snapshot.log_ip or ""),
-		port = update.enabled and tonumber(update.port) or tonumber(snapshot.log_port) or 514,
-		protocol = update.enabled and update.protocol or (snapshot.log_proto == "tcp" and "tcp" or "udp"),
-		hostname = update.enabled and update.hostname or (snapshot.log_hostname or ""),
-		prefix = update.enabled and update.prefix or (snapshot.log_prefix or ""),
+		enabled = resulting.enabled,
+		host = resulting.host,
+		port = resulting.port,
+		protocol = resulting.protocol,
+		hostname = resulting.hostname,
+		prefix = resulting.prefix,
+		tls_status = resulting.tls_status,
 		restarted = true,
 		rolled_back = false
 	})
