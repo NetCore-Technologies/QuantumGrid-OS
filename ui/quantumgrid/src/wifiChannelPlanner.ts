@@ -215,3 +215,17 @@ export function planWifiChannels(
 }
 
 
+
+
+export function recommendWifiChannel(plan: WifiChannelPlanGroup): WifiChannelOptionScore | null {
+  if (!Array.isArray(plan.options) || plan.options.length < 2 || plan.widthAssumed) return null;
+  const current = plan.options.find((option) => option.current);
+  if (!current || current.score <= 0 || current.knownSignalAccessPoints < 1 ||
+      current.unknownSignalAccessPoints > 0 || current.unknownWidthAccessPoints > 0) return null;
+  const minimumImprovement = Math.max(0.5, current.score * 0.15);
+  return plan.options.find((option) => {
+    if (option.current || option.score >= current.score - minimumImprovement) return false;
+    if (option.unknownSignalAccessPoints > 0 || option.unknownWidthAccessPoints > 0) return false;
+    return !option.flags.some((flag) => /no.?ir|passive|radar|dfs|disabled/i.test(flag));
+  }) ?? null;
+}
