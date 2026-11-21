@@ -1013,8 +1013,8 @@ function validate_office_ipv6_pinhole(
 		-- The controller only collects NDP data for an active kernel L3 device;
 		-- enforce that invariant again at the policy boundary.
 		local live_device = type(iface) == "table" and iface.up == true
-			and type(iface.device) == "string" and #iface.device <= 64
-			and iface.device:match("^[%w][%w_.%-]*$") ~= nil
+			and type(iface.l3_device) == "string" and #iface.l3_device <= 64
+			and iface.l3_device:match("^[%w][%w_.%-]*$") ~= nil
 		if live_device then
 			for _, neighbor in ipairs(type(iface.ipv6_neighbors) == "table" and iface.ipv6_neighbors or {}) do
 				if type(neighbor) == "table"
