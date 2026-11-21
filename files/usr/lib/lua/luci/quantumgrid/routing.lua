@@ -251,9 +251,11 @@ function validate_static_route(family, interface, target, gateway, metric, table
 
 	for _, route in ipairs(type(existing) == "table" and existing or {}) do
 		if type(route) == "table" and route.family == family and
-			route.target == parsed_target.normalized and
 			tostring(route.table or "") == tostring(table_number or "") then
-			return nil, "A route for this destination already exists in the selected routing table."
+			local existing_target = parse_target(family, route.target)
+			if existing_target and existing_target.normalized == parsed_target.normalized then
+				return nil, "A route for this destination already exists in the selected routing table."
+			end
 		end
 	end
 
