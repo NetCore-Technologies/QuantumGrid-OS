@@ -49,6 +49,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/office-wifi-network-api.test.mjs
       - name: Test guarded WAN port-forward API contract
         run: node --experimental-strip-types --test ../../tests/office-port-forward-api.test.mjs
+      - name: Test managed IPv6 WAN pinhole API contract
+        run: node --experimental-strip-types --test ../../tests/office-ipv6-pinhole-api.test.mjs
       - name: Test CAKE profile API contract
         run: node --experimental-strip-types --test ../../tests/sqm-cake-profile-api.test.mjs
       - name: Test per-client DSCP API contract
