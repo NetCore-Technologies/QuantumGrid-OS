@@ -42,7 +42,7 @@ fi
 
 # Restore the pristine source fixture, then add an unexpected feed.
 cp "$ORIGINAL" "$OPENWRT/feeds.conf.default"
-printf 'src-git unexpected https://example.invalid/unexpected.git;main\\n' >> "$OPENWRT/feeds.conf.default"
+printf 'src-git unexpected https://example.invalid/unexpected.git;main\n' >> "$OPENWRT/feeds.conf.default"
 if bash "$PIN_SCRIPT" "$OPENWRT" "$MANIFEST" >/dev/null 2>&1; then
   echo "ERROR: unexpected NSS feed was accepted." >&2
   exit 1
