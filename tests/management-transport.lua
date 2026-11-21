@@ -114,6 +114,77 @@ assert(https_only.ssh_authorized_keys.owner_readable)
 assert(not https_only.ssh_authorized_keys.group_writable)
 assert(not https_only.ssh_authorized_keys.other_writable)
 
+-- HTTPS private keys must be root-owned, regular and inaccessible to group/other users.
+local private_key = https_only.private_key
+assert(private_key.available and private_key.status == "present")
+assert(private_key.root_owned and private_key.regular_file and private_key.owner_readable)
+assert(not private_key.group_access and not private_key.other_access)
+
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/uhttpd.key"] = { size = 512, uid = 0, mode = 33188 }
+  }
+})
+local exposed_key = transport.inspect(uci, fs)
+assert(exposed_key.private_key.status == "review")
+assert(exposed_key.private_key.group_access or exposed_key.private_key.other_access)
+assert(exposed_key.status == "review")
+
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/uhttpd.key"] = { size = 512, uid = 1000, mode = 33152 }
+  }
+})
+local unowned_key = transport.inspect(uci, fs)
+assert(unowned_key.private_key.status == "review")
+assert(not unowned_key.private_key.root_owned)
+assert(unowned_key.status == "review")
+
+uci, fs = fixture("1", {
+  stat_overrides = {
+    ["/etc/uhttpd.key"] = { size = 70000, uid = 0, mode = 33152 }
+  }
+})
+local oversized_key = transport.inspect(uci, fs)
+assert(oversized_key.private_key.status == "review")
+
+-- Fingerprints expose only a normalized SHA-256 digest, never certificate or key contents.
+local expected_fingerprint = string.rep("AA:", 31) .. "AA"
+local parsed_fingerprint = transport.parse_certificate_fingerprint(
+  "sha256 Fingerprint=" .. expected_fingerprint .. "\\n")
+assert(parsed_fingerprint.available)
+assert(parsed_fingerprint.algorithm == "SHA-256")
+assert(parsed_fingerprint.value == expected_fingerprint)
+local upper_prefix_fingerprint = transport.parse_certificate_fingerprint(
+  "SHA256 Fingerprint=" .. expected_fingerprint)
+assert(upper_prefix_fingerprint.available)
+assert(upper_prefix_fingerprint.value == expected_fingerprint)
+assert(not transport.parse_certificate_fingerprint("sha256 Fingerprint=AA:BB").available)
+assert(not transport.parse_certificate_fingerprint("MD5 Fingerprint=" .. expected_fingerprint).available)
+assert(not transport.parse_certificate_fingerprint(string.rep("A", 4097)).available)
+
+uci, fs = fixture("1")
+local with_fingerprint = transport.inspect(uci, fs, "sha256 Fingerprint=" .. expected_fingerprint)
+assert(with_fingerprint.certificate_fingerprint.available)
+assert(with_fingerprint.certificate_fingerprint.value == expected_fingerprint)
+
+uci, fs = fixture("1", {
+  files = {
+    ["/etc/init.d/uhttpd"] = true,
+    ["/etc/init.d/dropbear"] = true,
+    ["/etc/dropbear"] = true,
+    ["/root/.ssh"] = true,
+    ["/etc/dropbear/authorized_keys"] = true,
+    ["/lib/libustream-ssl.so"] = true,
+    ["/etc/uhttpd.crt"] = true,
+    ["/etc/uhttpd.key"] = false,
+    ["/usr/bin/openssl"] = true
+  }
+})
+local missing_key = transport.inspect(uci, fs)
+assert(missing_key.private_key.status == "missing")
+assert(missing_key.status == "unavailable")
+
 -- Key-only access with no authorized-keys file is not a ready management posture.
 uci, fs = fixture("1", {
   files = {
