@@ -1142,6 +1142,15 @@ export interface RouterOfficeIpv6PinholeRemoveResult {
   rolled_back: false;
 }
 
+export interface RouterOfficeIpv6PinholeToggleResult {
+  ok: true;
+  section: string;
+  enabled: boolean;
+  changed: boolean;
+  reloaded: boolean;
+  rolled_back: false;
+}
+
 export interface RouterOfficeDhcpScope {
   section: string;
   name: string;
@@ -1420,6 +1429,7 @@ const OFFICE_PORT_FORWARD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/of
 const OFFICE_PORT_FORWARD_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-remove";
 const OFFICE_IPV6_PINHOLE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-add";
 const OFFICE_IPV6_PINHOLE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-remove";
+const OFFICE_IPV6_PINHOLE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-ipv6-pinhole-toggle";
 const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-zone-update";
 const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-wifi-network-update";
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
@@ -3300,6 +3310,53 @@ export async function removeRouterOfficeIpv6Pinhole(section: string): Promise<Ro
     throw new Error("The router did not confirm IPv6 pinhole removal and firewall reload.");
   }
   return payload as RouterOfficeIpv6PinholeRemoveResult;
+}
+
+export async function setRouterOfficeIpv6PinholeEnabled(
+  section: string,
+  enabled: boolean,
+): Promise<RouterOfficeIpv6PinholeToggleResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(section) || section === "." || section === "..") {
+    throw new Error("Invalid firewall IPv6 pinhole section identifier.");
+  }
+  if (typeof enabled !== "boolean") throw new Error("An explicit enabled state is required.");
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("enabled", enabled ? "1" : "0");
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_IPV6_PINHOLE_TOGGLE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "IPv6 firewall changes require an active router administrator session."
+      : "The router returned an invalid IPv6 pinhole state response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid IPv6 pinhole state response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== section ||
+    !("enabled" in payload) || payload.enabled !== enabled ||
+    !("changed" in payload) || typeof payload.changed !== "boolean" ||
+    !("reloaded" in payload) || typeof payload.reloaded !== "boolean" ||
+    payload.reloaded !== payload.changed ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the requested IPv6 pinhole state and firewall reload.");
+  }
+  return payload as RouterOfficeIpv6PinholeToggleResult;
 }
 
 export async function createRouterOfficeForwarding(input: {
