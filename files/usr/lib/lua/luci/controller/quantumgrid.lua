@@ -14,6 +14,11 @@ local latency_test_cache_at = 0
 local cellular_cache = nil
 local cellular_cache_at = 0
 
+local function require_https(http)
+	local transport = require "luci.quantumgrid.management_transport"
+	return transport.require_https(http)
+end
+
 local function read_file(path)
 	local file = io.open(path, "r")
 	if not file then return nil end
@@ -947,6 +952,7 @@ function action_wifi_scan()
 		http.write_json({ ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		http.status(403, "Forbidden")
 		http.prepare_content("application/json; charset=UTF-8")
@@ -985,6 +991,7 @@ function action_latency_test()
 		http.write_json({ ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		http.status(403, "Forbidden")
 		http.prepare_content("application/json; charset=UTF-8")
@@ -1260,6 +1267,7 @@ function action_wireless_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -1715,6 +1723,7 @@ function action_sqm_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -1834,6 +1843,7 @@ function action_sqm_cake_profile()
 		http.write_json(payload)
 	end
 	if http.getenv("REQUEST_METHOD") ~= "POST" then respond(405, { ok = false, error = "POST is required." }); return end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then respond(403, { ok = false, error = "A same-origin request is required." }); return end
 	if fs.access("/etc/init.d/sqm") ~= true or fs.access("/etc/config/sqm") ~= true then
 		respond(503, { ok = false, error = "SQM service or configuration is not installed." }); return
@@ -1916,6 +1926,7 @@ function action_set_password()
 		http.write_json({ ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 
 	if not host or origin ~= scheme .. "://" .. host then
 		http.status(403, "Forbidden")
@@ -1979,6 +1990,7 @@ function action_package_operation()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -2132,7 +2144,6 @@ end
 local function security_status(uci, fs)
 	local firewall_inventory = require "luci.quantumgrid.firewall_inventory"
 	local firewall_runtime = require "luci.quantumgrid.firewall_runtime"
-	local management_transport = require "luci.quantumgrid.management_transport"
 	local result = {
 		firewall_installed = fs.access("/etc/init.d/firewall") == true,
 		firewall_config_available = fs.access("/etc/config/firewall") == true,
@@ -3048,6 +3059,7 @@ function action_led_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -3158,6 +3170,7 @@ function action_config_backup()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -3375,6 +3388,7 @@ function action_bridge_vlan_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -3578,6 +3592,7 @@ function action_bridge_vlan_remove()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -3722,6 +3737,7 @@ function action_office_forwarding_add()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -3832,6 +3848,7 @@ function action_office_forwarding_remove()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -3998,6 +4015,7 @@ function action_office_zone_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -4206,6 +4224,7 @@ function action_office_segment_add()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -4476,6 +4495,7 @@ function action_sqm_client_qos_add()
 		http.write_json(payload)
 	end
 	if http.getenv("REQUEST_METHOD") ~= "POST" then respond(405, { ok = false, error = "POST is required." }); return end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then respond(403, { ok = false, error = "A same-origin request is required." }); return end
 	if http.formvalue("confirmed", true) ~= "1" then
 		respond(400, { ok = false, error = "Explicit confirmation is required before adding a per-client DSCP policy." }); return
@@ -4571,6 +4591,7 @@ function action_sqm_client_qos_remove()
 		http.write_json(payload)
 	end
 	if http.getenv("REQUEST_METHOD") ~= "POST" then respond(405, { ok = false, error = "POST is required." }); return end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then respond(403, { ok = false, error = "A same-origin request is required." }); return end
 	if http.formvalue("confirmed", true) ~= "1" then
 		respond(400, { ok = false, error = "Explicit confirmation is required before removing a per-client DSCP policy." }); return
@@ -4656,6 +4677,7 @@ function action_office_wifi_network_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -4816,6 +4838,7 @@ function action_office_port_forward_add()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -4941,6 +4964,7 @@ function action_office_port_forward_remove()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -5041,6 +5065,7 @@ function action_dhcp_scope_add()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -5197,6 +5222,7 @@ function action_dhcp_scope_remove()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -5305,6 +5331,7 @@ function action_dhcp_scope_toggle()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -5468,6 +5495,7 @@ function action_dhcp_scope_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -5745,6 +5773,7 @@ function action_dhcp_reservation()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -5922,6 +5951,7 @@ function action_dhcp_reservation_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -6112,6 +6142,7 @@ function action_dhcp_reservation_remove()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host or origin ~= scheme .. "://" .. host then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
@@ -6228,6 +6259,7 @@ function action_remote_syslog_update()
 		respond(405, { ok = false, error = "POST is required." })
 		return
 	end
+	if not require_https(http) then return end
 	if not host_header or origin ~= scheme .. "://" .. host_header then
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return

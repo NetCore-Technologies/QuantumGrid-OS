@@ -40,6 +40,32 @@ local function nonempty_file(fs, path)
   return exists(fs, path)
 end
 
+function M.require_https(http)
+  if type(http) ~= "table" or type(http.getenv) ~= "function" then
+    return false
+  end
+  if http.getenv("HTTPS") == "on" then
+    return true
+  end
+
+  if type(http.status) == "function" then
+    http.status(403, "Forbidden")
+  end
+  if type(http.header) == "function" then
+    http.header("Cache-Control", "no-store")
+  end
+  if type(http.prepare_content) == "function" then
+    http.prepare_content("application/json; charset=UTF-8")
+  end
+  if type(http.write_json) == "function" then
+    http.write_json({
+      ok = false,
+      error = "HTTPS is required for administrator requests."
+    })
+  end
+  return false
+end
+
 function M.inspect(uci, fs)
   local service_installed = exists(fs, "/etc/init.d/uhttpd")
   local http_listener_count = listener_count(uci, "listen_http")

@@ -118,4 +118,23 @@ uci, fs = fixture("1", {
 local malformed = transport.inspect(uci, fs)
 assert(malformed.http_listener_count == 1 and malformed.https_listener_count == 1)
 
+local https_http = {
+  getenv = function(name) return name == "HTTPS" and "on" or nil end
+}
+assert(transport.require_https(https_http) == true, "HTTPS administrator requests must be accepted")
+
+local response = { headers = {}, body = nil, status = nil, content_type = nil }
+local plaintext_http = {
+  getenv = function(name) return name == "HTTPS" and nil or nil end,
+  status = function(code, reason) response.status = code; response.reason = reason end,
+  header = function(name, value) response.headers[name] = value end,
+  prepare_content = function(value) response.content_type = value end,
+  write_json = function(value) response.body = value end
+}
+assert(transport.require_https(plaintext_http) == false, "plaintext HTTP administrator requests must be rejected")
+assert(response.status == 403 and response.reason == "Forbidden")
+assert(response.headers["Cache-Control"] == "no-store")
+assert(response.content_type == "application/json; charset=UTF-8")
+assert(response.body.ok == false and response.body.error:find("HTTPS", 1, true))
+
 print("management-transport: HTTPS readiness and plaintext HTTP posture tests passed")

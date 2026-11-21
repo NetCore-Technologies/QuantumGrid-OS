@@ -85,6 +85,13 @@ Security fixes will be included in supported releases whenever practical.
 Release notes and security advisories will identify affected versions and recommended upgrade or mitigation steps when appropriate.
 
 ## Administrator web transport
+Every administrator POST action also checks the uHTTPd TLS environment server-side
+and returns a forbidden response when the request did not arrive over HTTPS. The redirect
+is therefore not the only protection for password setup or configuration-changing APIs.
+This TLS requirement does not replace LuCI authentication, same-origin validation or
+trusted-network firewall policy.
+
+
 
 The stable AW1000 image includes uHTTPd, the mbedTLS ustream runtime and the OpenSSL
 key-generation utility. On first boot, QuantumGrid sets uHTTPd's `redirect_https`
