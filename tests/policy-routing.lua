@@ -102,6 +102,13 @@ for _, item in ipairs(invalid_routes) do
   assert(route == nil, item[7] .. " must be rejected")
 end
 
+equal(routing.ip_address_family("192.0.2.8"), "IPv4", "administrator IPv4 address family")
+equal(routing.ip_address_family("2001:db8::8"), "IPv6", "administrator IPv6 address family")
+equal(routing.ip_address_family("fe80::1"), "IPv6", "link-local administrator address family")
+equal(routing.ip_address_family("192.0.2.999"), nil, "invalid IPv4 administrator address")
+equal(routing.ip_address_family("2001:db8:gg::1"), nil, "invalid IPv6 administrator address")
+equal(routing.ip_address_family("fe80::1%br-lan"), nil, "scoped IPv6 administrator address fails closed")
+
 local route_snapshot = routing.snapshot_static_route_section({
   [".type"] = "route6", [".name"] = "cfg_remote6",
   interface = "wg0", target = "2001:db8:1200::/56",
