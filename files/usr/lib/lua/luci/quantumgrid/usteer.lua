@@ -6,12 +6,11 @@ local function valid_token(value, maximum)
 end
 
 local function integer(value, minimum, maximum, label)
-	if type(value) ~= "string" or #value > 6 or
-		not value:match("^(0|[1-9]%d*)$") then
+	if type(value) ~= "string" or #value > 6 or not value:match("^%d+$") then
 		return nil, label .. " must be a whole number."
 	end
 	local number = tonumber(value)
-	if not number or number < minimum or number > maximum or number ~= math.floor(number) then
+	if not number or tostring(number) ~= value or number < minimum or number > maximum or number ~= math.floor(number) then
 		return nil, label .. " must be between " .. tostring(minimum) .. " and " .. tostring(maximum) .. "."
 	end
 	return number
@@ -46,10 +45,12 @@ local function same_security(left, right)
 	if left.encryption ~= right.encryption then return false end
 	if left.encryption == "none" then return false end
 	if left.encryption == "wpa2" or left.encryption == "wpa3" then
-		return left.auth_server == right.auth_server and left.auth_port == right.auth_port
-			and left.auth_secret == right.auth_secret
+		return type(left.auth_server) == "string" and left.auth_server ~= "" and
+			left.auth_server == right.auth_server and left.auth_port == right.auth_port and
+			type(left.auth_secret) == "string" and #left.auth_secret >= 16 and
+			left.auth_secret == right.auth_secret
 	end
-	return left.key == right.key
+	return type(left.key) == "string" and #left.key >= 8 and left.key == right.key
 end
 
 local function normalize_ssids(ssids)
@@ -168,13 +169,12 @@ function validate(input, network_binding, access_points)
 end
 
 local function map_count(value, maximum)
-	if type(value) ~= "table" then return 0, {} end
-	local count = 0
+	if type(value) ~= "table" then return 0, {}, false end
+	local total = 0
 	local rows = {}
 	for key, item in pairs(value) do
-		if count < maximum then
-			count = count + 1
-			if type(item) == "table" then
+		total = total + 1
+		if #rows < maximum and type(item) == "table" then
 				local row = {
 					name = type(key) == "string" and key or "",
 					ssid = type(item.ssid) == "string" and item.ssid or "",
@@ -184,16 +184,15 @@ local function map_count(value, maximum)
 					channel_load = tonumber(item.load),
 					noise_dbm = tonumber(item.noise)
 				}
-				table.insert(rows, row)
-			end
+			table.insert(rows, row)
 		end
 	end
 	table.sort(rows, function(left, right) return left.name < right.name end)
-	return count, rows
+	return math.min(total, maximum), rows, total > maximum
 end
 
 function summarize_runtime(config, local_nodes, remote_hosts)
-	local local_count, nodes = map_count(local_nodes, 32)
+	local local_count, nodes, local_truncated = map_count(local_nodes, 32)
 	local remote_count = 0
 	if type(remote_hosts) == "table" then
 		for _ in pairs(remote_hosts) do remote_count = remote_count + 1 end
@@ -203,6 +202,7 @@ function summarize_runtime(config, local_nodes, remote_hosts)
 	return {
 		running = type(config) == "table",
 		local_node_count = local_count,
+		local_nodes_truncated = local_truncated,
 		remote_host_count = math.min(remote_count, 64),
 		remote_hosts_truncated = remote_count > 64,
 		associated_clients = clients,
