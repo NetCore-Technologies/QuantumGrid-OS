@@ -128,13 +128,16 @@ local function status_fixture(options)
     log_hostname = "qg-office-router",
     log_prefix = "office-site1",
   }}
+  local globals = {
+    [".name"] = "globals",
+    [".type"] = "globals",
+    setuid = "nobody",
+    setgid = "nogroup",
+  }
+  if options.globals == false then globals = nil
+  elseif type(options.globals) == "table" then globals = options.globals end
   local sections = {
-    globals = options.globals == false and nil or options.globals or {
-      [".name"] = "globals",
-      [".type"] = "globals",
-      setuid = "nobody",
-      setgid = "nogroup",
-    },
+    globals = globals,
     quantumgrid_syslog = options.tunnel or {
       [".name"] = "quantumgrid_syslog",
       [".type"] = "service",
