@@ -218,6 +218,10 @@ jobs:
         run: lua5.1 tests/management-transport.lua
       - name: Test runtime hardware profile identity
         run: lua5.1 tests/device-profile.lua
+      - name: Test persistent device identity and provisioning
+        run: |
+          lua5.1 tests/device-identity.lua
+          bash tests/device-identity-provision.sh
       - name: Test secure configuration backup validation
         run: lua5.1 tests/config-backup.lua
       - name: Test redacted and bounded office admin audit events
