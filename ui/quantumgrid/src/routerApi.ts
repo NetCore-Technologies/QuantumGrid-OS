@@ -433,29 +433,29 @@ export interface RouterFirewallRuntimeStatus {
 
 export interface RouterDropbearInstance {
   name: string;
-  enabled: boolean | null;
+  enabled?: boolean | null;
   interface: string;
   interface_bound: boolean;
-  port: number | null;
+  port?: number | null;
   port_valid: boolean;
-  password_auth_enabled: boolean | null;
-  root_password_auth_enabled: boolean | null;
-  gateway_ports_enabled: boolean | null;
+  password_auth_enabled?: boolean | null;
+  root_password_auth_enabled?: boolean | null;
+  gateway_ports_enabled?: boolean | null;
 }
 
 export interface RouterAuthorizedKeysStatus {
   available: boolean;
   path: string;
-  size_bytes: number | null;
-  root_owned: boolean | null;
-  regular_file: boolean | null;
-  owner_readable: boolean | null;
-  group_writable: boolean | null;
-  other_writable: boolean | null;
-  directory_root_owned: boolean | null;
-  directory_valid: boolean | null;
-  directory_group_writable: boolean | null;
-  directory_other_writable: boolean | null;
+  size_bytes?: number | null;
+  root_owned?: boolean | null;
+  regular_file?: boolean | null;
+  owner_readable?: boolean | null;
+  group_writable?: boolean | null;
+  other_writable?: boolean | null;
+  directory_root_owned?: boolean | null;
+  directory_valid?: boolean | null;
+  directory_group_writable?: boolean | null;
+  directory_other_writable?: boolean | null;
   directory: string;
   status: "present" | "missing" | "review" | "unknown" | "unavailable";
 }
