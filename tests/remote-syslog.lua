@@ -164,11 +164,16 @@ local function status_fixture(options)
     return nil
   end
   local fs = { access = function(path) return files[path] == true end }
-  return uci, fs
+  local process = options.process or {
+    pid = "1234",
+    comm = "stunnel\\n",
+    cmdline = "/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0",
+  }
+  return uci, fs, process
 end
 
-local status_uci, status_fs = status_fixture()
-local tls_status = remote.inspect_status(status_uci, status_fs, 123)
+local status_uci, status_fs, status_process = status_fixture()
+local tls_status = remote.inspect_status(status_uci, status_fs, 123, status_process)
 assert(tls_status.available and tls_status.service_installed and tls_status.config_available)
 assert(tls_status.protocol == "tls" and tls_status.host == "logs.corp.example" and tls_status.port == 6514)
 assert(tls_status.tls_available and tls_status.tls_privilege_drop_configured)
@@ -176,32 +181,46 @@ assert(tls_status.tls_configured and tls_status.tls_identity_verified and tls_st
 assert(tls_status.tls_status == "ready" and tls_status.enabled)
 assert(tls_status.sampled_at == 123)
 
-local unencrypted_uci, unencrypted_fs = status_fixture({
+assert(remote.stunnel_process_running("1234\\n", "stunnel\\n", "/usr/bin/stunnel\\0/var/etc/stunnel.conf\\0"))
+for _, process in ipairs({
+  { pid = nil, comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
+  { pid = "0", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
+  { pid = "1", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
+  { pid = "1.2", comm = "stunnel", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
+  { pid = "1234", comm = "dropbear", cmdline = "/usr/bin/stunnel /var/etc/stunnel.conf" },
+  { pid = "1234", comm = "stunnel", cmdline = "/usr/bin/stunnel /etc/stunnel/other.conf" },
+  { pid = "1234", comm = "stunnel", cmdline = nil },
+}) do
+  assert(not remote.stunnel_process_running(process.pid, process.comm, process.cmdline),
+    "missing or mismatched process identity must not be reported as a running managed tunnel")
+end
+
+local unencrypted_uci, unencrypted_fs, unencrypted_process = status_fixture({
   system_sections = {{
     [".name"] = "system", [".type"] = "system",
     log_ip = "192.0.2.20", log_port = "514", log_proto = "udp", log_remote = "1",
   }},
 })
-local unencrypted_status = remote.inspect_status(unencrypted_uci, unencrypted_fs, 456)
+local unencrypted_status = remote.inspect_status(unencrypted_uci, unencrypted_fs, 456, unencrypted_process)
 assert(unencrypted_status.available and unencrypted_status.enabled)
 assert(unencrypted_status.protocol == "udp" and unencrypted_status.host == "192.0.2.20")
 assert(unencrypted_status.tls_privilege_drop_configured,
   "TLS service prerequisites must be detected even before the administrator enables TLS")
 assert(unencrypted_status.tls_status == "unavailable", "plain UDP must not be reported as TLS")
 
-local missing_stunnel_globals_uci, missing_stunnel_globals_fs = status_fixture({ globals = false })
-local missing_stunnel_globals = remote.inspect_status(missing_stunnel_globals_uci, missing_stunnel_globals_fs, 457)
+local missing_stunnel_globals_uci, missing_stunnel_globals_fs, missing_stunnel_globals_process = status_fixture({ globals = false })
+local missing_stunnel_globals = remote.inspect_status(missing_stunnel_globals_uci, missing_stunnel_globals_fs, 457, missing_stunnel_globals_process)
 assert(not missing_stunnel_globals.tls_privilege_drop_configured,
   "a missing stunnel globals section must not be presented as TLS-ready")
 
-local unsafe_globals_uci, unsafe_globals_fs = status_fixture({
+local unsafe_globals_uci, unsafe_globals_fs, unsafe_globals_process = status_fixture({
   globals = { [".name"] = "globals", [".type"] = "globals", setuid = "root", setgid = "nogroup" },
 })
-local unsafe_globals = remote.inspect_status(unsafe_globals_uci, unsafe_globals_fs, 1)
+local unsafe_globals = remote.inspect_status(unsafe_globals_uci, unsafe_globals_fs, 1, unsafe_globals_process)
 assert(unsafe_globals.tls_status == "review" and not unsafe_globals.tls_privilege_drop_configured)
 assert(not unsafe_globals.enabled)
 
-local weak_tls_uci, weak_tls_fs = status_fixture({
+local weak_tls_uci, weak_tls_fs, weak_tls_process = status_fixture({
   tunnel = {
     [".name"] = "quantumgrid_syslog", [".type"] = "service",
     enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
@@ -210,10 +229,10 @@ local weak_tls_uci, weak_tls_fs = status_fixture({
     checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
   },
 })
-local weak_tls_status = remote.inspect_status(weak_tls_uci, weak_tls_fs, 2)
+local weak_tls_status = remote.inspect_status(weak_tls_uci, weak_tls_fs, 2, weak_tls_process)
 assert(weak_tls_status.tls_status == "review" and not weak_tls_status.enabled)
 
-local unverified_identity_uci, unverified_identity_fs = status_fixture({
+local unverified_identity_uci, unverified_identity_fs, unverified_identity_process = status_fixture({
   tunnel = {
     [".name"] = "quantumgrid_syslog", [".type"] = "service",
     enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
@@ -222,10 +241,10 @@ local unverified_identity_uci, unverified_identity_fs = status_fixture({
     checkHost = { "logs.corp.example" }, sni = { "logs.corp.example" },
   },
 })
-local extra_destination = remote.inspect_status(unverified_identity_uci, unverified_identity_fs, 3)
+local extra_destination = remote.inspect_status(unverified_identity_uci, unverified_identity_fs, 3, unverified_identity_process)
 assert(extra_destination.tls_status == "review" and not extra_destination.tls_identity_verified)
 
-local ip_tls_uci, ip_tls_fs = status_fixture({
+local ip_tls_uci, ip_tls_fs, ip_tls_process = status_fixture({
   tunnel = {
     [".name"] = "quantumgrid_syslog", [".type"] = "service",
     enabled = "1", client = "1", accept_host = "127.0.0.1", accept_port = "5514",
@@ -234,23 +253,39 @@ local ip_tls_uci, ip_tls_fs = status_fixture({
     checkIP = { "192.0.2.15" },
   },
 })
-local ip_tls_status = remote.inspect_status(ip_tls_uci, ip_tls_fs, 4)
+local ip_tls_status = remote.inspect_status(ip_tls_uci, ip_tls_fs, 4, ip_tls_process)
 assert(ip_tls_status.tls_status == "ready" and ip_tls_status.tls_identity_verified)
 assert(ip_tls_status.host == "192.0.2.15" and ip_tls_status.port == 6514)
 
-local missing_ca_uci, missing_ca_fs = status_fixture({
+local stopped_tunnel_uci, stopped_tunnel_fs = status_fixture({ process = {
+  pid = "1234", comm = "dropbear\\n", cmdline = "/usr/bin/dropbear\\0",
+} })
+local stopped_tunnel_process = remote.inspect_status(stopped_tunnel_uci, stopped_tunnel_fs, 7, {
+  pid = "1234", comm = "dropbear\\n", cmdline = "/usr/bin/dropbear\\0",
+})
+assert(stopped_tunnel_process.tls_status == "review" and not stopped_tunnel_process.enabled)
+assert(stopped_tunnel_process.tls_error ~= nil)
+
+local stale_disabled_uci, stale_disabled_fs, stale_disabled_process = status_fixture({
+  system_sections = {{ [".name"] = "system", [".type"] = "system", log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp", log_remote = "0" }},
+})
+local stale_disabled = remote.inspect_status(stale_disabled_uci, stale_disabled_fs, 8, stale_disabled_process)
+assert(stale_disabled.tls_status == "review" and not stale_disabled.enabled,
+  "a running tunnel left behind while disabled must be surfaced for review")
+
+local missing_ca_uci, missing_ca_fs, missing_ca_process = status_fixture({
   files = { ["/etc/ssl/certs/ca-certificates.crt"] = false },
 })
-local missing_ca = remote.inspect_status(missing_ca_uci, missing_ca_fs, 5)
+local missing_ca = remote.inspect_status(missing_ca_uci, missing_ca_fs, 5, missing_ca_process)
 assert(missing_ca.tls_status == "unavailable" and not missing_ca.enabled)
 
-local ambiguous_uci, ambiguous_fs = status_fixture({
+local ambiguous_uci, ambiguous_fs, ambiguous_process = status_fixture({
   system_sections = {
     { [".name"] = "system", [".type"] = "system", log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp", log_remote = "1" },
     { [".name"] = "system2", [".type"] = "system", log_ip = "192.0.2.10", log_port = "514", log_proto = "udp", log_remote = "1" },
   },
 })
-local ambiguous_status = remote.inspect_status(ambiguous_uci, ambiguous_fs, 6)
+local ambiguous_status = remote.inspect_status(ambiguous_uci, ambiguous_fs, 6, ambiguous_process)
 assert(not ambiguous_status.available, "ambiguous system UCI sections must not be reported as a verified destination")
 
 print("remote-syslog: destination, transport, sender name, prefix and disabled state validation passed")
