@@ -903,6 +903,13 @@ assert(office.snapshot_office_ipv6_pinhole({
   src = "wan", dest = "corp", dest_ip = "2001:4860:4860::8888",
   dest_port = "443", proto = { "tcp" }, family = "ipv6", target = "ACCEPT",
 }) == nil, "arbitrary administrator firewall rules must never be managed as QuantumGrid pinholes")
+assert(office.snapshot_office_ipv6_pinhole({
+  [".type"] = "rule", [".name"] = "cfg_invalid_enabled",
+  name = "QuantumGrid IPv6 pinhole: bad-enabled",
+  src = "wan", dest = "corp", dest_ip = "2001:4860:4860::8888",
+  dest_port = "443", proto = { "tcp" }, family = "ipv6", target = "ACCEPT",
+  enabled = "yes",
+}) == nil, "managed pinholes with non-canonical enabled options must fail closed")
 
 local pinhole_inventory = office.build_inventory({
   available = true,
