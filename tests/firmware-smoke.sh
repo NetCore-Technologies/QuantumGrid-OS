@@ -21,7 +21,23 @@ grep -Fq 'function M.require_https(http)' "$ROOT/files/usr/lib/lua/luci/quantumg
 RELEASE_WORKFLOW="$ROOT/.github/workflows/firmware-release.yml"
 grep -Fqx '  id-token: write' "$RELEASE_WORKFLOW"
 grep -Fqx '  attestations: write' "$RELEASE_WORKFLOW"
-grep -Fq 'uses: actions/attest@v4' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262' "$ROOT/.github/workflows/ci.yml"
+grep -Fq 'uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065' "$ROOT/.github/workflows/ci.yml"
+grep -Fq 'uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020' "$ROOT/.github/workflows/ci.yml"
+grep -Fq 'uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b' "$ROOT/.github/workflows/pages.yml"
+grep -Fq 'uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b' "$ROOT/.github/workflows/pages.yml"
+grep -Fq 'uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e' "$ROOT/.github/workflows/pages.yml"
+for workflow in "$ROOT"/.github/workflows/*.yml; do
+  if grep -Eq 'uses: [^[:space:]]+@(v[0-9]+|main|master|latest)([[:space:]]|$)' "$workflow"; then
+    echo "ERROR: mutable GitHub Action reference found in $workflow" >&2
+    exit 1
+  fi
+done
 grep -Fq "subject-path: 'dist/*'" "$RELEASE_WORKFLOW"
 grep -Fq 'gh attestation verify' "$ROOT/Docs/RELEASES.md"
 grep -Fq -- '--signer-workflow NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml' "$ROOT/Docs/RELEASES.md"

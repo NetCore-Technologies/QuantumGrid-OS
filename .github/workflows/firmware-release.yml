@@ -46,7 +46,7 @@ jobs:
       QG_BUILD_JOBS: "2"
     steps:
       - name: Checkout QuantumGrid source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned upstream v4
         with:
           fetch-depth: 0
 
@@ -70,7 +70,7 @@ jobs:
             zlib1g-dev zstd
 
       - name: Set up Node.js for the QuantumGrid control centre
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # pinned upstream v4
         with:
           node-version: "22"
           cache: npm
@@ -206,12 +206,12 @@ jobs:
           cat dist/SHA256SUMS
 
       - name: Generate signed SLSA provenance for release assets
-        uses: actions/attest@v4
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # pinned upstream v4
         with:
           subject-path: 'dist/*'
 
       - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # pinned upstream v4
         with:
           name: quantumgrid-aw1000-firmware
           path: dist/*
@@ -220,7 +220,7 @@ jobs:
 
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/qg-v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # pinned upstream v2
         with:
           name: QuantumGrid OS ${{ github.ref_name }}
           generate_release_notes: true
