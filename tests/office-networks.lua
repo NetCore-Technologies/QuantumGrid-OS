@@ -259,49 +259,6 @@ local wifi_aps = {
 local radius_vlan_interfaces = {
   { name = "corp20", protocol = "static", device = "br-lan.20" },
   { name = "guest30", protocol = "static", device = "br-lan.30" },
-  { name = "badwan", protocol = "static", device = "eth1.40" },
-}
-local radius_vlan_bridges = {
-  { name = "br-lan", vlan_filtering = true, ports = { "lan1", "lan2" } },
-  { name = "br-other", vlan_filtering = false, ports = { "lan3" } },
-}
-local radius_vlan_sections = {
-  { name = "vlan20", device = "br-lan", vlan_id = 20, ports = { { name = "lan1", mode = "tagged" } } },
-  { name = "vlan30", device = "br-lan", vlan_id = 30, ports = { { name = "lan2", mode = "tagged" } } },
-}
-local radius_vlan_zones = {
-  { section = "corp_zone", name = "corp", networks = { "corp20" }, input = "REJECT", forward = "REJECT" },
-  { section = "guest_zone", name = "guest", networks = { "guest30" }, input = "DROP", forward = "DROP" },
-  { section = "wan_zone", name = "wan", networks = { "badwan" }, input = "REJECT", forward = "REJECT" },
-}
-local valid_radius_vlans, radius_vlan_error = office.validate_radius_dynamic_vlan_mappings({
-  { vid = "20", network = "corp20" },
-  { vid = "30", network = "guest30" },
-}, radius_vlan_interfaces, radius_vlan_bridges, radius_vlan_sections, radius_vlan_zones)
-assert(valid_radius_vlans ~= nil, radius_vlan_error or "valid RADIUS VLAN mapping should pass")
-assert(#valid_radius_vlans == 2 and valid_radius_vlans[1].vid == "20")
-assert(valid_radius_vlans[1].name == "qg20" and valid_radius_vlans[2].network == "guest30")
-
-local function reject_radius_vlans(mappings, label)
-  local result, err = office.validate_radius_dynamic_vlan_mappings(
-    mappings, radius_vlan_interfaces, radius_vlan_bridges, radius_vlan_sections, radius_vlan_zones)
-  assert(result == nil, label .. " must be rejected")
-  assert(type(err) == "string" and #err > 0, label .. " should explain why it was rejected")
-end
-reject_radius_vlans({}, "empty RADIUS VLAN mapping")
-reject_radius_vlans({ { vid = "0", network = "corp20" } }, "VLAN ID zero")
-reject_radius_vlans({ { vid = "4095", network = "corp20" } }, "out-of-range VLAN ID")
-reject_radius_vlans({ { vid = "20", network = "corp20" }, { vid = "20", network = "guest30" } }, "duplicate RADIUS VLAN ID")
-reject_radius_vlans({ { vid = "20", network = "corp20" }, { vid = "30", network = "corp20" } }, "duplicate routed network")
-reject_radius_vlans({ { vid = "20", network = "wan" } }, "unknown routed network")
-reject_radius_vlans({ { vid = "40", network = "badwan" } }, "external firewall zone")
-reject_radius_vlans({ { vid = "30", network = "guest30" } }, "VLAN ID does not match routed device")
-reject_radius_vlans({ { vid = "20", network = "corp20" } }, "missing VLAN mapping fixture should be handled by existing test")
-reject_radius_vlans({ { vid = "40", network = "corp20" } }, "VLAN ID does not match configured bridge VLAN")
-reject_radius_vlans({ { vid = "20", network = "corp20" } }, "VLAN validation requires bridge filter and matching VLAN")
-local radius_vlan_interfaces = {
-  { name = "corp20", protocol = "static", device = "br-lan.20" },
-  { name = "guest30", protocol = "static", device = "br-lan.30" },
   { name = "wan20", protocol = "static", device = "br-wan.20" },
 }
 local radius_vlan_bridges = {
