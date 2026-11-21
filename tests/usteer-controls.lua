@@ -132,6 +132,17 @@ assert(runtime.associated_clients == 7 and not runtime.local_nodes_truncated)
 assert(runtime.local_nodes[1].ssid == "Corp" and runtime.local_nodes[1].clients >= 0)
 
 local expected_policy = {
+  syslog = true,
+  ipv6 = false,
+  local_mode = false,
+  assoc_steering = false,
+  probe_steering = false,
+  load_kick_enabled = false,
+  min_snr = 0,
+  min_connect_snr = 0,
+  roam_scan_snr = 0,
+  roam_trigger_snr = 0,
+  aggressiveness_override_count = 0,
   aggressiveness = 1,
   assoc_steering = false,
   probe_steering = false,
