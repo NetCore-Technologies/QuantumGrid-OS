@@ -97,4 +97,17 @@ assert(type(wifi_binding_event) == "string" and
   wifi_binding_event:find('"action":"office.wifi.network.update"', 1, true),
   "SSID-to-network binding events must be accepted by the redacted audit log")
 
+for _, action in ipairs({ "office.port-forward.add", "office.port-forward.remove" }) do
+  local event = audit.encode_event({
+    timestamp = 1700000004,
+    actor = "root",
+    remote_ip = "192.0.2.10",
+    action = action,
+    target = "cfg443",
+    outcome = "success",
+  })
+  assert(type(event) == "string" and event:find('"action":"' .. action .. '"', 1, true),
+    "WAN port-forward changes must be accepted by the redacted audit log")
+end
+
 print("audit: allowlist, secret exclusion, escaping, validation and bounded parsing passed")
