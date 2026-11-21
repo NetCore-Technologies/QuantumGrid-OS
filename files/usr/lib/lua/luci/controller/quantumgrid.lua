@@ -7597,7 +7597,7 @@ function action_remote_syslog_update()
 			error = rolled_back and
 				"The TLS service restarted but its live process, exact destination or verified trust configuration could not be confirmed. Previous settings were restored."
 				or "The TLS service did not reach the required live posture and rollback could not be confirmed. Inspect system and stunnel configuration and services locally.",
-			tls_status = resulting.tls_status,
+			tls_status = type(resulting) == "table" and resulting.tls_status or "unknown",
 			rolled_back = rolled_back
 		})
 		return
