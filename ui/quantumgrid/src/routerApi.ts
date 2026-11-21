@@ -223,6 +223,7 @@ export interface RouterSqmQueue {
   linklayer: string;
   overhead?: number;
   tc_mpu?: number;
+  runtime_state: "observed" | "not_observed" | "unavailable" | "unconfigured" | "inventory_truncated" | "disabled";
 }
 
 export interface RouterQdiscState {
@@ -246,6 +247,7 @@ export interface RouterSqmStatus {
   config_readable: boolean;
   queues: RouterSqmQueue[];
   runtime_available: boolean;
+  qdiscs_truncated: boolean;
   qdiscs: RouterQdiscState[];
 }
 
