@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5442,6 +5442,238 @@ function WirelessConfigEditor({
         (radiusSecretBytes < 16 || radiusSecretBytes > 128 || hasAsciiControlCharacters(radiusSecret))
         ? <div className="module-message">RADIUS shared secret must be 16–128 bytes and contain no control characters.</div> : null}
     </div>
+  );
+}
+
+
+function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refresh }: {
+  status?: RouterUsteerStatus;
+  wirelessConfigs?: { available: boolean; sections: RouterWirelessConfig[] };
+  networkInterfaces: RouterOfficeInterface[];
+  refresh: () => void;
+}) {
+  const configs = wirelessConfigs?.available ? wirelessConfigs.sections : [];
+  const ssidOptions = [...new Set(configs
+    .filter((config) => config.ssid.trim() !== "" && !config.interface_disabled && !config.radio_disabled)
+    .map((config) => config.ssid))].sort((left, right) => left.localeCompare(right));
+  const networkOptions = networkInterfaces
+    .filter((item) => item.protocol === "static" && item.device !== "" && item.name !== "loopback")
+    .slice().sort((left, right) => left.name.localeCompare(right.name));
+  const [enabled, setEnabled] = useState(status?.configured_enabled ?? false);
+  const [network, setNetwork] = useState(status?.network ?? networkOptions[0]?.name ?? "");
+  const [ssids, setSsids] = useState<string[]>(status?.ssid_list ?? []);
+  const [aggressiveness, setAggressiveness] = useState(String(status?.aggressiveness ?? 1));
+  const [bandInterval, setBandInterval] = useState(String(status?.band_steering_interval ?? 30000));
+  const [bandMinSnr, setBandMinSnr] = useState(String(status?.band_steering_min_snr ?? -65));
+  const [bandThreshold, setBandThreshold] = useState(String(status?.band_steering_threshold ?? 5));
+  const [loadThreshold, setLoadThreshold] = useState(String(status?.load_balancing_threshold ?? 0));
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const ssidOptionsKey = ssidOptions.join("\u0000");
+
+  useEffect(() => {
+    if (!status || dirty) return;
+    setEnabled(status.configured_enabled);
+    setNetwork(status.network || networkOptions[0]?.name || "");
+    setSsids(status.ssid_list.length > 0 ? status.ssid_list : (ssidOptions[0] ? [ssidOptions[0]] : []));
+    setAggressiveness(String(status.aggressiveness));
+    setBandInterval(String(status.band_steering_interval));
+    setBandMinSnr(String(status.band_steering_min_snr));
+    setBandThreshold(String(status.band_steering_threshold));
+    setLoadThreshold(String(status.load_balancing_threshold));
+    setLoaded(true);
+  }, [status?.sampled_at, status?.configured, status?.network, status?.status, status?.ssid_list.join("\u0000"), ssidOptionsKey, dirty]);
+
+  const selectedAps = configs.filter((config) => ssids.includes(config.ssid) && !config.interface_disabled && !config.radio_disabled);
+  const missingKOrV = ssids.some((ssid) => {
+    const matches = selectedAps.filter((config) => config.ssid === ssid);
+    return matches.length === 0 || matches.some((config) => !config.ieee80211k || !config.ieee80211v);
+  });
+  const wrongNetwork = ssids.some((ssid) => selectedAps
+    .filter((config) => config.ssid === ssid)
+    .some((config) => !config.networks.includes(network)));
+  const allSelectedAvailable = ssids.length >= 1 && ssids.length <= 8 &&
+    ssids.every((ssid) => ssidOptions.includes(ssid));
+  const numericSettingsValid = [aggressiveness, bandInterval, bandMinSnr, bandThreshold, loadThreshold]
+    .every((value) => value.trim() !== "" && Number.isFinite(Number(value)) && Number.isInteger(Number(value)));
+  const safeReady = !enabled || (network !== "" && allSelectedAvailable && !missingKOrV &&
+    !wrongNetwork && numericSettingsValid && networkOptions.some((item) => item.name === network));
+  const statusLabel = !status ? "WAITING" : status.status === "cluster" ? "CLUSTER PEERS" :
+    status.status === "local_only" ? "LOCAL ONLY" : status.status.replaceAll("_", " ").toUpperCase();
+  const markDirty = () => { setDirty(true); setNotice(null); };
+
+  const save = async () => {
+    if (!confirmed || !loaded || saving || !safeReady) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterUsteer({
+        enabled,
+        network,
+        ssids,
+        aggressiveness: Number(aggressiveness),
+        bandSteeringInterval: Number(bandInterval),
+        bandSteeringMinSnr: Number(bandMinSnr),
+        bandSteeringThreshold: Number(bandThreshold),
+        loadBalancingThreshold: Number(loadThreshold),
+      });
+      setEnabled(result.enabled);
+      setNetwork(result.network);
+      setSsids(result.ssid_list);
+      setAggressiveness(String(result.aggressiveness));
+      setBandInterval(String(result.band_steering_interval));
+      setBandMinSnr(String(result.band_steering_min_snr));
+      setBandThreshold(String(result.band_steering_threshold));
+      setLoadThreshold(String(result.load_balancing_threshold));
+      setDirty(false);
+      setConfirmed(false);
+      setNotice({
+        success: true,
+        message: result.enabled
+          ? result.remote_host_count > 0
+            ? "uSteer is running. " + result.remote_host_count + " remote AP peer(s) are currently observed. Client movement is not inferred from peer presence."
+            : "uSteer is running locally, but no remote AP peers are currently observed. Multi-AP roaming is not yet established."
+          : "uSteer has been stopped and disabled at boot.",
+      });
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The uSteer roaming service could not be updated.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="Multi-AP roaming assist"
+      eyebrow="USTEER · 802.11K NEIGHBOR REPORTS · 802.11V BSS TRANSITIONS"
+      action={<Status active={Boolean(status?.running)}>{statusLabel}</Status>}
+    >
+      {!status?.available ? (
+        <div className="module-message">The uSteer daemon, service script or configuration is unavailable in this firmware. The AW1000 build includes usteer; confirm the installed package set and /etc/config/usteer.</div>
+      ) : !status.configured ? (
+        <div className="module-message">QuantumGrid requires exactly one valid usteer UCI section. Resolve missing or duplicate sections before enabling managed roaming.</div>
+      ) : (
+        <>
+          <div className="module-grid">
+            <div className="module-message">
+              <strong>Live service view</strong>
+              <div>{status.running ? "Daemon responds over ubus." : status.status === "disabled" ? "Daemon is stopped or disabled at boot." : "Daemon runtime is not currently observable."}</div>
+              <div>{status.local_node_count} local BSS · {status.associated_clients} associated client(s) · {status.remote_host_count} remote AP peer(s)</div>
+              {status.local_nodes_truncated || status.remote_hosts_truncated
+                ? <div>Runtime inventory is truncated; counts are upper-bounded samples.</div>
+                : null}
+              {!status.remote_hosts_available && status.running
+                ? <div>Remote peer telemetry is unavailable; a zero peer count is not assumed.</div>
+                : status.remote_host_count === 0 && status.running
+                  ? <div>No remote AP peer has been observed. Confirm that every AP is running usteer on the same inter-AP network.</div>
+                  : null}
+            </div>
+            <div className="module-message">
+              <strong>Steering safety</strong>
+              <div>Probe rejection and association rejection stay disabled. Aggressiveness is capped below forced disassociation. The daemon is opt-in and is never enabled on first boot.</div>
+              <div>Each local AP in a selected ESS must use one trusted network, identical security credentials, and 802.11k plus 802.11v.</div>
+            </div>
+          </div>
+          {status.status === "review" ? (
+            <div className="module-message" role="alert">The live usteer configuration does not match its persisted policy. Review service state before changing the roaming profile.</div>
+          ) : null}
+          <div className="wireless-config-options">
+            <label>
+              <input type="checkbox" checked={enabled} disabled={saving} onChange={(event) => { setEnabled(event.target.checked); markDirty(); }} />
+              <span>Enable managed multi-AP roaming</span>
+            </label>
+          </div>
+          {enabled ? (
+            <>
+              <div className="office-editor-grid">
+                <label className="wireless-config-field">
+                  <span>INTER-AP NETWORK</span>
+                  <select value={network} disabled={saving} onChange={(event) => { setNetwork(event.target.value); markDirty(); }}>
+                    <option value="">Choose an existing internal network</option>
+                    {networkOptions.map((item) => (
+                      <option value={item.name} key={item.name}>{item.name} · {item.device || item.l3_device || "device unavailable"}</option>
+                    ))}
+                  </select>
+                  <small>Must resolve to one existing static L3 interface and one trusted internal firewall zone. WAN, masquerading and ambiguous mappings are rejected by the router.</small>
+                </label>
+                <label className="wireless-config-field">
+                  <span>BSS-TRANSITION AGGRESSIVENESS</span>
+                  <select value={aggressiveness} disabled={saving} onChange={(event) => { setAggressiveness(event.target.value); markDirty(); }}>
+                    <option value="0">0 · No active transition</option>
+                    <option value="1">1 · Passive BSS transition request</option>
+                    <option value="2">2 · Disassociation imminent</option>
+                    <option value="3">3 · Disassociation timer</option>
+                  </select>
+                  <small>Forced disassociation level 4 is not available in this managed profile.</small>
+                </label>
+              </div>
+              <div className="wireless-config-options">
+                {ssidOptions.map((ssid) => (
+                  <label key={ssid}>
+                    <input
+                      type="checkbox"
+                      checked={ssids.includes(ssid)}
+                      disabled={saving}
+                      onChange={(event) => {
+                        setSsids((current) => event.target.checked
+                          ? [...current, ssid].sort()
+                          : current.filter((item) => item !== ssid));
+                        markDirty();
+                      }}
+                    />
+                    <span>{ssid}</span>
+                  </label>
+                ))}
+              </div>
+              {ssidOptions.length === 0 ? (
+                <div className="module-message">No active, named local AP SSIDs are available to add to the roaming allowlist.</div>
+              ) : null}
+              <div className="office-editor-grid">
+                <label className="wireless-config-field">
+                  <span>BAND-STEERING INTERVAL (MS)</span>
+                  <input type="number" min="0" max="300000" step="1000" value={bandInterval} disabled={saving} onChange={(event) => { setBandInterval(event.target.value); markDirty(); }} />
+                </label>
+                <label className="wireless-config-field">
+                  <span>MINIMUM SIGNAL (DBM)</span>
+                  <input type="number" min="-90" max="-35" step="1" value={bandMinSnr} disabled={saving} onChange={(event) => { setBandMinSnr(event.target.value); markDirty(); }} />
+                </label>
+                <label className="wireless-config-field">
+                  <span>BAND CLIENT THRESHOLD</span>
+                  <input type="number" min="0" max="20" step="1" value={bandThreshold} disabled={saving} onChange={(event) => { setBandThreshold(event.target.value); markDirty(); }} />
+                </label>
+                <label className="wireless-config-field">
+                  <span>LOAD-BALANCING CLIENT THRESHOLD</span>
+                  <input type="number" min="0" max="32" step="1" value={loadThreshold} disabled={saving} onChange={(event) => { setLoadThreshold(event.target.value); markDirty(); }} />
+                </label>
+              </div>
+              {missingKOrV ? <div className="module-message">Enable both 802.11k neighbor reports and 802.11v BSS transitions on every active local AP broadcasting each selected SSID.</div> : null}
+              {wrongNetwork ? <div className="module-message">Every active local AP selected for roaming must attach to the same inter-AP network.</div> : null}
+              {!allSelectedAvailable ? <div className="module-message">Select at least one existing active local SSID. The server checks all APs sharing each selected SSID and requires matching security credentials.</div> : null}
+            </>
+          ) : (
+            <div className="module-message">Roaming is disabled. Saving will stop the daemon and remove its boot start link while preserving the existing policy for later reuse.</div>
+          )}
+          <label className="wireless-config-confirm">
+            <input type="checkbox" checked={confirmed} disabled={saving} onChange={(event) => setConfirmed(event.target.checked)} />
+            <span>I confirm the selected SSIDs and shared inter-AP network, and authorize QuantumGrid to restart or stop usteer.</span>
+          </label>
+          {notice ? <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>{notice.message}</div> : null}
+          <div className="wireless-config-actions">
+            <button className="hero-button" disabled={!loaded || !confirmed || saving || (enabled && !safeReady)} onClick={() => void save()}>
+              {saving ? "Applying roaming policy…" : enabled ? "Enable & start roaming" : "Stop & disable roaming"}
+            </button>
+          </div>
+          <div className="module-message">A running daemon with zero remote peers is not a working multi-AP cluster. Remote peer discovery, client acceptance of BSS transitions and actual roam events are separate measurements; this page does not claim those outcomes from service startup alone.</div>
+        </>
+      )}
+    </Panel>
   );
 }
 
