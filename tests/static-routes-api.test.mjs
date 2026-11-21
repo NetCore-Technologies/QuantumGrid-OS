@@ -115,7 +115,7 @@ test("static route client rejects unsafe and malformed values before fetch", asy
   );
   await assert.rejects(
     createRouterStaticRoute({ ...ipv4Input, target: "10.40.1.0/16" }),
-    /IPv4 network CIDR/,
+    /canonical network CIDR/,
   );
   await assert.rejects(
     createRouterStaticRoute({ ...ipv4Input, target: "0.0.0.0/0" }),
