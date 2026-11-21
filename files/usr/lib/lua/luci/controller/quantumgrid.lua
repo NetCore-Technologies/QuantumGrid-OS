@@ -3278,6 +3278,156 @@ local function office_network_status(uci, fs)
 end
 
 
+local function usteer_access_point_inventory(uci)
+	local result = {}
+	local total = 0
+	local ok = pcall(function()
+		uci:foreach("wireless", "wifi-iface", function(section)
+			if section.mode ~= "ap" then return end
+			total = total + 1
+			if #result >= 64 then return end
+			local name = type(section[".name"]) == "string" and section[".name"] or ""
+			local radio = type(section.device) == "string" and section.device or ""
+			if not name:match("^[%w_.%-]+$") or not radio:match("^[%w_.%-]+$") then return end
+			local radio_ok, radio_type = pcall(uci.get, uci, "wireless", radio, ".type")
+			if not radio_ok or radio_type ~= "wifi-device" then return end
+			local networks = {}
+			for _, network in ipairs(wireless_option_list(section.network)) do
+				if type(network) == "string" and network:match("^[%w_.%-]+$") then
+					table.insert(networks, network)
+				end
+			end
+			local encryption = type(section.encryption) == "string" and section.encryption or "none"
+			table.insert(result, {
+				section = name,
+				radio = radio,
+				mode = "ap",
+				ssid = type(section.ssid) == "string" and section.ssid or "",
+				networks = networks,
+				encryption = encryption,
+				key = type(section.key) == "string" and section.key or "",
+				auth_server = type(section.auth_server) == "string" and section.auth_server or "",
+				auth_port = tonumber(section.auth_port) or 1812,
+				auth_secret = type(section.auth_secret) == "string" and section.auth_secret or "",
+				ieee80211k = section.ieee80211k == "1" and "1" or "0",
+				ieee80211v = section.ieee80211v == "1" and "1" or "0",
+				disabled = section.disabled == "1",
+				radio_disabled = uci:get("wireless", radio, "disabled") == "1"
+			})
+		end)
+	end)
+	return {
+		available = ok,
+		truncated = total > #result,
+		count = total,
+		access_points = result
+	}
+end
+
+local function usteer_status(uci, fs)
+	local manager = require "luci.quantumgrid.usteer"
+	local service_installed = fs.access("/etc/init.d/usteer") == true
+	local binary_installed = fs.access("/sbin/usteerd") == true
+	local config_available = fs.access("/etc/config/usteer") == true
+	local init_enabled = fs.access("/etc/rc.d/S50usteer") == true
+	local section_count = 0
+	local section = nil
+	local section_ok = config_available and pcall(function()
+		uci:foreach("usteer", "usteer", function(candidate)
+			section_count = section_count + 1
+			if section_count == 1 then section = candidate end
+		end)
+	end) or false
+	local configured = section_ok and section_count == 1 and
+		type(section) == "table" and section[".type"] == "usteer"
+	local result = {
+		available = service_installed and binary_installed and config_available,
+		service_installed = service_installed,
+		binary_installed = binary_installed,
+		config_available = config_available,
+		configured = configured,
+		configured_enabled = configured and section.enabled ~= "0",
+		init_enabled = init_enabled,
+		running = false,
+		status = "unavailable",
+		network = "",
+		ssid_list = {},
+		aggressiveness = tonumber(section and section.aggressiveness) or 1,
+		assoc_steering = section and section.assoc_steering == "1" or false,
+		probe_steering = section and section.probe_steering == "1" or false,
+		local_mode = section and section.local_mode == "1" or false,
+		band_steering_interval = tonumber(section and section.band_steering_interval) or 0,
+		band_steering_min_snr = tonumber(section and section.band_steering_min_snr) or -60,
+		band_steering_threshold = tonumber(section and section.band_steering_threshold) or 5,
+		load_balancing_threshold = tonumber(section and section.load_balancing_threshold) or 0,
+		local_node_count = 0,
+		local_nodes_truncated = false,
+		remote_host_count = 0,
+		remote_hosts_truncated = false,
+		associated_clients = 0,
+		local_nodes = {},
+		remote_hosts_available = false,
+		sampled_at = os.time()
+	}
+	if not result.available or not configured then return result end
+
+	result.network = type(section.network) == "string" and section.network or ""
+	result.ssid_list = wireless_option_list(section.ssid_list)
+	if not result.configured_enabled or not init_enabled then
+		result.status = "disabled"
+		return result
+	end
+
+	local runtime_config = ubus_call("usteer", "get_config", {})
+	local local_nodes = ubus_call("usteer", "local_info", {})
+	local remote_hosts = ubus_call("usteer", "remote_hosts", {})
+	local runtime = manager.summarize_runtime(
+		type(runtime_config) == "table" and runtime_config or nil,
+		type(local_nodes) == "table" and local_nodes or nil,
+		type(remote_hosts) == "table" and remote_hosts or nil
+	)
+	result.running = type(runtime_config) == "table" and type(local_nodes) == "table"
+	result.local_node_count = runtime.local_node_count
+	result.local_nodes_truncated = runtime.local_nodes_truncated
+	result.remote_host_count = runtime.remote_host_count
+	result.remote_hosts_truncated = runtime.remote_hosts_truncated
+	result.associated_clients = runtime.associated_clients
+	result.local_nodes = runtime.local_nodes
+	result.remote_hosts_available = type(remote_hosts) == "table"
+	if not result.running then
+		result.status = "not_running"
+		return result
+	end
+
+	local function same_string_list(left, right)
+		if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then return false end
+		local a, b = {}, {}
+		for _, value in ipairs(left) do a[#a + 1] = tostring(value) end
+		for _, value in ipairs(right) do b[#b + 1] = tostring(value) end
+		table.sort(a)
+		table.sort(b)
+		for index = 1, #a do if a[index] ~= b[index] then return false end end
+		return true
+	end
+	local runtime_matches = tonumber(runtime_config.aggressiveness) == result.aggressiveness and
+		tostring(runtime_config.local_mode == true and "1" or "0") == (result.local_mode and "1" or "0") and
+		tostring(runtime_config.assoc_steering == true and "1" or "0") == (result.assoc_steering and "1" or "0") and
+		tostring(runtime_config.band_steering_interval or 0) == tostring(result.band_steering_interval) and
+		tostring(runtime_config.band_steering_min_snr or -60) == tostring(result.band_steering_min_snr) and
+		tostring(runtime_config.band_steering_threshold or 5) == tostring(result.band_steering_threshold) and
+		tostring(runtime_config.load_balancing_threshold or 0) == tostring(result.load_balancing_threshold) and
+		same_string_list(runtime_config.ssid_list or {}, result.ssid_list)
+	if not runtime_matches then
+		result.status = "review"
+	elseif result.remote_host_count > 0 then
+		result.status = "cluster"
+	else
+		result.status = "local_only"
+	end
+	return result
+end
+
+
 local function remote_syslog_status(uci, fs)
 	local remote_syslog = require "luci.quantumgrid.remote_syslog"
 	local pid_contents = read_file("/var/run/stunnel/stunnel.pid")
