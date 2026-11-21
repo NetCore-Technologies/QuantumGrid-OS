@@ -3364,6 +3364,8 @@ local function remote_syslog_status(uci, fs)
 	result.tls_enabled = tunnel.enabled == "1"
 	if not result.tls_available then
 		result.tls_status = "unavailable"
+	elseif not result.tls_privilege_drop_configured then
+		result.tls_status = "review"
 	elseif not tls_configured then
 		result.tls_status = "review"
 	elseif not result.tls_enabled then
@@ -3371,13 +3373,14 @@ local function remote_syslog_status(uci, fs)
 	else
 		result.tls_status = "ready"
 	end
-	result.enabled = result.enabled and result.tls_enabled and tls_configured and result.tls_available
+	result.enabled = result.enabled and result.tls_enabled and tls_configured and
+		result.tls_available and result.tls_privilege_drop_configured
 	if not result.tls_available then
-		result.tls_error = "The stunnel service or trusted CA bundle is unavailable."
+		result.tls_error = "The stunnel service, UCI configuration or trusted CA bundle is unavailable."
+	elseif not result.tls_privilege_drop_configured then
+		result.tls_error = "The stunnel global configuration must drop privileges to a non-root user and group."
 	elseif not tls_configured then
-		result.tls_error = result.tls_privilege_drop_configured and
-			"TLS verification, local listener or remote certificate identity configuration is incomplete." or
-			"The stunnel global configuration must drop privileges to a non-root user and group."
+		result.tls_error = "TLS 1.2, chain verification, local listener or remote certificate identity configuration is incomplete."
 	end
 	return result
 end
