@@ -96,6 +96,18 @@ function validate(input)
 	return result
 end
 
+local function non_root_identity(value)
+	if type(value) ~= "string" or value == "" then return false end
+	local normalized = value:lower():match("^%s*(.-)%s*$")
+	return normalized ~= "root" and normalized ~= "0" and
+		(not tonumber(normalized) or tonumber(normalized) > 0)
+end
+
+function has_non_root_privilege_drop(globals)
+	return type(globals) == "table" and globals[".type"] == "globals" and
+		non_root_identity(globals.setuid) and non_root_identity(globals.setgid)
+end
+
 function stunnel_options(update)
 	if type(update) ~= "table" or update.enabled ~= true or type(update.tls) ~= "table" then
 		return nil
