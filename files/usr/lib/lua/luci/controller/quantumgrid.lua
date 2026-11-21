@@ -4976,7 +4976,7 @@ function action_sqm_client_qos_add()
 	end
 	record_audit(http, "sqm.client-qos.add", section, "success")
 	respond(nil, {
-		ok = true, section = section, mac = update.mac,
+		ok = true, section = section, mac = update.mac, direction = "upload", protocol = "all",
 		source_zone = update.source_zone, destination_zone = update.destination_zone,
 		dscp_class = update.dscp_class, reloaded = true, rolled_back = false
 	})
@@ -5089,7 +5089,7 @@ function action_sqm_client_qos_download_add()
 	end
 	record_audit(http, "sqm.client-qos.download.add", section, "success")
 	respond(nil, {
-		ok = true, section = section, direction = "download",
+		ok = true, section = section, direction = "download", protocol = "all",
 		mac = update.mac, destination_ip = update.destination_ip,
 		source_zone = update.source_zone, destination_zone = update.destination_zone,
 		dscp_class = update.dscp_class, reloaded = true, rolled_back = false
@@ -5170,6 +5170,8 @@ function action_sqm_client_qos_remove()
 	record_audit(http, "sqm.client-qos.remove", valid_section, "success")
 	respond(nil, {
 		ok = true, section = valid_section, mac = summary.mac,
+		direction = summary.direction, protocol = summary.protocol,
+		destination_ip = summary.destination_ip,
 		source_zone = summary.source_zone, destination_zone = summary.destination_zone,
 		dscp_class = summary.dscp_class, removed = true, reloaded = true, rolled_back = false
 	})
