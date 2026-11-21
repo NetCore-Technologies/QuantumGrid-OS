@@ -4363,6 +4363,9 @@ function action_config_restore()
     local rollback_path = nil
     local restore_lock_acquired = false
     local restore_lock_path = "/tmp/quantumgrid-config-archive.lock"
+    local restore_authorized = false
+    local restore_audit_recorded = false
+    local restore_audit_target = "preflight"
 
     local function respond(status, payload)
         if status then
@@ -4390,7 +4393,15 @@ function action_config_restore()
         end
     end
 
+    local function audit_restore(outcome)
+        if not restore_authorized or restore_audit_recorded then return false end
+        local recorded = record_audit(http, "system.config.restore", restore_audit_target, outcome)
+        if recorded then restore_audit_recorded = true end
+        return recorded
+    end
+
     local function fail(status, message, extra, preserve_rollback)
+        audit_restore("failed")
         cleanup(preserve_rollback)
         local payload = { ok = false, error = message }
         if type(extra) == "table" then
@@ -4408,41 +4419,43 @@ function action_config_restore()
         respond(403, { ok = false, error = "A same-origin request is required." })
         return
     end
+    restore_authorized = true
     local content_type = http.getenv("CONTENT_TYPE") or ""
     local normalized_content_type = content_type:lower():match("^%s*([^;%s]+)")
     if normalized_content_type ~= "application/gzip" and normalized_content_type ~= "application/octet-stream" then
-        respond(400, { ok = false, error = "The decrypted configuration archive must be streamed as application/gzip." })
+        fail(400, "The decrypted configuration archive must be streamed as application/gzip.")
         return
     end
     local content_length = http.getenv("CONTENT_LENGTH")
     if content_length and content_length ~= "" then
         if not content_length:match("^%d+$") or tonumber(content_length) > MAX_UPLOAD_BYTES + 1024 * 1024 then
-            respond(413, { ok = false, error = "The configuration archive upload exceeds the 64 MiB restore limit." })
+            fail(413, "The configuration archive upload exceeds the 64 MiB restore limit.")
             return
         end
     end
     if fs.access("/sbin/sysupgrade") ~= true or fs.access("/bin/tar") ~= true or
         fs.access("/sbin/reboot") ~= true or fs.access("/bin/sleep") ~= true or
         fs.access("/bin/mkdir") ~= true or fs.access("/bin/rmdir") ~= true then
-        respond(503, { ok = false, error = "Native sysupgrade, tar or reboot utilities are unavailable; no configuration was changed." })
+        fail(503, "Native sysupgrade, tar or reboot utilities are unavailable; no configuration was changed.")
         return
     end
 
     local context, context_error = quantumgrid_backup_context(fs)
     if not context then
-        respond(503, { ok = false, error = context_error })
+        fail(503, context_error)
         return
     end
+    restore_audit_target = context.profile_id
     local backup_paths_ok, backup_paths_error = ensure_sysupgrade_backup_paths()
     if not backup_paths_ok then
-        respond(503, { ok = false, error = backup_paths_error })
+        fail(503, backup_paths_error)
         return
     end
 
     local lock_ok, lock_status = pcall(sys.call,
         "/bin/mkdir " .. restore_lock_path .. " >/dev/null 2>&1")
     if not lock_ok or lock_status ~= 0 then
-        respond(409, { ok = false, error = "Another configuration restore is already active, or the restore lock could not be acquired. No archive was applied." })
+        fail(409, "Another configuration restore is already active, or the restore lock could not be acquired. No archive was applied.")
         return
     end
     restore_lock_acquired = true
@@ -4596,7 +4609,7 @@ function action_config_restore()
         local rollback_ok, rollback_status = pcall(sys.call,
             "/sbin/sysupgrade -r " .. rollback_path .. " >/dev/null 2>&1")
         local rolled_back = rollback_ok and rollback_status == 0
-        record_audit(http, "system.config.restore", context.profile_id, "failed")
+        audit_restore("failed")
         if rolled_back then
             cleanup()
             local reboot_ok, reboot_status = pcall(sys.call,
@@ -4618,7 +4631,7 @@ function action_config_restore()
         return
     end
 
-    record_audit(http, "system.config.restore", context.profile_id, "success")
+    audit_restore("success")
     local reboot_ok, reboot_status = pcall(sys.call,
         "( /bin/sleep 3; /sbin/reboot ) >/dev/null 2>&1 </dev/null &")
     local reboot_scheduled = reboot_ok and reboot_status == 0
