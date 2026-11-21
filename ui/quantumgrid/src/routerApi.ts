@@ -990,6 +990,7 @@ export interface RouterOfficeInterface {
   netmask: string;
   ip6assign: string;
   ipv6: string[];
+  ipv6_neighbors: Array<{ address: string; mac: string; state: string }>;
   vlan_ids: number[];
   firewall_zones: string[];
   wifi_aps: RouterOfficeWifiAp[];
