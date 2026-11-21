@@ -1548,6 +1548,8 @@ export async function updateRouterWirelessConfig(input: {
   if ("error" in payload && typeof payload.error === "string") {
     throw new Error(payload.error);
   }
+  const expectedRadiusVlans = [...input.radiusVlans].sort((left, right) =>
+    Number(left.vid) - Number(right.vid));
   if (
     !response.ok || !("ok" in payload) || payload.ok !== true ||
     !("radio" in payload) || payload.radio !== input.radio ||
@@ -1571,11 +1573,11 @@ export async function updateRouterWirelessConfig(input: {
       !("radius_vlan_count" in payload) ||
       payload.radius_vlan_count !== input.radiusVlans.length ||
       !("radius_vlan_mappings" in payload) || !Array.isArray(payload.radius_vlan_mappings) ||
-      payload.radius_vlan_mappings.length !== input.radiusVlans.length ||
+      payload.radius_vlan_mappings.length !== expectedRadiusVlans.length ||
       payload.radius_vlan_mappings.some((mapping, index) =>
         typeof mapping !== "object" || mapping === null ||
-        !("vid" in mapping) || mapping.vid !== input.radiusVlans[index].vid ||
-        !("network" in mapping) || mapping.network !== input.radiusVlans[index].network
+        !("vid" in mapping) || mapping.vid !== expectedRadiusVlans[index].vid ||
+        !("network" in mapping) || mapping.network !== expectedRadiusVlans[index].network
       )
     ))
   ) {
