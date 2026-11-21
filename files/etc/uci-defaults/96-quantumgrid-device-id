@@ -1,0 +1,63 @@
+#!/bin/sh
+set -eu
+
+ID_FILE="${1:-/etc/quantumgrid/device-id}"
+case "$ID_FILE" in
+    /*/*) ;;
+    *) echo "QuantumGrid device identity path must be absolute." >&2; exit 1 ;;
+esac
+ID_DIR="${ID_FILE%/*}"
+[ -n "$ID_DIR" ] || ID_DIR="/"
+mkdir -p "$ID_DIR"
+
+valid_device_id() {
+    [ ! -L "$ID_FILE" ] || return 1
+    [ -f "$ID_FILE" ] || return 1
+    local_bytes="$(wc -c < "$ID_FILE" | tr -d '[:space:]')"
+    [ "$local_bytes" = "32" ] || [ "$local_bytes" = "33" ] || return 1
+    local_id="$(cat "$ID_FILE")" || return 1
+    [ "${#local_id}" -eq 32 ] || return 1
+    case "$local_id" in
+        *[!0123456789abcdef]*|'') return 1 ;;
+    esac
+    return 0
+}
+
+# Never silently replace an existing identity: inventory references must remain stable.
+if [ -e "$ID_FILE" ] || [ -L "$ID_FILE" ]; then
+    if valid_device_id; then
+        exit 0
+    fi
+    if command -v logger >/dev/null 2>&1; then
+        logger -t quantumgrid-device-id "Existing device identity is invalid; leaving it unchanged"
+    fi
+    exit 0
+fi
+
+DEVICE_ID="$(/usr/bin/openssl rand -hex 16)" || {
+    echo "Could not generate QuantumGrid device identity." >&2
+    exit 1
+}
+case "$DEVICE_ID" in
+    *[!0123456789abcdef]*|'') echo "OpenSSL returned an invalid device identity." >&2; exit 1 ;;
+esac
+[ "${#DEVICE_ID}" -eq 32 ] || {
+    echo "OpenSSL returned an invalid device identity length." >&2
+    exit 1
+}
+
+TEMP_FILE="${ID_FILE}.tmp.$$"
+if [ -e "$TEMP_FILE" ] || [ -L "$TEMP_FILE" ]; then
+    echo "QuantumGrid device identity temporary path already exists." >&2
+    exit 1
+fi
+cleanup() { rm -f "$TEMP_FILE"; }
+trap cleanup EXIT HUP INT TERM
+(
+    umask 077
+    set -C
+    printf '%s\n' "$DEVICE_ID" > "$TEMP_FILE"
+)
+chmod 0644 "$TEMP_FILE"
+mv "$TEMP_FILE" "$ID_FILE"
+trap - EXIT HUP INT TERM
