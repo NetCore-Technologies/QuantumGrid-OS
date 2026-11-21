@@ -1976,10 +1976,12 @@ function NetworkControlPage({
   routerOverview,
   stats,
   interfaceCounterDeltas,
+  refresh,
 }: {
   routerOverview: RouterOverview | null;
   stats: Stats;
   interfaceCounterDeltas: Map<string, InterfaceCounterDelta>;
+  refresh: () => void;
 }) {
   const interfaces = routerOverview?.interfaces ?? [];
   const routes = routerOverview?.routes ?? [];
@@ -3088,9 +3090,9 @@ function SecurityControlPage({ routerOverview, wireGuardPeerRates }: { routerOve
   const sshPorts = enabledSshInstances
     .map((instance) => instance.name + ": " + (instance.port_valid ? String(instance.port ?? "UNKNOWN") : "INVALID"))
     .join(", ") || "NONE / UNKNOWN";
-  const sshPasswordAuthValues = enabledSshInstances.map((instance) => instance.password_auth_enabled);
-  const sshRootPasswordAuthValues = enabledSshInstances.map((instance) => instance.root_password_auth_enabled);
-  const sshGatewayPortsValues = enabledSshInstances.map((instance) => instance.gateway_ports_enabled);
+  const sshPasswordAuthValues = enabledSshInstances.map((instance) => instance.password_auth_enabled ?? null);
+  const sshRootPasswordAuthValues = enabledSshInstances.map((instance) => instance.root_password_auth_enabled ?? null);
+  const sshGatewayPortsValues = enabledSshInstances.map((instance) => instance.gateway_ports_enabled ?? null);
   const summarizeSshOption = (values: Array<boolean | null>) => {
     if (!managementTransport?.ssh_config_available) return "UNKNOWN";
     if (values.length === 0) return "NOT ENABLED";
@@ -3985,7 +3987,7 @@ function DashboardPage({
   const inventoryAvailable = Array.isArray(routerOverview?.clients);
 
   if (page === "phone") return <PhonePage routerOverview={routerOverview} />;
-  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} interfaceCounterDeltas={interfaceCounterDeltas} />;
+  if (page === "network") return <NetworkControlPage routerOverview={routerOverview} stats={stats} interfaceCounterDeltas={interfaceCounterDeltas} refresh={refresh} />;
   if (page === "diagnostics") return <DiagnosticsControlPage stats={stats} telemetryError={telemetryError} routerOverview={routerOverview} refresh={refresh} />;
   if (page === "system") return <SystemControlPage routerOverview={routerOverview} stats={stats} refresh={refresh} />;
   if (page === "analytics") return <AnalyticsControlPage stats={stats} trafficHistory={trafficHistory} />;
