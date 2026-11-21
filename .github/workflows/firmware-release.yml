@@ -161,9 +161,8 @@ jobs:
           [[ -s dist/OPENWRT-FEEDS.txt ]] || { echo "OpenWrt feed revision report is missing." >&2; exit 1; }
 
           MANIFEST="$(find "$IMAGE_DIR" -maxdepth 1 -type f -name '*arcadyan_aw1000*.manifest' -print -quit)"
-          if [[ -n "$MANIFEST" ]]; then
-            cp "$MANIFEST" "dist/QuantumGrid-OS-${VERSION}-AW1000-PACKAGE-MANIFEST.txt"
-          fi
+          [[ -n "$MANIFEST" && -s "$MANIFEST" ]] || { echo "The AW1000 installed-package manifest is required to produce an accurate SBOM." >&2; exit 1; }
+          cp "$MANIFEST" "dist/QuantumGrid-OS-${VERSION}-AW1000-PACKAGE-MANIFEST.txt"
 
           git -C third_party/openwrt-aw1000-phone archive --format=tar.gz \
             --output="dist/QuantumGrid-OS-${VERSION}-AW1000-phone-source.tar.gz" HEAD
@@ -228,6 +227,20 @@ jobs:
           cp Docs/PHONE-PORT.md dist/PHONE-PORT.md
           cp Docs/RECOVERY.md dist/RECOVERY.md
           cp configs/aw1000-max.config dist/aw1000-max.config
+
+          python3 -m py_compile scripts/generate-aw1000-sbom.py
+          python3 scripts/generate-aw1000-sbom.py \
+            --manifest "dist/QuantumGrid-OS-${VERSION}-AW1000-PACKAGE-MANIFEST.txt" \
+            --firmware-image "dist/QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi" \
+            --packages-archive "$PACKAGE_ARCHIVE" \
+            --output "dist/QuantumGrid-OS-${VERSION}-AW1000-SBOM.cdx.json" \
+            --version "$VERSION" \
+            --target "qualcommax/ipq807x" \
+            --profile "arcadyan_aw1000" \
+            --build-profile "$BUILD_PROFILE" \
+            --source-commit "$SOURCE_SHA" \
+            --openwrt-commit "$OPENWRT_SHA"
+          [[ -s "dist/QuantumGrid-OS-${VERSION}-AW1000-SBOM.cdx.json" ]] || { echo "CycloneDX SBOM was not generated." >&2; exit 1; }
 
           (
             cd dist
