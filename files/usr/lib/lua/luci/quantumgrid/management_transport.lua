@@ -155,6 +155,86 @@ local function authorized_keys_status(fs)
   return result
 end
 
+local function https_private_key_status(fs)
+  local result = {
+    available = false,
+    path = "/etc/uhttpd.key",
+    size_bytes = nil,
+    root_owned = nil,
+    regular_file = nil,
+    owner_readable = nil,
+    group_access = nil,
+    other_access = nil,
+    status = "missing"
+  }
+
+  if not exists(fs, result.path) then return result end
+  result.available = true
+  if type(fs.stat) ~= "function" then
+    result.status = "unknown"
+    return result
+  end
+
+  local ok, stat = pcall(fs.stat, result.path)
+  if not ok or type(stat) ~= "table" then
+    result.status = "unknown"
+    return result
+  end
+  if type(stat.size) == "number" and stat.size >= 0 then
+    result.size_bytes = stat.size
+  end
+  if type(stat.uid) == "number" then
+    result.root_owned = stat.uid == 0
+  end
+  if type(stat.mode) == "number" then
+    local permissions = stat.mode % 512
+    local file_type = math.floor(stat.mode / 4096) % 16
+    result.regular_file = file_type == 8
+    result.owner_readable = math.floor(permissions / 256) % 2 == 1
+    result.group_access = math.floor(permissions / 8) % 8 ~= 0
+    result.other_access = permissions % 8 ~= 0
+  end
+
+  if result.size_bytes == nil or result.root_owned == nil or
+    result.regular_file == nil or result.owner_readable == nil or
+    result.group_access == nil or result.other_access == nil then
+    result.status = "unknown"
+  elseif result.size_bytes == 0 or result.size_bytes > 65536 or
+    not result.root_owned or not result.regular_file or not result.owner_readable or
+    result.group_access or result.other_access then
+    result.status = "review"
+  else
+    result.status = "present"
+  end
+  return result
+end
+
+function M.parse_certificate_fingerprint(output)
+  local result = {
+    available = false,
+    algorithm = "SHA-256",
+    value = nil
+  }
+  if type(output) ~= "string" or #output > 4096 then return result end
+
+  local lower = output:lower()
+  local _, finish = lower:find("sha256%s+fingerprint%s*=%s*")
+  if not finish then return result end
+
+  local raw = output:sub(finish + 1):match("^([%x:]+)")
+  if not raw then return result end
+  local compact = raw:gsub(":", "")
+  if #compact ~= 64 or not compact:match("^[%x]+$") then return result end
+
+  local bytes = {}
+  for index = 1, #compact, 2 do
+    table.insert(bytes, compact:sub(index, index + 1):upper())
+  end
+  result.available = true
+  result.value = table.concat(bytes, ":")
+  return result
+end
+
 local function dropbear_status(uci, fs)
   local result = {
     ssh_service_installed = exists(fs, "/etc/init.d/dropbear"),
@@ -287,7 +367,7 @@ function M.require_https(http)
   return false
 end
 
-function M.inspect(uci, fs)
+function M.inspect(uci, fs, certificate_fingerprint_output)
   local service_installed = exists(fs, "/etc/init.d/uhttpd")
   local http_listener_count = listener_count(uci, "listen_http")
   local https_listener_count = listener_count(uci, "listen_https")
@@ -301,6 +381,8 @@ function M.inspect(uci, fs)
     nonempty_file(fs, "/etc/uhttpd.key")
   local key_generator_available = exists(fs, "/usr/bin/openssl") or
     exists(fs, "/usr/sbin/px5g")
+  local private_key = https_private_key_status(fs)
+  local certificate_fingerprint = M.parse_certificate_fingerprint(certificate_fingerprint_output)
 
   local https_configured = service_installed and https_listener_count > 0 and
     tls_library_available and certificate_available
@@ -311,8 +393,8 @@ function M.inspect(uci, fs)
   local status = "ready"
   if not https_configured then
     status = "unavailable"
-  elseif plaintext_http_unredirected or ssh.ssh_status == "review" or
-    ssh.ssh_status == "unavailable" then
+  elseif plaintext_http_unredirected or private_key.status ~= "present" or
+    ssh.ssh_status == "review" or ssh.ssh_status == "unavailable" then
     status = "review"
   end
 
@@ -323,6 +405,8 @@ function M.inspect(uci, fs)
     tls_library_available = tls_library_available,
     certificate_available = certificate_available,
     key_generator_available = key_generator_available,
+    private_key = private_key,
+    certificate_fingerprint = certificate_fingerprint,
     http_redirect_enabled = http_redirect_enabled,
     https_configured = https_configured,
     plaintext_http_unredirected = plaintext_http_unredirected,
