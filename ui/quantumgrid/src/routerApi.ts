@@ -904,6 +904,7 @@ export interface RouterOfficeNetworks {
   bridges: RouterOfficeBridge[];
   vlans: RouterOfficeVlan[];
   zones: RouterOfficeFirewallZone[];
+  wifi_aps: RouterOfficeWifiAp[];
   forwardings: RouterOfficeForwarding[];
   forwarding_count: number;
   interface_count: number;
@@ -1115,6 +1116,7 @@ const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-
 const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-add";
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
 const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-zone-update";
+const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-wifi-network-update";
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
 
@@ -2545,6 +2547,67 @@ export async function createRouterOfficeForwarding(input: {
     throw new Error("The router did not confirm the firewall forwarding and reload.");
   }
   return payload as RouterOfficeForwardingCreateResult;
+}
+
+
+export interface RouterOfficeWifiNetworkUpdateResult {
+  ok: true;
+  section: string;
+  ssid: string;
+  network: string;
+  networks: string[];
+  reloaded: boolean;
+  rolled_back: false;
+}
+
+export async function updateRouterOfficeWifiNetwork(input: {
+  section: string;
+  network: string;
+}): Promise<RouterOfficeWifiNetworkUpdateResult> {
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.section) || input.section === "." || input.section === "..") {
+    throw new Error("Invalid wireless AP section identifier.");
+  }
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) || input.network === "." || input.network === "..") {
+    throw new Error("Select an existing office LAN/VLAN network interface.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", input.section);
+  form.set("network", input.network);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_WIFI_NETWORK_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "SSID network changes require an active router administrator session."
+      : "The router returned an invalid SSID network update response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid SSID network update response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("section" in payload) || payload.section !== input.section ||
+    !("ssid" in payload) || typeof payload.ssid !== "string" ||
+    !("network" in payload) || payload.network !== input.network ||
+    !("networks" in payload) || !Array.isArray(payload.networks) ||
+    payload.networks.length !== 1 || payload.networks[0] !== input.network ||
+    !("reloaded" in payload) || typeof payload.reloaded !== "boolean" ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the SSID network binding and Wi-Fi reload.");
+  }
+  return payload as RouterOfficeWifiNetworkUpdateResult;
 }
 
 export async function updateRouterOfficeZonePolicy(input: {

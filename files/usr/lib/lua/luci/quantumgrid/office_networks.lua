@@ -98,6 +98,17 @@ local function ipv4_number(value)
 	return octets[1] * 16777216 + octets[2] * 65536 + octets[3] * 256 + octets[4]
 end
 
+local function usable_ipv4_host(value)
+	local address = ipv4_number(value)
+	if not address then return false end
+	local first = math.floor(address / 16777216)
+	local second = math.floor(address / 65536) % 256
+	if first == 0 or first == 127 or (first == 169 and second == 254) or first >= 224 then
+		return false
+	end
+	return true
+end
+
 local function ipv4_text(address)
 	if type(address) ~= "number" or address < 0 or address > 4294967295 then return nil end
 	local a = math.floor(address / 16777216) % 256
@@ -516,9 +527,16 @@ function validate_radius_dynamic_vlan_mappings(mappings, interfaces, bridges, vl
 
 		local binding, binding_error = validate_wireless_network_binding(network, interfaces, zones)
 		if not binding then return nil, binding_error end
-		if type(binding.ipv4) ~= "table" or #binding.ipv4 == 0 then
+		local gateway_available = false
+		for _, gateway in ipairs(type(binding.ipv4) == "table" and binding.ipv4 or {}) do
+			if usable_ipv4_host(gateway) then
+				gateway_available = true
+				break
+			end
+		end
+		if not gateway_available then
 			return nil, "RADIUS VLAN " .. tostring(numeric_vid) ..
-				" must map to an existing routed IPv4 office segment with a gateway address."
+				" must map to an existing routed IPv4 office segment with a valid unicast gateway address."
 		end
 		local parent_bridge, device_vid = binding.device:match("^(.-)%.(%d+)$")
 		if not parent_bridge or tonumber(device_vid) ~= numeric_vid then
