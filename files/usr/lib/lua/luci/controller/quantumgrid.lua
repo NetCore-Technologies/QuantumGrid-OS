@@ -3023,13 +3023,17 @@ local function office_network_status(uci, fs)
 			if type(device) ~= "string" or device == "" then
 				device = type(section.ifname) == "string" and section.ifname or ""
 			end
-			if type(device) ~= "string" or not device:match("^[%w_.%-]+$") then device = "" end
+			if type(device) ~= "string" or not device:match("^[%w][%w_.%-]*$") then device = "" end
+			local neighbor_device = status.l3_device or status.device or device
+			if type(neighbor_device) ~= "string" or not neighbor_device:match("^[%w][%w_.%-]*$") then
+				neighbor_device = ""
+			end
 			local ipv6_neighbors = {}
-			if device ~= "" and fs.access("/sbin/ip") == true then
-				local command = "/sbin/ip -6 neigh show dev " .. device .. " 2>/dev/null"
+			if status.up == true and neighbor_device ~= "" and fs.access("/sbin/ip") == true then
+				local command = "/sbin/ip -6 neigh show dev " .. neighbor_device .. " 2>/dev/null | head -n 64"
 				local command_ok, output = pcall(util.exec, command)
 				if command_ok and type(output) == "string" then
-					ipv6_neighbors = validator.parse_ipv6_neighbor_inventory(output, device)
+					ipv6_neighbors = validator.parse_ipv6_neighbor_inventory(output, neighbor_device)
 				end
 			end
 			table.insert(source.interfaces, {
