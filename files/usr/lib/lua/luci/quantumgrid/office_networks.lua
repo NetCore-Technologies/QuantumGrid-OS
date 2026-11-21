@@ -1631,7 +1631,8 @@ function build_inventory(source)
 					protocol = item.protocol,
 					source_port = source_port,
 					destination_ip = destination_ip,
-					destination_port = destination_port
+					destination_port = destination_port,
+					enabled = item.enabled ~= false
 				})
 			end
 		end
