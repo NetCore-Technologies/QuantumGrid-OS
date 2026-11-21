@@ -105,7 +105,7 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-          ./build.sh
+          bash ./build.sh
 
       - name: Assemble firmware assets and provenance
         shell: bash
