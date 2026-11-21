@@ -177,6 +177,6 @@ printf '==============================================\n'
 printf 'Device profile: %s (%s)\n' "$DEVICE_PROFILE_ID" "$OPENWRT_DEVICE"
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 printf '\nFirmware outputs:\n'
-find "$OUTPUT_PATH" -maxdepth 1 -type f \\
-    \\( -name "$FACTORY_GLOB" -o -name "$INITRAMFS_GLOB" \\) \\
+find "$OUTPUT_PATH" -maxdepth 1 -type f \
+    \( -name "$FACTORY_GLOB" -o -name "$INITRAMFS_GLOB" \) \
     -print | sort
