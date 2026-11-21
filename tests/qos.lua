@@ -29,6 +29,85 @@ assert(qos.validate_client_policy("02:11:22:33:44:55", "corp", "wan", "CS1", zon
 assert(qos.validate_client_policy("02:11:22:33:44:55", "corp", "uplink", "BE", zones),
 	"WWAN networks attached to an external zone must be allowed as destinations")
 
+local download_interfaces = {
+  {
+    name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0",
+    firewall_zones = { "corp" },
+  },
+  {
+    name = "guest", ipv4 = { "192.168.30.1" }, netmask = "255.255.255.0",
+    firewall_zones = { "guest" },
+  },
+}
+local download_leases = {
+  { section = "cfg_host_1", name = "desktop", mac = "02:11:22:33:44:55", ipv4 = "192.168.20.40" },
+}
+local download = qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, download_interfaces, download_leases)
+assert(download and download.direction == "download")
+assert(download.mac == "02:11:22:33:44:55" and download.destination_ip == "192.168.20.40")
+assert(download.source_zone == "wan" and download.destination_zone == "corp")
+assert(download.dscp_class == "AF41")
+assert(download.name == "QuantumGrid client QoS download: 02:11:22:33:44:55")
+
+local invalid_downloads = {
+  { "01:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41", zones, download_interfaces, download_leases },
+  { "02:11:22:33:44:55", "192.168.20.0", "wan", "corp", "AF41", zones, download_interfaces, download_leases },
+  { "02:11:22:33:44:55", "192.168.20.255", "wan", "corp", "AF41", zones, download_interfaces, download_leases },
+  { "02:11:22:33:44:55", "192.168.30.40", "wan", "corp", "AF41", zones, download_interfaces, download_leases },
+  { "02:11:22:33:44:55", "192.168.20.40", "corp", "wan", "AF41", zones, download_interfaces, download_leases },
+  { "02:11:22:33:44:55", "192.168.20.40", "wan", "guest", "AF41", zones, download_interfaces, download_leases },
+  { "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "CS1; flush", zones, download_interfaces, download_leases },
+}
+for _, input in ipairs(invalid_downloads) do
+  assert(qos.validate_client_download_policy(unpack(input)) == nil,
+    "invalid direction, address, subnet, DSCP or zone must be rejected for download marking")
+end
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, download_interfaces, {}) == nil, "a dynamic lease is not a stable downlink match")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:56", "192.168.20.40", "wan", "corp", "AF41",
+  zones, download_interfaces, download_leases) == nil, "the reserved MAC must match")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, download_interfaces, {
+    download_leases[1], { mac = "02:aa:bb:cc:dd:ee", ipv4 = "192.168.20.40" },
+  }) == nil, "the reserved IPv4 address must not be duplicated")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, {
+    download_interfaces[1],
+    { name = "corp2", ipv4 = { "192.168.20.2" }, netmask = "255.255.255.0", firewall_zones = { "corp" } },
+  }, download_leases) == nil, "overlapping internal interfaces must be treated as ambiguous")
+assert(qos.validate_client_download_policy(
+  "02:11:22:33:44:55", "192.168.20.40", "wan", "corp", "AF41",
+  zones, {
+    { name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0", firewall_zones = { "guest" } },
+  }, download_leases) == nil, "the target subnet must be attached to the selected internal firewall zone")
+
+local download_summary = qos.summarize_client_policy({
+  [".name"] = "cfg_client_download_1", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  target = "dscp", set_dscp = "AF41", enabled = "1",
+})
+assert(download_summary and download_summary.direction == "download")
+assert(download_summary.destination_ip == "192.168.20.40")
+assert(download_summary.mac == "02:11:22:33:44:55" and download_summary.enabled)
+assert(qos.summarize_client_policy({
+  [".name"] = "cfg_client_download_bad", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  src_mac = "02:11:22:33:44:55", target = "dscp", set_dscp = "AF41",
+}) == nil, "download policy must not rely on unsupported destination MAC matching")
+assert(qos.summarize_client_policy({
+  [".name"] = "cfg_client_download_bad", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "not-an-ip", target = "dscp", set_dscp = "AF41",
+}) == nil, "malformed downlink destination addresses must not be inventoried")
+
 local summary = qos.summarize_client_policy({
 	[".name"] = "cfg_client_1", [".type"] = "rule",
 	name = "QuantumGrid client QoS: 02:11:22:33:44:55",
@@ -65,6 +144,14 @@ assert(snap and snap.values.extra[2] == "both")
 assert(qos.snapshot_client_policy_section({
 	[".name"] = "user_rule", [".type"] = "rule", name = "unowned"
 }) == nil)
+
+local download_snapshot = qos.snapshot_client_policy_section({
+  [".name"] = "cfg_client_download_1", [".type"] = "rule",
+  name = "QuantumGrid client QoS download: 02:11:22:33:44:55",
+  src = "wan", dest = "corp", dest_ip = "192.168.20.40",
+  target = "dscp", set_dscp = "AF41",
+})
+assert(download_snapshot and download_snapshot.values.dest_ip == "192.168.20.40")
 
 local fake = { rules = {
 	{ [".name"] = "cfg_client_1", [".type"] = "rule", name = "QuantumGrid client QoS: 02:11:22:33:44:55", src = "corp", dest = "wan", src_mac = "02:11:22:33:44:55", target = "dscp", set_dscp = "AF41" },
