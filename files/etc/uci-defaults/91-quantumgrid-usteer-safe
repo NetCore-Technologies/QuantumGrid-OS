@@ -1,5 +1,10 @@
 #!/bin/sh
 # QuantumGrid ships usteer for optional client steering, but never starts
 # roaming policy before an administrator configures its SSID scope.
-[ -x /etc/init.d/usteer ] && /etc/init.d/usteer disable
+if [ -x /etc/init.d/usteer ] && [ -f /etc/config/usteer ]; then
+	if uci -q set usteer.@usteer[-1].enabled='0' 2>/dev/null; then
+		uci -q commit usteer 2>/dev/null
+	fi
+	/etc/init.d/usteer disable
+fi
 exit 0
