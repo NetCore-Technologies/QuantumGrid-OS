@@ -89,25 +89,128 @@ function validate_client_policy_section(section)
 	return section
 end
 
-function summarize_client_policy(section)
-	if type(section) ~= "table" or type(section.name) ~= "string"
-		or section.name:sub(1, #POLICY_PREFIX) ~= POLICY_PREFIX or section.target ~= "dscp" then return nil end
-	local mac = normalize_unicast_mac(section.src_mac)
-	if not mac or section.name ~= POLICY_PREFIX .. mac then return nil end
-	if not valid_token(section.src) or not valid_token(section.dest) then return nil end
-	if type(section.set_dscp) ~= "string" or not ALLOWED_DSCP[section.set_dscp] then return nil end
-	if section[".type"] ~= nil and section[".type"] ~= "rule" then return nil end
-	local name = type(section[".name"]) == "string" and section[".name"] or ""
-	if not valid_token(name) then return nil end
+local DOWNLOAD_POLICY_PREFIX = "QuantumGrid client QoS download: "
+
+local function valid_ipv4_host(value)
+	if type(value) ~= "string" or #value > 15 then return false end
+	local a, b, c, d = value:match("^(%d+)%.(%d+)%.(%d+)%.(%d+)$")
+	if not a then return false end
+	local octets = { a, b, c, d }
+	for _, part in ipairs(octets) do
+		local number = tonumber(part)
+		if not number or number < 0 or number > 255 or number ~= math.floor(number)
+			or tostring(number) ~= part then return false end
+	end
+	local first, second = tonumber(a), tonumber(b)
+	return first ~= 0 and first ~= 127 and first < 224 and
+		not (first == 169 and second == 254) and not (first == 255)
+end
+
+function validate_client_download_policy(mac, destination_ip, source_zone, destination_zone, dscp_class, zones, interfaces, static_leases)
+	local normalized_mac = normalize_unicast_mac(mac)
+	if not normalized_mac then
+		return nil, "Choose one unicast client MAC address in six-octet notation."
+	end
+	if not valid_ipv4_host(destination_ip) then
+		return nil, "Download marking requires one usable static IPv4 host address."
+	end
+	if not valid_token(source_zone) or not valid_token(destination_zone) or source_zone == destination_zone then
+		return nil, "Choose existing external and internal firewall zones."
+	end
+	if type(dscp_class) ~= "string" or not ALLOWED_DSCP[dscp_class] then
+		return nil, "Choose one supported DSCP class: BE, AF41, EF or CS1."
+	end
+	local source, destination
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			if zone.name == source_zone then source = zone end
+			if zone.name == destination_zone then destination = zone end
+		end
+	end
+	if not source or not destination then
+		return nil, "Both firewall zones must already exist in the current inventory."
+	end
+	if not is_external_zone(source) or is_external_zone(destination) then
+		return nil, "Download marking must travel from an existing WAN/WWAN zone to an internal LAN/office zone."
+	end
+
+	local matching_leases, mac_conflicts, ip_conflicts = 0, 0, 0
+	for _, lease in ipairs(type(static_leases) == "table" and static_leases or {}) do
+		if type(lease) == "table" then
+			local lease_mac = normalize_unicast_mac(lease.mac)
+			if lease_mac == normalized_mac then
+				mac_conflicts = mac_conflicts + 1
+				if lease.ipv4 == destination_ip then matching_leases = matching_leases + 1 end
+			end
+			if lease.ipv4 == destination_ip then ip_conflicts = ip_conflicts + 1 end
+		end
+	end
+	if matching_leases ~= 1 or mac_conflicts ~= 1 or ip_conflicts ~= 1 then
+		return nil, "The client must have exactly one matching static DHCP reservation for this MAC and IPv4 address."
+	end
+
+	local office = require "luci.quantumgrid.office_networks"
+	local matching_interfaces = 0
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" then
+			local attached = false
+			for _, zone_name in ipairs(type(iface.firewall_zones) == "table" and iface.firewall_zones or {}) do
+				if zone_name == destination_zone then attached = true break end
+			end
+			if attached and type(iface.ipv4) == "table" then
+				for _, interface_ip in ipairs(iface.ipv4) do
+					if office.ipv4_in_subnet(destination_ip, interface_ip, iface.netmask) then
+						matching_interfaces = matching_interfaces + 1
+					end
+				end
+			end
+		end
+	end
+	if matching_interfaces ~= 1 then
+		return nil, "The reserved client IP must belong to exactly one routed IPv4 subnet attached to the selected internal zone."
+	end
+
 	return {
-		section = name,
-		name = "Client " .. mac,
-		mac = mac,
-		source_zone = section.src,
-		destination_zone = section.dest,
-		dscp_class = section.set_dscp,
-		enabled = section.enabled ~= "0"
+		mac = normalized_mac,
+		destination_ip = destination_ip,
+		source_zone = source_zone,
+		destination_zone = destination_zone,
+		dscp_class = dscp_class,
+		direction = "download",
+		name = DOWNLOAD_POLICY_PREFIX .. normalized_mac
 	}
+end
+
+function summarize_client_policy(section)
+	if type(section) ~= "table" or type(section.name) ~= "string" or section.target ~= "dscp" then return nil end
+	if section[".type"] ~= nil and section[".type"] ~= "rule" then return nil end
+	local section_name = type(section[".name"]) == "string" and section[".name"] or ""
+	if not valid_token(section_name) then return nil end
+	if type(section.set_dscp) ~= "string" or not ALLOWED_DSCP[section.set_dscp] then return nil end
+
+	local upload_mac = section.name:sub(1, #POLICY_PREFIX) == POLICY_PREFIX
+		and normalize_unicast_mac(section.src_mac) or nil
+	if upload_mac and section.name == POLICY_PREFIX .. upload_mac and
+		valid_token(section.src) and valid_token(section.dest) and section.dest_ip == nil then
+		return {
+			section = section_name, name = "Client " .. upload_mac, mac = upload_mac,
+			source_zone = section.src, destination_zone = section.dest,
+			dscp_class = section.set_dscp, direction = "upload", enabled = section.enabled ~= "0"
+		}
+	end
+
+	local download_mac = section.name:sub(1, #DOWNLOAD_POLICY_PREFIX) == DOWNLOAD_POLICY_PREFIX
+		and normalize_unicast_mac(section.name:sub(#DOWNLOAD_POLICY_PREFIX + 1)) or nil
+	if download_mac and section.name == DOWNLOAD_POLICY_PREFIX .. download_mac and
+		normalize_unicast_mac(section.src_mac) == nil and valid_token(section.src) and
+		valid_token(section.dest) and valid_ipv4_host(section.dest_ip) then
+		return {
+			section = section_name, name = "Client " .. download_mac, mac = download_mac,
+			destination_ip = section.dest_ip, source_zone = section.src, destination_zone = section.dest,
+			dscp_class = section.set_dscp, direction = "download", enabled = section.enabled ~= "0"
+		}
+	end
+	return nil
 end
 
 function read_client_policies(uci, limit)
