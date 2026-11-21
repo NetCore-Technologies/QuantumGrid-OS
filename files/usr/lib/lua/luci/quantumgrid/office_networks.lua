@@ -1039,6 +1039,9 @@ function validate_office_segment_ipv6(enabled)
 		ip6assign = "64",
 		dhcpv6 = modes.dhcpv6,
 		ra = modes.ra,
+		ra_flags = { "managed-config", "other-config" },
+		ra_slaac = "1",
+		ra_dns = "1",
 		ndp = modes.ndp
 	}
 end
