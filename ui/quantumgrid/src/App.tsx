@@ -5558,7 +5558,19 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
       {!status?.available ? (
         <div className="module-message">The uSteer daemon, service script or configuration is unavailable in this firmware. The AW1000 build includes usteer; confirm the installed package set and /etc/config/usteer.</div>
       ) : !status.configured ? (
-        <div className="module-message">QuantumGrid requires exactly one valid usteer UCI section. Resolve missing or duplicate sections before enabling managed roaming.</div>
+        <>
+          <div className="module-message" role="alert">QuantumGrid requires exactly one valid usteer UCI section. The current configuration is ambiguous or missing; do not enable roaming until it is repaired. A guarded emergency stop remains available.</div>
+          <label className="wireless-config-confirm">
+            <input type="checkbox" checked={confirmed} disabled={saving} onChange={(event) => setConfirmed(event.target.checked)} />
+            <span>I authorize QuantumGrid to stop usteer and disable its boot start link without modifying ambiguous UCI sections.</span>
+          </label>
+          {notice ? <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>{notice.message}</div> : null}
+          <div className="wireless-config-actions">
+            <button className="hero-button" disabled={!loaded || !confirmed || saving} onClick={() => void save()}>
+              {saving ? "Stopping usteer…" : "Emergency stop & disable usteer"}
+            </button>
+          </div>
+        </>
       ) : (
         <>
           <div className="module-grid">
