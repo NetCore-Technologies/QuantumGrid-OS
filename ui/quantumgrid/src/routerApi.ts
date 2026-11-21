@@ -431,6 +431,18 @@ export interface RouterFirewallRuntimeStatus {
   sampled_at: number;
 }
 
+export interface RouterDropbearInstance {
+  name: string;
+  enabled: boolean | null;
+  interface: string;
+  interface_bound: boolean;
+  port: number | null;
+  port_valid: boolean;
+  password_auth_enabled: boolean | null;
+  root_password_auth_enabled: boolean | null;
+  gateway_ports_enabled: boolean | null;
+}
+
 export interface RouterManagementTransport {
   service_installed: boolean;
   http_listener_count: number;
@@ -441,6 +453,13 @@ export interface RouterManagementTransport {
   http_redirect_enabled: boolean;
   https_configured: boolean;
   plaintext_http_unredirected: boolean;
+  ssh_service_installed?: boolean;
+  ssh_config_available?: boolean;
+  ssh_instance_count?: number;
+  ssh_enabled_instance_count?: number;
+  ssh_truncated?: boolean;
+  ssh_instances?: RouterDropbearInstance[];
+  ssh_status?: "ready" | "review" | "unavailable" | "disabled";
   status: "ready" | "review" | "unavailable";
 }
 
