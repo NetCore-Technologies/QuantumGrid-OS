@@ -164,16 +164,17 @@ function validate_client_download_policy(mac, destination_ip, source_zone, desti
 	local matching_interfaces = 0
 	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
 		if type(iface) == "table" then
-			local attached = false
-			for _, zone_name in ipairs(type(iface.firewall_zones) == "table" and iface.firewall_zones or {}) do
-				if zone_name == destination_zone then attached = true break end
-			end
+			local zone_memberships = type(iface.firewall_zones) == "table" and iface.firewall_zones or {}
+			local attached = #zone_memberships == 1 and zone_memberships[1] == destination_zone
 			if attached and type(iface.ipv4) == "table" then
+				local interface_matches = false
 				for _, interface_ip in ipairs(iface.ipv4) do
 					if office.ipv4_in_subnet(destination_ip, interface_ip, iface.netmask) then
-						matching_interfaces = matching_interfaces + 1
+						interface_matches = true
+						break
 					end
 				end
+				if interface_matches then matching_interfaces = matching_interfaces + 1 end
 			end
 		end
 	end
