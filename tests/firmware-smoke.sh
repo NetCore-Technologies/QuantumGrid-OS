@@ -4,6 +4,14 @@ trap 'status=$?; printf "ERROR: firmware smoke check failed at line %s: %s (stat
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/configs/aw1000-max.config"
+RELEASE_WORKFLOW="$ROOT/.github/workflows/firmware-release.yml"
+grep -Fqx '  id-token: write' "$RELEASE_WORKFLOW"
+grep -Fqx '  attestations: write' "$RELEASE_WORKFLOW"
+grep -Fq 'uses: actions/attest@v4' "$RELEASE_WORKFLOW"
+grep -Fq "subject-path: 'dist/*'" "$RELEASE_WORKFLOW"
+grep -Fq 'gh attestation verify' "$ROOT/Docs/RELEASES.md"
+grep -Fq -- '--signer-workflow NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml' "$ROOT/Docs/RELEASES.md"
+grep -Fq 'gh attestation verify' "$ROOT/docs/downloads.html"
 
 grep -qx 'CONFIG_TARGET_qualcommax=y' "$CONFIG"
 grep -qx 'CONFIG_TARGET_qualcommax_ipq807x=y' "$CONFIG"
