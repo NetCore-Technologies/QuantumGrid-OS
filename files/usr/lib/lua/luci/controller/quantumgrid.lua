@@ -335,6 +335,68 @@ local function wireless_survey(ifname, frequency)
 	return { supported = false }
 end
 
+local function wireless_option_list(value)
+	local result = {}
+	if type(value) == "string" then
+		for item in value:gmatch("%S+") do table.insert(result, item) end
+	elseif type(value) == "table" then
+		for _, item in ipairs(value) do
+			if type(item) == "string" then table.insert(result, item) end
+		end
+	end
+	return result
+end
+
+local function wireless_vlan_owned_for_ap(section, ap_section)
+	if type(section) ~= "table" or type(ap_section) ~= "string" then return false end
+	local section_name = tostring(section[".name"] or "")
+	local vid = tostring(section.vid or "")
+	local prefix = "qgrid_" .. ap_section .. "_"
+	local iface_list = wireless_option_list(section.iface)
+	local network_list = wireless_option_list(section.network)
+	return #ap_section <= 48
+		and vid:match("^[1-9]%d*$") ~= nil
+		and section_name == prefix .. vid
+		and section.name == "qg" .. vid
+		and #iface_list == 1 and iface_list[1] == ap_section
+		and #network_list == 1
+end
+
+local function wireless_vlan_sections_for_ap(uci, ap_section)
+	local result = { sections = {}, unmanaged = false, available = false }
+	local ok = pcall(function()
+		uci:foreach("wireless", "wifi-vlan", function(section)
+			local iface_list = wireless_option_list(section.iface)
+			local attached = false
+			for _, iface in ipairs(iface_list) do
+				if iface == ap_section then attached = true break end
+			end
+			if attached then
+				if #result.sections >= 16 then
+					result.unmanaged = true
+					return
+				end
+				local network_list = wireless_option_list(section.network)
+				local section_name = tostring(section[".name"] or "")
+				local name = tostring(section.name or "")
+				local vid = tostring(section.vid or "")
+				local managed = wireless_vlan_owned_for_ap(section, ap_section)
+				if not managed then result.unmanaged = true end
+				table.insert(result.sections, {
+					section = section_name,
+					name = name,
+					vid = tonumber(vid) or 0,
+					network = #network_list == 1 and network_list[1] or "",
+					managed = managed
+				})
+			end
+		end)
+	end)
+	result.available = ok
+	if not ok then result.unmanaged = true end
+	return result
+end
+
 local function wireless_config_inventory(uci, radios)
 	local result = {}
 	local ok = pcall(function()
@@ -376,12 +438,22 @@ local function wireless_config_inventory(uci, radios)
 							end
 						end
 					end
+					local vlan_inventory = wireless_vlan_sections_for_ap(uci, name)
+					local dynamic_vlan = tonumber(section.dynamic_vlan) or 0
+					local radius_vlan_unmanaged = vlan_inventory.unmanaged or not vlan_inventory.available
+					if dynamic_vlan > 0 and #vlan_inventory.sections == 0 then radius_vlan_unmanaged = true end
+					if type(section.vlan_file) == "string" and section.vlan_file ~= "" then radius_vlan_unmanaged = true end
+					if type(section.vlan_bridge) == "string" and section.vlan_bridge ~= "" then radius_vlan_unmanaged = true end
+					if type(section.vlan_tagged_interface) == "string" and section.vlan_tagged_interface ~= "" then radius_vlan_unmanaged = true end
 					table.insert(result, {
 						section = name,
 						radio = radio,
 						mode = mode,
 						ssid = tostring(section.ssid or ""),
 						networks = networks,
+						dynamic_vlan = dynamic_vlan,
+						radius_vlan_unmanaged = radius_vlan_unmanaged,
+						radius_vlan_mappings = vlan_inventory.sections,
 						encryption = tostring(section.encryption or "none"),
 						ieee80211w = tostring(section.ieee80211w or ""),
 						hidden = section.hidden == "1",
@@ -1012,6 +1084,44 @@ local function restore_wireless_option(uci, section, option, previous)
 	return ok and result == true
 end
 
+local function restore_wireless_vlan_sections(uci, interface, snapshot)
+	local prefix = "qgrid_" .. interface .. "_"
+	local current = {}
+	local inspect_ok = pcall(function()
+		uci:foreach("wireless", "wifi-vlan", function(section)
+			local section_name = tostring(section[".name"] or "")
+			local iface_list = wireless_option_list(section.iface)
+			local attached = false
+			for _, iface in ipairs(iface_list) do
+				if iface == interface then attached = true break end
+			end
+			if attached and section_name:sub(1, #prefix) == prefix then
+				table.insert(current, section_name)
+			end
+		end)
+	end)
+	if not inspect_ok then return false end
+	for _, section in ipairs(current) do
+		local delete_ok, deleted = pcall(uci.delete, uci, "wireless", section)
+		if not delete_ok or deleted ~= true then return false end
+	end
+
+	for _, item in ipairs(snapshot.wifi_vlans or {}) do
+		if type(item) ~= "table" or type(item.section) ~= "string"
+			or type(item.name) ~= "string" or type(item.vid) ~= "string"
+			or type(item.network) ~= "string" then return false end
+		local create_ok, created = pcall(uci.section, uci, "wireless", "wifi-vlan", item.section, {
+			name = item.name,
+			vid = item.vid
+		})
+		if not create_ok or created ~= item.section then return false end
+		local iface_ok, iface_set = pcall(uci.set_list, uci, "wireless", item.section, "iface", { interface })
+		local network_ok, network_set = pcall(uci.set_list, uci, "wireless", item.section, "network", { item.network })
+		if not iface_ok or iface_set ~= true or not network_ok or network_set ~= true then return false end
+	end
+	return true
+end
+
 local function restore_wireless_snapshot(uci, radio, interface, snapshot)
 	for option, value in pairs(snapshot.radio) do
 		if not restore_wireless_option(uci, radio, option, value) then
@@ -1024,6 +1134,11 @@ local function restore_wireless_snapshot(uci, radio, interface, snapshot)
 			pcall(uci.revert, uci, "wireless")
 			return false
 		end
+	end
+	if snapshot.manage_radius_vlans and
+		not restore_wireless_vlan_sections(uci, interface, snapshot) then
+		pcall(uci.revert, uci, "wireless")
+		return false
 	end
 	local ok, result = pcall(uci.commit, uci, "wireless")
 	return ok and result == true
@@ -1078,47 +1193,16 @@ local function wireless_radio_power_levels(radio_name)
 end
 
 
-local function wireless_network_inventory(uci)
-	local result = { interfaces = {}, zones = {}, available = false, truncated = false }
-	local network_ok = pcall(function()
-		uci:foreach("network", "interface", function(section)
-			if #result.interfaces >= 64 then result.truncated = true return end
-			local name = tostring(section[".name"] or "")
-			local device = type(section.device) == "string" and section.device or
-				type(section.ifname) == "string" and section.ifname or ""
-			if name:match("^[%w_.%-]+$") and device:match("^[%w_.%-]+$") then
-				table.insert(result.interfaces, {
-					name = name,
-					protocol = tostring(section.proto or ""),
-					device = device
-				})
-			end
-		end)
-	end)
-	local firewall_ok = pcall(function()
-		uci:foreach("firewall", "zone", function(section)
-			if #result.zones >= 32 then result.truncated = true return end
-			local name = tostring(section.name or section[".name"] or "")
-			local section_name = tostring(section[".name"] or "")
-			local networks = {}
-			if type(section.network) == "string" then
-				for network in section.network:gmatch("%S+") do table.insert(networks, network) end
-			elseif type(section.network) == "table" then
-				for _, network in ipairs(section.network) do
-					if type(network) == "string" then table.insert(networks, network) end
-				end
-			end
-			if name:match("^[%w_.%-]+$") and section_name:match("^[%w_.%-]+$") then
-				table.insert(result.zones, {
-					section = section_name,
-					name = name,
-					networks = networks
-				})
-			end
-		end)
-	end)
-	result.available = network_ok and firewall_ok and not result.truncated
-	return result
+local function wireless_network_inventory(uci, fs)
+	local office = office_network_status(uci, fs)
+	return {
+		interfaces = office.interfaces or {},
+		bridges = office.bridges or {},
+		vlans = office.vlans or {},
+		zones = office.zones or {},
+		available = office.available == true and office.firewall_available == true,
+		truncated = office.truncated == true
+	}
 end
 
 local function network_interface_for_remote_address(remote_ip, interfaces)
@@ -1207,7 +1291,7 @@ function action_wireless_update()
 		return
 	end
 	local requested_network = http.formvalue("network", true)
-	local network_inventory = wireless_network_inventory(uci)
+	local network_inventory = wireless_network_inventory(uci, fs)
 	if not network_inventory.available or network_inventory.truncated then
 		respond(503, { ok = false, error = "Network or firewall interface inventories are unavailable or truncated; SSID network binding cannot be verified." })
 		return
