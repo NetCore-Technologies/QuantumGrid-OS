@@ -4437,7 +4437,7 @@ function action_config_restore()
         mktemp_command = "/usr/bin/mktemp"
     end
     if not mktemp_command then
-        respond(503, { ok = false, error = "A secure mktemp utility is unavailable; no restore was started." })
+        fail(503, "A secure mktemp utility is unavailable; no restore was started.")
         return
     end
 
@@ -4456,7 +4456,7 @@ function action_config_restore()
     local temp_path, temp_error = create_temp(
         "/tmp/quantumgrid-config-restore.XXXXXX", validator.validate_restore_temp_path)
     if not temp_path then
-        respond(503, { ok = false, error = temp_error })
+        fail(503, temp_error)
         return
     end
     restore_path = temp_path
