@@ -38,8 +38,6 @@ for command in git make python3; do
 done
 
 DEVICE_PROFILE="${QG_DEVICE_PROFILE:-${PROJECT_ROOT}/profiles/arcadyan-aw1000.json}"
-PROFILE_FIELDS="$(python3 "$PROJECT_ROOT/scripts/verify-device-profile.py" "$DEVICE_PROFILE" --fields)" \
-    || die "The selected QuantumGrid device profile failed validation"
 PROFILE_FIELDS_FILE="$(mktemp "${TMPDIR:-/tmp}/qg-device-profile.XXXXXX")" || die "Could not create temporary device-profile field file"
 if ! python3 "$PROJECT_ROOT/scripts/verify-device-profile.py" "$DEVICE_PROFILE" --lines > "$PROFILE_FIELDS_FILE"; then
     rm -f "$PROFILE_FIELDS_FILE"
