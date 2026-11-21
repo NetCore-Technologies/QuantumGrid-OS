@@ -704,6 +704,26 @@ local custom_zone_ssh = transport.inspect(uci, fs)
 assert(custom_zone_ssh.ssh_instances[1].interface_zone_status == "unknown")
 assert(custom_zone_ssh.ssh_status == "review", "unrecognised SSH firewall zones must fail closed")
 
+-- An interface assigned to multiple firewall zones is ambiguous even if one is named LAN.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "ambiguous-ssh",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }},
+  firewall_zones = {
+    { [".name"] = "lan", network = { "lan" } },
+    { [".name"] = "wan", network = { "lan" } }
+  }
+})
+local ambiguous_zone_ssh = transport.inspect(uci, fs)
+assert(ambiguous_zone_ssh.ssh_instances[1].interface_zone_status == "unknown")
+assert(ambiguous_zone_ssh.ssh_status == "review", "ambiguous zone membership must not pass the SSH posture check")
+
 -- Missing or ambiguous firewall bindings cannot be interpreted as a trusted management network.
 uci, fs = fixture("1", {
   dropbear_sections = {{
