@@ -58,11 +58,10 @@ function validate_restore_temp_capacity(available_bytes, upload_bytes)
 		available_bytes < 0 then
 		return nil, "Available /tmp capacity could not be verified; no restore was attempted."
 	end
-	local required_bytes = upload_bytes + reserve_bytes
-	if available_bytes < required_bytes then
-		return nil, "There is not enough verified free /tmp space for the uploaded archive, a maximum-sized rollback snapshot and the 8 MiB safety reserve. No restore was attempted."
+	if available_bytes < reserve_bytes then
+		return nil, "There is not enough remaining verified /tmp space for a maximum-sized rollback snapshot and the 8 MiB safety reserve. No restore was attempted."
 	end
-	return required_bytes
+	return reserve_bytes
 end
 
 local function valid_archive_path(path)
