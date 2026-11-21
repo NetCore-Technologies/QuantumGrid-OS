@@ -495,6 +495,24 @@ export interface RouterAuthorizedKeysStatus {
   status: "present" | "missing" | "review" | "unknown" | "unavailable";
 }
 
+export interface RouterHttpsPrivateKeyStatus {
+  available: boolean;
+  path: string;
+  size_bytes?: number;
+  root_owned?: boolean;
+  regular_file?: boolean;
+  owner_readable?: boolean;
+  group_access?: boolean;
+  other_access?: boolean;
+  status: "present" | "missing" | "review" | "unknown";
+}
+
+export interface RouterCertificateFingerprint {
+  available: boolean;
+  algorithm: "SHA-256";
+  value?: string;
+}
+
 export interface RouterManagementTransport {
   service_installed: boolean;
   http_listener_count: number;
@@ -502,6 +520,8 @@ export interface RouterManagementTransport {
   tls_library_available: boolean;
   certificate_available: boolean;
   key_generator_available: boolean;
+  private_key?: RouterHttpsPrivateKeyStatus;
+  certificate_fingerprint?: RouterCertificateFingerprint;
   http_redirect_enabled: boolean;
   https_configured: boolean;
   plaintext_http_unredirected: boolean;
