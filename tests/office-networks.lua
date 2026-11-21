@@ -316,6 +316,14 @@ local no_ipv4_mapping, no_ipv4_error = office.validate_radius_dynamic_vlan_mappi
 assert(no_ipv4_mapping == nil and type(no_ipv4_error) == "string" and
   no_ipv4_error:find("routed IPv4 office segment", 1, true),
   "RADIUS dynamic VLAN assignment requires a routed IPv4 gateway")
+
+local invalid_ipv4_mapping, invalid_ipv4_error = office.validate_radius_dynamic_vlan_mappings(
+  { { vid = "20", network = "corp20" } },
+  { { name = "corp20", protocol = "static", device = "br-lan.20", ipv4 = { "not-an-ip" } } },
+  radius_vlan_bridges, radius_vlan_sections, radius_vlan_zones)
+assert(invalid_ipv4_mapping == nil and type(invalid_ipv4_error) == "string" and
+  invalid_ipv4_error:find("routed IPv4 office segment", 1, true),
+  "RADIUS dynamic VLAN assignment requires a valid IPv4 gateway address")
 local wifi_interfaces = {
   { name = "corp", protocol = "static" },
   { name = "guest", protocol = "static" },
