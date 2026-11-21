@@ -48,7 +48,7 @@ class DeviceProfileTests(unittest.TestCase):
         self.assertEqual(fields[12], "1")
         self.assertEqual(fields[15], "*arcadyan_aw1000-squashfs-factory.ubi")
 
-    def test_line_output_is_a_fixed_sixteen_field_contract(self) -> None:
+    def test_line_output_is_a_fixed_seventeen_field_contract(self) -> None:
         result = subprocess.run(
             [sys.executable, str(VALIDATOR_PATH), str(PROFILE), "--lines"],
             check=True,
@@ -57,7 +57,7 @@ class DeviceProfileTests(unittest.TestCase):
         )
         self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 17)
 
-    def test_tab_output_is_a_fixed_sixteen_field_contract(self) -> None:
+    def test_tab_output_is_a_fixed_seventeen_field_contract(self) -> None:
         result = subprocess.run(
             [sys.executable, str(VALIDATOR_PATH), str(PROFILE), "--fields"],
             check=True,
