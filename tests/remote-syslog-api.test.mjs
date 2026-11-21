@@ -103,6 +103,12 @@ test("TLS syslog client rejects malformed destinations and unknown transports be
     updateRouterRemoteSyslog({ ...tlsInput, host: "192.0.2.999" }),
     /valid IPv4 address, unicast IPv6 address or DNS host name/,
   );
+  for (const host of ["192.0.2.15", "198.51.100.5", "203.0.113.5", "127.0.0.1", "169.254.1.5", "224.0.0.1", "0.0.0.0"]) {
+    await assert.rejects(
+      updateRouterRemoteSyslog({ ...tlsInput, host }),
+      /valid IPv4 address, unicast IPv6 address or DNS host name/,
+    );
+  }
   await assert.rejects(
     updateRouterRemoteSyslog({ ...tlsInput, host: "192.0.2.015" }),
     /valid IPv4 address, unicast IPv6 address or DNS host name/,
