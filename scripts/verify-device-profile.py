@@ -181,6 +181,7 @@ def main() -> int:
     )
     output = parser.add_mutually_exclusive_group()
     output.add_argument("--fields", action="store_true", help="print validated tab-separated build fields")
+    output.add_argument("--lines", action="store_true", help="print one validated build field per line")
     output.add_argument("--check-only", action="store_true", help="validate without printing build fields")
     args = parser.parse_args()
 
