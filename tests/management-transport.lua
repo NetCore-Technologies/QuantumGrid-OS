@@ -138,6 +138,75 @@ local unknown_auth = transport.inspect(uci, fs)
 assert(unknown_auth.ssh_status == "review")
 assert(unknown_auth.ssh_instances[1].password_auth_enabled == nil)
 
+-- An invalid enable flag must not be mistaken for a disabled daemon.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "maybe",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local unknown_enable = transport.inspect(uci, fs)
+assert(unknown_enable.ssh_enabled_instance_count == 0)
+assert(unknown_enable.ssh_status == "review")
+assert(unknown_enable.status == "review")
+
+-- Gateway port forwarding is a review item even with key-only authentication.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "22",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "on"
+  }}
+})
+local gateway_ports = transport.inspect(uci, fs)
+assert(gateway_ports.ssh_status == "review")
+assert(gateway_ports.ssh_instances[1].gateway_ports_enabled)
+
+-- Invalid listener ports are never treated as a valid SSH endpoint.
+uci, fs = fixture("1", {
+  dropbear_sections = {{
+    [".name"] = "main",
+    enable = "1",
+    Interface = "lan",
+    Port = "70000",
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }}
+})
+local invalid_port = transport.inspect(uci, fs)
+assert(invalid_port.ssh_status == "review")
+assert(not invalid_port.ssh_instances[1].port_valid)
+
+-- Inventory truncation is visible and cannot be reported as ready.
+local many_dropbear_instances = {}
+for index = 1, 9 do
+  many_dropbear_instances[index] = {
+    [".name"] = "instance" .. tostring(index),
+    enable = "1",
+    Interface = "lan",
+    Port = tostring(2200 + index),
+    PasswordAuth = "off",
+    RootPasswordAuth = "off",
+    GatewayPorts = "off"
+  }
+end
+uci, fs = fixture("1", { dropbear_sections = many_dropbear_instances })
+local truncated_ssh = transport.inspect(uci, fs)
+assert(truncated_ssh.ssh_instance_count == 9)
+assert(#truncated_ssh.ssh_instances == 8 and truncated_ssh.ssh_truncated)
+assert(truncated_ssh.ssh_status == "review")
+assert(truncated_ssh.status == "review")
+
 -- An intentionally disabled Dropbear service does not create a false warning.
 uci, fs = fixture("1", {
   files = {
