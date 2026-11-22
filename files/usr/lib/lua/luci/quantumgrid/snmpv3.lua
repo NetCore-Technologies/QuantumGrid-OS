@@ -257,6 +257,9 @@ function classify_status(snapshot)
 		return "review"
 	end
 	if snapshot.enabled ~= true then
+		if snapshot.process_running == true or snapshot.firewall_rule_present == true then
+			return "review"
+		end
 		return "disabled"
 	end
 	if snapshot.snmp_version ~= "v3" or
