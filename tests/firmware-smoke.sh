@@ -5291,6 +5291,11 @@ grep -Fq 'removeRouterStaticRoute' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'function StaticRouteManager' "$ROOT/ui/quantumgrid/src/App.tsx"
 test -f "$ROOT/tests/static-routes-api.test.mjs"
 
+test -s "$ROOT/scripts/secure-aw1000-snmpd-runtime-config.sh"
+test -s "$ROOT/tests/snmpd-runtime-umask-smoke.sh"
+grep -Fq 'secure-aw1000-snmpd-runtime-config.sh' "$ROOT/build.sh"
+grep -Fq 'umask 077' "$ROOT/scripts/secure-aw1000-snmpd-runtime-config.sh"
+grep -Fq 'snmpd-runtime-umask-smoke.sh' "$ROOT/.github/workflows/ci.yml"
 # SNMPv3 management is authPriv-only, read-only, zone-scoped and fails closed.
 test -s "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 test -s "$ROOT/tests/snmpv3.lua"
