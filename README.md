@@ -743,6 +743,38 @@ must verify the collector's certificate chain, DNS, firewall policy, receipt and
 collector side. Lua validation is covered by `tests/remote-syslog.lua`, and the browser API contract
 by `tests/remote-syslog-api.test.mjs` in CI.
 
+## SNMPv3 management
+
+The System page can provision the AW1000 Net-SNMP agent using SNMPv3 `authPriv` only:
+SHA authentication, AES privacy, no write access, and the standard system-information
+OID subtree `.1.3.6.1.2.1`. The agent is disabled in the default image. The controller
+requires explicit confirmation over the authenticated same-origin HTTPS session and
+creates one QuantumGrid-managed v3 user plus one UDP/161 firewall rule scoped to a single
+recognised internal management zone. The zone's network membership must be unique across
+the firewall zone inventory. The default service-wide network list is cleared so the
+managed rule, rather than the package's implicit network rules, defines exposure.
+
+Enabling is refused when legacy SNMPv1/v2c community/access configuration is found or
+cannot be inspected, when another UDP/161 ACCEPT rule could expose the agent, or when an
+external/unknown firewall zone does not have an explicit REJECT/DROP input policy. The
+reserved user and firewall sections are never overwritten if they contain unmanaged
+options. The controller commits the SNMP and firewall settings, applies the firewall,
+restarts the daemon, and then verifies the exact user, read-only OID/access policy,
+zone mapping, firewall rule, process identity and credential-file permissions. A failed
+commit, restart, permission check or live-posture check enters a rollback path and reports
+whether restoration was confirmed.
+
+SNMP passphrases are not returned by the API or written to the administrative audit log.
+The UCI credential configuration and generated Net-SNMP runtime configuration are required
+to be root-owned with mode 0600. This is file-permission protection, not encryption at rest;
+protect the router's root filesystem, backups and physical console accordingly. The feature
+does not provide a central NMS, user lifecycle/rotation workflow, SNMP trap receiver,
+SNMPv1/v2c compatibility, write-enabled MIB access or per-OID custom policy. A reported
+`ready` state is a local configuration/process posture check, not proof that an NMS can
+reach UDP/161 or successfully authenticate; verify polling and network reachability from
+the intended management host before operational use. Lua and browser API contracts are
+covered by `tests/snmpv3.lua` and `tests/snmpv3-api.test.mjs`.
+
 ## Configuration backup and restore
 
 The authenticated System page creates a configuration archive with the native
