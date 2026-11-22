@@ -10,6 +10,63 @@ local input = {
   privacy_pass = "StrongPrivacySecret-2026!",
   source_zone = "mgmt"
 }
+local uci_zones = {
+  { [".name"] = "mgmt", name = "mgmt", network = { "lan" } },
+  { [".name"] = "wan", name = "wan", network = { "wan" } },
+}
+local zone_uci = {}
+function zone_uci:foreach(package, section_type, callback)
+  if package == "firewall" and section_type == "zone" then
+    for _, zone in ipairs(uci_zones) do callback(zone) end
+  end
+end
+local networks = snmp.trusted_zone_networks(zone_uci, "mgmt")
+assert(networks and #networks == 1 and networks[1] == "lan")
+assert(snmp.trusted_zone_networks(zone_uci, "wan") == nil,
+  "WAN zones must never be trusted SNMP sources")
+
+local ambiguous_zone_uci = {}
+function ambiguous_zone_uci:foreach(package, section_type, callback)
+  if package == "firewall" and section_type == "zone" then
+    callback({ [".name"] = "mgmt", name = "mgmt", network = { "lan" } })
+    callback({ [".name"] = "corp", name = "corp", network = { "lan" } })
+  end
+end
+assert(snmp.trusted_zone_networks(ambiguous_zone_uci, "mgmt") == nil,
+  "a network attached to multiple zones must be rejected")
+
+local managed_user = {
+  [".name"] = "quantumgrid", [".type"] = "v3",
+  username = "quantumgrid-nms", auth_type = "SHA",
+  auth_pass = "StrongAuthPassphrase-2026!",
+  privacy_type = "AES", privacy_pass = "StrongPrivacySecret-2026!",
+  allow_write = "0", RestrictedOID = ".1.3.6.1.2.1",
+  source_zone = "mgmt",
+}
+assert(snmp.has_only_managed_user_options(managed_user))
+managed_user.exec = "/bin/sh"
+assert(not snmp.has_only_managed_user_options(managed_user),
+  "unmanaged user directives must never be treated as a managed SNMPv3 user")
+
+local managed_rule = {
+  [".name"] = "quantumgrid_snmpv3", [".type"] = "rule",
+  name = "QuantumGrid SNMPv3 management access", src = "mgmt",
+  proto = "udp", dest_port = "161", target = "ACCEPT", family = "any",
+}
+assert(snmp.has_only_managed_firewall_options(managed_rule))
+managed_rule.dest = "wan"
+assert(not snmp.has_only_managed_firewall_options(managed_rule),
+  "a managed SNMP rule must not contain an unexpected destination zone")
+
+assert(snmp.credentials_file_private({ uid = 0, modedec = 384 }),
+  "root-owned 0600 SNMP credential files are accepted")
+assert(not snmp.credentials_file_private({ uid = 0, modedec = 420 }),
+  "group/world-readable SNMP credential files are rejected")
+assert(not snmp.credentials_file_private({ uid = 1000, modedec = 384 }),
+  "non-root-owned SNMP credential files are rejected")
+assert(not snmp.credentials_file_private({ uid = 0, modedec = 416 }),
+  "group-writable SNMP credential files are rejected")
+
 local valid = snmp.validate(input, zones)
 assert(valid and valid.enabled)
 assert(valid.username == "quantumgrid-nms")
@@ -59,6 +116,13 @@ local ready_status = snmp.classify_status({
   restricted_oid = ".1.3.6.1.2.1",
   source_zone_class = "internal",
   firewall_rule_configured = true,
+  legacy_network_firewall = false,
+  firewall_perimeter_safe = true,
+  firewall_conflict = false,
+  managed_user_section = true,
+  managed_firewall_rule = true,
+  private_config_permissions = true,
+  runtime_credentials_private = true,
   process_running = true,
 })
 assert(ready_status == "ready")
