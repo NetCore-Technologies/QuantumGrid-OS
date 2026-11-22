@@ -244,8 +244,10 @@ assert(not snmp.private_root_directory({ uid = 0, type = "reg", modedec = 33152 
 assert(not snmp.credentials_file_private({ uid = 0, modedec = 416 }),
   "group-writable SNMP credential files are rejected")
 
-local function persistent_file_fixture(stat, content, read_failure)
+local function persistent_file_fixture(stat, content, read_failure, directory_stat)
+  directory_stat = directory_stat or { uid = 0, type = "dir", modedec = 16877 }
   local fs = { lstat = function(path)
+    if path == "/usr/lib/snmp" then return directory_stat end
     assert(path == "/usr/lib/snmp/snmpd.conf")
     return stat
   end }
@@ -289,6 +291,17 @@ local malformed_fs, malformed_reader = persistent_file_fixture(
   { uid = 0, type = "reg", modedec = 33152, size = 20 }, "usmUser malformed\\n")
 assert(snmp.inspect_persistent_usm_file(
   malformed_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", malformed_reader) == nil)
+for _, unsafe_directory in ipairs({
+  { uid = 0, type = "lnk", modedec = 41471 },
+  { uid = 0, type = "dir", modedec = 16895 },
+  { uid = 1000, type = "dir", modedec = 16877 },
+}) do
+  local unsafe_dir_fs, unsafe_dir_reader = persistent_file_fixture(
+    persistent_stat, persistent_db, false, unsafe_directory)
+  assert(snmp.inspect_persistent_usm_file(
+    unsafe_dir_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", unsafe_dir_reader) == nil,
+    "symlinked, non-root or writable persistent directories must be rejected")
+end
 local unreadable_fs, unreadable_reader = persistent_file_fixture(persistent_stat, nil, true)
 assert(snmp.inspect_persistent_usm_file(
   unreadable_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", unreadable_reader) == nil)
