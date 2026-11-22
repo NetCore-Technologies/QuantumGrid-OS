@@ -25,7 +25,8 @@ Every completed build must include:
 - Package archive produced by the same build
 - `OPENWRT-FEEDS.txt` listing verified package-feed commit revisions
 - Pinned AW1000 phone-feed source archive
-- Package manifest when generated
+- Exact installed-package manifest used by the SBOM generator
+- CycloneDX 1.6 SBOM with SHA-256 evidence references
 - Phone-port and recovery guides
 - The exact AW1000 build configuration
 - `BUILDINFO.txt` and `SHA256SUMS`
@@ -41,8 +42,12 @@ check, not a cryptographic signature or proof of publisher identity.
 After creating `SHA256SUMS`, the firmware release workflow creates a GitHub artifact
 attestation for every file in `dist/` using Sigstore-backed SLSA provenance. This binds each
 asset's SHA-256 digest to the repository, source commit, workflow identity and build run.
-The checksum manifest remains useful for transfer-corruption checks, but it is not the
-publisher-authentication mechanism.
+The CycloneDX SBOM hashes the exact installed-package manifest, resolved OpenWrt feed report,
+pinned AW1000 phone-source archive, `BUILDINFO.txt`, and exact AW1000 build configuration in
+addition to the firmware and package archive. Package inventory entries are limited to the
+names and versions present in the image manifest; the generator does not fabricate license or
+transitive-dependency data that the manifest does not contain. The checksum manifest remains
+useful for transfer-corruption checks, but it is not the publisher-authentication mechanism.
 
 Install and authenticate GitHub CLI, download the release assets, then verify the factory image before transferring it to the router:
 
