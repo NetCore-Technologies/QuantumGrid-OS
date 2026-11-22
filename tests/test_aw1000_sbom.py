@@ -118,7 +118,7 @@ class Aw1000SbomTests(unittest.TestCase):
 
     def test_manifest_enforces_component_limit(self) -> None:
         self.manifest.write_text(
-            "".join(f"package-{index} - 1.0.0\\n" for index in range(SBOM.MAX_PACKAGES + 1)),
+            "".join(f"package-{index} - 1.0.0\n" for index in range(SBOM.MAX_PACKAGES + 1)),
             encoding="utf-8",
         )
         with self.assertRaises(SBOM.SbomError):
@@ -130,6 +130,33 @@ class Aw1000SbomTests(unittest.TestCase):
             SBOM.build_sbom(self.args)
         self.args.profile = "arcadyan_aw1000"
         self.args.source_commit = "not-a-full-git-sha"
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.build_sbom(self.args)
+
+    def test_manifest_must_be_regular_and_within_size_limit(self) -> None:
+        link = self.root / "manifest-link"
+        link.symlink_to(self.manifest)
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.parse_manifest(link)
+        self.manifest.write_bytes(b"#" + b"x" * (4 * 1024 * 1024))
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.parse_manifest(self.manifest)
+
+    def test_sbom_dependency_references_resolve_to_components(self) -> None:
+        sbom = SBOM.build_sbom(self.args)
+        refs = {item["bom-ref"] for item in sbom["components"]}
+        dependencies = sbom["dependencies"]
+        self.assertEqual(len(dependencies), 1)
+        self.assertTrue(set(dependencies[0]["dependsOn"]).issubset(refs))
+        self.assertEqual(len(refs), len(sbom["components"]), "component bom-ref values must be unique")
+        self.assertEqual(len(dependencies[0]["dependsOn"]), 3)
+
+    def test_rejects_unadmitted_build_profile_and_control_characters(self) -> None:
+        self.args.build_profile = "unreviewed router image"
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.build_sbom(self.args)
+        self.args.build_profile = "AW1000 stable upstream OpenWrt"
+        self.args.version = "0.4.0\\nmalicious"
         with self.assertRaises(SBOM.SbomError):
             SBOM.build_sbom(self.args)
 
