@@ -313,6 +313,7 @@ it can request a confirmed write. It defaults to read-only preflight.
 | `*-packages.tar.zst` | Package output from the same firmware build |
 | `SHA256SUMS` | Verify the published release assets |
 | `BUILDINFO.txt` | Source commits, configuration hash and build metadata |
+| `QuantumGrid-OS-*-AW1000-SBOM.cdx.json` | CycloneDX 1.6 inventory of image-installed OpenWrt packages and release artifact hashes |
 
 QuantumGrid intentionally publishes **no `sysupgrade.bin`** for the AW1000 build. The
 persistent release artifact is the factory `.ubi` image. Do not upload it to a generic LuCI
