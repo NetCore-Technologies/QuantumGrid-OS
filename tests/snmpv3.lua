@@ -356,6 +356,10 @@ local ready_status = snmp.classify_status({
   managed_firewall_rule = true,
   private_config_permissions = true,
   runtime_credentials_private = true,
+  persistent_inventory_available = true,
+  persistent_user_present = true,
+  persistent_user_matches = 1,
+  persistent_usm_user_count = 1,
   process_running = true,
 })
 assert(ready_status == "ready")
@@ -371,6 +375,10 @@ for _, overrides in ipairs({
   { private_config_permissions = false },
   { runtime_credentials_private = false },
   { process_running = false },
+  { persistent_inventory_available = false },
+  { persistent_user_present = false },
+  { persistent_user_matches = 0 },
+  { persistent_usm_user_count = 2 },
 }) do
   local candidate = {}
   for key, value in pairs({
@@ -386,6 +394,8 @@ for _, overrides in ipairs({
     firewall_perimeter_safe = true, firewall_conflict = false,
     managed_user_section = true, managed_firewall_rule = true,
     private_config_permissions = true, runtime_credentials_private = true,
+    persistent_inventory_available = true, persistent_user_present = true,
+    persistent_user_matches = 1, persistent_usm_user_count = 1,
     process_running = true,
   }) do candidate[key] = value end
   for key, value in pairs(overrides) do candidate[key] = value end
@@ -418,6 +428,8 @@ assert(snmp.classify_status({
   available = true, enabled = false, firewall_inventory_available = true,
   firewall_rule_present = false, firewall_conflict = false,
   process_running = false, runtime_credentials_present = false,
+  persistent_inventory_available = true, persistent_user_present = false,
+  persistent_user_matches = 0, persistent_usm_user_count = 0,
 }) == "disabled")
 for _, disabled_state in ipairs({
   { firewall_inventory_available = false },
@@ -425,11 +437,16 @@ for _, disabled_state in ipairs({
   { firewall_conflict = true },
   { process_running = true },
   { runtime_credentials_present = true },
+  { persistent_inventory_available = false },
+  { persistent_user_present = true },
+  { persistent_usm_user_count = 1 },
 }) do
   local candidate = {
     available = true, enabled = false, firewall_inventory_available = true,
     firewall_rule_present = false, firewall_conflict = false,
     process_running = false, runtime_credentials_present = false,
+    persistent_inventory_available = true, persistent_user_present = false,
+    persistent_user_matches = 0, persistent_usm_user_count = 0,
   }
   for key, value in pairs(disabled_state) do candidate[key] = value end
   assert(snmp.classify_status(candidate) == "review",
@@ -450,8 +467,12 @@ assert(ready and polled.status == "ready" and sample_calls == 3 and sleeps == 2,
   "SNMP enablement should tolerate daemon startup delay but return only on exact ready state")
 
 local disable_samples = {
-  { enabled = false, status = "review", process_running = true },
-  { enabled = false, status = "disabled", process_running = false },
+  { enabled = false, status = "review", process_running = true,
+    runtime_credentials_present = true, persistent_inventory_available = true,
+    persistent_user_present = true, persistent_usm_user_count = 1 },
+  { enabled = false, status = "disabled", process_running = false,
+    runtime_credentials_present = false, persistent_inventory_available = true,
+    persistent_user_present = false, persistent_usm_user_count = 0 },
 }
 local disable_calls = 0
 local disabled_state, disable_ready = snmp.wait_for_state(function()
@@ -460,6 +481,22 @@ local disabled_state, disable_ready = snmp.wait_for_state(function()
 end, function() end, false, nil, nil, 4)
 assert(disable_ready and disabled_state.process_running == false and disable_calls == 2,
   "SNMP disablement waits until the managed daemon process has stopped even when legacy config remains")
+
+local persistent_left_samples = {
+  { enabled = false, status = "review", process_running = false,
+    runtime_credentials_present = false, persistent_inventory_available = true,
+    persistent_user_present = true, persistent_usm_user_count = 1 },
+  { enabled = false, status = "disabled", process_running = false,
+    runtime_credentials_present = false, persistent_inventory_available = true,
+    persistent_user_present = false, persistent_usm_user_count = 0 },
+}
+local persistent_left_calls = 0
+local clean_state, persistent_clean = snmp.wait_for_state(function()
+  persistent_left_calls = persistent_left_calls + 1
+  return persistent_left_samples[persistent_left_calls]
+end, function() end, false, nil, nil, 3)
+assert(persistent_clean and clean_state.status == "disabled" and persistent_left_calls == 2,
+  "SNMP disablement must wait for persistent localized USM keys to be removed")
 
 local retry_count, sleep_count = 0, 0
 local last_state, exhausted = snmp.wait_for_state(function()
