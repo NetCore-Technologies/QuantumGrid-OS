@@ -132,6 +132,9 @@ local ready_status = snmp.classify_status({
   allow_write = "0",
   restricted_oid = ".1.3.6.1.2.1",
   source_zone_class = "internal",
+  firewall_inventory_available = true,
+  firewall_rule_present = true,
+  runtime_credentials_present = true,
   source_zone = "mgmt",
   user_source_zone = "mgmt",
   network_membership_verified = true,
@@ -164,7 +167,9 @@ for _, overrides in ipairs({
     username = "quantumgrid-nms", auth_type = "SHA", privacy_type = "AES",
     allow_write = "0", restricted_oid = ".1.3.6.1.2.1",
     source_zone = "mgmt", user_source_zone = "mgmt",
-    source_zone_class = "internal", network_membership_verified = true,
+    source_zone_class = "internal", firewall_inventory_available = true,
+    firewall_rule_present = true, runtime_credentials_present = true,
+    network_membership_verified = true,
     firewall_rule_configured = true, legacy_network_firewall = false,
     firewall_perimeter_safe = true, firewall_conflict = false,
     managed_user_section = true, managed_firewall_rule = true,
@@ -197,7 +202,27 @@ local community_status = snmp.classify_status({
 assert(community_status == "review",
   "legacy community strings must be flagged even while the daemon is disabled")
 assert(snmp.classify_status({ available = false }) == "unavailable")
-assert(snmp.classify_status({ available = true, enabled = false }) == "disabled")
+assert(snmp.classify_status({
+  available = true, enabled = false, firewall_inventory_available = true,
+  firewall_rule_present = false, firewall_conflict = false,
+  process_running = false, runtime_credentials_present = false,
+}) == "disabled")
+for _, disabled_state in ipairs({
+  { firewall_inventory_available = false },
+  { firewall_rule_present = true },
+  { firewall_conflict = true },
+  { process_running = true },
+  { runtime_credentials_present = true },
+}) do
+  local candidate = {
+    available = true, enabled = false, firewall_inventory_available = true,
+    firewall_rule_present = false, firewall_conflict = false,
+    process_running = false, runtime_credentials_present = false,
+  }
+  for key, value in pairs(disabled_state) do candidate[key] = value end
+  assert(snmp.classify_status(candidate) == "review",
+    "disabled SNMP must be review while residual firewall, process, credential or unknown firewall state remains")
+end
 
 local samples = {
   { enabled = true, status = "disabled", process_running = false, username = "", source_zone = "" },
