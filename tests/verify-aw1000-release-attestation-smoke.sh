@@ -25,7 +25,7 @@ chmod +x "$WORK/bin/gh"
 export PATH="$WORK/bin:$PATH"
 export GH_ARGS_LOG="$WORK/gh-args.txt"
 
-"$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST"
+sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST"
 grep -Fxq 'attestation' "$GH_ARGS_LOG"
 grep -Fxq 'verify' "$GH_ARGS_LOG"
 grep -Fxq "$IMAGE" "$GH_ARGS_LOG"
@@ -37,7 +37,7 @@ grep -Fxq 'NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-releas
 # A bad checksum must stop before GitHub is contacted.
 : > "$GH_ARGS_LOG"
 printf '%064d  %s\n' 0 "$(basename "$IMAGE")" > "$MANIFEST"
-if "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+if sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
   echo "ERROR: checksum mismatch was accepted" >&2
   exit 1
 fi
@@ -51,7 +51,7 @@ fi
   cd "$WORK"
   sha256sum "$(basename "$IMAGE")" > "$MANIFEST"
 )
-if GH_FAIL=1 "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+if GH_FAIL=1 sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
   echo "ERROR: failed GitHub attestation was accepted" >&2
   exit 1
 fi
