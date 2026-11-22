@@ -71,6 +71,8 @@ jobs:
         run: node --experimental-strip-types --test ../../tests/static-routes-api.test.mjs
       - name: Test authenticated TLS and native remote syslog API
         run: node --experimental-strip-types --test ../../tests/remote-syslog-api.test.mjs
+      - name: Test authenticated read-only SNMPv3 API contract
+        run: node --experimental-strip-types --test ../../tests/snmpv3-api.test.mjs
       - name: Test authenticated multi-AP usteer roaming API contract
         run: node --experimental-strip-types --test ../../tests/usteer-api.test.mjs
       - name: Test encrypted configuration backup container and integrity
@@ -208,6 +210,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/config_backup.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/audit.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/snmpv3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
@@ -253,6 +256,8 @@ jobs:
         run: lua5.1 tests/audit-log.lua
       - name: Test native remote syslog validation
         run: lua5.1 tests/remote-syslog.lua
+      - name: Test read-only SNMPv3 authPriv validation and firewall scope
+        run: lua5.1 tests/snmpv3.lua
       - name: Test NSS EDMA and PPE readiness states
         run: lua5.1 tests/acceleration-status.lua
       - name: Test optional AW1000 NSS build profile
