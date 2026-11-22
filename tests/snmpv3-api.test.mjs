@@ -193,7 +193,7 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
     return jsonResponse({
       ...ready,
       enabled: false,
-      status: "disabled",
+      status: "review",
       username: "",
       source_zone: "",
       auth_type: "",
@@ -211,7 +211,7 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
       persistent_inventory_available: true,
       persistent_user_present: false,
       persistent_user_matches: 0,
-      persistent_usm_user_count: 0,
+      persistent_usm_user_count: 1,
     });
   };
   const result = await updateRouterSnmpv3({
@@ -226,5 +226,9 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
   assert.equal(form.get("enabled"), "0");
   assert.equal(form.has("auth_pass"), false);
   assert.equal(form.has("privacy_pass"), false);
-  assert.equal(result.status, "disabled");
+  assert.equal(result.status, "review");
+  assert.equal(result.persistent_user_present, false);
+  assert.equal(result.persistent_user_matches, 0);
+  assert.equal(result.persistent_usm_user_count, 1,
+    "unrelated persistent Net-SNMP users are preserved while the managed user's key is removed");
 });
