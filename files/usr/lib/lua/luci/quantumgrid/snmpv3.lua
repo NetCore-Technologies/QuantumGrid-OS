@@ -274,7 +274,7 @@ function inspect_persistent_usm_users(content)
 	for line in (content .. "\n"):gmatch("(.-)\n") do
 		local tokens = persistent_line_tokens(line)
 		if tokens[1] == "usmUser" then
-			if #tokens < 11 then
+			if #tokens < 12 then
 				return nil, "The Net-SNMP persistent user database contains a malformed usmUser record."
 			end
 			total = total + 1
@@ -298,19 +298,29 @@ function strip_persistent_usm_users(content, usernames)
 	end
 	local output = {}
 	local removed = 0
-	for line in (content .. "\n"):gmatch("(.-)\n") do
+	local offset = 1
+	while offset <= #content do
+		local newline = content:find("\n", offset, true)
+		local line, ending
+		if newline then
+			line = content:sub(offset, newline - 1)
+			ending = "\n"
+			offset = newline + 1
+		else
+			line = content:sub(offset)
+			ending = ""
+			offset = #content + 1
+		end
 		local tokens = persistent_line_tokens(line)
 		local remove = tokens[1] == "usmUser" and
 			(encoded[tokens[5]] == true or encoded[tokens[6]] == true)
 		if remove then
 			removed = removed + 1
 		else
-			table.insert(output, line)
+			table.insert(output, line .. ending)
 		end
 	end
-	local result = table.concat(output, "\n")
-	if result ~= "" then result = result .. "\n" end
-	return result, removed
+	return table.concat(output), removed
 end
 
 function persistent_user_matches(content, username)
