@@ -43,16 +43,39 @@ grep -Fxq -- '--source-ref' "$GH_ARGS_LOG"
 grep -Fxq 'refs/tags/qg-v0.4.0' "$GH_ARGS_LOG"
 grep -Fxq -- '--deny-self-hosted-runners' "$GH_ARGS_LOG"
 
-# Older GitHub CLI versions have unsafe case-insensitive source-ref comparison.
-: > "$GH_ARGS_LOG"
-if GH_VERSION=2.101.0 sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
-  echo "ERROR: an outdated GitHub CLI was accepted for source-ref enforcement" >&2
-  exit 1
-fi
-[ ! -s "$GH_ARGS_LOG" ] || {
-  echo "ERROR: attestation verification ran with an outdated GitHub CLI" >&2
-  exit 1
-}
+# GitHub CLI releases through 2.101.0 have unsafe case-insensitive source-ref comparison.
+for old_version in 1.99.0 2.67.9 2.68.0 2.99.9 2.101.0; do
+  : > "$GH_ARGS_LOG"
+  if GH_VERSION="$old_version" sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+    echo "ERROR: outdated GitHub CLI $old_version was accepted" >&2
+    exit 1
+  fi
+  [ ! -s "$GH_ARGS_LOG" ] || {
+    echo "ERROR: attestation ran with outdated GitHub CLI $old_version" >&2
+    exit 1
+  }
+done
+
+# Supported versions include patch, minor and major releases at or above 2.102.0.
+for supported_version in 2.102.0 2.102.1 2.103.0 3.0.0; do
+  : > "$GH_ARGS_LOG"
+  GH_VERSION="$supported_version" sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST"
+  grep -Fxq -- '--source-ref' "$GH_ARGS_LOG"
+  grep -Fxq 'refs/tags/qg-v0.4.0' "$GH_ARGS_LOG"
+done
+
+# Missing or malformed CLI versions are rejected before contacting GitHub.
+for malformed_version in "" 2.102 2.x.0 2.102.0-rc.1; do
+  : > "$GH_ARGS_LOG"
+  if GH_VERSION="$malformed_version" sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+    echo "ERROR: malformed GitHub CLI version '$malformed_version' was accepted" >&2
+    exit 1
+  fi
+  [ ! -s "$GH_ARGS_LOG" ] || {
+    echo "ERROR: attestation ran with malformed GitHub CLI version '$malformed_version'" >&2
+    exit 1
+  }
+done
 
 # Manual build artifacts are not tagged releases and cannot pass this verifier.
 MANUAL_IMAGE="$WORK/QuantumGrid-OS-manual-build-7-AW1000-squashfs-factory.ubi"
