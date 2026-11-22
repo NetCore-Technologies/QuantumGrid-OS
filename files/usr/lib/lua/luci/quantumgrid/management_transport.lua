@@ -93,6 +93,10 @@ local function add_zone_networks(index, value, kind)
   end
 end
 
+function M.classify_firewall_zone_name(name)
+  return management_zone_kind(name)
+end
+
 local function management_zone_index(uci)
   if type(uci) ~= "table" or type(uci.foreach) ~= "function" then return nil end
   local index = {}
