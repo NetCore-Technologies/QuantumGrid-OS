@@ -3920,8 +3920,10 @@ local function snmpv3_status(uci, fs)
 		allow_write = "",
 		restricted_oid = "",
 		legacy_community_configured = false,
+		legacy_network_firewall = false,
 		firewall_rule_configured = false,
 		firewall_perimeter_safe = false,
+		firewall_conflict = false,
 		process_running = false,
 		sampled_at = os.time()
 	}
@@ -3933,6 +3935,8 @@ local function snmpv3_status(uci, fs)
 	end
 	result.snmp_version = type(general.snmp_version) == "string" and general.snmp_version or ""
 	result.enabled = general.enabled == "1"
+	result.legacy_network_firewall = type(general.network) == "table" and #general.network > 0 or
+		(type(general.network) == "string" and general.network ~= "")
 	local legacy = snmpv3_legacy_access_configured(uci)
 	if legacy == nil then
 		result.available = false
@@ -3975,6 +3979,13 @@ local function snmpv3_status(uci, fs)
 			rule.target == "ACCEPT" and rule.family == "any" and
 			result.source_zone_class == "internal" and perimeter_safe
 	end
+	local firewall_conflict = require("luci.quantumgrid.snmpv3").has_conflicting_firewall_rule(uci)
+	if firewall_conflict == nil then
+		result.available = false
+		return result
+	end
+	result.firewall_conflict = firewall_conflict
+	if firewall_conflict then result.firewall_rule_configured = false end
 
 	local pid_contents = read_file("/var/run/snmpd.pid")
 	local pid = type(pid_contents) == "string" and pid_contents:match("^%s*(%d+)%s*$") or nil
