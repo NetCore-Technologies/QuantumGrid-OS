@@ -135,6 +135,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.1
+      - name: Test AW1000 CycloneDX SBOM generation
+        run: |
+          python3 -m py_compile scripts/generate-aw1000-sbom.py tests/test_aw1000_sbom.py
+          python3 tests/test_aw1000_sbom.py
       - name: Validate hardware profile contracts
         run: |
           python3 -m py_compile scripts/verify-device-profile.py tests/device-profile.py
