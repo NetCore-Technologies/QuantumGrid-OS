@@ -1543,6 +1543,8 @@ export interface RouterSnmpv3UpdateResult {
   persistent_user_present: boolean;
   persistent_user_matches: number;
   persistent_usm_user_count: number;
+  v3_user_section_present: boolean;
+  v3_user_section_count: number;
   restarted: true;
   lock_released: true;
   rolled_back: false;
