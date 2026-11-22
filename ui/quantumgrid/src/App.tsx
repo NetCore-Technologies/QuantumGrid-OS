@@ -3105,6 +3105,7 @@ function SnmpV3Settings({ status, refresh }: {
     status.legacy_network_firewall === false &&
     status.firewall_perimeter_safe && !status.legacy_community_configured &&
     !status.firewall_conflict && status.runtime_credentials_private &&
+    status.persistent_inventory_available &&
     (status.status === "disabled" || status.status === "ready") &&
     trustedZones.some((zone) => zone.name === sourceZone) &&
     /^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(username) && username !== "root" &&
@@ -3133,12 +3134,12 @@ function SnmpV3Settings({ status, refresh }: {
       setNotice({
         success: true,
         message: result.enabled
-          ? "SNMPv3 is active with SHA authentication, AES privacy, authPriv security, read-only SNMP system-group access and the " + result.source_zone + " management zone. Passphrases were not returned by the router."
+          ? "SNMPv3 is active with SHA authentication, AES privacy, read-only system-group access, the " + result.source_zone + " management zone and exactly one verified persistent USM key. Passphrases were not returned by the router."
           : result.firewall_reloaded
             ? result.status === "disabled"
-              ? "SNMP service stopped, the QuantumGrid UDP/161 rule was removed, and the generated runtime credential file was scrubbed."
-              : "SNMP service stopped and the generated runtime credentials were scrubbed. Firewall/legacy SNMP state remains in review."
-            : "SNMP service stopped and the generated runtime credentials were scrubbed. The firewall was unavailable, so its UDP/161 rules still require out-of-band inspection.",
+              ? "SNMP service stopped, the QuantumGrid UDP/161 rule was removed, and both generated runtime credentials and managed persistent USM keys were scrubbed."
+              : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. Firewall or legacy SNMP state remains in review."
+            : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. The firewall was unavailable, so its UDP/161 rules still require out-of-band inspection.",
       });
       refresh();
     } catch (cause) {
@@ -3177,6 +3178,16 @@ function SnmpV3Settings({ status, refresh }: {
               The Net-SNMP service still has an implicit network binding. It must be cleared so only the selected firewall-zone rule controls UDP/161 exposure.
             </div>
           )}
+          {!status.persistent_inventory_available && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The Net-SNMP persistent user database could not be verified as a root-owned mode-0600 regular file inside a protected directory. QuantumGrid will not report SNMP as ready or confirm credential cleanup while this inventory is unavailable.
+            </div>
+          )}
+          {status.persistent_inventory_available && status.persistent_usm_user_count > 0 && (
+            <div className="module-message remote-syslog-error" role="alert">
+              Net-SNMP has {status.persistent_usm_user_count} persistent localized USM key record(s), with {status.persistent_user_matches} matching the configured managed user. QuantumGrid accepts readiness only with exactly one matching record and no additional persisted users; disable or rotate through the managed workflow to remove stale keys.
+            </div>
+          )}
           {!status.private_config_permissions && (
             <div className="module-message" role="note">
               The current SNMP configuration file is not yet root-only. Before writing new credentials, QuantumGrid will apply and verify mode 0600; enabling is refused if that pre-write hardening fails.
@@ -3204,7 +3215,7 @@ function SnmpV3Settings({ status, refresh }: {
           )}
           {status.enabled && status.status !== "ready" && (
             <div className="module-message remote-syslog-error" role="alert">
-              SNMP is enabled but its live posture is not ready. Inspect the daemon, reserved firewall rule, process state and credential file permissions before relying on monitoring.
+              SNMP is enabled but its live posture is not ready. Inspect the daemon, reserved firewall rule, process identity, runtime file permissions and persistent USM key inventory before relying on monitoring.
             </div>
           )}
           <label className="remote-syslog-enabled">
@@ -3248,8 +3259,8 @@ function SnmpV3Settings({ status, refresh }: {
           )}
           <div className="module-message">
             {status.enabled
-              ? "Current configuration: " + (status.username || "unknown user") + " · " + (status.auth_type || "unknown auth") + " / " + (status.privacy_type || "unknown privacy") + " · " + (status.source_zone || "no trusted zone") + " · OID " + (status.restricted_oid || "unverified")
-              : "The SNMP daemon is currently disabled. Applying a new configuration writes the credentials to a root-only UCI file and protects the generated runtime credential file with mode 0600."}
+              ? "Current configuration: " + (status.username || "unknown user") + " · " + (status.auth_type || "unknown auth") + " / " + (status.privacy_type || "unknown privacy") + " · " + (status.source_zone || "no trusted zone") + " · OID " + (status.restricted_oid || "unverified") + " · persistent keys " + status.persistent_user_matches + "/" + status.persistent_usm_user_count
+              : "The SNMP daemon is currently disabled. Applying a new configuration writes credentials to a root-only UCI file, protects the generated runtime credential file with mode 0600, and verifies that only the current user’s localized key remains in the protected persistent database."}
           </div>
           <label className="remote-syslog-confirm">
             <input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} />
@@ -3261,7 +3272,7 @@ function SnmpV3Settings({ status, refresh }: {
             <button className="hero-button" type="submit" disabled={!confirmed || busy || (enabled && !canEnable)}>
               <Check size={14} /> {busy ? "Applying SNMPv3…" : enabled ? "Apply SNMPv3 authPriv" : "Disable SNMP"}
             </button>
-            <span>Authentication and privacy passphrases are never returned in telemetry and are cleared from this form after each attempt. Disabling also removes the generated plaintext runtime credential file.</span>
+            <span>Authentication and privacy passphrases are never returned in telemetry and are cleared from this form after each attempt. Rotation and disable stop the daemon before scrubbing its generated plaintext runtime file and only the managed user's persistent localized USM key records; unrelated Net-SNMP engine state is preserved.</span>
           </div>
           {notice && (
             <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
