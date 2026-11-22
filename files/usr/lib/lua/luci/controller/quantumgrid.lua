@@ -3925,6 +3925,7 @@ local function snmpv3_status(uci, fs)
 		firewall_perimeter_safe = false,
 		firewall_conflict = false,
 		process_running = false,
+		private_config_permissions = false,
 		sampled_at = os.time()
 	}
 	if not result.available or not result.firewall_available then return result end
@@ -3996,6 +3997,14 @@ local function snmpv3_status(uci, fs)
 	}
 	result.process_running = validator.snmpd_process_running(
 		process.pid, process.comm, process.cmdline)
+	local config_stat_ok, config_stat = pcall(fs.stat, "/etc/config/snmpd")
+	local runtime_stat_ok, runtime_stat = pcall(fs.stat, "/var/run/snmpd.conf")
+	local config_mode_secure = config_stat_ok and type(config_stat) == "table" and
+		validator.private_file_mode_secure(config_stat.mode)
+	local runtime_mode_secure = runtime_stat_ok and type(runtime_stat) == "table" and
+		validator.private_file_mode_secure(runtime_stat.mode)
+	result.private_config_permissions = config_mode_secure and
+		(not result.enabled or runtime_mode_secure)
 	result.status = validator.classify_status(result)
 	return result
 end
