@@ -9484,6 +9484,103 @@ function action_snmpv3_update()
 		return
 	end
 
+	local function current_snmp_process_running()
+		local pid_contents = read_file("/var/run/snmpd.pid")
+		local pid = type(pid_contents) == "string" and pid_contents:match("^%s*(%d+)%s*$") or nil
+		return validator.snmpd_process_running(
+			pid_contents,
+			pid and read_file("/proc/" .. pid .. "/comm") or nil,
+			pid and read_file("/proc/" .. pid .. "/cmdline") or nil
+		)
+	end
+
+	local prior_pid_contents = read_file("/var/run/snmpd.pid")
+	local was_running = current_snmp_process_running()
+	if prior_pid_contents and not was_running then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			"The SNMP PID file exists but does not identify the expected managed daemon. Resolve the stale or unexpected process state before retrying."
+			or "The SNMP process identity is invalid and rollback could not be confirmed. Use an out-of-band management path.", 409)
+		return
+	end
+	if was_running then
+		local stop_ok, stop_status = pcall(sys.call, "/etc/init.d/snmpd stop >/dev/null 2>&1")
+		if not stop_ok or stop_status ~= 0 then
+			local rolled_back = restore_all()
+			fail(rolled_back and
+				"The existing SNMP daemon could not be stopped for safe credential rotation; previous settings were restored."
+				or "The SNMP daemon could not be stopped and rollback could not be confirmed. Use an out-of-band management path.", 502)
+			return
+		end
+	end
+	local daemon_stopped = false
+	for attempt = 1, 10 do
+		if not current_snmp_process_running() then
+			daemon_stopped = true
+			break
+		end
+		if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
+	end
+	if not daemon_stopped then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			"The SNMP daemon did not stop within the bounded shutdown window; previous settings were restored."
+			or "The SNMP daemon is still active and rollback could not be confirmed. Use an out-of-band management path.", 502)
+		return
+	end
+
+	local runtime_path = "/var/run/snmpd.conf"
+	local runtime_stat_ok, runtime_stat = pcall(fs.lstat, runtime_path)
+	if not runtime_stat_ok or (runtime_stat ~= nil and not validator.private_root_regular_file(runtime_stat)) then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			"The generated SNMP runtime file is not a verified root-owned 0600 regular file; previous settings were restored."
+			or "The runtime SNMP credential file could not be safely inspected and rollback could not be confirmed.", 502)
+		return
+	end
+	if runtime_stat ~= nil then
+		local remove_ok, removed = pcall(os.remove, runtime_path)
+		if not remove_ok or removed ~= true or fs.access(runtime_path) == true then
+			local rolled_back = restore_all()
+			fail(rolled_back and
+				"The stopped daemon's generated runtime credential file could not be removed; previous settings were restored."
+				or "The generated SNMP credentials could not be scrubbed and rollback could not be confirmed.", 502)
+			return
+		end
+	end
+
+	local usernames_to_scrub = {}
+	local seen_usernames = {}
+	local function add_scrub_username(username)
+		if username == nil or username == "" or seen_usernames[username] then return true end
+		if not validator.valid_username(username) then return false end
+		seen_usernames[username] = true
+		table.insert(usernames_to_scrub, username)
+		return true
+	end
+	if v3_snapshot and not add_scrub_username(v3_snapshot.username) then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			"The previous managed SNMP username is invalid; persistent user keys were not changed and previous settings were restored."
+			or "The previous SNMP username is invalid and rollback could not be confirmed.", 409)
+		return
+	end
+	if update.enabled and not add_scrub_username(update.username) then
+		local rolled_back = restore_all()
+		fail(rolled_back and "The replacement SNMP username is invalid; previous settings were restored."
+			or "The replacement SNMP username is invalid and rollback could not be confirmed.", 400)
+		return
+	end
+	local scrub_ok, scrubbed_count_or_error = scrub_persistent_usm_user_keys(usernames_to_scrub)
+	if not scrub_ok then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			(tostring(scrubbed_count_or_error) .. " Previous SNMP and firewall settings were restored.")
+			or (tostring(scrubbed_count_or_error) .. " Rollback could not be confirmed; inspect the SNMP persistent database and services locally."),
+			502)
+		return
+	end
+
 	local firewall_reload_ok, firewall_reload_status = true, 0
 	if firewall_available then
 		firewall_reload_ok, firewall_reload_status = pcall(sys.call,
@@ -9495,38 +9592,23 @@ function action_snmpv3_update()
 			or "The firewall reload failed and rollback could not be confirmed. Inspect firewall and SNMP service state locally.", 502)
 		return
 	end
-	local snmp_restart_ok, snmp_restart_status = pcall(sys.call,
-		"/etc/init.d/snmpd restart >/dev/null 2>&1")
-	if not snmp_restart_ok or snmp_restart_status ~= 0 then
-		local rolled_back = restore_all()
-		fail(rolled_back and "The SNMP daemon could not restart; previous SNMP and firewall settings were restored."
-			or "The SNMP daemon failed to restart and rollback could not be confirmed. Inspect the SNMP and firewall services locally.", 502)
-		return
-	end
 	if update.enabled then
-		local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
-		if not runtime_mode_ok or runtime_mode == false then
+		local snmp_start_ok, snmp_start_status = pcall(sys.call,
+			"/etc/init.d/snmpd start >/dev/null 2>&1")
+		if not snmp_start_ok or snmp_start_status ~= 0 then
 			local rolled_back = restore_all()
-			fail(rolled_back and "The generated SNMP runtime credential file could not be protected with mode 0600; previous settings were restored."
+			fail(rolled_back and "The SNMP daemon could not start with the replacement credentials; previous settings were restored."
+				or "The SNMP daemon failed to start and rollback could not be confirmed. Inspect SNMP and firewall services locally.", 502)
+			return
+		end
+		local runtime_mode_ok, runtime_mode = pcall(fs.chmod, runtime_path, 384)
+		local runtime_stat_after_ok, runtime_stat_after = pcall(fs.lstat, runtime_path)
+		if not runtime_mode_ok or runtime_mode == false or not runtime_stat_after_ok or
+			not validator.private_root_regular_file(runtime_stat_after) then
+			local rolled_back = restore_all()
+			fail(rolled_back and "The generated SNMP runtime credential file could not be verified as root-owned mode 0600; previous settings were restored."
 				or "The generated SNMP credential file permissions could not be secured and rollback could not be confirmed.", 502)
 			return
-		end
-	else
-		local stopped = snmpv3_status(uci, fs)
-		if stopped.process_running then
-			local rolled_back = restore_all()
-			fail(rolled_back and "The SNMP daemon remained active after the disable request; previous settings were restored."
-				or "The SNMP daemon did not stop and rollback could not be confirmed. Use an out-of-band management path.", 502)
-			return
-		end
-		if fs.access("/var/run/snmpd.conf") == true then
-			local remove_ok, removed = pcall(os.remove, "/var/run/snmpd.conf")
-			if not remove_ok or removed ~= true or fs.access("/var/run/snmpd.conf") == true then
-				local rolled_back = restore_all()
-				fail(rolled_back and "The stopped SNMP daemon's generated credential file could not be scrubbed; previous settings were restored."
-					or "The generated SNMP credentials could not be scrubbed and rollback could not be confirmed.", 502)
-				return
-			end
 		end
 	end
 
