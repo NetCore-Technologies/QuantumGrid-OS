@@ -78,6 +78,67 @@ function validate(input, trusted_zones)
 	}
 end
 
+function snmpd_process_running(pid_contents, comm_contents, cmdline_contents)
+	if type(pid_contents) ~= "string" then return false end
+	local pid_text = pid_contents:match("^%s*(%d+)%s*$")
+	local pid = pid_text and tonumber(pid_text) or nil
+	if not pid or pid <= 1 or pid ~= math.floor(pid) then return false end
+	if type(comm_contents) ~= "string" or
+		comm_contents:match("^%s*(.-)%s*$") ~= "snmpd" then return false end
+	if type(cmdline_contents) ~= "string" then return false end
+	return cmdline_contents:find("/usr/sbin/snmpd", 1, true) ~= nil and
+		cmdline_contents:find("/var/run/snmpd.conf", 1, true) ~= nil
+end
+
+local function contains_udp(value)
+	if value == nil or value == "" then return true end
+	if type(value) == "table" then
+		for _, item in ipairs(value) do
+			if item == "udp" or item == "all" or item == "any" then return true end
+		end
+		return false
+	end
+	if type(value) ~= "string" then return false end
+	for token in value:gmatch("[^,%s]+") do
+		if token == "udp" or token == "all" or token == "any" then return true end
+	end
+	return false
+end
+
+local function contains_snmp_port(value)
+	if value == nil or value == "" then return true end
+	local values = type(value) == "table" and value or { value }
+	for _, raw in ipairs(values) do
+		if type(raw) ~= "string" then return true end
+		for token in raw:gmatch("[^,%s]+") do
+			local port = tonumber(token)
+			if port == 161 then return true end
+			local first, last = token:match("^(%d+)%-(%d+)$")
+			if first and last and tonumber(first) <= 161 and tonumber(last) >= 161 then
+				return true
+			end
+		end
+	end
+	return false
+end
+
+function has_conflicting_firewall_rule(uci)
+	if type(uci) ~= "table" or type(uci.foreach) ~= "function" then return nil end
+	local conflict = false
+	local ok = pcall(function()
+		uci:foreach("firewall", "rule", function(section)
+			if section[".name"] == "quantumgrid_snmpv3" then return end
+			local target = type(section.target) == "string" and section.target:upper() or "ACCEPT"
+			if target == "ACCEPT" and contains_udp(section.proto) and
+				contains_snmp_port(section.dest_port) then
+				conflict = true
+			end
+		end)
+	end)
+	if not ok then return nil end
+	return conflict
+end
+
 function classify_status(snapshot)
 	if type(snapshot) ~= "table" or snapshot.available ~= true then
 		return "unavailable"
