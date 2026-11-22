@@ -58,6 +58,23 @@ managed_rule.dest = "wan"
 assert(not snmp.has_only_managed_firewall_options(managed_rule),
   "a managed SNMP rule must not contain an unexpected destination zone")
 
+local function firewall_rule_fixture(section)
+  local fake = {}
+  function fake:foreach(package, section_type, callback)
+    if package == "firewall" and section_type == "rule" then callback(section) end
+  end
+  return fake
+end
+assert(snmp.has_conflicting_firewall_rule(firewall_rule_fixture({
+  [".name"] = "legacy-open-snmp", target = "ACCEPT", proto = "udp", dest_port = "161"
+})), "another UDP/161 ACCEPT rule must block enabling SNMPv3")
+assert(not snmp.has_conflicting_firewall_rule(firewall_rule_fixture({
+  [".name"] = "dns-accept", target = "ACCEPT", proto = "udp", dest_port = "53"
+})), "unrelated firewall rules must not conflict with SNMPv3")
+assert(not snmp.has_conflicting_firewall_rule(firewall_rule_fixture({
+  [".name"] = "quantumgrid_snmpv3", target = "ACCEPT", proto = "udp", dest_port = "161"
+})), "the reserved QuantumGrid SNMPv3 rule is excluded from its own conflict scan")
+
 assert(snmp.credentials_file_private({ uid = 0, modedec = 384 }),
   "root-owned 0600 SNMP credential files are accepted")
 assert(not snmp.credentials_file_private({ uid = 0, modedec = 420 }),
@@ -115,6 +132,9 @@ local ready_status = snmp.classify_status({
   allow_write = "0",
   restricted_oid = ".1.3.6.1.2.1",
   source_zone_class = "internal",
+  source_zone = "mgmt",
+  user_source_zone = "mgmt",
+  network_membership_verified = true,
   firewall_rule_configured = true,
   legacy_network_firewall = false,
   firewall_perimeter_safe = true,
@@ -126,6 +146,35 @@ local ready_status = snmp.classify_status({
   process_running = true,
 })
 assert(ready_status == "ready")
+for _, overrides in ipairs({
+  { user_source_zone = "wan" },
+  { network_membership_verified = false },
+  { legacy_network_firewall = true },
+  { firewall_perimeter_safe = false },
+  { firewall_conflict = true },
+  { managed_user_section = false },
+  { managed_firewall_rule = false },
+  { private_config_permissions = false },
+  { runtime_credentials_private = false },
+  { process_running = false },
+}) do
+  local candidate = {}
+  for key, value in pairs({
+    available = true, enabled = true, snmp_version = "v3",
+    username = "quantumgrid-nms", auth_type = "SHA", privacy_type = "AES",
+    allow_write = "0", restricted_oid = ".1.3.6.1.2.1",
+    source_zone = "mgmt", user_source_zone = "mgmt",
+    source_zone_class = "internal", network_membership_verified = true,
+    firewall_rule_configured = true, legacy_network_firewall = false,
+    firewall_perimeter_safe = true, firewall_conflict = false,
+    managed_user_section = true, managed_firewall_rule = true,
+    private_config_permissions = true, runtime_credentials_private = true,
+    process_running = true,
+  }) do candidate[key] = value end
+  for key, value in pairs(overrides) do candidate[key] = value end
+  assert(snmp.classify_status(candidate) == "review",
+    "incomplete SNMP security or runtime posture must be review, not ready")
+end
 local weak_status = snmp.classify_status({
   available = true,
   enabled = true,
