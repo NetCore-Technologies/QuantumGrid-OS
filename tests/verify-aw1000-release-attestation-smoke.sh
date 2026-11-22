@@ -17,7 +17,7 @@ printf 'test-factory-ubi-image\n' > "$IMAGE"
 cat > "$WORK/bin/gh" <<'GH'
 #!/bin/sh
 if [ "${1:-}" = "version" ]; then
-  printf 'gh version %s\n' "${GH_VERSION:-2.102.0}"
+  printf 'gh version %s\n' "${GH_VERSION-2.102.0}"
   exit 0
 fi
 printf '%s\n' "$@" > "$GH_ARGS_LOG"
