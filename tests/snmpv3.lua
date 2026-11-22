@@ -498,18 +498,19 @@ assert(disable_ready and disabled_state.process_running == false and disable_cal
 local persistent_left_samples = {
   { enabled = false, status = "review", process_running = false,
     runtime_credentials_present = false, persistent_inventory_available = true,
-    persistent_user_present = true, persistent_usm_user_count = 1 },
-  { enabled = false, status = "disabled", process_running = false,
+    persistent_user_present = true, persistent_user_matches = 1, persistent_usm_user_count = 2 },
+  { enabled = false, status = "review", process_running = false,
     runtime_credentials_present = false, persistent_inventory_available = true,
-    persistent_user_present = false, persistent_usm_user_count = 0 },
+    persistent_user_present = false, persistent_user_matches = 0, persistent_usm_user_count = 1 },
 }
 local persistent_left_calls = 0
 local clean_state, persistent_clean = snmp.wait_for_state(function()
   persistent_left_calls = persistent_left_calls + 1
   return persistent_left_samples[persistent_left_calls]
 end, function() end, false, nil, nil, 3)
-assert(persistent_clean and clean_state.status == "disabled" and persistent_left_calls == 2,
-  "SNMP disablement must wait for persistent localized USM keys to be removed")
+assert(persistent_clean and clean_state.status == "review" and
+  clean_state.persistent_usm_user_count == 1 and persistent_left_calls == 2,
+  "SNMP disablement must remove the managed user's keys while preserving unrelated persistent users")
 
 local retry_count, sleep_count = 0, 0
 local last_state, exhausted = snmp.wait_for_state(function()
