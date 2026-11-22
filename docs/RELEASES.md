@@ -43,19 +43,17 @@ asset's SHA-256 digest to the repository, source commit, workflow identity and b
 The checksum manifest remains useful for transfer-corruption checks, but it is not the
 publisher-authentication mechanism.
 
-Install GitHub CLI and verify the downloaded factory image before transferring it to the router:
+Install and authenticate GitHub CLI, download the release assets, then verify them before transferring the factory image to the router:
 
 ```bash
 sha256sum -c SHA256SUMS
-gh attestation verify QuantumGrid-OS-<version>-AW1000-squashfs-factory.ubi \
-  --repo NetCore-Technologies/QuantumGrid-OS \
-  --signer-workflow NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml
+sh verify-aw1000-release-attestation.sh QuantumGrid-OS-<version>-AW1000-squashfs-factory.ubi SHA256SUMS
 ```
 
-Use the exact asset filename from the release. Verification checks the attested digest,
-the QuantumGrid repository and the named firmware workflow. Do not flash an image when
-either the checksum or attestation verification fails. The on-router installer still
-checks SHA-256 only; it does not verify Sigstore attestations itself.
+The bundled host-side verifier checks the image digest first, then requires a GitHub artifact
+attestation from this repository and the exact firmware-release workflow. Do not flash an image
+when either step fails. The on-router installer still enforces SHA-256 only; it does not verify
+Sigstore attestations itself. Keep host-side verification as a required release-installation step.
 The initramfs `.itb` is a RAM-boot artifact and does not install persistent firmware.
 The AW1000 profile does not produce or publish a `sysupgrade.bin` image; the release workflow
 must never require, fabricate, rename or advertise one.
