@@ -209,7 +209,6 @@ assert(ready_status == "ready")
 for _, overrides in ipairs({
   { user_source_zone = "wan" },
   { agent_listener_configured = false },
-  { agent_listener_configured = false },
   { network_membership_verified = false },
   { legacy_network_firewall = true },
   { firewall_perimeter_safe = false },
