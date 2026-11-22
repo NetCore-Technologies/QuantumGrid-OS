@@ -51,7 +51,7 @@ after="$(sha256sum "$INIT" | awk '{print $1}')"
 # Unexpected upstream layout must be rejected without modifying the file.
 UNSUPPORTED="$WORK/unsupported/feeds/packages/net/net-snmp/files/snmpd.init"
 mkdir -p "$(dirname "$UNSUPPORTED")"
-printf '#!/bin/sh\nstart_service() {\n' > "$UNSUPPORTED"
+printf '#!/bin/sh\nstart_service() { # unexpected upstream variation\n' > "$UNSUPPORTED"
 cp "$UNSUPPORTED" "$WORK/unsupported.before"
 if bash "$ROOT/scripts/secure-aw1000-snmpd-runtime-config.sh" "$WORK/unsupported" >/dev/null 2>&1; then
   echo "ERROR: unsupported upstream init script was accepted" >&2
