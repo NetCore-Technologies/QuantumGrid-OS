@@ -124,6 +124,7 @@ cd "$OPENWRT_DIR"
 ./scripts/feeds update -a
 bash "$PROJECT_ROOT/scripts/verify-openwrt-feeds.sh" "$OPENWRT_DIR"
 ./scripts/feeds install -a
+bash "$PROJECT_ROOT/scripts/secure-aw1000-snmpd-runtime-config.sh" "$OPENWRT_DIR"
 
 printf '\n[5/10] Building and installing the QuantumGrid control centre...\n'
 "$PROJECT_ROOT/scripts/build-ui.sh" "$PROJECT_ROOT" "$OPENWRT_DIR"
