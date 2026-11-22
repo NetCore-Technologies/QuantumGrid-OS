@@ -5312,6 +5312,7 @@ grep -Fq 'enabled = "1"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lu
 grep -Fq 'result.private_config_permissions' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'result.runtime_credentials_private' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function trusted_zone_networks(uci, zone_name)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'management.classify_firewall_zone_name(network) == "external"' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'function has_only_managed_user_options(section)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'function has_only_managed_firewall_options(section)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'function classify_status(snapshot)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
