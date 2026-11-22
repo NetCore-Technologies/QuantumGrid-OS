@@ -8982,6 +8982,7 @@ function action_snmpv3_update()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
 	local sys = require "luci.sys"
+	local nixio = require "nixio"
 	local uci = require("luci.model.uci").cursor()
 	local validator = require "luci.quantumgrid.snmpv3"
 	local host_header = http.getenv("HTTP_HOST")
@@ -9354,14 +9355,20 @@ function action_snmpv3_update()
 		end
 	end
 
-	local resulting = snmpv3_status(uci, fs)
-	if update.enabled and (resulting.status ~= "ready" or
-		resulting.username ~= update.username or resulting.source_zone ~= update.source_zone) then
+	local resulting, state_ready = validator.wait_for_state(
+		function() return snmpv3_status(uci, fs) end,
+		function() return nixio.nanosleep(0, 200000000) end,
+		update.enabled, update.username, update.source_zone, 10
+	)
+	if not state_ready or type(resulting) ~= "table" or
+		(update.enabled and (resulting.status ~= "ready" or resulting.username ~= update.username or
+			resulting.source_zone ~= update.source_zone)) then
 		local rolled_back = restore_all()
-		fail(rolled_back and
-			"The SNMP daemon restarted but its live authPriv, read-only, firewall or process posture could not be confirmed. Previous settings were restored."
-			or "SNMPv3 did not reach the required live posture and rollback could not be confirmed. Use an out-of-band management path.",
-			502)
+		local reason = update.enabled
+			and "The SNMP daemon restarted but its live authPriv, read-only, firewall or process posture could not be confirmed."
+			or "The SNMP daemon did not stop after the disable request."
+		fail(rolled_back and reason .. " Previous settings were restored."
+			or reason .. " Rollback could not be confirmed. Use an out-of-band management path.", 502)
 		return
 	end
 
