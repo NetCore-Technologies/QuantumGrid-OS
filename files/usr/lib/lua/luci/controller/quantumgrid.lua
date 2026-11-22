@@ -9275,6 +9275,98 @@ function action_snmpv3_update()
 		return create_ok and created ~= nil and created ~= false
 	end
 
+	local persistent_directory = "/usr/lib/snmp"
+	local persistent_path = persistent_directory .. "/snmpd.conf"
+	local persistent_temporary_path = persistent_directory .. "/.quantumgrid-snmpd.conf.tmp"
+	local function scrub_persistent_usm_user_keys(usernames)
+		local directory_ok, directory_stat = pcall(fs.lstat, persistent_directory)
+		if not directory_ok then return false, "The Net-SNMP persistent directory could not be inspected." end
+		if directory_stat == nil then return true, 0 end
+		if not validator.private_root_directory(directory_stat) then
+			return false, "The Net-SNMP persistent directory is not a root-owned, non-writable directory."
+		end
+		local file_stat_ok, file_stat = pcall(fs.lstat, persistent_path)
+		if not file_stat_ok then return false, "The Net-SNMP persistent user database could not be inspected." end
+		if file_stat == nil then return true, 0 end
+		local file_size = type(file_stat) == "table" and tonumber(file_stat.size) or nil
+		if not validator.private_root_regular_file(file_stat) or not file_size or
+			file_size < 0 or file_size > 4 * 1024 * 1024 then
+			return false, "The Net-SNMP persistent database must be a root-owned regular 0600 file no larger than 4 MiB."
+		end
+		local source = io.open(persistent_path, "r")
+		if not source then return false, "The Net-SNMP persistent user database could not be opened." end
+		local content = source:read(4 * 1024 * 1024 + 1)
+		local source_closed = source:close()
+		if type(content) ~= "string" or #content > 4 * 1024 * 1024 or source_closed == nil then
+			return false, "The Net-SNMP persistent user database could not be read completely."
+		end
+		local rewritten, removed, scrub_error = validator.strip_persistent_usm_users(content, usernames)
+		if type(rewritten) ~= "string" then
+			return false, scrub_error or "The Net-SNMP persistent user database could not be validated for targeted cleanup."
+		end
+		if removed == 0 then return true, 0 end
+
+		local temporary_stat_ok, temporary_stat = pcall(fs.lstat, persistent_temporary_path)
+		if not temporary_stat_ok or temporary_stat ~= nil then
+			return false, "A pre-existing QuantumGrid SNMP database temporary file blocks safe credential cleanup."
+		end
+		if type(nixio.umask) ~= "function" then
+			return false, "A restrictive file-creation umask is unavailable for persistent SNMP credential cleanup."
+		end
+		local mask_ok, previous_mask = pcall(nixio.umask, 63)
+		if not mask_ok or type(previous_mask) ~= "number" then
+			return false, "A restrictive file-creation umask could not be established for persistent SNMP credential cleanup."
+		end
+		local temporary, temporary_error = io.open(persistent_temporary_path, "w")
+		local restore_mask_ok = pcall(nixio.umask, previous_mask)
+		if not restore_mask_ok then
+			if temporary then pcall(temporary.close, temporary) end
+			pcall(os.remove, persistent_temporary_path)
+			return false, "The original process umask could not be restored after creating the SNMP cleanup file."
+		end
+		if not temporary then
+			return false, "The private temporary SNMP database could not be created: " .. tostring(temporary_error or "unknown error")
+		end
+		local write_ok, write_result = pcall(temporary.write, temporary, rewritten)
+		local flush_ok, flush_result = pcall(temporary.flush, temporary)
+		local close_ok, close_result = pcall(temporary.close, temporary)
+		if not write_ok or write_result == nil or not flush_ok or flush_result == nil or
+			not close_ok or close_result == nil then
+			pcall(os.remove, persistent_temporary_path)
+			return false, "The scrubbed SNMP database could not be written and flushed completely."
+		end
+		local staged_ok, staged_stat = pcall(fs.lstat, persistent_temporary_path)
+		if not staged_ok or not validator.private_root_regular_file(staged_stat) or
+			type(staged_stat) ~= "table" or tonumber(staged_stat.size) ~= #rewritten then
+			pcall(os.remove, persistent_temporary_path)
+			return false, "The staged SNMP database failed its root ownership, mode or size verification."
+		end
+		local rename_ok, renamed = pcall(os.rename, persistent_temporary_path, persistent_path)
+		if not rename_ok or not renamed then
+			pcall(os.remove, persistent_temporary_path)
+			return false, "The scrubbed SNMP database could not atomically replace the previous persistent file."
+		end
+		local final_stat_ok, final_stat = pcall(fs.lstat, persistent_path)
+		if not final_stat_ok or not validator.private_root_regular_file(final_stat) or
+			type(final_stat) ~= "table" or tonumber(final_stat.size) ~= #rewritten then
+			return false, "The replaced SNMP database failed its final ownership, mode or size verification."
+		end
+		local verify_file = io.open(persistent_path, "r")
+		if not verify_file then return false, "The scrubbed SNMP database could not be reopened for verification." end
+		local verified_content = verify_file:read(4 * 1024 * 1024 + 1)
+		local verify_closed = verify_file:close()
+		if verified_content ~= rewritten or verify_closed == nil then
+			return false, "The persistent SNMP database did not match the atomically written cleanup result."
+		end
+		for _, username in ipairs(usernames) do
+			local present, match_count = validator.persistent_user_matches(verified_content, username)
+			if present ~= false or match_count ~= 0 then
+				return false, "A managed SNMPv3 localized user key remains in the persistent database after cleanup."
+			end
+		end
+		return true, removed
+	end
+
 	if update.enabled then
 		local config_stat_ok, config_stat = pcall(fs.stat, "/etc/config/snmpd")
 		if not config_stat_ok or type(config_stat) ~= "table" or tonumber(config_stat.uid) ~= 0 then
