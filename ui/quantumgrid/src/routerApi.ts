@@ -199,6 +199,8 @@ export interface RouterWirelessUpdateResult {
 export interface RouterWirelessRadio {
   name: string;
   up: boolean;
+  disabled: boolean;
+  config_available: boolean;
   interfaces: RouterWirelessInterface[];
   channels?: RouterWirelessChannel[];
   txpower_levels?: RouterWirelessTxPower[];
@@ -1615,6 +1617,7 @@ const SQM_CLIENT_QOS_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cli
 const SQM_CLIENT_QOS_DOWNLOAD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-download-add";
 const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
+const WIRELESS_RADIO_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-update";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
@@ -2251,6 +2254,74 @@ export async function updateRouterWirelessConfig(input: {
     throw new Error("The router did not confirm the wireless configuration and Wi-Fi reload.");
   }
   return payload as RouterWirelessUpdateResult;
+}
+
+export interface RouterWirelessRadioUpdateResult {
+  ok: true;
+  radio: string;
+  enabled: boolean;
+  disabled: boolean;
+  runtime_up: boolean;
+  changed: boolean;
+  reloaded: boolean;
+  rolled_back: false;
+}
+
+export async function updateRouterWirelessRadio(input: {
+  radio: string;
+  enabled: boolean;
+  expectedDisabled: boolean;
+}): Promise<RouterWirelessRadioUpdateResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(input.radio)) {
+    throw new Error("Invalid wireless radio section name.");
+  }
+  if (typeof input.enabled !== "boolean" || typeof input.expectedDisabled !== "boolean") {
+    throw new Error("Radio state and expected current state must be explicit booleans.");
+  }
+  if (input.enabled === input.expectedDisabled) {
+    throw new Error("The requested radio state must differ from the expected current state.");
+  }
+  const form = new URLSearchParams();
+  form.set("radio", input.radio);
+  form.set("enabled", input.enabled ? "1" : "0");
+  form.set("expected_disabled", input.expectedDisabled ? "1" : "0");
+  form.set("confirmed", "1");
+  const response = await fetch(WIRELESS_RADIO_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Radio changes require an active router administrator session."
+      : "The router returned an invalid radio state response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid radio state response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("radio" in payload) || payload.radio !== input.radio ||
+    !("enabled" in payload) || payload.enabled !== input.enabled ||
+    !("disabled" in payload) || payload.disabled !== !input.enabled ||
+    !("runtime_up" in payload) || payload.runtime_up !== input.enabled ||
+    !("changed" in payload) || typeof payload.changed !== "boolean" ||
+    !("reloaded" in payload) || payload.reloaded !== payload.changed ||
+    !("rolled_back" in payload) || payload.rolled_back !== false
+  ) {
+    throw new Error("The router did not confirm the requested radio configuration and live runtime state.");
+  }
+  return payload as RouterWirelessRadioUpdateResult;
 }
 
 export async function updateRouterUsteer(input: {
