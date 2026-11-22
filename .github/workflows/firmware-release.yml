@@ -223,6 +223,10 @@ jobs:
             --manifest "dist/QuantumGrid-OS-${VERSION}-AW1000-PACKAGE-MANIFEST.txt" \
             --firmware-image "dist/QuantumGrid-OS-${VERSION}-AW1000-squashfs-factory.ubi" \
             --packages-archive "$PACKAGE_ARCHIVE" \
+            --feeds-report "dist/OPENWRT-FEEDS.txt" \
+            --phone-source-archive "dist/QuantumGrid-OS-${VERSION}-AW1000-phone-source.tar.gz" \
+            --build-info "dist/BUILDINFO.txt" \
+            --build-config "dist/aw1000-max.config" \
             --output "dist/QuantumGrid-OS-${VERSION}-AW1000-SBOM.cdx.json" \
             --version "$VERSION" \
             --target "qualcommax/ipq807x" \
