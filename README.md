@@ -747,9 +747,9 @@ by `tests/remote-syslog-api.test.mjs` in CI.
 
 The System page can provision the AW1000 Net-SNMP agent using SNMPv3 `authPriv` only:
 SHA authentication, AES privacy, no write access, and the standard system-information
-OID subtree `.1.3.6.1.2.1`. The agent is disabled in the default image. The controller
+OID subtree `.1.3.6.1.2.1.1` (the SNMPv2-MIB system group only). The agent is disabled in the default image. The controller
 requires explicit confirmation over the authenticated same-origin HTTPS session and
-creates one QuantumGrid-managed v3 user plus one UDP/161 firewall rule scoped to a single
+creates one QuantumGrid-managed v3 user plus a fixed UDP/161 IPv4/IPv6 listener and one firewall rule scoped to a single
 recognised internal management zone. The zone's network membership must be unique across
 the firewall zone inventory. The default service-wide network list is cleared so the
 managed rule, rather than the package's implicit network rules, defines exposure.
