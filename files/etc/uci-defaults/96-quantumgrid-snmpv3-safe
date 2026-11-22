@@ -1,0 +1,7 @@
+#!/bin/sh
+
+# SNMPv3 authPriv credentials are stored in the root-only UCI configuration.
+[ -f /etc/config/snmpd ] && chmod 0600 /etc/config/snmpd
+[ -f /var/run/snmpd.conf ] && chmod 0600 /var/run/snmpd.conf
+
+exit 0
