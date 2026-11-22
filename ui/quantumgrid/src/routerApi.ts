@@ -2278,9 +2278,6 @@ export async function updateRouterWirelessRadio(input: {
   if (typeof input.enabled !== "boolean" || typeof input.expectedDisabled !== "boolean") {
     throw new Error("Radio state and expected current state must be explicit booleans.");
   }
-  if (input.enabled === input.expectedDisabled) {
-    throw new Error("The requested radio state must differ from the expected current state.");
-  }
   const form = new URLSearchParams();
   form.set("radio", input.radio);
   form.set("enabled", input.enabled ? "1" : "0");
