@@ -765,8 +765,11 @@ commit, restart, permission check or live-posture check enters a rollback path a
 whether restoration was confirmed.
 
 SNMP passphrases are not returned by the API or written to the administrative audit log.
-The UCI credential configuration and generated Net-SNMP runtime configuration are required
-to be root-owned with mode 0600. This is file-permission protection, not encryption at rest;
+The firmware build patches the pinned Net-SNMP `start_service()` to set `umask 077` before
+creating the generated `createUser` file, preventing a world-readable startup interval. The
+controller also verifies and enforces root ownership with mode 0600 on both the UCI credential
+configuration and generated Net-SNMP runtime configuration. This is file-permission protection,
+not encryption at rest;
 protect the router's root filesystem, backups and physical console accordingly. The feature
 does not provide a central NMS, user lifecycle/rotation workflow, SNMP trap receiver,
 SNMPv1/v2c compatibility, write-enabled MIB access or per-OID custom policy. A reported
