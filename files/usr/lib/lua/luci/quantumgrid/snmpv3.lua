@@ -267,6 +267,8 @@ function classify_status(snapshot)
 		snapshot.restricted_oid ~= VALID_OID or
 		snapshot.managed_user_section ~= true or
 		snapshot.source_zone_class ~= "internal" or
+		snapshot.user_source_zone ~= snapshot.source_zone or
+		snapshot.network_membership_verified ~= true or
 		snapshot.legacy_network_firewall == true or
 		snapshot.firewall_perimeter_safe ~= true or
 		snapshot.firewall_conflict == true or
