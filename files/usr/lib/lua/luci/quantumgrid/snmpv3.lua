@@ -290,7 +290,7 @@ function classify_status(snapshot)
 		return "disabled"
 	end
 	if snapshot.agent_listener_configured ~= true or
-	if snapshot.snmp_version ~= "v3" or
+		snapshot.snmp_version ~= "v3" or
 		not valid_username(snapshot.username) or
 		snapshot.auth_type ~= "SHA" or
 		snapshot.privacy_type ~= "AES" or
