@@ -60,6 +60,27 @@ function validate_roaming_features(encryption, ieee80211k, ieee80211v)
 	return { ieee80211k = ieee80211k, ieee80211v = ieee80211v }
 end
 
+function validate_radio_toggle(radio, enabled, expected_disabled, confirmed)
+	if not valid_section(radio) then
+		return nil, "Invalid wireless radio section name."
+	end
+	if enabled ~= "0" and enabled ~= "1" then
+		return nil, "Radio enabled state must be exactly 0 or 1."
+	end
+	if expected_disabled ~= "0" and expected_disabled ~= "1" then
+		return nil, "Expected current radio state must be exactly 0 or 1."
+	end
+	if confirmed ~= "1" then
+		return nil, "Explicit confirmation is required because changing radio state disconnects wireless clients."
+	end
+	return {
+		radio = radio,
+		enabled = enabled == "1",
+		expected_disabled = expected_disabled == "1",
+		desired_disabled = enabled ~= "1"
+	}
+end
+
 function validate_expected_current_channel(expected, current)
 	if expected == nil then return true end
 	if type(expected) ~= "string" or
