@@ -3364,6 +3364,16 @@ export async function updateRouterRemoteSyslog(input: {
   }
   return payload as RouterRemoteSyslogUpdateResult;
 }
+const SNMPV3_ALLOWED_SECRET_CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./:;<=>?@[]^_{|}~";
+
+function isValidSnmpv3Secret(value: string): boolean {
+  if (value.length < 20 || value.length > 128) return false;
+  for (const character of value) {
+    if (!SNMPV3_ALLOWED_SECRET_CHARACTERS.includes(character)) return false;
+  }
+  return true;
+}
+
 export async function updateRouterSnmpv3(input: {
   enabled: boolean;
   username: string;
@@ -3375,11 +3385,10 @@ export async function updateRouterSnmpv3(input: {
     if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(input.username) || input.username === "root") {
       throw new Error("SNMPv3 username must be 1-32 safe characters, start with a letter and must not be root.");
     }
-    const safeSecret = /^[A-Za-z0-9!#$%&()*+,-./:;<=>?@[]^_{|}~]{20,128}$/;
-    if (!safeSecret.test(input.authPassphrase)) {
+    if (!isValidSnmpv3Secret(input.authPassphrase)) {
       throw new Error("SNMPv3 authentication passphrase must be 20-128 supported ASCII characters.");
     }
-    if (!safeSecret.test(input.privacyPassphrase)) {
+    if (!isValidSnmpv3Secret(input.privacyPassphrase)) {
       throw new Error("SNMPv3 privacy passphrase must be 20-128 supported ASCII characters.");
     }
     if (input.authPassphrase === input.privacyPassphrase) {
