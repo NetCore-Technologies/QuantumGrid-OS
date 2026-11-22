@@ -298,10 +298,13 @@ successful authentication against a live RADIUS server.
 
 The Arcadyan AW1000 release has one persistent firmware format: the device-specific
 squashfs factory UBI image. The initramfs image is a temporary RAM-boot recovery/development
-artifact; it is not a persistent firmware installer. The release includes
+artifact; it is not a persistent firmware installer. Verify downloads on the host with
+`verify-aw1000-release-attestation.sh`, which checks the checksum and the GitHub/Sigstore
+attestation from the exact QuantumGrid release workflow. The release also includes
 `install-aw1000-ubi.sh` and `verify-aw1000-release-manifest.sh`: the on-router installer checks
 the SHA-256 manifest, target board, RAM-boot environment and standard AW1000 MTD geometry before
-it can request a confirmed write. It defaults to read-only preflight.
+it can request a confirmed write. It defaults to read-only preflight. The on-router checksum
+check is not a substitute for host-side attestation verification.
 
 | Artifact | Intended use |
 |---|---|
