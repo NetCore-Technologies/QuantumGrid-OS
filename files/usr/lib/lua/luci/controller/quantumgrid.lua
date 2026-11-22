@@ -3877,7 +3877,7 @@ local function snmpv3_zone_inventory(uci)
 end
 
 
-local function snmpv3_status(uci, fs)
+local function snmpv3_status(uci, fs, persistent_username_override)
 	local validator = require "luci.quantumgrid.snmpv3"
 	local result = {
 		available = fs.access("/usr/sbin/snmpd") == true and
@@ -4028,8 +4028,9 @@ local function snmpv3_status(uci, fs)
 	result.private_config_permissions = config_mode_secure
 	result.runtime_credentials_private = result.enabled and runtime_mode_secure or
 		(not result.enabled and not result.runtime_credentials_present)
+	local persistent_username = result.username ~= "" and result.username or persistent_username_override
 	local persistent = validator.inspect_persistent_usm_file(
-		fs, "/usr/lib/snmp/snmpd.conf", result.username ~= "" and result.username or nil)
+		fs, "/usr/lib/snmp/snmpd.conf", persistent_username ~= "" and persistent_username or nil)
 	if type(persistent) == "table" and persistent.available == true then
 		result.persistent_inventory_available = true
 		result.persistent_user_present = persistent.user_present == true
@@ -9612,8 +9613,9 @@ function action_snmpv3_update()
 		end
 	end
 
+	local disabled_username = v3_snapshot and v3_snapshot.username or nil
 	local resulting, state_ready = validator.wait_for_state(
-		function() return snmpv3_status(uci, fs) end,
+		function() return snmpv3_status(uci, fs, disabled_username) end,
 		function() return nixio.nanosleep(0, 200000000) end,
 		update.enabled, update.username, update.source_zone, 10
 	)
