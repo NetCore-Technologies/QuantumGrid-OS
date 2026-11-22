@@ -245,6 +245,10 @@ function private_file_mode_secure(mode)
 	return mode % 512 == 384
 end
 
+function credentials_file_private(stat)
+	return private_root_file(stat)
+end
+
 function classify_status(snapshot)
 	if type(snapshot) ~= "table" or snapshot.available ~= true then
 		return "unavailable"
