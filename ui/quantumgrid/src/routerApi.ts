@@ -1505,6 +1505,8 @@ export interface RouterSnmpv3Status {
   persistent_user_present: boolean;
   persistent_user_matches: number;
   persistent_usm_user_count: number;
+  v3_user_section_present: boolean;
+  v3_user_section_count: number;
   sampled_at: number;
   trusted_zones?: RouterSnmpv3TrustedZone[];
 }
@@ -3504,9 +3506,12 @@ export async function updateRouterSnmpv3(input: {
     !("persistent_user_present" in payload) || typeof payload.persistent_user_present !== "boolean" ||
     !("persistent_user_matches" in payload) || typeof payload.persistent_user_matches !== "number" ||
     !("persistent_usm_user_count" in payload) || typeof payload.persistent_usm_user_count !== "number" ||
+    !("v3_user_section_present" in payload) || typeof payload.v3_user_section_present !== "boolean" ||
+    !("v3_user_section_count" in payload) || typeof payload.v3_user_section_count !== "number" ||
     (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.agent_listener_configured !== true || payload.legacy_community_configured !== false || payload.legacy_network_firewall !== false || payload.firewall_inventory_available !== true || payload.firewall_conflict !== false || payload.managed_user_section !== true || payload.managed_firewall_rule !== true || payload.network_membership_verified !== true || payload.firewall_rule_present !== true || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true ||
       payload.persistent_inventory_available !== true || payload.persistent_user_present !== true ||
-      payload.persistent_user_matches !== 1 || payload.persistent_usm_user_count !== 1)) ||
+      payload.persistent_user_matches !== 1 || payload.persistent_usm_user_count !== 1 ||
+      payload.v3_user_section_present !== true || payload.v3_user_section_count !== 1)) ||
     (!input.enabled && (payload.process_running !== false || payload.runtime_credentials_present !== false ||
       payload.runtime_credentials_private !== true || payload.persistent_inventory_available !== true ||
       payload.persistent_user_present !== false || payload.persistent_user_matches !== 0 ||
