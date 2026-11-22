@@ -527,7 +527,9 @@ function classify_status(snapshot)
 	if snapshot.enabled ~= true then
 		if snapshot.process_running == true or snapshot.firewall_rule_present == true or
 			snapshot.runtime_credentials_present == true or snapshot.firewall_conflict == true or
-			snapshot.firewall_inventory_available ~= true then
+			snapshot.firewall_inventory_available ~= true or
+			snapshot.persistent_inventory_available ~= true or
+			(tonumber(snapshot.persistent_usm_user_count) or 0) > 0 then
 			return "review"
 		end
 		return "disabled"
@@ -553,6 +555,10 @@ function classify_status(snapshot)
 		snapshot.private_config_permissions ~= true or
 		snapshot.runtime_credentials_private ~= true or
 		snapshot.runtime_credentials_present ~= true or
+		snapshot.persistent_inventory_available ~= true or
+		snapshot.persistent_user_present ~= true or
+		snapshot.persistent_user_matches ~= 1 or
+		snapshot.persistent_usm_user_count ~= 1 or
 		snapshot.process_running ~= true then
 		return "review"
 	end
