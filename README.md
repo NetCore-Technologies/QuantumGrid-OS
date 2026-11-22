@@ -767,16 +767,33 @@ whether restoration was confirmed.
 SNMP passphrases are not returned by the API or written to the administrative audit log.
 The firmware build patches the pinned Net-SNMP `start_service()` to set `umask 077` before
 creating the generated `createUser` file, preventing a world-readable startup interval. The
-controller also verifies and enforces root ownership with mode 0600 on both the UCI credential
-configuration and generated Net-SNMP runtime configuration. This is file-permission protection,
-not encryption at rest;
-protect the router's root filesystem, backups and physical console accordingly. The feature
-does not provide a central NMS, user lifecycle/rotation workflow, SNMP trap receiver,
-SNMPv1/v2c compatibility, write-enabled MIB access or per-OID custom policy. A reported
-`ready` state is a local configuration/process posture check, not proof that an NMS can
-reach UDP/161 or successfully authenticate; verify polling and network reachability from
-the intended management host before operational use. Lua and browser API contracts are
-covered by `tests/snmpv3.lua` and `tests/snmpv3-api.test.mjs`.
+controller verifies root ownership and mode 0600 for the UCI credential file and generated
+runtime configuration. This is file-permission protection, not encryption at rest.
+
+Net-SNMP also keeps localized USM authentication/privacy key records in its persistent
+`/usr/lib/snmp/snmpd.conf` database. QuantumGrid verifies that the parent directory is
+root-owned and not group/world-writable, and that the database itself is a root-owned regular
+file with mode 0600 before reading or changing it. Credential rotation and disable stop the
+daemon first, remove only the managed username's `usmUser` records, write the scrubbed
+database to a private temporary file and atomically replace the original. The rewrite preserves
+engine state and records belonging to other users. The daemon is started again only after the
+managed cleanup and firewall update succeed; live readiness requires exactly one localized
+record for the managed user and no additional persistent users.
+
+When disabling a managed user, unrelated persistent users are deliberately retained rather than
+silently deleted. The SNMP daemon remains disabled and QuantumGrid reports a review posture if
+other persistent user records remain; inspect those accounts before enabling SNMP again. If the
+persistent database or its directory fails ownership, type, mode, size or parse checks, the
+operation fails closed rather than modifying it. Rollback restores UCI/firewall configuration
+and restarts the previous daemon so Net-SNMP can re-localize its previous key.
+
+Protect the router's root filesystem, backups and physical console accordingly. The feature
+does not provide a central NMS, SNMP trap receiver, SNMPv1/v2c compatibility, write-enabled
+MIB access or per-OID custom policy. A reported `ready` state is a local configuration,
+process and persistent-key posture check, not proof that an NMS can reach UDP/161 or
+successfully authenticate; verify polling and network reachability from the intended
+management host before operational use. Lua and browser API contracts are covered by
+`tests/snmpv3.lua` and `tests/snmpv3-api.test.mjs`.
 
 ## Configuration backup and restore
 
