@@ -3083,203 +3083,6 @@ function RemoteSyslogSettings({ status, refresh }: {
 }
 
 
-function Snmpv3Settings({ status, refresh }: {
-  status?: RouterSnmpv3Status;
-  refresh: () => void;
-}) {
-  const [enabled, setEnabled] = useState(status?.enabled ?? false);
-  const [username, setUsername] = useState(status?.username ?? "");
-  const [sourceZone, setSourceZone] = useState(status?.source_zone || status?.trusted_zones?.[0]?.name || "");
-  const [authPassphrase, setAuthPassphrase] = useState("");
-  const [privacyPassphrase, setPrivacyPassphrase] = useState("");
-  const [confirmed, setConfirmed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
-  const trustedZones = status?.trusted_zones ?? [];
-  const hasLegacyAccess = Boolean(status?.legacy_community_configured);
-  const canEnable = Boolean(
-    status?.available &&
-    status.firewall_available &&
-    status.firewall_perimeter_safe &&
-    status.firewall_inventory_available &&
-    status.agent_listener_configured &&
-    status.legacy_network_firewall === false &&
-    !hasLegacyAccess &&
-    !status.firewall_conflict &&
-    trustedZones.some((zone) => zone.name === sourceZone),
-  );
-
-  const save = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!confirmed || busy || !status?.available) return;
-    if (enabled && !canEnable) return;
-    setBusy(true);
-    setNotice(null);
-    try {
-      const result = await updateRouterSnmpv3({
-        enabled,
-        username: username.trim(),
-        authPassphrase,
-        privacyPassphrase,
-        sourceZone,
-      });
-      setEnabled(result.enabled);
-      setUsername(result.username);
-      setSourceZone(result.source_zone || sourceZone);
-      setAuthPassphrase("");
-      setPrivacyPassphrase("");
-      setConfirmed(false);
-      setNotice({
-        success: true,
-        message: result.enabled
-          ? "SNMPv3 authPriv is active for " + result.username + " on the " + result.source_zone + " zone. SHA authentication, AES privacy and read-only access were verified after restart."
-          : result.firewall_available
-            ? "The SNMP daemon has been disabled, runtime credentials were scrubbed and the managed firewall rule was removed."
-            : "The SNMP daemon has been disabled and runtime credentials were scrubbed. The firewall service was unavailable, so firewall-rule cleanup could not be verified; inspect UDP/161 rules when the firewall service returns.",
-      });
-      refresh();
-    } catch (cause) {
-      setNotice({
-        success: false,
-        message: cause instanceof Error ? cause.message : "SNMPv3 settings could not be updated.",
-      });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Panel
-      title="SNMPv3 management"
-      eyebrow="NET-SNMP · AUTHENTICATED + ENCRYPTED · READ ONLY"
-      action={<Status active={Boolean(status?.enabled && status.status === "ready")}>{status?.status === "ready" ? "AUTHPRIV READY" : (status?.status ?? "unavailable").toUpperCase()}</Status>}
-    >
-      {!status?.available ? (
-        <div className="module-message">The SNMP daemon or its UCI configuration is unavailable on this firmware.</div>
-      ) : (
-        <form className="remote-syslog-form" onSubmit={save}>
-          <div className="remote-syslog-warning" role="note">
-            <strong>Read-only management access</strong>
-            <span>QuantumGrid provisions SNMPv3 authPriv only: SHA authentication, AES privacy, no write access and the System Group OID subtree only. UDP/161 is permitted only from one uniquely mapped internal management zone. SNMPv1/v2c community access is not enabled.</span>
-          </div>
-          {!status.agent_listener_configured && (
-            <div className="module-message remote-syslog-error" role="alert">
-              The SNMP agent is not using the exact managed UDP/161 IPv4 and IPv6 listener profile. Enabling is blocked until custom or additional listener bindings are removed through a trusted maintenance path.
-            </div>
-          )}
-          {!status.firewall_available && (
-            <div className="module-message remote-syslog-error" role="alert">
-              The firewall service is unavailable. SNMPv3 cannot be enabled, but an active SNMP daemon can still be disabled and its generated credentials scrubbed.
-            </div>
-          )}
-          {status.status === "review" && (
-            <div className="module-message remote-syslog-error" role="alert">
-              SNMP security posture requires review. Check legacy community configuration, UDP/161 firewall rules, the selected zone and credential-file permissions before enabling management access.
-            </div>
-          )}
-          {hasLegacyAccess && (
-            <div className="module-message remote-syslog-error" role="alert">
-              Legacy SNMPv1/v2c or community access is present. QuantumGrid will not enable SNMPv3 until that unmanaged configuration has been removed through a trusted maintenance path.
-            </div>
-          )}
-          {status.firewall_conflict && (
-            <div className="module-message remote-syslog-error" role="alert">
-              Another firewall ACCEPT rule may expose UDP/161. Resolve that rule before enabling SNMPv3.
-            </div>
-          )}
-          <label className="remote-syslog-enabled">
-            <input type="checkbox" checked={enabled} disabled={busy} onChange={(event) => setEnabled(event.target.checked)} />
-            <span>Enable the SNMPv3 management agent</span>
-          </label>
-          {enabled && (
-            <>
-              <div className="remote-syslog-fields snmpv3-fields">
-                <label>
-                  <span>SNMPv3 username</span>
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    minLength={1}
-                    maxLength={32}
-                    autoComplete="username"
-                    placeholder="quantumgrid-nms"
-                    required
-                    disabled={busy}
-                  />
-                </label>
-                <label>
-                  <span>Internal management zone</span>
-                  <select value={sourceZone} onChange={(event) => setSourceZone(event.target.value)} required disabled={busy || trustedZones.length === 0}>
-                    <option value="">Select a trusted zone</option>
-                    {trustedZones.map((zone) => (
-                      <option key={zone.name} value={zone.name}>{zone.name} · input {zone.input_policy || "default"}</option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  <span>SHA authentication passphrase · 20–128 characters</span>
-                  <input
-                    type="password"
-                    value={authPassphrase}
-                    onChange={(event) => setAuthPassphrase(event.target.value)}
-                    minLength={20}
-                    maxLength={128}
-                    autoComplete="new-password"
-                    required
-                    disabled={busy}
-                  />
-                </label>
-                <label>
-                  <span>AES privacy passphrase · 20–128 characters</span>
-                  <input
-                    type="password"
-                    value={privacyPassphrase}
-                    onChange={(event) => setPrivacyPassphrase(event.target.value)}
-                    minLength={20}
-                    maxLength={128}
-                    autoComplete="new-password"
-                    required
-                    disabled={busy}
-                  />
-                </label>
-              </div>
-              <InfoRows rows={[
-                ["SECURITY LEVEL", "authPriv"],
-                ["AUTHENTICATION", "SHA"],
-                ["PRIVACY", "AES"],
-                ["ACCESS", "Read only · no SET/write"],
-                ["OID SUBTREE", ".1.3.6.1.2.1.1"],
-              ]} />
-            </>
-          )}
-          <label className="remote-syslog-confirm">
-            <input
-              type="checkbox"
-              checked={confirmed}
-              disabled={busy || (enabled && !canEnable)}
-              onChange={(event) => setConfirmed(event.target.checked)}
-            />
-            <span>I confirm this management zone and authorize QuantumGrid to update SNMP credentials, restrict UDP/161 and restart the firewall and SNMP daemon.</span>
-          </label>
-          <div className="remote-syslog-actions">
-            <button className="hero-button" type="submit" disabled={!confirmed || busy || (enabled && (!canEnable || !username.trim() || !authPassphrase || !privacyPassphrase))}>
-              <Check size={14} /> {busy ? "Applying SNMPv3…" : enabled ? "Apply SNMPv3 authPriv" : "Disable SNMP service"}
-            </button>
-            <span>Passphrases are never returned by the API or included in audit events. They are stored in root-only configuration and runtime files.</span>
-          </div>
-          {notice && (
-            <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
-              {notice.message}
-            </div>
-          )}
-        </form>
-      )}
-    </Panel>
-  );
-}
-
-
 function SnmpV3Settings({ status, refresh }: {
   status?: RouterSnmpv3Status;
   refresh: () => void;
@@ -3298,10 +3101,12 @@ function SnmpV3Settings({ status, refresh }: {
   const credentialsValid = authPassphrase.length >= 20 && authPassphrase.length <= 128 &&
     privacyPassphrase.length >= 20 && privacyPassphrase.length <= 128 && distinctPassphrases;
   const canEnable = Boolean(status?.available && status.firewall_available &&
-    status.firewall_inventory_available && status.private_config_permissions &&
+    status.firewall_inventory_available && status.agent_listener_configured &&
+    status.legacy_network_firewall === false &&
     status.firewall_perimeter_safe && !status.legacy_community_configured &&
     !status.firewall_conflict && status.runtime_credentials_private &&
-    trustedZones.length > 0 && sourceZone &&
+    (status.status === "disabled" || status.status === "ready") &&
+    trustedZones.some((zone) => zone.name === sourceZone) &&
     /^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(username) && username !== "root" &&
     credentialsValid);
 
@@ -3362,6 +3167,21 @@ function SnmpV3Settings({ status, refresh }: {
             <strong>SNMPv3 only · authentication and privacy required</strong>
             <span>QuantumGrid provisions SHA authentication, AES encryption, authPriv security and read-only access to the standard MIB-II subtree. The agent remains disabled until explicitly enabled. No SNMPv1/v2c community string is created. The service is restricted to one internal firewall zone on UDP/161; ensure your NMS supports SNMPv3 USM with SHA and AES.</span>
           </div>
+          {!status.agent_listener_configured && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The daemon listener is not the exact QuantumGrid UDP/161 IPv4 and IPv6 profile. Custom or additional listeners must be removed before enabling SNMPv3.
+            </div>
+          )}
+          {status.legacy_network_firewall && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The Net-SNMP service still has an implicit network binding. It must be cleared so only the selected firewall-zone rule controls UDP/161 exposure.
+            </div>
+          )}
+          {!status.private_config_permissions && (
+            <div className="module-message" role="note">
+              The current SNMP configuration file is not yet root-only. Before writing new credentials, QuantumGrid will apply and verify mode 0600; enabling is refused if that pre-write hardening fails.
+            </div>
+          )}
           {status.legacy_community_configured && (
             <div className="module-message remote-syslog-error" role="alert">
               Legacy SNMP community/access sections were detected. QuantumGrid will not enable SNMPv3 while those entries remain in the daemon configuration. Disable the service and remove legacy community configuration through a trusted maintenance path.
@@ -3575,11 +3395,6 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
         refresh={refresh}
       />
       <SnmpV3Settings
-        key={JSON.stringify(routerOverview?.snmpv3 ?? null)}
-        status={routerOverview?.snmpv3}
-        refresh={refresh}
-      />
-      <Snmpv3Settings
         key={JSON.stringify(routerOverview?.snmpv3 ?? null)}
         status={routerOverview?.snmpv3}
         refresh={refresh}
