@@ -3912,6 +3912,9 @@ local function snmpv3_status(uci, fs)
 		status = "unavailable",
 		username = "",
 		managed_user_section = false,
+		managed_firewall_rule = false,
+		network_membership_verified = false,
+		user_source_zone = "",
 		source_zone = "",
 		source_zone_class = "unknown",
 		snmp_version = "",
@@ -3967,14 +3970,18 @@ local function snmpv3_status(uci, fs)
 		result.privacy_type = type(user.privacy_type) == "string" and user.privacy_type or ""
 		result.allow_write = type(user.allow_write) == "string" and user.allow_write or ""
 		result.restricted_oid = type(user.RestrictedOID) == "string" and user.RestrictedOID or ""
-		result.managed_user_section = user[".name"] == "quantumgrid"
+		result.user_source_zone = type(user.source_zone) == "string" and user.source_zone or ""
+		result.managed_user_section = validator.has_only_managed_user_options(user)
 	end
 	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
 	result.firewall_perimeter_safe = perimeter_safe
 
 	local rule_ok, rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
-	if rule_ok and type(rule) == "table" and rule[".type"] == "rule" then
+	if rule_ok and validator.has_only_managed_firewall_options(rule) then
+		result.managed_firewall_rule = true
 		result.source_zone = type(rule.src) == "string" and rule.src or ""
+		local zone_networks = validator.trusted_zone_networks(uci, result.source_zone)
+		result.network_membership_verified = type(zone_networks) == "table" and #zone_networks > 0
 		result.source_zone_class = zones_readable and zones[result.source_zone] and
 			zones[result.source_zone].classification or "unknown"
 		result.firewall_rule_configured = rule[".name"] == "quantumgrid_snmpv3" and
@@ -3982,7 +3989,8 @@ local function snmpv3_status(uci, fs)
 			rule.src == result.source_zone and rule.proto == "udp" and rule.dest_port == "161" and
 			rule.target == "ACCEPT" and rule.family == "any" and
 			(rule.enabled == nil or rule.enabled == "1") and
-			result.source_zone_class == "internal" and perimeter_safe
+			result.source_zone_class == "internal" and result.network_membership_verified and
+			result.user_source_zone == result.source_zone and perimeter_safe
 	end
 	local firewall_conflict = require("luci.quantumgrid.snmpv3").has_conflicting_firewall_rule(uci)
 	if firewall_conflict == nil then
@@ -4003,12 +4011,10 @@ local function snmpv3_status(uci, fs)
 		process.pid, process.comm, process.cmdline)
 	local config_stat_ok, config_stat = pcall(fs.stat, "/etc/config/snmpd")
 	local runtime_stat_ok, runtime_stat = pcall(fs.stat, "/var/run/snmpd.conf")
-	local config_mode_secure = config_stat_ok and type(config_stat) == "table" and
-		validator.private_file_mode_secure(config_stat.mode)
-	local runtime_mode_secure = runtime_stat_ok and type(runtime_stat) == "table" and
-		validator.private_file_mode_secure(runtime_stat.mode)
-	result.private_config_permissions = config_mode_secure and
-		(not result.enabled or runtime_mode_secure)
+	local config_mode_secure = config_stat_ok and validator.private_root_file(config_stat)
+	local runtime_mode_secure = runtime_stat_ok and validator.private_root_file(runtime_stat)
+	result.private_config_permissions = config_mode_secure
+	result.runtime_credentials_private = not result.enabled or runtime_mode_secure
 	result.status = validator.classify_status(result)
 	return result
 end
