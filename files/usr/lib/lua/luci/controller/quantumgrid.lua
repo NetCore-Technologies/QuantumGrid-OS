@@ -9466,7 +9466,6 @@ function action_snmpv3_update()
 		firewall_perimeter_safe = resulting.firewall_perimeter_safe,
 		process_running = resulting.process_running,
 		firewall_available = resulting.firewall_available,
-		agent_listener_configured = resulting.agent_listener_configured,
 		legacy_community_configured = resulting.legacy_community_configured,
 		legacy_network_firewall = resulting.legacy_network_firewall,
 		firewall_inventory_available = resulting.firewall_inventory_available,
