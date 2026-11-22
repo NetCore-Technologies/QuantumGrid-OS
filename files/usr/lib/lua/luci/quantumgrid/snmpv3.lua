@@ -249,6 +249,28 @@ function private_root_file(stat)
 	return mode ~= nil and mode % 512 == 384
 end
 
+function private_root_regular_file(stat)
+	if not private_root_file(stat) then return false end
+	if stat.type ~= nil then return stat.type == "reg" end
+	local mode = tonumber(stat.modedec or stat.mode)
+	return mode ~= nil and math.floor(mode / 4096) % 16 == 8
+end
+
+function private_root_directory(stat)
+	if type(stat) ~= "table" or tonumber(stat.uid) ~= 0 then return false end
+	local mode = tonumber(stat.modedec or stat.mode)
+	if not mode then return false end
+	if stat.type ~= nil then
+		if stat.type ~= "dir" then return false end
+	elseif math.floor(mode / 4096) % 16 ~= 4 then
+		return false
+	end
+	local permissions = mode % 512
+	local group_writable = math.floor(permissions / 16) % 2 == 1
+	local world_writable = math.floor(permissions / 2) % 2 == 1
+	return not group_writable and not world_writable
+end
+
 local function persistent_octet_string(value)
 	if type(value) ~= "string" then return nil end
 	if value:match("^[A-Za-z0-9 ]+$") then return '"' .. value .. '"' end
