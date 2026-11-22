@@ -1463,6 +1463,54 @@ export interface RouterUsteerUpdateResult {
   rolled_back: false;
 }
 
+export interface RouterSnmpv3TrustedZone {
+  name: string;
+  input_policy: string;
+}
+
+export interface RouterSnmpv3Status {
+  available: boolean;
+  service_installed: boolean;
+  binary_installed: boolean;
+  config_available: boolean;
+  firewall_available: boolean;
+  enabled: boolean;
+  status: "unavailable" | "disabled" | "review" | "ready";
+  username: string;
+  source_zone: string;
+  source_zone_class: "internal" | "external" | "unknown";
+  snmp_version: string;
+  auth_type: string;
+  privacy_type: string;
+  security_level: "authPriv";
+  allow_write: string;
+  restricted_oid: string;
+  legacy_community_configured: boolean;
+  legacy_network_firewall: boolean;
+  firewall_rule_configured: boolean;
+  firewall_perimeter_safe: boolean;
+  firewall_conflict: boolean;
+  process_running: boolean;
+  private_config_permissions: boolean;
+  sampled_at: number;
+  trusted_zones?: RouterSnmpv3TrustedZone[];
+}
+
+export interface RouterSnmpv3UpdateResult {
+  ok: true;
+  enabled: boolean;
+  status: "unavailable" | "disabled" | "review" | "ready";
+  username: string;
+  source_zone: string;
+  auth_type: string;
+  privacy_type: string;
+  security_level: "authPriv";
+  restarted: true;
+  firewall_reloaded: true;
+  rolled_back: false;
+  sampled_at: number;
+}
+
 export interface RouterOverview {
   ok: true;
   root_password_set: boolean;
@@ -1470,6 +1518,7 @@ export interface RouterOverview {
   hardware_io?: RouterHardwareIoStatus;
   office_networks?: RouterOfficeNetworks;
   remote_syslog?: RouterRemoteSyslogStatus;
+  snmpv3?: RouterSnmpv3Status;
   usteer?: RouterUsteerStatus;
   conntrack?: RouterConntrackStatus;
   timestamp: number;
@@ -1553,6 +1602,7 @@ const OFFICE_ZONE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-
 const OFFICE_WIFI_NETWORK_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-wifi-network-update";
 const OFFICE_SEGMENT_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-segment-add";
 const REMOTE_SYSLOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/remote-syslog";
+const SNMPV3_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/snmpv3-update";
 const USTEER_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/usteer-update";
 
 function isRemoteSyslogIpv4(value: string): boolean {
@@ -3314,6 +3364,83 @@ export async function updateRouterRemoteSyslog(input: {
   }
   return payload as RouterRemoteSyslogUpdateResult;
 }
+export async function updateRouterSnmpv3(input: {
+  enabled: boolean;
+  username: string;
+  authPassphrase: string;
+  privacyPassphrase: string;
+  sourceZone: string;
+}): Promise<RouterSnmpv3UpdateResult> {
+  if (input.enabled) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(input.username) || input.username === "root") {
+      throw new Error("SNMPv3 username must be 1-32 safe characters, start with a letter and must not be root.");
+    }
+    const safeSecret = /^[A-Za-z0-9!#$%&()*+,-./:;<=>?@[]^_{|}~]{20,128}$/;
+    if (!safeSecret.test(input.authPassphrase)) {
+      throw new Error("SNMPv3 authentication passphrase must be 20-128 supported ASCII characters.");
+    }
+    if (!safeSecret.test(input.privacyPassphrase)) {
+      throw new Error("SNMPv3 privacy passphrase must be 20-128 supported ASCII characters.");
+    }
+    if (input.authPassphrase === input.privacyPassphrase) {
+      throw new Error("SNMPv3 authentication and privacy passphrases must be different.");
+    }
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(input.sourceZone)) {
+      throw new Error("Choose a trusted internal management firewall zone.");
+    }
+  }
+  const form = new URLSearchParams();
+  form.set("confirmed", "1");
+  form.set("enabled", input.enabled ? "1" : "0");
+  if (input.enabled) {
+    form.set("username", input.username);
+    form.set("auth_pass", input.authPassphrase);
+    form.set("privacy_pass", input.privacyPassphrase);
+    form.set("source_zone", input.sourceZone);
+  }
+  const response = await fetch(SNMPV3_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "SNMPv3 changes require an active router administrator session."
+      : "The router returned an invalid SNMPv3 response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid SNMPv3 response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") {
+    throw new Error(payload.error);
+  }
+  if (
+    !response.ok || !("ok" in payload) || payload.ok !== true ||
+    !("enabled" in payload) || payload.enabled !== input.enabled ||
+    !("status" in payload) || (payload.status !== "ready" && payload.status !== "disabled" && payload.status !== "review" && payload.status !== "unavailable") ||
+    !("restarted" in payload) || payload.restarted !== true ||
+    !("firewall_reloaded" in payload) || payload.firewall_reloaded !== true ||
+    !("rolled_back" in payload) || payload.rolled_back !== false ||
+    !("username" in payload) || typeof payload.username !== "string" ||
+    !("source_zone" in payload) || typeof payload.source_zone !== "string" ||
+    !("auth_type" in payload) || typeof payload.auth_type !== "string" ||
+    !("privacy_type" in payload) || typeof payload.privacy_type !== "string" ||
+    !("security_level" in payload) || payload.security_level !== "authPriv" ||
+    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES")) ||
+    (!input.enabled && payload.status === "ready")
+  ) {
+    throw new Error("The router did not confirm the selected read-only SNMPv3 authPriv and firewall posture.");
+  }
+  return payload as RouterSnmpv3UpdateResult;
+}
+
 export async function updateRouterDhcpReservation(input: {
   section: string;
   name: string;
