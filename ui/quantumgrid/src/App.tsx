@@ -3105,7 +3105,8 @@ function SnmpV3Settings({ status, refresh }: {
     status.legacy_network_firewall === false &&
     status.firewall_perimeter_safe && !status.legacy_community_configured &&
     !status.firewall_conflict && status.runtime_credentials_private &&
-    status.persistent_inventory_available &&
+    status.persistent_inventory_available && !status.v3_user_section_present &&
+    status.v3_user_section_count === 0 &&
     (status.status === "disabled" || status.status === "ready") &&
     trustedZones.some((zone) => zone.name === sourceZone) &&
     /^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(username) && username !== "root" &&
@@ -3138,9 +3139,11 @@ function SnmpV3Settings({ status, refresh }: {
           : result.firewall_reloaded
             ? result.status === "disabled"
               ? "SNMP service stopped, the QuantumGrid UDP/161 rule was removed, and both generated runtime credentials and managed persistent USM keys were scrubbed."
-              : result.persistent_usm_user_count > 0
-                ? "SNMP service stopped and the managed user's runtime and persistent keys were scrubbed. " + result.persistent_usm_user_count + " unrelated persistent user record(s) were preserved and require review before SNMP is enabled again."
-                : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. Firewall or legacy SNMP state remains in review."
+              : result.v3_user_section_present
+                ? "SNMP service stopped. " + result.v3_user_section_count + " SNMPv3 UCI user section(s) with unmanaged settings were preserved and require trusted maintenance review before re-enabling."
+                : result.persistent_usm_user_count > 0
+                  ? "SNMP service stopped and the managed user's runtime and persistent keys were scrubbed. " + result.persistent_usm_user_count + " unrelated persistent user record(s) were preserved and require review before SNMP is enabled again."
+                  : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. Firewall or legacy SNMP state remains in review."
             : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. The firewall was unavailable, so its UDP/161 rules still require out-of-band inspection.",
       });
       refresh();
@@ -3198,6 +3201,11 @@ function SnmpV3Settings({ status, refresh }: {
           {!status.private_config_permissions && (
             <div className="module-message" role="note">
               The current SNMP configuration file is not yet root-only. Before writing new credentials, QuantumGrid will apply and verify mode 0600; enabling is refused if that pre-write hardening fails.
+            </div>
+          )}
+          {!status.enabled && status.v3_user_section_present && (
+            <div className="module-message remote-syslog-error" role="alert">
+              SNMP is disabled, but {status.v3_user_section_count} SNMPv3 UCI user section(s) remain. QuantumGrid preserved sections containing unmanaged options instead of deleting unknown configuration; inspect and remove them through a trusted maintenance path before re-enabling SNMP.
             </div>
           )}
           {status.legacy_community_configured && (
