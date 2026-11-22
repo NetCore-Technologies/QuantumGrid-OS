@@ -199,4 +199,40 @@ assert(community_status == "review",
 assert(snmp.classify_status({ available = false }) == "unavailable")
 assert(snmp.classify_status({ available = true, enabled = false }) == "disabled")
 
+local samples = {
+  { enabled = true, status = "disabled", process_running = false, username = "", source_zone = "" },
+  { enabled = true, status = "review", process_running = true, username = "quantumgrid-nms", source_zone = "mgmt" },
+  { enabled = true, status = "ready", process_running = true, username = "quantumgrid-nms", source_zone = "mgmt" },
+}
+local sample_calls, sleeps = 0, 0
+local polled, ready = snmp.wait_for_state(function()
+  sample_calls = sample_calls + 1
+  return samples[sample_calls]
+end, function() sleeps = sleeps + 1 end, true, "quantumgrid-nms", "mgmt", 5)
+assert(ready and polled.status == "ready" and sample_calls == 3 and sleeps == 2,
+  "SNMP enablement should tolerate daemon startup delay but return only on exact ready state")
+
+local disable_samples = {
+  { enabled = false, status = "review", process_running = true },
+  { enabled = false, status = "disabled", process_running = false },
+}
+local disable_calls = 0
+local disabled_state, disable_ready = snmp.wait_for_state(function()
+  disable_calls = disable_calls + 1
+  return disable_samples[disable_calls]
+end, function() end, false, nil, nil, 4)
+assert(disable_ready and disabled_state.process_running == false and disable_calls == 2,
+  "SNMP disablement waits until the managed daemon process has stopped even when legacy config remains")
+
+local retry_count, sleep_count = 0, 0
+local last_state, exhausted = snmp.wait_for_state(function()
+  retry_count = retry_count + 1
+  return { enabled = true, status = "review", process_running = true }
+end, function() sleep_count = sleep_count + 1 end, true, "quantumgrid-nms", "mgmt", 3)
+assert(not exhausted and last_state.status == "review" and retry_count == 3 and sleep_count == 2,
+  "SNMP readiness polling must be bounded and report the final observation")
+
+local nil_state, nil_ready = snmp.wait_for_state(function() error("telemetry failed") end, function() end, true, "nms", "mgmt", 2)
+assert(nil_state == nil and not nil_ready, "failed status reads must not be treated as ready")
+
 print("snmpv3: authPriv credentials, read-only access, trusted zone and posture validation passed")
