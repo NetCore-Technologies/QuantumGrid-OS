@@ -3283,14 +3283,16 @@ function SnmpV3Settings({ status, refresh }: {
   const credentialsValid = authPassphrase.length >= 20 && authPassphrase.length <= 128 &&
     privacyPassphrase.length >= 20 && privacyPassphrase.length <= 128 && distinctPassphrases;
   const canEnable = Boolean(status?.available && status.firewall_available &&
+    status.firewall_inventory_available && status.private_config_permissions &&
     status.firewall_perimeter_safe && !status.legacy_community_configured &&
-    !status.firewall_conflict && trustedZones.length > 0 && sourceZone &&
+    !status.firewall_conflict && status.runtime_credentials_private &&
+    trustedZones.length > 0 && sourceZone &&
     /^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(username) && username !== "root" &&
     credentialsValid);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!confirmed || busy || !status?.available || !status.firewall_available) return;
+    if (!confirmed || busy || !status?.available) return;
     if (enabled && !canEnable) return;
     setBusy(true);
     setNotice(null);
@@ -3312,9 +3314,11 @@ function SnmpV3Settings({ status, refresh }: {
         success: true,
         message: result.enabled
           ? "SNMPv3 is active with SHA authentication, AES privacy, authPriv security, read-only MIB-II access and the " + result.source_zone + " management zone. Passphrases were not returned by the router."
-          : result.status === "review"
-            ? "The SNMP daemon was disabled and the managed firewall rule was removed. Legacy SNMP community configuration remains and needs a separate maintenance review."
-            : "SNMP service is disabled and the QuantumGrid UDP/161 management rule was removed.",
+          : result.firewall_reloaded
+            ? result.status === "disabled"
+              ? "SNMP service stopped, the QuantumGrid UDP/161 rule was removed, and the generated runtime credential file was scrubbed."
+              : "SNMP service stopped and the generated runtime credentials were scrubbed. Firewall/legacy SNMP state remains in review."
+            : "SNMP service stopped and the generated runtime credentials were scrubbed. The firewall was unavailable, so its UDP/161 rules still require out-of-band inspection.",
       });
       refresh();
     } catch (cause) {
@@ -3335,8 +3339,8 @@ function SnmpV3Settings({ status, refresh }: {
       eyebrow="NET-SNMP · SHA/AES AUTHPRIV · READ-ONLY"
       action={<Status active={Boolean(status?.enabled && status.status === "ready")}>{status?.enabled ? (status.status ?? "UNKNOWN").toUpperCase() : status?.available ? status.status.toUpperCase() : "UNAVAILABLE"}</Status>}
     >
-      {!status?.available || !status.firewall_available ? (
-        <div className="module-message">The OpenSSL-enabled Net-SNMP daemon, UCI configuration or native firewall service is unavailable in this firmware.</div>
+      {!status?.available ? (
+        <div className="module-message">The OpenSSL-enabled Net-SNMP daemon or its UCI configuration is unavailable in this firmware.</div>
       ) : (
         <form className="remote-syslog-form" onSubmit={save}>
           <div className="remote-syslog-warning" role="note">
@@ -3358,13 +3362,25 @@ function SnmpV3Settings({ status, refresh }: {
               Another firewall ACCEPT rule may expose UDP/161 beyond the managed zone. Resolve that rule before enabling SNMPv3.
             </div>
           )}
+          {!status.firewall_available && status.enabled && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The firewall service is unavailable. SNMP cannot be enabled or confirmed safe, but the emergency disable control remains available to stop the daemon and remove its local runtime credentials.
+            </div>
+          )}
           {status.enabled && status.status !== "ready" && (
             <div className="module-message remote-syslog-error" role="alert">
               SNMP is enabled but its live posture is not ready. Inspect the daemon, reserved firewall rule, process state and credential file permissions before relying on monitoring.
             </div>
           )}
           <label className="remote-syslog-enabled">
-            <input type="checkbox" checked={enabled} disabled={busy || !status.available || !status.firewall_available} onChange={(event) => setEnabled(event.target.checked)} />
+            <input type="checkbox" checked={enabled} disabled={busy || !status.available || (!status.firewall_available && !status.enabled)} onChange={(event) => {
+              const nextEnabled = event.target.checked;
+              setEnabled(nextEnabled);
+              if (!nextEnabled) {
+                setAuthPassphrase("");
+                setPrivacyPassphrase("");
+              }
+            }} />
             <span>Enable SNMPv3 read-only agent</span>
           </label>
           {enabled && (
@@ -3410,7 +3426,7 @@ function SnmpV3Settings({ status, refresh }: {
             <button className="hero-button" type="submit" disabled={!confirmed || busy || (enabled && !canEnable)}>
               <Check size={14} /> {busy ? "Applying SNMPv3…" : enabled ? "Apply SNMPv3 authPriv" : "Disable SNMP"}
             </button>
-            <span>Authentication and privacy passphrases are never returned in telemetry and are cleared from this form after each attempt.</span>
+            <span>Authentication and privacy passphrases are never returned in telemetry and are cleared from this form after each attempt. Disabling also removes the generated plaintext runtime credential file.</span>
           </div>
           {notice && (
             <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
