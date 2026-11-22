@@ -192,9 +192,17 @@ local managed_user = {
   source_zone = "mgmt",
 }
 assert(snmp.has_only_managed_user_options(managed_user))
+assert(snmp.is_managed_user_section(managed_user))
+local other_named_user = {}
+for key, value in pairs(managed_user) do other_named_user[key] = value end
+other_named_user[".name"] = "legacy_nms"
+assert(not snmp.is_managed_user_section(other_named_user),
+  "a different SNMPv3 UCI section must not be identified as QuantumGrid's managed user")
 managed_user.exec = "/bin/sh"
 assert(not snmp.has_only_managed_user_options(managed_user),
   "unmanaged user directives must never be treated as a managed SNMPv3 user")
+assert(not snmp.is_managed_user_section(managed_user),
+  "the reserved UCI section with unmanaged directives must not be treated as managed")
 
 local managed_rule = {
   [".name"] = "quantumgrid_snmpv3", [".type"] = "rule",
