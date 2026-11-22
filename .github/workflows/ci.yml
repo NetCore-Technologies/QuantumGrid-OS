@@ -188,6 +188,8 @@ jobs:
           bash tests/dropbear-lan-binding-smoke.sh
           sh -n files/etc/uci-defaults/93-quantumgrid-audit-backup
           bash -n tests/firmware-smoke.sh
+          bash -n scripts/secure-aw1000-snmpd-runtime-config.sh
+          bash -n tests/snmpd-runtime-umask-smoke.sh
           luac5.1 -p files/usr/lib/lua/luci/controller/quantumgrid.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/sqm.lua
@@ -258,6 +260,8 @@ jobs:
         run: lua5.1 tests/remote-syslog.lua
       - name: Test read-only SNMPv3 authPriv validation and firewall scope
         run: lua5.1 tests/snmpv3.lua
+      - name: Test Net-SNMP generated credential file umask
+        run: bash tests/snmpd-runtime-umask-smoke.sh
       - name: Test NSS EDMA and PPE readiness states
         run: lua5.1 tests/acceleration-status.lua
       - name: Test optional AW1000 NSS build profile
