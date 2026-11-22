@@ -9284,6 +9284,21 @@ function action_snmpv3_update()
 		return create_ok and created ~= nil and created ~= false
 	end
 
+	if update.enabled then
+		local config_stat_ok, config_stat = pcall(fs.stat, "/etc/config/snmpd")
+		if not config_stat_ok or type(config_stat) ~= "table" or tonumber(config_stat.uid) ~= 0 then
+			fail("The existing SNMP configuration is not verifiably root-owned. No credentials were written.", 503)
+			return
+		end
+		local config_mode_ok, config_mode = pcall(fs.chmod, "/etc/config/snmpd", 384)
+		local secured_stat_ok, secured_stat = pcall(fs.stat, "/etc/config/snmpd")
+		if not config_mode_ok or config_mode == false or not secured_stat_ok or
+			not validator.private_root_file(secured_stat) then
+			fail("The persistent SNMP credential file could not be secured as root-owned mode 0600. No credentials were written.", 503)
+			return
+		end
+	end
+
 	if not set_option("snmpd", "general", "enabled", update.enabled and "1" or "0") or
 		not set_option("snmpd", "general", "snmp_version", "v3") or
 		not set_list("snmpd", "general", "network", {}) then
