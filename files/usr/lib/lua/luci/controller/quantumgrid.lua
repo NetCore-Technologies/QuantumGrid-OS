@@ -3911,6 +3911,7 @@ local function snmpv3_status(uci, fs)
 		enabled = false,
 		status = "unavailable",
 		username = "",
+		managed_user_section = false,
 		source_zone = "",
 		source_zone_class = "unknown",
 		snmp_version = "",
@@ -3976,8 +3977,9 @@ local function snmpv3_status(uci, fs)
 		result.source_zone = type(rule.src) == "string" and rule.src or ""
 		result.source_zone_class = zones_readable and zones[result.source_zone] and
 			zones[result.source_zone].classification or "unknown"
-		result.firewall_rule_configured = rule.src == result.source_zone and
-			rule.proto == "udp" and rule.dest_port == "161" and
+		result.firewall_rule_configured = rule[".name"] == "quantumgrid_snmpv3" and
+			rule.name == "QuantumGrid SNMPv3 management" and
+			rule.src == result.source_zone and rule.proto == "udp" and rule.dest_port == "161" and
 			rule.target == "ACCEPT" and rule.family == "any" and
 			(rule.enabled == nil or rule.enabled == "1") and
 			result.source_zone_class == "internal" and perimeter_safe
