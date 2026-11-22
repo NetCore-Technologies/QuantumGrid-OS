@@ -3155,7 +3155,7 @@ function Snmpv3Settings({ status, refresh }: {
         <form className="remote-syslog-form" onSubmit={save}>
           <div className="remote-syslog-warning" role="note">
             <strong>Read-only management access</strong>
-            <span>QuantumGrid provisions SNMPv3 authPriv only: SHA authentication, AES privacy, no write access and the standard system-information OID subtree. UDP/161 is permitted only from one uniquely mapped internal management zone. SNMPv1/v2c community access is not enabled.</span>
+            <span>QuantumGrid provisions SNMPv3 authPriv only: SHA authentication, AES privacy, no write access and the System Group OID subtree only. UDP/161 is permitted only from one uniquely mapped internal management zone. SNMPv1/v2c community access is not enabled.</span>
           </div>
           {status.status === "review" && (
             <div className="module-message remote-syslog-error" role="alert">
@@ -3234,7 +3234,7 @@ function Snmpv3Settings({ status, refresh }: {
                 ["AUTHENTICATION", "SHA"],
                 ["PRIVACY", "AES"],
                 ["ACCESS", "Read only · no SET/write"],
-                ["OID SUBTREE", ".1.3.6.1.2.1"],
+                ["OID SUBTREE", ".1.3.6.1.2.1.1"],
               ]} />
             </>
           )}
