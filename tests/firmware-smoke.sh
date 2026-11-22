@@ -5314,6 +5314,10 @@ grep -Fq '/usr/lib/snmp/snmpd.conf' "$ROOT/files/usr/lib/lua/luci/controller/qua
 grep -Fq 'persistent_inventory_available' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'persistent_user_matches' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'state.persistent_user_matches' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'v3_user_section_present' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'v3_user_section_count' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'validator.has_only_managed_user_options(existing_v3)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'v3_user_section_present' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 python3 - "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua" <<'PY'
 import pathlib
 import sys
