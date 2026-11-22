@@ -2313,6 +2313,7 @@ export async function updateRouterWirelessRadio(input: {
     !("disabled" in payload) || payload.disabled !== !input.enabled ||
     !("runtime_up" in payload) || payload.runtime_up !== input.enabled ||
     !("changed" in payload) || typeof payload.changed !== "boolean" ||
+    payload.changed !== (input.enabled !== !input.expectedDisabled) ||
     !("reloaded" in payload) || payload.reloaded !== payload.changed ||
     !("rolled_back" in payload) || payload.rolled_back !== false
   ) {
