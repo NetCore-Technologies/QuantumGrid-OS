@@ -9023,12 +9023,12 @@ function action_snmpv3_update()
 		source_zone = http.formvalue("source_zone", true)
 	}
 	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
-	if not zones_readable then
+	if input.enabled == "1" and not zones_readable then
 		respond(503, { ok = false, error = "The firewall-zone inventory could not be read safely." })
 		return
 	end
 	local trusted_zones = {}
-	for name, zone in pairs(zones) do
+	for name, zone in pairs(zones or {}) do
 		if zone.classification == "internal" then trusted_zones[name] = true end
 	end
 	local update, validation_error = validator.validate(input, trusted_zones)
@@ -9037,6 +9037,11 @@ function action_snmpv3_update()
 		return
 	end
 	if update.enabled then
+		local zone_networks, zone_error = validator.trusted_zone_networks(uci, update.source_zone)
+		if not zone_networks then
+			respond(409, { ok = false, error = zone_error })
+			return
+		end
 		if not perimeter_safe then
 			respond(409, {
 				ok = false,
@@ -9084,6 +9089,10 @@ function action_snmpv3_update()
 			respond(409, { ok = false, error = "An unmanaged SNMPv3 user already exists. QuantumGrid will not overwrite or expose unmanaged SNMP users." })
 			return
 		end
+		if existing_v3 and not validator.has_only_managed_user_options(existing_v3) then
+			respond(409, { ok = false, error = "The reserved QuantumGrid SNMPv3 user contains unmanaged options. No credentials were changed." })
+			return
+		end
 	end
 
 	local rule_read_ok, existing_rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
@@ -9091,8 +9100,8 @@ function action_snmpv3_update()
 		respond(503, { ok = false, error = "The reserved SNMPv3 firewall rule could not be inspected." })
 		return
 	end
-	if type(existing_rule) == "table" and existing_rule[".type"] ~= "rule" then
-		respond(409, { ok = false, error = "The reserved SNMPv3 firewall section exists with an incompatible type." })
+	if type(existing_rule) == "table" and not validator.has_only_managed_firewall_options(existing_rule) then
+		respond(409, { ok = false, error = "The reserved SNMPv3 firewall section has an incompatible type or unmanaged options." })
 		return
 	end
 
@@ -9104,14 +9113,14 @@ function action_snmpv3_update()
 	if existing_v3 then
 		v3_snapshot = {}
 		for _, option in ipairs({ "username", "auth_type", "auth_pass", "privacy_type",
-			"privacy_pass", "allow_write", "RestrictedOID" }) do
+			"privacy_pass", "allow_write", "RestrictedOID", "source_zone" }) do
 			v3_snapshot[option] = existing_v3[option]
 		end
 	end
 	local rule_snapshot = nil
 	if type(existing_rule) == "table" then
 		rule_snapshot = {}
-		for _, option in ipairs({ "name", "src", "proto", "dest_port", "target", "family" }) do
+		for _, option in ipairs({ "name", "src", "proto", "dest_port", "target", "family", "enabled" }) do
 			rule_snapshot[option] = existing_rule[option]
 		end
 	end
@@ -9160,9 +9169,9 @@ function action_snmpv3_update()
 			general_snapshot, { "enabled", "snmp_version", "network" })
 		local v3_restored = restore_section("snmpd", "quantumgrid", "v3",
 			v3_snapshot, { "username", "auth_type", "auth_pass", "privacy_type",
-				"privacy_pass", "allow_write", "RestrictedOID" })
+				"privacy_pass", "allow_write", "RestrictedOID", "source_zone" })
 		local rule_restored = restore_section("firewall", "quantumgrid_snmpv3", "rule",
-			rule_snapshot, { "name", "src", "proto", "dest_port", "target", "family" })
+			rule_snapshot, { "name", "src", "proto", "dest_port", "target", "family", "enabled" })
 		local snmp_commit_ok, snmp_committed = false, false
 		local firewall_commit_ok, firewall_committed = false, false
 		if general_restored and v3_restored then
@@ -9223,7 +9232,8 @@ function action_snmpv3_update()
 			privacy_type = update.privacy_type,
 			privacy_pass = update.privacy_pass,
 			allow_write = "0",
-			RestrictedOID = update.restricted_oid
+			RestrictedOID = update.restricted_oid,
+			source_zone = update.source_zone
 		}
 		for option, value in pairs(v3_options) do
 			if not set_option("snmpd", "quantumgrid", option, value) then
@@ -9244,7 +9254,8 @@ function action_snmpv3_update()
 			proto = "udp",
 			dest_port = "161",
 			target = "ACCEPT",
-			family = "any"
+			family = "any",
+			enabled = "1"
 		}
 		for option, value in pairs(rule_options) do
 			if not set_option("firewall", "quantumgrid_snmpv3", option, value) then
