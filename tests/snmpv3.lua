@@ -229,6 +229,18 @@ assert(not snmp.credentials_file_private({ uid = 0, modedec = 420 }),
   "group/world-readable SNMP credential files are rejected")
 assert(not snmp.credentials_file_private({ uid = 1000, modedec = 384 }),
   "non-root-owned SNMP credential files are rejected")
+assert(snmp.private_root_regular_file({ uid = 0, type = "reg", modedec = 33152 }),
+  "the persistent SNMP database must be a root-owned regular file with mode 0600")
+assert(not snmp.private_root_regular_file({ uid = 0, type = "lnk", modedec = 41471 }),
+  "persistent SNMP database symlinks must be rejected")
+assert(not snmp.private_root_regular_file({ uid = 1000, type = "reg", modedec = 33152 }))
+assert(not snmp.private_root_regular_file({ uid = 0, type = "reg", modedec = 33188 }))
+assert(snmp.private_root_directory({ uid = 0, type = "dir", modedec = 16877 }),
+  "a root-owned, non-group/world-writable persistent directory is safe")
+assert(not snmp.private_root_directory({ uid = 0, type = "dir", modedec = 16895 }),
+  "a world-writable persistent directory must be rejected")
+assert(not snmp.private_root_directory({ uid = 1000, type = "dir", modedec = 16877 }))
+assert(not snmp.private_root_directory({ uid = 0, type = "reg", modedec = 33152 }))
 assert(not snmp.credentials_file_private({ uid = 0, modedec = 416 }),
   "group-writable SNMP credential files are rejected")
 
