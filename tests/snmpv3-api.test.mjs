@@ -122,6 +122,7 @@ test("rejects API success responses unless they prove SHA/AES authPriv, read-onl
     { ...ready, process_running: false },
     { ...ready, private_config_permissions: false },
     { ...ready, source_zone: "wan" },
+    { ...ready, lock_released: false },
     { ...ready, restarted: false },
     { ...ready, firewall_reloaded: false },
     { ...ready, rolled_back: true },
