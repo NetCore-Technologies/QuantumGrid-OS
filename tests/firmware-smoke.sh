@@ -5316,6 +5316,12 @@ grep -Fq 'function has_only_managed_user_options(section)' "$ROOT/files/usr/lib/
 grep -Fq 'function has_only_managed_firewall_options(section)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'function classify_status(snapshot)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'function has_expected_agent_listener(uci)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'function legacy_access_configured(uci)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'local required = {' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+test "$(grep -Fc 'agent_listener_configured: boolean;' "$ROOT/ui/quantumgrid/src/routerApi.ts")" -eq 2
+test "$(grep -Fc 'agent_listener_configured = resulting.agent_listener_configured' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua")" -eq 1
+test "$(grep -Fc 'function SnmpV3Settings' "$ROOT/ui/quantumgrid/src/App.tsx")" -eq 1
+! grep -Fq 'function Snmpv3Settings' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq '.1.3.6.1.2.1.1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 grep -Fq 'agent_listener_configured = resulting.agent_listener_configured' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'payload.lock_released = release_ok and release_status == 0' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
