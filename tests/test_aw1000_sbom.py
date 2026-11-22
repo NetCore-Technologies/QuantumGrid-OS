@@ -100,6 +100,14 @@ class Aw1000SbomTests(unittest.TestCase):
                 with self.assertRaises(SBOM.SbomError):
                     SBOM.parse_manifest(self.manifest)
 
+    def test_manifest_enforces_component_limit(self) -> None:
+        self.manifest.write_text(
+            "".join(f"package-{index} - 1.0.0\\n" for index in range(SBOM.MAX_PACKAGES + 1)),
+            encoding="utf-8",
+        )
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.parse_manifest(self.manifest)
+
     def test_rejects_wrong_profile_and_incomplete_build_identity(self) -> None:
         self.args.profile = "other-router"
         with self.assertRaises(SBOM.SbomError):
