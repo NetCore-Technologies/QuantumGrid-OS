@@ -3203,6 +3203,11 @@ function SnmpV3Settings({ status, refresh }: {
               The current SNMP configuration file is not yet root-only. Before writing new credentials, QuantumGrid will apply and verify mode 0600; enabling is refused if that pre-write hardening fails.
             </div>
           )}
+          {status.enabled && (!status.managed_user_section || status.v3_user_section_count !== 1) && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The active agent does not map to exactly one QuantumGrid-managed SNMPv3 UCI section. QuantumGrid will not treat an alternate section name, duplicate user definition or section with extra directives as a verified managed identity.
+            </div>
+          )}
           {!status.enabled && status.v3_user_section_present && (
             <div className="module-message remote-syslog-error" role="alert">
               SNMP is disabled, but {status.v3_user_section_count} SNMPv3 UCI user section(s) remain. QuantumGrid preserved sections containing unmanaged options instead of deleting unknown configuration; inspect and remove them through a trusted maintenance path before re-enabling SNMP.
