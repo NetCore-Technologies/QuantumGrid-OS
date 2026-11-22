@@ -3914,6 +3914,10 @@ local function snmpv3_status(uci, fs)
 		private_config_permissions = false,
 		runtime_credentials_present = false,
 		runtime_credentials_private = false,
+		persistent_inventory_available = false,
+		persistent_user_present = false,
+		persistent_user_matches = 0,
+		persistent_usm_user_count = 0,
 		sampled_at = os.time()
 	}
 	if not result.available then return result end
@@ -4024,6 +4028,14 @@ local function snmpv3_status(uci, fs)
 	result.private_config_permissions = config_mode_secure
 	result.runtime_credentials_private = result.enabled and runtime_mode_secure or
 		(not result.enabled and not result.runtime_credentials_present)
+	local persistent = validator.inspect_persistent_usm_file(
+		fs, "/usr/lib/snmp/snmpd.conf", result.username ~= "" and result.username or nil)
+	if type(persistent) == "table" and persistent.available == true then
+		result.persistent_inventory_available = true
+		result.persistent_user_present = persistent.user_present == true
+		result.persistent_user_matches = tonumber(persistent.matches) or 0
+		result.persistent_usm_user_count = tonumber(persistent.total) or 0
+	end
 	result.status = validator.classify_status(result)
 	return result
 end
@@ -9469,8 +9481,12 @@ function action_snmpv3_update()
 		network_membership_verified = resulting.network_membership_verified,
 		firewall_rule_present = resulting.firewall_rule_present,
 		runtime_credentials_present = resulting.runtime_credentials_present,
-		private_config_permissions = resulting.private_config_permissions,
 		runtime_credentials_private = resulting.runtime_credentials_private,
+		persistent_inventory_available = resulting.persistent_inventory_available,
+		persistent_user_present = resulting.persistent_user_present,
+		persistent_user_matches = resulting.persistent_user_matches,
+		persistent_usm_user_count = resulting.persistent_usm_user_count,
+		private_config_permissions = resulting.private_config_permissions,
 		restarted = true,
 		firewall_reloaded = firewall_available and firewall_reload_ok and firewall_reload_status == 0 or false,
 		rolled_back = false,
