@@ -128,6 +128,33 @@ for _, process in ipairs({
     "nonstandard Net-SNMP invocation or listener override must not be ready")
 end
 
+local managed_persistent = "usmUser 3 3 0x0102 0x71672d636f6c6c6563746f72 0x71672d636f6c6c6563746f72 .1.3.6.1.6.3.10.1.1.3 0x010203 0x010203 .1.3.6.1.6.3.10.1.2.4 0x040506 0x040506 \"\\n"
+local other_persistent = "usmUser 3 3 0x0102 \"otheruser\" \"otheruser\" .1.3.6.1.6.3.10.1.1.3 0x010203 0x010203 .1.3.6.1.6.3.10.1.2.4 0x040506 0x040506 \"\\n"
+local persistent_db = "# Net-SNMP persistent state\\nengineBoots 7\\n" .. managed_persistent .. other_persistent
+local inventory = snmp.inspect_persistent_usm_users(persistent_db)
+assert(inventory and inventory.total == 2)
+local present, matches, total = snmp.persistent_user_matches(persistent_db, "qg-collector")
+assert(present and matches == 1 and total == 2)
+local no_user, no_matches, no_total = snmp.persistent_user_matches(persistent_db, "missing-nms")
+assert(not no_user and no_matches == 0 and no_total == 2)
+local scrubbed, removed = snmp.strip_persistent_usm_users(persistent_db, { "qg-collector" })
+assert(scrubbed and removed == 1)
+assert(not snmp.persistent_user_matches(scrubbed, "qg-collector"))
+assert(snmp.persistent_user_matches(scrubbed, "otheruser"))
+assert(scrubbed:find("# Net%-SNMP persistent state"))
+assert(scrubbed:find("engineBoots 7"))
+assert(not scrubbed:find(managed_persistent, 1, true))
+assert(scrubbed:find(other_persistent, 1, true))
+local removed_all, removed_count = snmp.strip_persistent_usm_users(persistent_db, { "qg-collector", "otheruser" })
+assert(removed_count == 2 and removed_all == "# Net-SNMP persistent state\\nengineBoots 7\\n")
+assert(snmp.strip_persistent_usm_users(persistent_db, {}) == persistent_db)
+assert(snmp.inspect_persistent_usm_users("usmUser malformed\\n") == nil,
+  "malformed persistent usmUser records must fail closed")
+assert(snmp.inspect_persistent_usm_users(string.rep("x", 4 * 1024 * 1024 + 1)) == nil,
+  "oversized persistent Net-SNMP state must fail closed")
+assert(snmp.strip_persistent_usm_users(persistent_db, { "../unsafe" }) == nil,
+  "invalid managed usernames must not be accepted by the persistent-store filter")
+
 local function agent_fixture(sections)
   local fake = {}
   function fake:foreach(package, section_type, callback)
