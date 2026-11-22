@@ -210,7 +210,7 @@ class Aw1000SbomTests(unittest.TestCase):
         with self.assertRaises(SBOM.SbomError):
             SBOM.build_sbom(self.args)
         self.args.build_profile = "AW1000 stable upstream OpenWrt"
-        self.args.version = "0.4.0\\nmalicious"
+        self.args.version = "0.4.0" + chr(10) + "malicious"
         with self.assertRaises(SBOM.SbomError):
             SBOM.build_sbom(self.args)
 
