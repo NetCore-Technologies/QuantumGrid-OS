@@ -35,33 +35,35 @@ end
 assert(snmp.trusted_zone_networks(ambiguous_zone_uci, "mgmt") == nil,
   "a network attached to multiple zones must be rejected")
 
-local function agent_fixture(sections)
+local function legacy_fixture(section_type, sections)
   local fake = {}
-  function fake:foreach(package, section_type, callback)
-    if package == "snmpd" and section_type == "agent" then
-      for _, section in ipairs(sections) do callback(section) end
+  function fake:foreach(package, requested_type, callback)
+    if package == "snmpd" and requested_type == section_type then
+      for _, section in ipairs(sections or {}) do callback(section) end
     end
   end
   return fake
 end
-local good_agent = {
-  [".name"] = "agent", [".type"] = "agent",
-  agentaddress = "UDP:161,UDP6:161",
-}
-assert(snmp.has_expected_agent_listener(agent_fixture({ good_agent })),
-  "the exact UDP/161 IPv4 and IPv6 listener profile is accepted")
-assert(not snmp.has_expected_agent_listener(agent_fixture({
-  { [".name"] = "agent", [".type"] = "agent", agentaddress = "UDP:161,UDP6:162" },
-})), "custom listener ports must not be reported as the managed SNMP endpoint")
-assert(not snmp.has_expected_agent_listener(agent_fixture({
-  { [".name"] = "agent", [".type"] = "agent", agentaddress = "UDP:161,UDP6:161", extra = "unexpected" },
-})), "additional agent options must not bypass the managed listener contract")
-assert(not snmp.has_expected_agent_listener(agent_fixture({
-  good_agent,
-  { [".name"] = "agent6", [".type"] = "agent", agentaddress = "UDP:161" },
-})), "multiple agent address sections must be rejected")
-assert(not snmp.has_expected_agent_listener(agent_fixture({})),
-  "missing SNMP listener configuration must fail closed")
+for _, section_type in ipairs({
+  "com2sec", "com2sec6", "access", "access_default",
+  "access_HostName", "access_HostIP", "trap_HostName", "trap_HostIP",
+}) do
+  assert(snmp.legacy_access_configured(legacy_fixture(section_type, { { version = "v2c" } })) == true,
+    "unmanaged " .. section_type .. " configuration must block QuantumGrid SNMPv3")
+end
+assert(snmp.legacy_access_configured(legacy_fixture("com2sec", {})) == false)
+assert(snmp.legacy_access_configured(legacy_fixture("group", {
+  { version = "v1" }
+})) == true)
+assert(snmp.legacy_access_configured(legacy_fixture("group", {
+  { version = "v2c" }
+})) == true)
+assert(snmp.legacy_access_configured(legacy_fixture("group", {
+  { version = "any" }
+})) == true)
+assert(snmp.legacy_access_configured(legacy_fixture("group", {
+  { version = "usm" }
+})) == false)
 
 local function agent_fixture(sections)
   local fake = {}
