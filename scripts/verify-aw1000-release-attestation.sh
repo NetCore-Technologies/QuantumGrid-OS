@@ -31,11 +31,15 @@ SOURCE_REF="refs/tags/qg-$VERSION"
 
 command -v gh >/dev/null 2>&1 || die "GitHub CLI (gh) is required for publisher/build-provenance verification."
 GH_VERSION=$(gh version 2>/dev/null | awk 'NR == 1 && $1 == "gh" && $2 == "version" { print $3 }')
-case "$GH_VERSION" in
-  ""|*[!0-9.]* ) die "Could not determine a stable GitHub CLI version." ;;
-esac
-MIN_GH_VERSION=$(printf '%s\n' "2.102.0" "$GH_VERSION" | sort -V | head -n 1)
-[ "$MIN_GH_VERSION" = "2.102.0" ] || die "GitHub CLI 2.102.0 or newer is required for exact case-sensitive source-ref verification."
+printf '%s\n' "$GH_VERSION" | awk -F. '
+  NF != 3 || $1 !~ /^[0-9]+$/ || $2 !~ /^[0-9]+$/ || $3 !~ /^[0-9]+$/ { exit 1 }
+  {
+    if (($1 + 0) > 2 ||
+        (($1 + 0) == 2 && ($2 + 0) > 102) ||
+        (($1 + 0) == 2 && ($2 + 0) == 102 && ($3 + 0) >= 0)) exit 0
+    exit 1
+  }
+' || die "GitHub CLI 2.102.0 or newer is required for exact case-sensitive source-ref verification."
 gh attestation verify "$IMAGE" \
   --repo NetCore-Technologies/QuantumGrid-OS \
   --signer-workflow NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml \
