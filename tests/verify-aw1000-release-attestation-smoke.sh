@@ -16,6 +16,10 @@ printf 'test-factory-ubi-image\n' > "$IMAGE"
 
 cat > "$WORK/bin/gh" <<'GH'
 #!/bin/sh
+if [ "${1:-}" = "version" ]; then
+  printf 'gh version %s\n' "${GH_VERSION:-2.102.0}"
+  exit 0
+fi
 printf '%s\n' "$@" > "$GH_ARGS_LOG"
 if [ "${GH_FAIL:-0}" = "1" ]; then
   exit 23
@@ -33,6 +37,40 @@ grep -Fxq -- '--repo' "$GH_ARGS_LOG"
 grep -Fxq 'NetCore-Technologies/QuantumGrid-OS' "$GH_ARGS_LOG"
 grep -Fxq -- '--signer-workflow' "$GH_ARGS_LOG"
 grep -Fxq 'NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml' "$GH_ARGS_LOG"
+grep -Fxq -- '--predicate-type' "$GH_ARGS_LOG"
+grep -Fxq 'https://slsa.dev/provenance/v1' "$GH_ARGS_LOG"
+grep -Fxq -- '--source-ref' "$GH_ARGS_LOG"
+grep -Fxq 'refs/tags/qg-v0.4.0' "$GH_ARGS_LOG"
+grep -Fxq -- '--deny-self-hosted-runners' "$GH_ARGS_LOG"
+
+# Older GitHub CLI versions have unsafe case-insensitive source-ref comparison.
+: > "$GH_ARGS_LOG"
+if GH_VERSION=2.101.0 sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: an outdated GitHub CLI was accepted for source-ref enforcement" >&2
+  exit 1
+fi
+[ ! -s "$GH_ARGS_LOG" ] || {
+  echo "ERROR: attestation verification ran with an outdated GitHub CLI" >&2
+  exit 1
+}
+
+# Manual build artifacts are not tagged releases and cannot pass this verifier.
+MANUAL_IMAGE="$WORK/QuantumGrid-OS-manual-build-7-AW1000-squashfs-factory.ubi"
+cp "$IMAGE" "$MANUAL_IMAGE"
+(
+  cd "$WORK"
+  sha256sum "$(basename "$MANUAL_IMAGE")" > "$MANIFEST"
+)
+: > "$GH_ARGS_LOG"
+if sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$MANUAL_IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: a manual build artifact was accepted as a tagged release" >&2
+  exit 1
+fi
+[ ! -s "$GH_ARGS_LOG" ] || {
+  echo "ERROR: GitHub was contacted for a non-release image" >&2
+  exit 1
+}
+
 
 # A bad checksum must stop before GitHub is contacted.
 : > "$GH_ARGS_LOG"
