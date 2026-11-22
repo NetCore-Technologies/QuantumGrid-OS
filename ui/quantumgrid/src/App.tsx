@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -4857,18 +4857,113 @@ function DashboardPage({
 }
 
 
+function WirelessRadioControl({ radio, refresh }: { radio: RouterWirelessRadio; refresh: () => void }) {
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const desiredEnabled = radio.disabled;
+
+  const apply = async () => {
+    if (!confirming || busy || radio.config_available !== true) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterWirelessRadio({
+        radio: radio.name,
+        enabled: desiredEnabled,
+        expectedDisabled: radio.disabled,
+      });
+      setConfirming(false);
+      setNotice({
+        success: true,
+        message: result.changed
+          ? result.enabled
+            ? "Radio enabled and live runtime state verified."
+            : "Radio disabled and live runtime state verified."
+          : "The radio already had the requested state; no reload was needed.",
+      });
+      await refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "The radio state could not be changed.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="wireless-radio-control">
+      <div className="wireless-radio-control-status">
+        <Status active={!radio.disabled && radio.up}>
+          {radio.disabled ? "CONFIG DISABLED" : radio.up ? "RUNTIME UP" : "RUNTIME DOWN"}
+        </Status>
+        {!radio.config_available ? (
+          <span>Configuration state unavailable</span>
+        ) : radio.disabled === radio.up ? (
+          <span>Configured and runtime state agree</span>
+        ) : (
+          <span className="wireless-radio-state-warning">Configuration and runtime state differ</span>
+        )}
+      </div>
+      {!confirming ? (
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={busy || !radio.config_available}
+          onClick={() => {
+            setNotice(null);
+            setConfirming(true);
+          }}
+        >
+          {radio.disabled ? "Enable radio" : "Disable radio"}
+        </button>
+      ) : (
+        <div className="wireless-radio-confirm">
+          <span>
+            {radio.disabled
+              ? "Enabling this radio may restart its AP interfaces."
+              : "Disabling this radio disconnects its clients and turns off every SSID on this radio."}
+          </span>
+          <button type="button" className="hero-button" disabled={busy} onClick={() => void apply()}>
+            {busy ? "Applying…" : "Confirm " + (radio.disabled ? "enable" : "disable")}
+          </button>
+          <button type="button" className="secondary-button" disabled={busy} onClick={() => setConfirming(false)}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function WirelessRadioInventory({
   radios,
   available,
+  manage = false,
+  refresh,
 }: {
   radios: RouterOverview["wireless"];
   available: boolean;
+  manage?: boolean;
+  refresh?: () => void;
 }) {
   if (!available) {
     return <div className="module-message">Waiting for authenticated wireless telemetry.</div>;
   }
-  if (radios.length === 0 || radios.every((radio) => radio.interfaces.length === 0)) {
+  if (radios.length === 0 || (!manage && radios.every((radio) => radio.interfaces.length === 0))) {
     return <div className="module-message">No wireless interfaces were reported by the router.</div>;
+  }
+  if (manage && radios.length > 0 && radios.every((radio) => radio.interfaces.length === 0) &&
+      radios.every((radio) => radio.config_available !== true)) {
+    return <div className="module-message">No wireless interfaces or verifiable radio configuration were reported by the router.</div>;
   }
 
   return (
@@ -4899,6 +4994,7 @@ function WirelessRadioInventory({
             <strong>{radio.name} · Driver frequency list</strong>
             <span>{radio.channels?.length ? `${radio.channels.length} channel entries` : "Not reported"}</span>
           </div>
+          {manage && refresh ? <WirelessRadioControl radio={radio} refresh={refresh} /> : null}
           {radio.channels?.length ? (
             <div className="wireless-channel-chips">
               {radio.channels.map((channel) => (
@@ -6396,7 +6492,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
       </section>
       <div className="module-grid">
         <Panel title="Wireless radios" eyebrow="NETWORK.WIRELESS STATUS" action={<Status active={Boolean(routerOverview)}>{routerOverview ? "LIVE" : "WAITING"}</Status>}>
-          <WirelessRadioInventory radios={radios} available={Boolean(routerOverview)} />
+          <WirelessRadioInventory radios={radios} available={Boolean(routerOverview)} manage refresh={refresh} />
         </Panel>
         <Panel title="Wireless configuration" eyebrow="AUTHENTICATED UCI · GUARDED WIFI RELOAD">
           {!wirelessConfigs ? (
