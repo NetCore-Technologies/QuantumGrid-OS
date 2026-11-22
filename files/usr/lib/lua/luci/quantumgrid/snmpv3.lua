@@ -345,6 +345,64 @@ function strip_persistent_usm_users(content, usernames)
 	return table.concat(output), removed
 end
 
+function inspect_persistent_usm_file(fs, path, username, read_fn)
+	if type(fs) ~= "table" or type(fs.lstat) ~= "function" or
+		type(path) ~= "string" or path == "" then
+		return nil, "The Net-SNMP persistent user database cannot be inspected safely."
+	end
+	if username ~= nil and username ~= "" and not valid_username(username) then
+		return nil, "The managed SNMP username is invalid."
+	end
+	local stat_ok, stat = pcall(fs.lstat, path)
+	if not stat_ok then
+		return nil, "The Net-SNMP persistent user database metadata could not be read."
+	end
+	if stat == nil then
+		return { available = true, present = false, total = 0, matches = 0, user_present = false }
+	end
+	if not private_root_regular_file(stat) then
+		return nil, "The Net-SNMP persistent user database must be a root-owned regular file with mode 0600."
+	end
+	local size = tonumber(stat.size)
+	if not size or size < 0 or size > 4 * 1024 * 1024 then
+		return nil, "The Net-SNMP persistent user database is too large or has invalid metadata."
+	end
+	if type(read_fn) ~= "function" then
+		read_fn = function(file_path)
+			local file = io.open(file_path, "r")
+			if not file then return nil end
+			local content = file:read(4 * 1024 * 1024 + 1)
+			local closed = file:close()
+			if closed == nil then return nil end
+			return content
+		end
+	end
+	local read_ok, content = pcall(read_fn, path)
+	if not read_ok or type(content) ~= "string" or #content > 4 * 1024 * 1024 then
+		return nil, "The Net-SNMP persistent user database could not be read safely."
+	end
+	local inventory, inventory_error = inspect_persistent_usm_users(content)
+	if not inventory then return nil, inventory_error end
+	local matches = 0
+	if username == nil or username == "" then
+		matches = inventory.total
+	else
+		local encoded = persistent_octet_string(username)
+		for _, record in ipairs(inventory.records) do
+			if record.username_token == encoded or record.security_name_token == encoded then
+				matches = matches + 1
+			end
+		end
+	end
+	return {
+		available = true,
+		present = true,
+		total = inventory.total,
+		matches = matches,
+		user_present = matches > 0
+	}
+end
+
 function persistent_user_matches(content, username)
 	local inventory, inventory_error = inspect_persistent_usm_users(content)
 	if not inventory then return nil, inventory_error end
