@@ -1,0 +1,105 @@
+module("luci.quantumgrid.snmpv3", package.seeall)
+
+local VALID_OID = ".1.3.6.1.2.1"
+local ALLOWED_SECRET_CHARACTERS =
+	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./:;<=>?@[]^_{|}~"
+
+function valid_username(value)
+	if type(value) ~= "string" or #value < 1 or #value > 32 then return false end
+	if value == "root" then return false end
+	return value:match("^[A-Za-z][A-Za-z0-9_.%-]*$") ~= nil
+end
+
+function valid_secret(value)
+	if type(value) ~= "string" or #value < 20 or #value > 128 then return false end
+	for index = 1, #value do
+		if not ALLOWED_SECRET_CHARACTERS:find(value:sub(index, index), 1, true) then
+			return false
+		end
+	end
+	return true
+end
+
+local function trusted_zone_exists(trusted_zones, name)
+	if type(trusted_zones) ~= "table" or type(name) ~= "string" then return false end
+	if trusted_zones[name] == true then return true end
+	for _, zone in ipairs(trusted_zones) do
+		if zone == name then return true end
+	end
+	return false
+end
+
+function validate(input, trusted_zones)
+	if type(input) ~= "table" then
+		return nil, "SNMPv3 settings must be provided."
+	end
+	if input.confirmed ~= "1" then
+		return nil, "Explicit confirmation is required before changing SNMP service settings."
+	end
+	if input.enabled ~= "1" and input.enabled ~= "0" then
+		return nil, "SNMPv3 enabled state must be 1 or 0."
+	end
+	if input.enabled == "0" then
+		return { enabled = false }
+	end
+
+	local username = input.username
+	if not valid_username(username) then
+		return nil, "SNMPv3 username must be 1-32 safe characters, start with a letter and must not be root."
+	end
+	local auth_pass = input.auth_pass
+	local privacy_pass = input.privacy_pass
+	if not valid_secret(auth_pass) then
+		return nil, "SNMPv3 authentication passphrase must be 20-128 characters using the supported ASCII character set."
+	end
+	if not valid_secret(privacy_pass) then
+		return nil, "SNMPv3 privacy passphrase must be 20-128 characters using the supported ASCII character set."
+	end
+	if auth_pass == privacy_pass then
+		return nil, "SNMPv3 authentication and privacy passphrases must be different."
+	end
+
+	local source_zone = input.source_zone
+	if not trusted_zone_exists(trusted_zones, source_zone) then
+		return nil, "Choose an existing internal management firewall zone; WAN and unknown zones are not allowed."
+	end
+
+	return {
+		enabled = true,
+		username = username,
+		auth_type = "SHA",
+		auth_pass = auth_pass,
+		privacy_type = "AES",
+		privacy_pass = privacy_pass,
+		allow_write = "0",
+		restricted_oid = VALID_OID,
+		source_zone = source_zone,
+		security_level = "authPriv"
+	}
+end
+
+function classify_status(snapshot)
+	if type(snapshot) ~= "table" or snapshot.available ~= true then
+		return "unavailable"
+	end
+	if snapshot.legacy_community_configured == true then
+		return "review"
+	end
+	if snapshot.enabled ~= true then
+		return "disabled"
+	end
+	if snapshot.snmp_version ~= "v3" or
+		not valid_username(snapshot.username) or
+		snapshot.auth_type ~= "SHA" or
+		snapshot.privacy_type ~= "AES" or
+		snapshot.allow_write ~= "0" or
+		snapshot.restricted_oid ~= VALID_OID or
+		snapshot.source_zone_class ~= "internal" or
+		snapshot.firewall_rule_configured ~= true or
+		snapshot.process_running ~= true then
+		return "review"
+	end
+	return "ready"
+end
+
+return _M
