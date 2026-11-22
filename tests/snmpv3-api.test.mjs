@@ -218,8 +218,8 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
       persistent_user_present: false,
       persistent_user_matches: 0,
       persistent_usm_user_count: 1,
-      v3_user_section_present: false,
-      v3_user_section_count: 0,
+      v3_user_section_present: true,
+      v3_user_section_count: 1,
     });
   };
   const result = await updateRouterSnmpv3({
@@ -239,4 +239,7 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
   assert.equal(result.persistent_user_matches, 0);
   assert.equal(result.persistent_usm_user_count, 1,
     "unrelated persistent Net-SNMP users are preserved while the managed user's key is removed");
+  assert.equal(result.v3_user_section_present, true);
+  assert.equal(result.v3_user_section_count, 1,
+    "an unmanaged SNMPv3 section is preserved and leaves the disabled posture in review");
 });
