@@ -156,9 +156,12 @@ def build_sbom(args: argparse.Namespace) -> dict:
         {
             "type": "file",
             "bom-ref": packages_ref,
-            "name": "QuantumGrid OS AW1000 APK/IPK package archive",
+            "name": args.packages_archive.name,
             "version": args.version,
             "hashes": [{"alg": "SHA-256", "content": package_archive_sha}],
+            "properties": [
+                {"name": "quantumgrid:artifact-role", "value": "Built AW1000 APK/IPK package archive"},
+            ],
         },
     ]
     evidence_files = [
