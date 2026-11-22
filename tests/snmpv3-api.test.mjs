@@ -44,6 +44,7 @@ const ready = {
   runtime_credentials_present: true,
   runtime_credentials_private: true,
   restarted: true,
+  lock_released: true,
   firewall_reloaded: true,
   rolled_back: false,
   sampled_at: 1790000000,
