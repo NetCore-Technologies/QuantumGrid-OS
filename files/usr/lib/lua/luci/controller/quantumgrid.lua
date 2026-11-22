@@ -8543,9 +8543,11 @@ function action_remote_syslog_update()
 		log_hostname = snapshot.log_hostname,
 		log_prefix = snapshot.log_prefix
 	}
-	local previous_tunnel_enabled = tunnel_snapshot_exists and tunnel_snapshot.enabled == "1"
-	local tunnel_changed = update.tls == true or previous_tunnel_enabled
-	local tunnel_restart_required = tunnel_changed and stunnel_installed
+	local tunnel_restart_required = validator.requires_tunnel_restart(
+		update, snapshot, tunnel_snapshot,
+		stunnel_installed and stunnel_config_available
+	)
+	local tunnel_changed = tunnel_restart_required
 	local tunnel_options = update.tls and validator.stunnel_options(update) or nil
 	if update.tls and (type(tunnel_options) ~= "table" or type(tunnel_options.scalars) ~= "table" or
 		type(tunnel_options.lists) ~= "table") then
