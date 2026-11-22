@@ -78,6 +78,107 @@ function validate(input, trusted_zones)
 	}
 end
 
+local function safe_network_name(value)
+	return type(value) == "string" and #value > 0 and #value <= 64 and
+		value:match("^[A-Za-z0-9_.:%-]+$") ~= nil
+end
+
+local function zone_network_list(value)
+	local result = {}
+	local seen = {}
+	local function add(item)
+		if not safe_network_name(item) then return false end
+		if not seen[item] then
+			seen[item] = true
+			table.insert(result, item)
+		end
+		return true
+	end
+	if type(value) == "table" then
+		for _, item in ipairs(value) do if not add(item) then return nil end end
+	elseif type(value) == "string" then
+		for item in value:gmatch("%S+") do if not add(item) then return nil end end
+	elseif value ~= nil then
+		return nil
+	end
+	return result
+end
+
+function trusted_zone_networks(uci, zone_name)
+	if type(uci) ~= "table" or type(uci.foreach) ~= "function" or
+		type(zone_name) ~= "string" or
+		require("luci.quantumgrid.management_transport").classify_firewall_zone_name(zone_name) ~= "internal" then
+		return nil, "The selected firewall zone is not a recognised internal management zone."
+	end
+	local owners = {}
+	local selected_networks = nil
+	local selected_count = 0
+	local ok = pcall(function()
+		uci:foreach("firewall", "zone", function(section)
+			if type(section) ~= "table" then error("invalid firewall zone") end
+			local name = type(section.name) == "string" and section.name or section[".name"]
+			if type(name) ~= "string" or name == "" then error("unnamed firewall zone") end
+			local networks = zone_network_list(section.network or section.networks)
+			if not networks then error("invalid firewall zone network list") end
+			if name == zone_name then
+				selected_count = selected_count + 1
+				selected_networks = networks
+			end
+			for _, network in ipairs(networks) do
+				owners[network] = owners[network] or {}
+				table.insert(owners[network], name)
+			end
+		end)
+	end)
+	if not ok or selected_count ~= 1 or type(selected_networks) ~= "table" or #selected_networks == 0 then
+		return nil, "The selected management zone has no unique, readable network membership."
+	end
+	for _, network in ipairs(selected_networks) do
+		local memberships = owners[network]
+		if type(memberships) ~= "table" or #memberships ~= 1 or memberships[1] ~= zone_name then
+			return nil, "A management network is attached to multiple firewall zones; SNMP exposure is ambiguous."
+		end
+	end
+	table.sort(selected_networks)
+	return selected_networks
+end
+
+local managed_user_options = {
+	username = true, auth_type = true, auth_pass = true, privacy_type = true,
+	privacy_pass = true, allow_write = true, RestrictedOID = true, source_zone = true
+}
+
+function has_only_managed_user_options(section)
+	if type(section) ~= "table" or section[".type"] ~= "v3" or
+		section[".name"] ~= "quantumgrid" then return false end
+	for option in pairs(section) do
+		if type(option) ~= "string" then return false end
+		if option:sub(1, 1) ~= "." and not managed_user_options[option] then return false end
+	end
+	return true
+end
+
+local managed_firewall_options = {
+	name = true, src = true, proto = true, dest_port = true,
+	target = true, family = true, enabled = true
+}
+
+function has_only_managed_firewall_options(section)
+	if type(section) ~= "table" or section[".type"] ~= "rule" or
+		section[".name"] ~= "quantumgrid_snmpv3" then return false end
+	for option in pairs(section) do
+		if type(option) ~= "string" then return false end
+		if option:sub(1, 1) ~= "." and not managed_firewall_options[option] then return false end
+	end
+	return true
+end
+
+function private_root_file(stat)
+	if type(stat) ~= "table" or tonumber(stat.uid) ~= 0 then return false end
+	local mode = tonumber(stat.modedec or stat.mode)
+	return mode ~= nil and mode % 512 == 384
+end
+
 function snmpd_process_running(pid_contents, comm_contents, cmdline_contents)
 	if type(pid_contents) ~= "string" then return false end
 	local pid_text = pid_contents:match("^%s*(%d+)%s*$")
@@ -165,8 +266,11 @@ function classify_status(snapshot)
 		snapshot.firewall_perimeter_safe ~= true or
 		snapshot.firewall_conflict == true or
 		snapshot.firewall_rule_configured ~= true or
-		snapshot.process_running ~= true or
-		snapshot.private_config_permissions ~= true then
+		snapshot.managed_user_section ~= true or
+		snapshot.managed_firewall_rule ~= true or
+		snapshot.private_config_permissions ~= true or
+		snapshot.runtime_credentials_private ~= true or
+		snapshot.process_running ~= true then
 		return "review"
 	end
 	return "ready"
