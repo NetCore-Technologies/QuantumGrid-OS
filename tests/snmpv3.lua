@@ -244,6 +244,55 @@ assert(not snmp.private_root_directory({ uid = 0, type = "reg", modedec = 33152 
 assert(not snmp.credentials_file_private({ uid = 0, modedec = 416 }),
   "group-writable SNMP credential files are rejected")
 
+local function persistent_file_fixture(stat, content, read_failure)
+  local fs = { lstat = function(path)
+    assert(path == "/usr/lib/snmp/snmpd.conf")
+    return stat
+  end }
+  local reader = function(path)
+    assert(path == "/usr/lib/snmp/snmpd.conf")
+    if read_failure then error("read failed") end
+    return content
+  end
+  return fs, reader
+end
+local persistent_stat = {
+  uid = 0, type = "reg", modedec = 33152, size = #persistent_db
+}
+local persistent_fs, persistent_reader = persistent_file_fixture(persistent_stat, persistent_db)
+local persistent_state = snmp.inspect_persistent_usm_file(
+  persistent_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", persistent_reader)
+assert(persistent_state and persistent_state.available and persistent_state.present)
+assert(persistent_state.total == 2 and persistent_state.matches == 1 and persistent_state.user_present)
+local absent_fs, absent_reader = persistent_file_fixture(nil, nil)
+local absent_state = snmp.inspect_persistent_usm_file(
+  absent_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", absent_reader)
+assert(absent_state and absent_state.available and not absent_state.present and absent_state.total == 0)
+local other_user_state = snmp.inspect_persistent_usm_file(
+  persistent_fs, "/usr/lib/snmp/snmpd.conf", "missing-nms", persistent_reader)
+assert(other_user_state and not other_user_state.user_present and other_user_state.total == 2)
+local all_users_state = snmp.inspect_persistent_usm_file(
+  persistent_fs, "/usr/lib/snmp/snmpd.conf", nil, persistent_reader)
+assert(all_users_state and all_users_state.user_present and all_users_state.matches == 2)
+for _, bad_stat in ipairs({
+  { uid = 0, type = "lnk", modedec = 41471, size = #persistent_db },
+  { uid = 1000, type = "reg", modedec = 33152, size = #persistent_db },
+  { uid = 0, type = "reg", modedec = 33188, size = #persistent_db },
+  { uid = 0, type = "reg", modedec = 33152, size = 4 * 1024 * 1024 + 1 },
+}) do
+  local bad_fs, bad_reader = persistent_file_fixture(bad_stat, persistent_db)
+  assert(snmp.inspect_persistent_usm_file(
+    bad_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", bad_reader) == nil,
+    "symlinked, public, non-root or oversized persistent databases must be rejected")
+end
+local malformed_fs, malformed_reader = persistent_file_fixture(
+  { uid = 0, type = "reg", modedec = 33152, size = 20 }, "usmUser malformed\\n")
+assert(snmp.inspect_persistent_usm_file(
+  malformed_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", malformed_reader) == nil)
+local unreadable_fs, unreadable_reader = persistent_file_fixture(persistent_stat, nil, true)
+assert(snmp.inspect_persistent_usm_file(
+  unreadable_fs, "/usr/lib/snmp/snmpd.conf", "qg-collector", unreadable_reader) == nil)
+
 local valid = snmp.validate(input, zones)
 assert(valid and valid.enabled)
 assert(valid.username == "quantumgrid-nms")
