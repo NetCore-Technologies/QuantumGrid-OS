@@ -52,8 +52,12 @@ sh verify-aw1000-release-attestation.sh QuantumGrid-OS-<version>-AW1000-squashfs
 ```
 
 The bundled host-side verifier checks the image digest first, then requires a GitHub artifact
-attestation from this repository and the exact firmware-release workflow. Do not flash an image
-when either step fails. The on-router installer still enforces SHA-256 only; it does not verify
+attestation from this repository, the exact firmware-release workflow, the precise `refs/tags/qg-v…`
+source ref inferred from the versioned image filename, SLSA provenance v1 and a GitHub-hosted
+runner. It rejects manual-build filenames and requires GitHub CLI 2.102.0 or newer because an
+older CLI compared `--source-ref` case-insensitively. The publish job itself runs only for a pushed
+version tag; a manual dispatch can build and attest inspection artifacts but cannot publish a
+release, even when dispatched against a tag. Do not flash an image when any verification step fails. The on-router installer still enforces SHA-256 only; it does not verify
 Sigstore attestations itself. Keep host-side verification as a required release-installation step.
 The initramfs `.itb` is a RAM-boot artifact and does not install persistent firmware.
 The AW1000 profile does not produce or publish a `sysupgrade.bin` image; the release workflow
