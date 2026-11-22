@@ -1,6 +1,25 @@
 package.path = "files/usr/lib/lua/?.lua;" .. package.path
 local wireless = require "luci.quantumgrid.wireless"
 
+local radio_enable = wireless.validate_radio_toggle("radio0", "1", "1", "1")
+assert(radio_enable and radio_enable.enabled == true and radio_enable.expected_disabled == true)
+assert(radio_enable.desired_disabled == false)
+local radio_disable = wireless.validate_radio_toggle("radio1", "0", "0", "1")
+assert(radio_disable and radio_disable.enabled == false and radio_disable.desired_disabled == true)
+assert(radio_disable.expected_disabled == false)
+for _, request in ipairs({
+	{ "../radio0", "1", "1", "1" },
+	{ "radio0", "true", "1", "1" },
+	{ "radio0", "1", "true", "1" },
+	{ "radio0", "1", "1", "0" },
+	{ "radio0", "0", nil, "1" },
+	{ "radio0", "1;uci", "0", "1" },
+}) do
+	local result, err = wireless.validate_radio_toggle(request[1], request[2], request[3], request[4])
+	assert(result == nil and type(err) == "string" and #err > 0,
+		"invalid or unconfirmed radio state change must be rejected")
+end
+
 local valid = wireless.validate_update(
 	"radio0", "default_radio0", "QuantumGrid", "sae-mixed", "strong-password-123",
 	"0", "auto", "HE80", "18", "0", "1"
