@@ -135,6 +135,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y lua5.1
+      - name: Test AW1000 release attestation verification
+        run: bash tests/verify-aw1000-release-attestation-smoke.sh
       - name: Test AW1000 CycloneDX SBOM generation
         run: |
           python3 -m py_compile scripts/generate-aw1000-sbom.py tests/test_aw1000_sbom.py
@@ -159,6 +161,7 @@ jobs:
           bash -n tests/nss-build-profile-smoke.sh
           bash -n tests/install-aw1000-target-inspector-smoke.sh
           bash -n scripts/verify-aw1000-release-manifest.sh
+          sh -n scripts/verify-aw1000-release-attestation.sh
           bash -n tests/install-aw1000-ubi-smoke.sh
           sh -n scripts/verify-openwrt-source.sh
           bash -n scripts/check-openwrt-worktree.sh
