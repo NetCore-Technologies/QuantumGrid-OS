@@ -603,6 +603,7 @@ end
 
 local function wireless_status()
 	local status = ubus_call("network.wireless", "status", {}) or {}
+	local uci = require("luci.model.uci").cursor()
 	local result = {}
 
 	for name, radio in pairs(status) do
@@ -669,8 +670,11 @@ local function wireless_status()
 				}
 				end
 			end
+			local disabled_ok, radio_disabled = pcall(uci.get, uci, "wireless", name, "disabled")
 			local item = {
 				name = name, up = radio.up == true, interfaces = {},
+				disabled = disabled_ok and radio_disabled == "1" or false,
+				config_available = disabled_ok,
 				channels = channels, txpower_levels = txpower_levels
 			}
 			for _, iface in ipairs(radio.interfaces or {}) do
@@ -1145,6 +1149,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-download-add"}, call("action_sqm_client_qos_download_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "wireless-radio-update"}, call("action_wireless_radio_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
