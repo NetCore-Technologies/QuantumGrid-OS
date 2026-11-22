@@ -3919,6 +3919,7 @@ local function snmpv3_status(uci, fs)
 		source_zone = "",
 		source_zone_class = "unknown",
 		snmp_version = "",
+		agent_listener_configured = false,
 		auth_type = "",
 		privacy_type = "",
 		security_level = "authPriv",
@@ -3943,6 +3944,7 @@ local function snmpv3_status(uci, fs)
 		return result
 	end
 	result.snmp_version = type(general.snmp_version) == "string" and general.snmp_version or ""
+	result.agent_listener_configured = validator.has_expected_agent_listener(uci)
 	result.enabled = general.enabled == "1"
 	result.legacy_network_firewall = type(general.network) == "table" and #general.network > 0 or
 		(type(general.network) == "string" and general.network ~= "")
@@ -9067,6 +9069,10 @@ function action_snmpv3_update()
 		return
 	end
 	if update.enabled then
+		if not validator.has_expected_agent_listener(uci) then
+			respond(409, { ok = false, error = "SNMP must use exactly the managed UDP/161 IPv4 and IPv6 listener profile; custom or multiple listener bindings are not supported." })
+			return
+		end
 		local zone_networks, zone_error = validator.trusted_zone_networks(uci, update.source_zone)
 		if not zone_networks then
 			respond(409, { ok = false, error = zone_error })
@@ -9428,6 +9434,7 @@ function action_snmpv3_update()
 		auth_type = resulting.auth_type,
 		privacy_type = resulting.privacy_type,
 		security_level = resulting.security_level,
+		agent_listener_configured = resulting.agent_listener_configured,
 		allow_write = resulting.allow_write,
 		restricted_oid = resulting.restricted_oid,
 		firewall_rule_configured = resulting.firewall_rule_configured,
