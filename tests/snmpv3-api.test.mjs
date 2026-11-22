@@ -34,10 +34,14 @@ const ready = {
   security_level: "authPriv",
   allow_write: "0",
   restricted_oid: ".1.3.6.1.2.1",
+  firewall_available: true,
+  firewall_rule_present: true,
   firewall_rule_configured: true,
   firewall_perimeter_safe: true,
   process_running: true,
   private_config_permissions: true,
+  runtime_credentials_present: true,
+  runtime_credentials_private: true,
   restarted: true,
   firewall_reloaded: true,
   rolled_back: false,
@@ -112,6 +116,44 @@ test("rejects API success responses unless they prove SHA/AES authPriv, read-onl
   }
 });
 
+test("allows emergency SNMP disable when the firewall service is unavailable", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ...ready,
+    enabled: false,
+    status: "review",
+    username: "",
+    source_zone: "",
+    auth_type: "",
+    privacy_type: "",
+    allow_write: "",
+    restricted_oid: "",
+    firewall_available: false,
+    firewall_reloaded: false,
+    firewall_rule_present: false,
+    firewall_rule_configured: false,
+    firewall_perimeter_safe: false,
+    firewall_conflict: true,
+    process_running: false,
+    private_config_permissions: true,
+    runtime_credentials_present: false,
+    runtime_credentials_private: true,
+  });
+  const result = await updateRouterSnmpv3({
+    enabled: false,
+    username: "",
+    authPassphrase: "",
+    privacyPassphrase: "",
+    sourceZone: "",
+  });
+  assert.equal(result.enabled, false);
+  assert.equal(result.status, "review");
+  assert.equal(result.firewall_available, false);
+  assert.equal(result.firewall_reloaded, false);
+  assert.equal(result.process_running, false);
+  assert.equal(result.runtime_credentials_present, false);
+  assert.equal(result.runtime_credentials_private, true);
+});
+
 test("disables SNMPv3 without resending or retaining passphrases", async () => {
   let requestInit;
   globalThis.fetch = async (_url, init) => {
@@ -126,9 +168,14 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
       privacy_type: "",
       allow_write: "",
       restricted_oid: "",
+      firewall_available: true,
+      firewall_reloaded: true,
+      firewall_rule_present: false,
       firewall_rule_configured: false,
       process_running: false,
       private_config_permissions: true,
+      runtime_credentials_present: false,
+      runtime_credentials_private: true,
     });
   };
   const result = await updateRouterSnmpv3({
