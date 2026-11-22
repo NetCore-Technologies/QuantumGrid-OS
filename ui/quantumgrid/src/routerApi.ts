@@ -1493,6 +1493,7 @@ export interface RouterSnmpv3Status {
   firewall_rule_configured: boolean;
   firewall_perimeter_safe: boolean;
   firewall_conflict: boolean;
+  agent_listener_configured: boolean;
   managed_user_section: boolean;
   managed_firewall_rule: boolean;
   network_membership_verified: boolean;
@@ -1518,6 +1519,14 @@ export interface RouterSnmpv3UpdateResult {
   allow_write: string;
   restricted_oid: string;
   firewall_available: boolean;
+  agent_listener_configured: boolean;
+  legacy_community_configured: boolean;
+  legacy_network_firewall: boolean;
+  firewall_inventory_available: boolean;
+  firewall_conflict: boolean;
+  managed_user_section: boolean;
+  managed_firewall_rule: boolean;
+  network_membership_verified: boolean;
   firewall_reloaded: boolean;
   firewall_rule_present: boolean;
   firewall_rule_configured: boolean;
@@ -3468,6 +3477,13 @@ export async function updateRouterSnmpv3(input: {
     !("auth_type" in payload) || typeof payload.auth_type !== "string" ||
     !("privacy_type" in payload) || typeof payload.privacy_type !== "string" ||
     !("agent_listener_configured" in payload) || typeof payload.agent_listener_configured !== "boolean" ||
+    !("legacy_community_configured" in payload) || typeof payload.legacy_community_configured !== "boolean" ||
+    !("legacy_network_firewall" in payload) || typeof payload.legacy_network_firewall !== "boolean" ||
+    !("firewall_inventory_available" in payload) || typeof payload.firewall_inventory_available !== "boolean" ||
+    !("firewall_conflict" in payload) || typeof payload.firewall_conflict !== "boolean" ||
+    !("managed_user_section" in payload) || typeof payload.managed_user_section !== "boolean" ||
+    !("managed_firewall_rule" in payload) || typeof payload.managed_firewall_rule !== "boolean" ||
+    !("network_membership_verified" in payload) || typeof payload.network_membership_verified !== "boolean" ||
     !("security_level" in payload) || payload.security_level !== "authPriv" ||
     !("allow_write" in payload) || typeof payload.allow_write !== "string" ||
     !("restricted_oid" in payload) || typeof payload.restricted_oid !== "string" ||
@@ -3478,7 +3494,7 @@ export async function updateRouterSnmpv3(input: {
     !("firewall_rule_present" in payload) || typeof payload.firewall_rule_present !== "boolean" ||
     !("runtime_credentials_present" in payload) || typeof payload.runtime_credentials_present !== "boolean" ||
     !("runtime_credentials_private" in payload) || typeof payload.runtime_credentials_private !== "boolean" ||
-    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.agent_listener_configured !== true || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true)) ||
+    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.agent_listener_configured !== true || payload.legacy_community_configured !== false || payload.legacy_network_firewall !== false || payload.firewall_inventory_available !== true || payload.firewall_conflict !== false || payload.managed_user_section !== true || payload.managed_firewall_rule !== true || payload.network_membership_verified !== true || payload.firewall_rule_present !== true || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true)) ||
     (!input.enabled && (payload.process_running !== false || payload.runtime_credentials_present !== false || payload.runtime_credentials_private !== true || payload.status === "ready"))
   ) {
     throw new Error("The router did not confirm the selected read-only SNMPv3 authPriv and firewall posture.");
