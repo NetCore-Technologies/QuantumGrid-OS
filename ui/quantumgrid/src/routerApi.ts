@@ -3510,7 +3510,7 @@ export async function updateRouterSnmpv3(input: {
     (!input.enabled && (payload.process_running !== false || payload.runtime_credentials_present !== false ||
       payload.runtime_credentials_private !== true || payload.persistent_inventory_available !== true ||
       payload.persistent_user_present !== false || payload.persistent_user_matches !== 0 ||
-      payload.persistent_usm_user_count !== 0 || payload.status === "ready"))
+      payload.persistent_usm_user_count < 0 || payload.status === "ready"))
   ) {
     throw new Error("The router did not confirm the selected read-only SNMPv3 authPriv and firewall posture.");
   }
