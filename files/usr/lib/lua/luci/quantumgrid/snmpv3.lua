@@ -162,6 +162,11 @@ function has_only_managed_user_options(section)
 	return true
 end
 
+function is_managed_user_section(section)
+	return type(section) == "table" and section[".name"] == "quantumgrid" and
+		has_only_managed_user_options(section)
+end
+
 local managed_firewall_options = {
 	name = true, src = true, proto = true, dest_port = true,
 	target = true, family = true, enabled = true
