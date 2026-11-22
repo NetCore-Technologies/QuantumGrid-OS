@@ -3448,7 +3448,13 @@ export async function updateRouterSnmpv3(input: {
     !("auth_type" in payload) || typeof payload.auth_type !== "string" ||
     !("privacy_type" in payload) || typeof payload.privacy_type !== "string" ||
     !("security_level" in payload) || payload.security_level !== "authPriv" ||
-    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES")) ||
+    !("allow_write" in payload) || typeof payload.allow_write !== "string" ||
+    !("restricted_oid" in payload) || typeof payload.restricted_oid !== "string" ||
+    !("firewall_rule_configured" in payload) || typeof payload.firewall_rule_configured !== "boolean" ||
+    !("firewall_perimeter_safe" in payload) || typeof payload.firewall_perimeter_safe !== "boolean" ||
+    !("process_running" in payload) || typeof payload.process_running !== "boolean" ||
+    !("private_config_permissions" in payload) || typeof payload.private_config_permissions !== "boolean" ||
+    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true)) ||
     (!input.enabled && payload.status === "ready")
   ) {
     throw new Error("The router did not confirm the selected read-only SNMPv3 authPriv and firewall posture.");
