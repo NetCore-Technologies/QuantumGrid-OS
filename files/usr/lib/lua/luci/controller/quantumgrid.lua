@@ -3975,6 +3975,15 @@ local function snmpv3_status(uci, fs)
 	end
 	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
 	result.firewall_perimeter_safe = perimeter_safe
+	result.trusted_zones = {}
+	if zones_readable then
+		for name, zone in pairs(zones) do
+			if zone.classification == "internal" then
+				table.insert(result.trusted_zones, { name = name, input_policy = zone.input_policy })
+			end
+		end
+		table.sort(result.trusted_zones, function(left, right) return left.name < right.name end)
+	end
 
 	local rule_ok, rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
 	if rule_ok and validator.has_only_managed_firewall_options(rule) then
