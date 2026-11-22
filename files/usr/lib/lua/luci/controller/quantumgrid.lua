@@ -8953,6 +8953,378 @@ function action_remote_syslog_update()
 end
 
 
+function action_snmpv3_update()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.snmpv3"
+	local host_header = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host_header or origin ~= scheme .. "://" .. host_header then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/etc/config/snmpd") ~= true or fs.access("/etc/init.d/snmpd") ~= true or
+		fs.access("/usr/sbin/snmpd") ~= true or fs.access("/etc/config/firewall") ~= true or
+		fs.access("/etc/init.d/firewall") ~= true then
+		respond(503, {
+			ok = false,
+			error = "The SNMPv3 daemon, its UCI configuration or the native firewall service is unavailable."
+		})
+		return
+	end
+
+	local input = {
+		confirmed = http.formvalue("confirmed", true),
+		enabled = http.formvalue("enabled", true),
+		username = http.formvalue("username", true),
+		auth_pass = http.formvalue("auth_pass", true),
+		privacy_pass = http.formvalue("privacy_pass", true),
+		source_zone = http.formvalue("source_zone", true)
+	}
+	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
+	if not zones_readable then
+		respond(503, { ok = false, error = "The firewall-zone inventory could not be read safely." })
+		return
+	end
+	local trusted_zones = {}
+	for name, zone in pairs(zones) do
+		if zone.classification == "internal" then trusted_zones[name] = true end
+	end
+	local update, validation_error = validator.validate(input, trusted_zones)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+	if update.enabled then
+		if not perimeter_safe then
+			respond(409, {
+				ok = false,
+				error = "SNMPv3 cannot be enabled while a WAN or unknown firewall zone lacks an explicit REJECT or DROP input policy."
+			})
+			return
+		end
+		local legacy = snmpv3_legacy_access_configured(uci)
+		if legacy ~= false then
+			respond(409, {
+				ok = false,
+				error = "Legacy SNMPv1/v2c community or access configuration is present or could not be inspected. Remove it through a trusted maintenance path before enabling SNMPv3."
+			})
+			return
+		end
+		local firewall_conflict = validator.has_conflicting_firewall_rule(uci)
+		if firewall_conflict ~= false then
+			respond(409, {
+				ok = false,
+				error = "An existing firewall ACCEPT rule may expose UDP/161 outside the selected management zone. Resolve the conflicting rule before enabling SNMPv3."
+			})
+			return
+		end
+	end
+
+	local general_ok, general = pcall(uci.get_all, uci, "snmpd", "general")
+	if not general_ok or type(general) ~= "table" or general[".type"] ~= "snmpd" then
+		respond(503, { ok = false, error = "The existing SNMP daemon general UCI section could not be read safely." })
+		return
+	end
+	local existing_v3 = nil
+	local v3_sections = {}
+	local v3_ok = pcall(function()
+		uci:foreach("snmpd", "v3", function(section)
+			table.insert(v3_sections, section)
+			if section[".name"] == "quantumgrid" then existing_v3 = section end
+		end)
+	end)
+	if not v3_ok then
+		respond(503, { ok = false, error = "The existing SNMPv3 user inventory could not be read safely." })
+		return
+	end
+	if update.enabled then
+		if #v3_sections > 1 or (#v3_sections == 1 and not existing_v3) then
+			respond(409, { ok = false, error = "An unmanaged SNMPv3 user already exists. QuantumGrid will not overwrite or expose unmanaged SNMP users." })
+			return
+		end
+	end
+
+	local rule_read_ok, existing_rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
+	if not rule_read_ok then
+		respond(503, { ok = false, error = "The reserved SNMPv3 firewall rule could not be inspected." })
+		return
+	end
+	if type(existing_rule) == "table" and existing_rule[".type"] ~= "rule" then
+		respond(409, { ok = false, error = "The reserved SNMPv3 firewall section exists with an incompatible type." })
+		return
+	end
+
+	local general_snapshot = {}
+	for _, option in ipairs({ "enabled", "snmp_version", "network" }) do
+		general_snapshot[option] = general[option]
+	end
+	local v3_snapshot = nil
+	if existing_v3 then
+		v3_snapshot = {}
+		for _, option in ipairs({ "username", "auth_type", "auth_pass", "privacy_type",
+			"privacy_pass", "allow_write", "RestrictedOID" }) do
+			v3_snapshot[option] = existing_v3[option]
+		end
+	end
+	local rule_snapshot = nil
+	if type(existing_rule) == "table" then
+		rule_snapshot = {}
+		for _, option in ipairs({ "name", "src", "proto", "dest_port", "target", "family" }) do
+			rule_snapshot[option] = existing_rule[option]
+		end
+	end
+
+	local function set_option(package, section, option, value)
+		local ok, result
+		if value == nil or value == "" then
+			ok, result = pcall(uci.delete, uci, package, section, option)
+			return ok and result ~= false
+		end
+		ok, result = pcall(uci.set, uci, package, section, option, value)
+		return ok and result == true
+	end
+	local function set_list(package, section, option, values)
+		local ok, result = pcall(uci.set_list, uci, package, section, option, values)
+		return ok and result == true
+	end
+	local function restore_section(package, name, section_type, snapshot, managed_options)
+		if snapshot == nil then
+			local ok, result = pcall(uci.delete, uci, package, name)
+			return ok and result ~= false
+		end
+		local current_ok, current = pcall(uci.get_all, uci, package, name)
+		if not current_ok then return false end
+		if type(current) ~= "table" then
+			local create_ok, created = pcall(uci.section, uci, package, section_type, name, {})
+			if not create_ok or not created then return false end
+		elseif current[".type"] ~= section_type then
+			return false
+		end
+		for _, option in ipairs(managed_options) do
+			local value = snapshot[option]
+			if type(value) == "table" then
+				if not set_list(package, name, option, value) then return false end
+			else
+				if not set_option(package, name, option, value) then return false end
+			end
+		end
+		return true
+	end
+
+	local function restore_all()
+		pcall(uci.revert, uci, "snmpd")
+		pcall(uci.revert, uci, "firewall")
+		local general_restored = restore_section("snmpd", "general", "snmpd",
+			general_snapshot, { "enabled", "snmp_version", "network" })
+		local v3_restored = restore_section("snmpd", "quantumgrid", "v3",
+			v3_snapshot, { "username", "auth_type", "auth_pass", "privacy_type",
+				"privacy_pass", "allow_write", "RestrictedOID" })
+		local rule_restored = restore_section("firewall", "quantumgrid_snmpv3", "rule",
+			rule_snapshot, { "name", "src", "proto", "dest_port", "target", "family" })
+		local snmp_commit_ok, snmp_committed = false, false
+		local firewall_commit_ok, firewall_committed = false, false
+		if general_restored and v3_restored then
+			snmp_commit_ok, snmp_committed = pcall(uci.commit, uci, "snmpd")
+		end
+		if rule_restored then
+			firewall_commit_ok, firewall_committed = pcall(uci.commit, uci, "firewall")
+		end
+		local config_mode_ok, config_mode = pcall(fs.chmod, "/etc/config/snmpd", 384)
+		local config_private = config_mode_ok and config_mode ~= false
+		local firewall_reload_ok, firewall_reload_status = pcall(sys.call,
+			"/etc/init.d/firewall reload >/dev/null 2>&1")
+		local snmp_restart_ok, snmp_restart_status = pcall(sys.call,
+			"/etc/init.d/snmpd restart >/dev/null 2>&1")
+		local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
+		local runtime_private = runtime_mode_ok and runtime_mode ~= false
+		return general_restored and v3_restored and rule_restored and
+			snmp_commit_ok and snmp_committed == true and
+			firewall_commit_ok and firewall_committed == true and config_private and
+			firewall_reload_ok and firewall_reload_status == 0 and
+			snmp_restart_ok and snmp_restart_status == 0 and runtime_private
+	end
+
+	local function fail(message, code)
+		record_audit(http, "system.snmpv3.update", "snmpd", "failed")
+		respond(code or 500, { ok = false, error = message })
+	end
+
+	local function ensure_section(package, name, section_type)
+		local current_ok, current = pcall(uci.get_all, uci, package, name)
+		if not current_ok then return false end
+		if type(current) == "table" then return current[".type"] == section_type end
+		local create_ok, created = pcall(uci.section, uci, package, section_type, name, {})
+		return create_ok and created ~= nil and created ~= false
+	end
+
+	if not set_option("snmpd", "general", "enabled", update.enabled and "1" or "0") or
+		not set_option("snmpd", "general", "snmp_version", "v3") or
+		not set_list("snmpd", "general", "network", {}) then
+		pcall(uci.revert, uci, "snmpd")
+		fail("The SNMP daemon configuration could not be staged.", 500)
+		return
+	end
+
+	if update.enabled then
+		if not ensure_section("snmpd", "quantumgrid", "v3") then
+			pcall(uci.revert, uci, "snmpd")
+			fail("The managed SNMPv3 user section could not be created safely.", 409)
+			return
+		end
+		local v3_options = {
+			username = update.username,
+			auth_type = update.auth_type,
+			auth_pass = update.auth_pass,
+			privacy_type = update.privacy_type,
+			privacy_pass = update.privacy_pass,
+			allow_write = "0",
+			RestrictedOID = update.restricted_oid
+		}
+		for option, value in pairs(v3_options) do
+			if not set_option("snmpd", "quantumgrid", option, value) then
+				pcall(uci.revert, uci, "snmpd")
+				fail("The managed SNMPv3 user settings could not be staged.", 500)
+				return
+			end
+		end
+		if not ensure_section("firewall", "quantumgrid_snmpv3", "rule") then
+			pcall(uci.revert, uci, "snmpd")
+			pcall(uci.revert, uci, "firewall")
+			fail("The managed SNMPv3 firewall rule could not be created safely.", 409)
+			return
+		end
+		local rule_options = {
+			name = "QuantumGrid SNMPv3 management",
+			src = update.source_zone,
+			proto = "udp",
+			dest_port = "161",
+			target = "ACCEPT",
+			family = "any"
+		}
+		for option, value in pairs(rule_options) do
+			if not set_option("firewall", "quantumgrid_snmpv3", option, value) then
+				pcall(uci.revert, uci, "snmpd")
+				pcall(uci.revert, uci, "firewall")
+				fail("The SNMPv3 firewall rule could not be staged.", 500)
+				return
+			end
+		end
+	else
+		if v3_snapshot then
+			local delete_ok, deleted = pcall(uci.delete, uci, "snmpd", "quantumgrid")
+			if not delete_ok or deleted == false then
+				pcall(uci.revert, uci, "snmpd")
+				fail("The managed SNMPv3 user could not be removed safely.", 500)
+				return
+			end
+		end
+		if rule_snapshot then
+			local delete_ok, deleted = pcall(uci.delete, uci, "firewall", "quantumgrid_snmpv3")
+			if not delete_ok or deleted == false then
+				pcall(uci.revert, uci, "snmpd")
+				pcall(uci.revert, uci, "firewall")
+				fail("The managed SNMPv3 firewall rule could not be removed safely.", 500)
+				return
+			end
+		end
+	end
+
+	local snmp_commit_ok, snmp_committed = pcall(uci.commit, uci, "snmpd")
+	local firewall_commit_ok, firewall_committed = pcall(uci.commit, uci, "firewall")
+	if not snmp_commit_ok or snmp_committed ~= true or
+		not firewall_commit_ok or firewall_committed ~= true then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			"The SNMPv3 configuration could not be committed; previous SNMP and firewall settings were restored."
+			or "The SNMPv3 configuration commit failed and rollback could not be confirmed. Inspect the SNMP and firewall configuration locally.",
+			502)
+		return
+	end
+
+	local config_mode_ok, config_mode = pcall(fs.chmod, "/etc/config/snmpd", 384)
+	if not config_mode_ok or config_mode == false then
+		local rolled_back = restore_all()
+		fail(rolled_back and "SNMPv3 credential storage could not be protected with mode 0600; previous settings were restored."
+			or "SNMPv3 credential storage permissions could not be secured and rollback could not be confirmed.", 502)
+		return
+	end
+
+	local firewall_reload_ok, firewall_reload_status = pcall(sys.call,
+		"/etc/init.d/firewall reload >/dev/null 2>&1")
+	if not firewall_reload_ok or firewall_reload_status ~= 0 then
+		local rolled_back = restore_all()
+		fail(rolled_back and "The firewall could not apply the SNMPv3 management-zone rule; previous settings were restored."
+			or "The firewall reload failed and rollback could not be confirmed. Inspect firewall and SNMP service state locally.", 502)
+		return
+	end
+	local snmp_restart_ok, snmp_restart_status = pcall(sys.call,
+		"/etc/init.d/snmpd restart >/dev/null 2>&1")
+	if not snmp_restart_ok or snmp_restart_status ~= 0 then
+		local rolled_back = restore_all()
+		fail(rolled_back and "The SNMP daemon could not restart; previous SNMP and firewall settings were restored."
+			or "The SNMP daemon failed to restart and rollback could not be confirmed. Inspect the SNMP and firewall services locally.", 502)
+		return
+	end
+	local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
+	if update.enabled and (not runtime_mode_ok or runtime_mode == false) then
+		local rolled_back = restore_all()
+		fail(rolled_back and "The generated SNMP runtime credential file could not be protected with mode 0600; previous settings were restored."
+			or "The generated SNMP credential file permissions could not be secured and rollback could not be confirmed.", 502)
+		return
+	end
+
+	local resulting = snmpv3_status(uci, fs)
+	if update.enabled and (resulting.status ~= "ready" or
+		resulting.username ~= update.username or resulting.source_zone ~= update.source_zone) then
+		local rolled_back = restore_all()
+		fail(rolled_back and
+			"The SNMP daemon restarted but its live authPriv, read-only, firewall or process posture could not be confirmed. Previous settings were restored."
+			or "SNMPv3 did not reach the required live posture and rollback could not be confirmed. Use an out-of-band management path.",
+			502)
+		return
+	end
+
+	record_audit(http, "system.snmpv3.update", "snmpd", "success")
+	respond(nil, {
+		ok = true,
+		enabled = resulting.enabled,
+		status = resulting.status,
+		username = resulting.username,
+		source_zone = resulting.source_zone,
+		auth_type = resulting.auth_type,
+		privacy_type = resulting.privacy_type,
+		security_level = resulting.security_level,
+		restarted = true,
+		firewall_reloaded = true,
+		rolled_back = false,
+		sampled_at = resulting.sampled_at
+	})
+end
+
+
 function action_audit_log()
 	local http = require "luci.http"
 	local jsonc = require "luci.jsonc"
