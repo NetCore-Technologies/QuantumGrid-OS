@@ -5304,6 +5304,25 @@ grep -Fq 'CONFIG_PACKAGE_snmpd-ssl=y' "$ROOT/configs/aw1000-max.config"
 grep -Fq "option enabled '0'" "$ROOT/files/etc/config/snmpd"
 grep -Fq 'snmpv3-update' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function action_snmpv3_update()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+python3 - "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text()
+start = source.index("function action_snmpv3_update()")
+end = source.index("function action_audit_log()", start)
+action = source[start:end]
+prewrite = action.index('fs.chmod("/etc/config/snmpd", 384)')
+first_secret_write = action.index('set_option("snmpd", "general", "enabled"')
+assert prewrite < first_secret_write, "SNMP config must be root-only before credentials are committed"
+assert 'payload.lock_released = release_ok and release_status == 0' in action
+assert action.count('agent_listener_configured = resulting.agent_listener_configured') == 1
+assert 'validator.legacy_access_configured(uci)' in action
+assert 'validator.has_expected_agent_listener(uci)' in action
+assert 'validator.trusted_zone_networks(uci, update.source_zone)' in action
+assert 'resulting.status ~= "ready"' in action
+assert 'validator.wait_for_state(' in action
+PY
 grep -Fq 'quantumgrid-snmpv3-update.lock' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'lock_released' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'validator.trusted_zone_networks(uci, update.source_zone)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
