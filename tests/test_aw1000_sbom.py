@@ -26,6 +26,10 @@ class Aw1000SbomTests(unittest.TestCase):
         self.manifest = self.root / "aw1000.manifest"
         self.firmware = self.root / "factory.ubi"
         self.packages = self.root / "packages.tar.zst"
+        self.feeds = self.root / "OPENWRT-FEEDS.txt"
+        self.phone_source = self.root / "phone-source.tar.gz"
+        self.build_info = self.root / "BUILDINFO.txt"
+        self.build_config = self.root / "aw1000-max.config"
         self.output = self.root / "sbom.cdx.json"
         self.manifest.write_text(
             "base-files - 1652~a1b2c3d4\n"
@@ -35,10 +39,18 @@ class Aw1000SbomTests(unittest.TestCase):
         )
         self.firmware.write_bytes(b"factory-ubi-image")
         self.packages.write_bytes(b"apk-ipk-package-archive")
+        self.feeds.write_text("openwrt/base revision abc123\\n", encoding="utf-8")
+        self.phone_source.write_bytes(b"pinned-phone-source-archive")
+        self.build_info.write_text("source commit: 0123456789abcdef\\n", encoding="utf-8")
+        self.build_config.write_text("CONFIG_TARGET_qualcommax=y\\n", encoding="utf-8")
         self.args = SBOM.argparse.Namespace(
             manifest=self.manifest,
             firmware_image=self.firmware,
             packages_archive=self.packages,
+            feeds_report=self.feeds,
+            phone_source_archive=self.phone_source,
+            build_info=self.build_info,
+            build_config=self.build_config,
             output=self.output,
             version="0.4.0",
             target="qualcommax/ipq807x",
@@ -55,7 +67,7 @@ class Aw1000SbomTests(unittest.TestCase):
         sbom = SBOM.build_sbom(self.args)
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
         self.assertEqual(sbom["specVersion"], "1.6")
-        self.assertEqual(len(sbom["components"]), 5)
+        self.assertEqual(len(sbom["components"]), 10)
         packages = [item for item in sbom["components"] if item["type"] == "library"]
         self.assertEqual(
             [(item["name"], item["version"]) for item in packages],
@@ -77,6 +89,44 @@ class Aw1000SbomTests(unittest.TestCase):
             props["quantumgrid:package-archive-sha256"],
             hashlib.sha256(self.packages.read_bytes()).hexdigest(),
         )
+        self.assertEqual(
+            props["quantumgrid:package-manifest-sha256"],
+            hashlib.sha256(self.manifest.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            props["quantumgrid:openwrt-feed-report-sha256"],
+            hashlib.sha256(self.feeds.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            props["quantumgrid:phone-source-archive-sha256"],
+            hashlib.sha256(self.phone_source.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            props["quantumgrid:buildinfo-sha256"],
+            hashlib.sha256(self.build_info.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(
+            props["quantumgrid:build-config-sha256"],
+            hashlib.sha256(self.build_config.read_bytes()).hexdigest(),
+        )
+        evidence = {
+            item["name"]: item for item in sbom["components"] if item["type"] == "file"
+        }
+        self.assertEqual(
+            set(evidence),
+            {
+                self.packages.name,
+                self.manifest.name,
+                self.feeds.name,
+                self.phone_source.name,
+                self.build_info.name,
+                self.build_config.name,
+            },
+        )
+        for item in evidence.values():
+            self.assertEqual(len(item["hashes"]), 1)
+            self.assertEqual(item["hashes"][0]["alg"], "SHA-256")
+            self.assertRegex(item["hashes"][0]["content"], r"^[0-9a-f]{64}$")
         self.assertEqual(len(sbom["dependencies"][0]["dependsOn"]), 3)
 
     def test_cli_writes_json_and_refuses_to_overwrite_existing_sbom(self) -> None:
@@ -86,6 +136,10 @@ class Aw1000SbomTests(unittest.TestCase):
             "--manifest", str(self.manifest),
             "--firmware-image", str(self.firmware),
             "--packages-archive", str(self.packages),
+            "--feeds-report", str(self.feeds),
+            "--phone-source-archive", str(self.phone_source),
+            "--build-info", str(self.build_info),
+            "--build-config", str(self.build_config),
             "--output", str(self.output),
             "--version", self.args.version,
             "--target", self.args.target,
@@ -157,6 +211,20 @@ class Aw1000SbomTests(unittest.TestCase):
             SBOM.build_sbom(self.args)
         self.args.build_profile = "AW1000 stable upstream OpenWrt"
         self.args.version = "0.4.0\\nmalicious"
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.build_sbom(self.args)
+
+    def test_metadata_evidence_inputs_must_be_nonempty_regular_files(self) -> None:
+        for attr in ("feeds_report", "phone_source_archive", "build_info", "build_config"):
+            path = getattr(self.args, attr)
+            path.write_bytes(b"")
+            with self.subTest(artifact=attr):
+                with self.assertRaises(SBOM.SbomError):
+                    SBOM.build_sbom(self.args)
+            path.write_bytes(b"valid-evidence")
+        link = self.root / "feeds-link.txt"
+        link.symlink_to(self.feeds)
+        self.args.feeds_report = link
         with self.assertRaises(SBOM.SbomError):
             SBOM.build_sbom(self.args)
 
