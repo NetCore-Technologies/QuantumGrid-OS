@@ -388,6 +388,17 @@ function normalize_ipv6_address(value)
 	return normalize_ipv6(value)
 end
 
+function requires_tunnel_restart(update, system_snapshot, tunnel_snapshot, service_available)
+	if service_available ~= true then return false end
+	if type(update) == "table" and type(update.tls) == "table" then return true end
+	local configured_enabled = type(tunnel_snapshot) == "table" and tunnel_snapshot.enabled == "1"
+	local system_points_to_tunnel = type(system_snapshot) == "table" and
+		system_snapshot.log_ip == "127.0.0.1" and
+		tostring(system_snapshot.log_port or "") == "5514" and
+		system_snapshot.log_proto == "tcp"
+	return configured_enabled or system_points_to_tunnel
+end
+
 function stunnel_options(update)
 	if type(update) ~= "table" or update.enabled ~= true or type(update.tls) ~= "table" then
 		return nil
