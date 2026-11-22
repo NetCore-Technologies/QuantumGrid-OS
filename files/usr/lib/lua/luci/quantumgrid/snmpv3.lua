@@ -139,6 +139,11 @@ function has_conflicting_firewall_rule(uci)
 	return conflict
 end
 
+function private_file_mode_secure(mode)
+	if type(mode) ~= "number" or mode < 0 or mode ~= math.floor(mode) then return false end
+	return mode % 512 == 384
+end
+
 function classify_status(snapshot)
 	if type(snapshot) ~= "table" or snapshot.available ~= true then
 		return "unavailable"
@@ -160,7 +165,8 @@ function classify_status(snapshot)
 		snapshot.firewall_perimeter_safe ~= true or
 		snapshot.firewall_conflict == true or
 		snapshot.firewall_rule_configured ~= true or
-		snapshot.process_running ~= true then
+		snapshot.process_running ~= true or
+		snapshot.private_config_permissions ~= true then
 		return "review"
 	end
 	return "ready"
