@@ -3918,6 +3918,8 @@ local function snmpv3_status(uci, fs, persistent_username_override)
 		persistent_user_present = false,
 		persistent_user_matches = 0,
 		persistent_usm_user_count = 0,
+		v3_user_section_present = false,
+		v3_user_section_count = 0,
 		sampled_at = os.time()
 	}
 	if not result.available then return result end
@@ -3948,11 +3950,9 @@ local function snmpv3_status(uci, fs, persistent_username_override)
 		result.available = false
 		return result
 	end
-	if #user_sections > 1 then
-		result.status = "review"
-		return result
-	end
-	local user = user_sections[1]
+	result.v3_user_section_count = #user_sections
+	result.v3_user_section_present = #user_sections > 0
+	local user = #user_sections == 1 and user_sections[1] or nil
 	if user then
 		result.username = type(user.username) == "string" and user.username or ""
 		result.auth_type = type(user.auth_type) == "string" and user.auth_type or ""
@@ -9450,7 +9450,7 @@ function action_snmpv3_update()
 			end
 		end
 	else
-		if v3_snapshot then
+		if v3_snapshot and validator.has_only_managed_user_options(existing_v3) then
 			local delete_ok, deleted = pcall(uci.delete, uci, "snmpd", "quantumgrid")
 			if not delete_ok or deleted == false then
 				pcall(uci.revert, uci, "snmpd")
@@ -9669,6 +9669,8 @@ function action_snmpv3_update()
 		persistent_user_present = resulting.persistent_user_present,
 		persistent_user_matches = resulting.persistent_user_matches,
 		persistent_usm_user_count = resulting.persistent_usm_user_count,
+		v3_user_section_present = resulting.v3_user_section_present,
+		v3_user_section_count = resulting.v3_user_section_count,
 		private_config_permissions = resulting.private_config_permissions,
 		restarted = true,
 		firewall_reloaded = firewall_available and firewall_reload_ok and firewall_reload_status == 0 or false,
