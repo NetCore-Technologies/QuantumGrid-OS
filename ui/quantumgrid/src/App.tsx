@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -3083,6 +3083,188 @@ function RemoteSyslogSettings({ status, refresh }: {
 }
 
 
+function Snmpv3Settings({ status, refresh }: {
+  status?: RouterSnmpv3Status;
+  refresh: () => void;
+}) {
+  const [enabled, setEnabled] = useState(status?.enabled ?? false);
+  const [username, setUsername] = useState(status?.username ?? "");
+  const [sourceZone, setSourceZone] = useState(status?.source_zone || status?.trusted_zones?.[0]?.name || "");
+  const [authPassphrase, setAuthPassphrase] = useState("");
+  const [privacyPassphrase, setPrivacyPassphrase] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const trustedZones = status?.trusted_zones ?? [];
+  const hasLegacyAccess = Boolean(status?.legacy_community_configured);
+  const canEnable = Boolean(
+    status?.available &&
+    status.firewall_available &&
+    status.firewall_perimeter_safe &&
+    !hasLegacyAccess &&
+    !status.firewall_conflict &&
+    trustedZones.some((zone) => zone.name === sourceZone),
+  );
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || busy || !status?.available) return;
+    if (enabled && !canEnable) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterSnmpv3({
+        enabled,
+        username: username.trim(),
+        authPassphrase,
+        privacyPassphrase,
+        sourceZone,
+      });
+      setEnabled(result.enabled);
+      setUsername(result.username);
+      setSourceZone(result.source_zone || sourceZone);
+      setAuthPassphrase("");
+      setPrivacyPassphrase("");
+      setConfirmed(false);
+      setNotice({
+        success: true,
+        message: result.enabled
+          ? "SNMPv3 authPriv is active for " + result.username + " on the " + result.source_zone + " zone. SHA authentication, AES privacy and read-only access were verified after restart."
+          : "The SNMP daemon has been disabled and the QuantumGrid-managed SNMPv3 user and firewall rule were removed.",
+      });
+      refresh();
+    } catch (cause) {
+      setNotice({
+        success: false,
+        message: cause instanceof Error ? cause.message : "SNMPv3 settings could not be updated.",
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Panel
+      title="SNMPv3 management"
+      eyebrow="NET-SNMP · AUTHENTICATED + ENCRYPTED · READ ONLY"
+      action={<Status active={Boolean(status?.enabled && status.status === "ready")}>{status?.status === "ready" ? "AUTHPRIV READY" : (status?.status ?? "unavailable").toUpperCase()}</Status>}
+    >
+      {!status?.available || !status.firewall_available ? (
+        <div className="module-message">The SNMP daemon, UCI configuration or native firewall service is unavailable on this firmware.</div>
+      ) : (
+        <form className="remote-syslog-form" onSubmit={save}>
+          <div className="remote-syslog-warning" role="note">
+            <strong>Read-only management access</strong>
+            <span>QuantumGrid provisions SNMPv3 authPriv only: SHA authentication, AES privacy, no write access and the standard system-information OID subtree. UDP/161 is permitted only from one uniquely mapped internal management zone. SNMPv1/v2c community access is not enabled.</span>
+          </div>
+          {status.status === "review" && (
+            <div className="module-message remote-syslog-error" role="alert">
+              SNMP security posture requires review. Check legacy community configuration, UDP/161 firewall rules, the selected zone and credential-file permissions before enabling management access.
+            </div>
+          )}
+          {hasLegacyAccess && (
+            <div className="module-message remote-syslog-error" role="alert">
+              Legacy SNMPv1/v2c or community access is present. QuantumGrid will not enable SNMPv3 until that unmanaged configuration has been removed through a trusted maintenance path.
+            </div>
+          )}
+          {status.firewall_conflict && (
+            <div className="module-message remote-syslog-error" role="alert">
+              Another firewall ACCEPT rule may expose UDP/161. Resolve that rule before enabling SNMPv3.
+            </div>
+          )}
+          <label className="remote-syslog-enabled">
+            <input type="checkbox" checked={enabled} disabled={busy} onChange={(event) => setEnabled(event.target.checked)} />
+            <span>Enable the SNMPv3 management agent</span>
+          </label>
+          {enabled && (
+            <>
+              <div className="remote-syslog-fields snmpv3-fields">
+                <label>
+                  <span>SNMPv3 username</span>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(event) => setUsername(event.target.value)}
+                    minLength={1}
+                    maxLength={32}
+                    autoComplete="username"
+                    placeholder="quantumgrid-nms"
+                    required
+                    disabled={busy}
+                  />
+                </label>
+                <label>
+                  <span>Internal management zone</span>
+                  <select value={sourceZone} onChange={(event) => setSourceZone(event.target.value)} required disabled={busy || trustedZones.length === 0}>
+                    <option value="">Select a trusted zone</option>
+                    {trustedZones.map((zone) => (
+                      <option key={zone.name} value={zone.name}>{zone.name} · input {zone.input_policy || "default"}</option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>SHA authentication passphrase · 20–128 characters</span>
+                  <input
+                    type="password"
+                    value={authPassphrase}
+                    onChange={(event) => setAuthPassphrase(event.target.value)}
+                    minLength={20}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    required
+                    disabled={busy}
+                  />
+                </label>
+                <label>
+                  <span>AES privacy passphrase · 20–128 characters</span>
+                  <input
+                    type="password"
+                    value={privacyPassphrase}
+                    onChange={(event) => setPrivacyPassphrase(event.target.value)}
+                    minLength={20}
+                    maxLength={128}
+                    autoComplete="new-password"
+                    required
+                    disabled={busy}
+                  />
+                </label>
+              </div>
+              <InfoRows rows={[
+                ["SECURITY LEVEL", "authPriv"],
+                ["AUTHENTICATION", "SHA"],
+                ["PRIVACY", "AES"],
+                ["ACCESS", "Read only · no SET/write"],
+                ["OID SUBTREE", ".1.3.6.1.2.1"],
+              ]} />
+            </>
+          )}
+          <label className="remote-syslog-confirm">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              disabled={busy || (enabled && !canEnable)}
+              onChange={(event) => setConfirmed(event.target.checked)}
+            />
+            <span>I confirm this management zone and authorize QuantumGrid to update SNMP credentials, restrict UDP/161 and restart the firewall and SNMP daemon.</span>
+          </label>
+          <div className="remote-syslog-actions">
+            <button className="hero-button" type="submit" disabled={!confirmed || busy || (enabled && (!canEnable || !username.trim() || !authPassphrase || !privacyPassphrase))}>
+              <Check size={14} /> {busy ? "Applying SNMPv3…" : enabled ? "Apply SNMPv3 authPriv" : "Disable SNMP service"}
+            </button>
+            <span>Passphrases are never returned by the API or included in audit events. They are stored in root-only configuration and runtime files.</span>
+          </div>
+          {notice && (
+            <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
+              {notice.message}
+            </div>
+          )}
+        </form>
+      )}
+    </Panel>
+  );
+}
+
+
 function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview: RouterOverview | null; stats: Stats; refresh: () => void }) {
   const memory = routerOverview?.system.memory;
   const load = routerOverview?.system.load_avg ?? [];
@@ -3200,6 +3382,11 @@ function SystemControlPage({ routerOverview, stats, refresh }: { routerOverview:
       <RemoteSyslogSettings
         key={JSON.stringify(routerOverview?.remote_syslog ?? null)}
         status={routerOverview?.remote_syslog}
+        refresh={refresh}
+      />
+      <Snmpv3Settings
+        key={JSON.stringify(routerOverview?.snmpv3 ?? null)}
+        status={routerOverview?.snmpv3}
         refresh={refresh}
       />
       <Panel title="Configuration backup" eyebrow="NATIVE SYSUPGRADE · PRIVATE RECOVERY ARCHIVE">
