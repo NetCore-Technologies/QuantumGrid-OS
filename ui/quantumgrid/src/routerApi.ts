@@ -1527,6 +1527,7 @@ export interface RouterSnmpv3UpdateResult {
   runtime_credentials_present: boolean;
   runtime_credentials_private: boolean;
   restarted: true;
+  lock_released: true;
   rolled_back: false;
   sampled_at: number;
 }
@@ -3455,6 +3456,7 @@ export async function updateRouterSnmpv3(input: {
     !("enabled" in payload) || payload.enabled !== input.enabled ||
     !("status" in payload) || (payload.status !== "ready" && payload.status !== "disabled" && payload.status !== "review" && payload.status !== "unavailable") ||
     !("restarted" in payload) || payload.restarted !== true ||
+    !("lock_released" in payload) || payload.lock_released !== true ||
     !("firewall_available" in payload) || typeof payload.firewall_available !== "boolean" ||
     !("firewall_reloaded" in payload) || typeof payload.firewall_reloaded !== "boolean" ||
     (input.enabled && (payload.firewall_available !== true || payload.firewall_reloaded !== true)) ||
