@@ -186,6 +186,7 @@ jobs:
             echo "OpenWrt expected commit: $OPENWRT_EXPECTED_SHA"
             echo "OpenWrt resolved commit: $OPENWRT_SHA"
             echo "OpenWrt package feed revisions: OPENWRT-FEEDS.txt"
+            echo "CycloneDX SBOM: QuantumGrid-OS-${VERSION}-AW1000-SBOM.cdx.json"
             echo "AW1000 phone requested ref: $PHONE_REF"
             echo "AW1000 phone expected commit: $PHONE_EXPECTED_SHA"
             echo "AW1000 phone resolved commit: $PHONE_SHA"
