@@ -1173,6 +1173,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "static-route-add"}, call("action_static_route_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "static-route-remove"}, call("action_static_route_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "remote-syslog"}, call("action_remote_syslog_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "snmpv3-update"}, call("action_snmpv3_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages-update"}, call("action_package_operation")).leaf = true
 	entry({"admin", "services", "quantumgrid", "led-update"}, call("action_led_update")).leaf = true
 end
@@ -3844,6 +3845,147 @@ local function usteer_status(uci, fs)
 	else
 		result.status = "local_only"
 	end
+	return result
+end
+
+
+local function snmpv3_zone_inventory(uci)
+	local zones = {}
+	local readable = true
+	local ok = pcall(function()
+		uci:foreach("firewall", "zone", function(section)
+			local name = type(section.name) == "string" and section.name or section[".name"]
+			if type(name) == "string" and name ~= "" then
+				local classification = management_transport.classify_firewall_zone_name(name)
+				local input_policy = type(section.input) == "string" and section.input:upper() or ""
+				zones[name] = {
+					classification = classification,
+					input_policy = input_policy
+				}
+			end
+		end)
+	end)
+	if not ok or next(zones) == nil then readable = false end
+	local perimeter_safe = readable
+	for _, zone in pairs(zones) do
+		if zone.classification ~= "internal" and
+			zone.input_policy ~= "REJECT" and zone.input_policy ~= "DROP" then
+			perimeter_safe = false
+		end
+	end
+	return zones, readable, perimeter_safe
+end
+
+
+local function snmpv3_legacy_access_configured(uci)
+	local legacy = false
+	local checked = { "com2sec", "com2sec6", "access_default", "access_HostName", "access_HostIP" }
+	for _, section_type in ipairs(checked) do
+		local ok = pcall(function()
+			uci:foreach("snmpd", section_type, function() legacy = true end)
+		end)
+		if not ok then return nil end
+	end
+	local groups_ok = pcall(function()
+		uci:foreach("snmpd", "group", function(section)
+			if section.version == "v1" or section.version == "v2c" or section.version == "any" then
+				legacy = true
+			end
+		end)
+	end)
+	if not groups_ok then return nil end
+	return legacy
+end
+
+
+local function snmpv3_status(uci, fs)
+	local validator = require "luci.quantumgrid.snmpv3"
+	local result = {
+		available = fs.access("/usr/sbin/snmpd") == true and
+			fs.access("/etc/init.d/snmpd") == true and fs.access("/etc/config/snmpd") == true,
+		service_installed = fs.access("/etc/init.d/snmpd") == true,
+		binary_installed = fs.access("/usr/sbin/snmpd") == true,
+		config_available = fs.access("/etc/config/snmpd") == true,
+		firewall_available = fs.access("/etc/config/firewall") == true and
+			fs.access("/etc/init.d/firewall") == true,
+		enabled = false,
+		status = "unavailable",
+		username = "",
+		source_zone = "",
+		source_zone_class = "unknown",
+		snmp_version = "",
+		auth_type = "",
+		privacy_type = "",
+		security_level = "authPriv",
+		allow_write = "",
+		restricted_oid = "",
+		legacy_community_configured = false,
+		firewall_rule_configured = false,
+		firewall_perimeter_safe = false,
+		process_running = false,
+		sampled_at = os.time()
+	}
+	if not result.available or not result.firewall_available then return result end
+	local general_ok, general = pcall(uci.get_all, uci, "snmpd", "general")
+	if not general_ok or type(general) ~= "table" or general[".type"] ~= "snmpd" then
+		result.available = false
+		return result
+	end
+	result.snmp_version = type(general.snmp_version) == "string" and general.snmp_version or ""
+	result.enabled = general.enabled == "1"
+	local legacy = snmpv3_legacy_access_configured(uci)
+	if legacy == nil then
+		result.available = false
+		return result
+	end
+	result.legacy_community_configured = legacy
+
+	local user_sections = {}
+	local v3_ok = pcall(function()
+		uci:foreach("snmpd", "v3", function(section)
+			table.insert(user_sections, section)
+		end)
+	end)
+	if not v3_ok then
+		result.available = false
+		return result
+	end
+	if #user_sections > 1 then
+		result.status = "review"
+		return result
+	end
+	local user = user_sections[1]
+	if user then
+		result.username = type(user.username) == "string" and user.username or ""
+		result.auth_type = type(user.auth_type) == "string" and user.auth_type or ""
+		result.privacy_type = type(user.privacy_type) == "string" and user.privacy_type or ""
+		result.allow_write = type(user.allow_write) == "string" and user.allow_write or ""
+		result.restricted_oid = type(user.RestrictedOID) == "string" and user.RestrictedOID or ""
+		result.source_zone = type(user.source_zone) == "string" and user.source_zone or ""
+	end
+	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
+	result.firewall_perimeter_safe = perimeter_safe
+	result.source_zone_class = zones_readable and zones[result.source_zone] and
+		zones[result.source_zone].classification or "unknown"
+
+	local rule_ok, rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
+	if rule_ok and type(rule) == "table" and rule[".type"] == "rule" then
+		result.firewall_rule_configured = rule.src == result.source_zone and
+			rule.proto == "udp" and rule.dest_port == "161" and
+			rule.target == "ACCEPT" and rule.family == "any" and
+			result.source_zone_class == "internal" and perimeter_safe
+	end
+
+	local pid_contents = read_file("/var/run/snmpd.pid")
+	local pid = type(pid_contents) == "string" and pid_contents:match("^%s*(%d+)%s*$") or nil
+	local process = {
+		pid = pid_contents,
+		comm = pid and read_file("/proc/" .. pid .. "/comm") or nil,
+		cmdline = pid and read_file("/proc/" .. pid .. "/cmdline") or nil
+	}
+	result.process_running = validator.snmpd_process_running(
+		process.pid, process.comm, process.cmdline)
+	result.status = validator.classify_status(result)
 	return result
 end
 
@@ -8862,6 +9004,7 @@ function action_api()
 	local hardware_io = hardware_io_status(fs)
 	local office_networks = office_network_status(uci, fs)
 	local remote_syslog = remote_syslog_status(uci, fs)
+	local snmpv3 = snmpv3_status(uci, fs)
 	local usteer = usteer_status(uci, fs)
 
 	http.prepare_content("application/json; charset=UTF-8")
@@ -8901,6 +9044,7 @@ function action_api()
 		hardware_io = hardware_io,
 		office_networks = office_networks,
 		remote_syslog = remote_syslog,
+		snmpv3 = snmpv3,
 		usteer = usteer,
 		conntrack = conntrack,
 		cellular = cellular,
