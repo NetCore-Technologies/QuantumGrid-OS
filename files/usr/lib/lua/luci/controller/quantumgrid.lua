@@ -4033,9 +4033,14 @@ local function snmpv3_status(uci, fs, persistent_username_override)
 		fs, "/usr/lib/snmp/snmpd.conf", persistent_username ~= "" and persistent_username or nil)
 	if type(persistent) == "table" and persistent.available == true then
 		result.persistent_inventory_available = true
-		result.persistent_user_present = persistent_username_override == false and false or persistent.user_present == true
-		result.persistent_user_matches = persistent_username_override == false and 0 or tonumber(persistent.matches) or 0
 		result.persistent_usm_user_count = tonumber(persistent.total) or 0
+		if persistent_username_override == false then
+			result.persistent_user_present = false
+			result.persistent_user_matches = 0
+		else
+			result.persistent_user_present = persistent.user_present == true
+			result.persistent_user_matches = tonumber(persistent.matches) or 0
+		end
 	end
 	result.status = validator.classify_status(result)
 	return result
