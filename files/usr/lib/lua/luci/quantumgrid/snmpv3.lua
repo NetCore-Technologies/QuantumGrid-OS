@@ -178,7 +178,9 @@ function legacy_access_configured(uci)
 	local legacy = false
 	local checked = {
 		"com2sec", "com2sec6", "access", "access_default",
-		"access_HostName", "access_HostIP", "trap_HostName", "trap_HostIP"
+		"access_HostName", "access_HostIP",
+		"trap_HostName", "trap_HostIP", "trapsink", "trap2sink", "informsink",
+		"pass", "exec", "extend"
 	}
 	for _, section_type in ipairs(checked) do
 		local ok = pcall(function()
@@ -197,6 +199,18 @@ function legacy_access_configured(uci)
 		end)
 	end)
 	if not groups_ok then return nil end
+	if type(uci.get_all) ~= "function" then return nil end
+	local general_ok, general = pcall(uci.get_all, uci, "snmpd", "general")
+	if not general_ok or type(general) ~= "table" or general[".type"] ~= "snmpd" then
+		return nil
+	end
+	for _, option in ipairs({ "trapcommunity", "trapsess", "v1trapaddress" }) do
+		local value = general[option]
+		if type(value) == "string" and value ~= "" or
+			type(value) == "table" and #value > 0 then
+			legacy = true
+		end
+	end
 	return legacy
 end
 
