@@ -5304,6 +5304,16 @@ grep -Fq 'CONFIG_PACKAGE_snmpd-ssl=y' "$ROOT/configs/aw1000-max.config"
 grep -Fq "option enabled '0'" "$ROOT/files/etc/config/snmpd"
 grep -Fq 'snmpv3-update' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function action_snmpv3_update()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'function inspect_persistent_usm_file' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'function private_root_regular_file' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'function private_root_directory' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'function strip_persistent_usm_users' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'local function scrub_persistent_usm_user_keys(usernames)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'validator.strip_persistent_usm_users' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq '/usr/lib/snmp/snmpd.conf' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'persistent_inventory_available' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'persistent_user_matches' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
+grep -Fq 'state.persistent_user_matches' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
 python3 - "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua" <<'PY'
 import pathlib
 import sys
