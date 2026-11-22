@@ -1,0 +1,15 @@
+config agent 'agent'
+	option agentaddress 'UDP:161,UDP6:161'
+
+config system 'quantumgrid'
+	option sysName 'QuantumGrid'
+	option sysLocation 'Unset'
+	option sysContact 'Unset'
+
+config engineid 'engineid'
+	option engineidtype '3'
+	option engineidnic 'br-lan'
+
+config snmpd 'general'
+	option enabled '0'
+	option snmp_version 'v3'
