@@ -286,4 +286,31 @@ function classify_status(snapshot)
 	return "ready"
 end
 
+function wait_for_state(sample_fn, sleep_fn, expected_enabled, expected_username, expected_zone, attempts)
+	if type(sample_fn) ~= "function" or type(sleep_fn) ~= "function" then
+		return nil, false
+	end
+	local limit = tonumber(attempts) or 10
+	if limit < 1 or limit > 20 or limit ~= math.floor(limit) then limit = 10 end
+	local last = nil
+	for attempt = 1, limit do
+		local ok, state = pcall(sample_fn)
+		if ok and type(state) == "table" then
+			last = state
+			if expected_enabled == true then
+				if state.enabled == true and state.status == "ready" and
+					state.username == expected_username and state.source_zone == expected_zone then
+					return state, true
+				end
+			else
+				if state.enabled == false and state.process_running == false then
+					return state, true
+				end
+			end
+		end
+		if attempt < limit then pcall(sleep_fn) end
+	end
+	return last, false
+end
+
 return _M
