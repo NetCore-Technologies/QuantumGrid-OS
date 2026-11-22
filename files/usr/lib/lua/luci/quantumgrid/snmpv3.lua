@@ -238,9 +238,38 @@ function snmpd_process_running(pid_contents, comm_contents, cmdline_contents)
 	if not pid or pid <= 1 or pid ~= math.floor(pid) then return false end
 	if type(comm_contents) ~= "string" or
 		comm_contents:match("^%s*(.-)%s*$") ~= "snmpd" then return false end
-	if type(cmdline_contents) ~= "string" then return false end
-	return cmdline_contents:find("/usr/sbin/snmpd", 1, true) ~= nil and
-		cmdline_contents:find("/var/run/snmpd.conf", 1, true) ~= nil
+	if type(cmdline_contents) ~= "string" or #cmdline_contents > 4096 then return false end
+
+	local args = {}
+	for argument in cmdline_contents:gmatch("([^%z]+)") do
+		table.insert(args, argument)
+	end
+	local required = {
+		"/usr/sbin/snmpd", "-f", "-r", "-p", "/var/run/snmpd.pid",
+		"-C", "-c", "/var/run/snmpd.conf"
+	}
+	if #args < #required then return false end
+	for index, expected in ipairs(required) do
+		if args[index] ~= expected then return false end
+	end
+
+	local index = #required + 1
+	while index <= #args do
+		local option = args[index]
+		local value = args[index + 1]
+		if value == nil then return false end
+		if option == "-Ls" then
+			if not value:match("^[du0-7]$") then return false end
+		elseif option == "-LF" then
+			if #value < 3 or #value > 512 or value:find("[%z\r\n]") then return false end
+		elseif option == "-Lf" then
+			if value ~= "/dev/null" then return false end
+		else
+			return false
+		end
+		index = index + 2
+	end
+	return true
 end
 
 local function contains_udp(value)
