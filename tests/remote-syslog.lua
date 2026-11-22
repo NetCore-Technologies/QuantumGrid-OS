@@ -22,6 +22,35 @@ for _, globals in ipairs({
     "missing, root or malformed stunnel privilege settings must be rejected")
 end
 
+local restart_tls = remote.validate({
+  confirmed = "1", enabled = "1", host = "logs.corp.example",
+  port = "6514", protocol = "tls",
+})
+local previous_plain = {
+  log_ip = "10.40.0.20", log_port = "514", log_proto = "udp", log_remote = "1",
+}
+assert(remote.requires_tunnel_restart(restart_tls, previous_plain, nil, true),
+  "enabling TLS must always restart the managed tunnel")
+
+assert(remote.requires_tunnel_restart({ enabled = false }, {
+  log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp", log_remote = "0",
+}, { enabled = "0" }, true),
+  "a stale loopback forwarding destination must restart stunnel even when its UCI enabled flag is already zero")
+assert(remote.requires_tunnel_restart({ enabled = true, protocol = "udp" }, {
+  log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp", log_remote = "1",
+}, nil, true),
+  "switching away from an old loopback tunnel must stop it")
+assert(remote.requires_tunnel_restart({ enabled = false }, previous_plain, {
+  enabled = "1",
+}, true), "an enabled managed tunnel must be restarted even if the system destination drifted")
+assert(not remote.requires_tunnel_restart({ enabled = true, protocol = "udp" }, previous_plain, {
+  enabled = "0",
+}, true), "ordinary plaintext forwarding must not touch an unrelated stopped tunnel")
+assert(not remote.requires_tunnel_restart({ enabled = false }, {
+  log_ip = "127.0.0.1", log_port = "5514", log_proto = "tcp",
+}, { enabled = "1" }, false),
+  "a missing stunnel service/config must never trigger an attempted service restart")
+
 local managed_stunnel_section = {
   [".name"] = "quantumgrid_syslog",
   [".type"] = "service",
