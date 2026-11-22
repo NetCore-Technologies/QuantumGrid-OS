@@ -5326,7 +5326,6 @@ test "$(grep -Fc 'agent_listener_configured = resulting.agent_listener_configure
 test "$(grep -Fc 'function SnmpV3Settings' "$ROOT/ui/quantumgrid/src/App.tsx")" -eq 1
 ! grep -Fq 'function Snmpv3Settings' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq '.1.3.6.1.2.1.1' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
-grep -Fq 'agent_listener_configured = resulting.agent_listener_configured' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'payload.lock_released = release_ok and release_status == 0' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'The persistent SNMP credential file could not be secured as root-owned mode 0600' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'runtime_credentials_present' "$ROOT/files/usr/lib/lua/luci/quantumgrid/snmpv3.lua"
@@ -5334,7 +5333,6 @@ grep -Fq 'The firewall service is unavailable' "$ROOT/ui/quantumgrid/src/App.tsx
 grep -Fq 'result.firewall_reloaded' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'os.remove, "/var/run/snmpd.conf"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function updateRouterSnmpv3(input:' "$ROOT/ui/quantumgrid/src/routerApi.ts"
-grep -Fq 'function SnmpV3Settings' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'SNMPv3 management' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'system.snmpv3.update' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'snmpv3-api.test.mjs' "$ROOT/.github/workflows/ci.yml"
