@@ -1480,6 +1480,7 @@ export interface RouterSnmpv3Status {
   source_zone: string;
   source_zone_class: "internal" | "external" | "unknown";
   snmp_version: string;
+  agent_listener_configured: boolean;
   auth_type: string;
   privacy_type: string;
   security_level: "authPriv";
@@ -1512,6 +1513,7 @@ export interface RouterSnmpv3UpdateResult {
   source_zone: string;
   auth_type: string;
   privacy_type: string;
+  agent_listener_configured: boolean;
   security_level: "authPriv";
   allow_write: string;
   restricted_oid: string;
@@ -3463,6 +3465,7 @@ export async function updateRouterSnmpv3(input: {
     !("source_zone" in payload) || typeof payload.source_zone !== "string" ||
     !("auth_type" in payload) || typeof payload.auth_type !== "string" ||
     !("privacy_type" in payload) || typeof payload.privacy_type !== "string" ||
+    !("agent_listener_configured" in payload) || typeof payload.agent_listener_configured !== "boolean" ||
     !("security_level" in payload) || payload.security_level !== "authPriv" ||
     !("allow_write" in payload) || typeof payload.allow_write !== "string" ||
     !("restricted_oid" in payload) || typeof payload.restricted_oid !== "string" ||
@@ -3473,7 +3476,7 @@ export async function updateRouterSnmpv3(input: {
     !("firewall_rule_present" in payload) || typeof payload.firewall_rule_present !== "boolean" ||
     !("runtime_credentials_present" in payload) || typeof payload.runtime_credentials_present !== "boolean" ||
     !("runtime_credentials_private" in payload) || typeof payload.runtime_credentials_private !== "boolean" ||
-    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true)) ||
+    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.agent_listener_configured !== true || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true)) ||
     (!input.enabled && (payload.process_running !== false || payload.runtime_credentials_present !== false || payload.runtime_credentials_private !== true || payload.status === "ready"))
   ) {
     throw new Error("The router did not confirm the selected read-only SNMPv3 authPriv and firewall posture.");
