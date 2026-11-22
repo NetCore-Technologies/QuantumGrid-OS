@@ -43,7 +43,8 @@ local ALLOWED_ACTIONS = {
 	["hardware.led.update"] = true,
 	["system.config.backup"] = true,
 	["system.config.restore"] = true,
-	["system.syslog.update"] = true
+	["system.syslog.update"] = true,
+	["system.snmpv3.update"] = true
 }
 
 local function clean(value, limit)
