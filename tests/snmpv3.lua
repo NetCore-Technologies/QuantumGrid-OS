@@ -65,6 +65,32 @@ assert(snmp.legacy_access_configured(legacy_fixture("group", {
   { version = "usm" }
 })) == false)
 
+local expected_snmpd_argv = table.concat({
+  "/usr/sbin/snmpd", "-f", "-r", "-p", "/var/run/snmpd.pid",
+  "-C", "-c", "/var/run/snmpd.conf",
+}, "\\0")
+assert(snmp.snmpd_process_running("1234\\n", "snmpd\\n", expected_snmpd_argv))
+assert(snmp.snmpd_process_running("1234\\n", "snmpd\\n",
+  expected_snmpd_argv .. "\\0-Ls\\0d\\0"))
+assert(snmp.snmpd_process_running("1234\\n", "snmpd\\n",
+  expected_snmpd_argv .. "\\0-LF\\0i /var/log/snmpd.log\\0"))
+assert(snmp.snmpd_process_running("1234\\n", "snmpd\\n",
+  expected_snmpd_argv .. "\\0-Lf\\0/dev/null\\0"))
+for _, process in ipairs({
+  { pid = "1", comm = "snmpd\\n", argv = expected_snmpd_argv },
+  { pid = "1234", comm = "dropbear\\n", argv = expected_snmpd_argv },
+  { pid = "1234", comm = "snmpd\\n", argv = "wrapper\\0" .. expected_snmpd_argv },
+  { pid = "1234", comm = "snmpd\\n", argv = expected_snmpd_argv .. "\\0--agentaddress\\0UDP:162\\0" },
+  { pid = "1234", comm = "snmpd\\n", argv = expected_snmpd_argv .. "\\0-a\\0UDP:162\\0" },
+  { pid = "1234", comm = "snmpd\\n", argv = expected_snmpd_argv .. "\\0-c\\0/etc/snmp/snmpd.conf\\0" },
+  { pid = "1234", comm = "snmpd\\n", argv = expected_snmpd_argv .. "\\0-Ls\\0d\\0--agentaddress\\0UDP:162\\0" },
+  { pid = "1234", comm = "snmpd\\n", argv = expected_snmpd_argv .. "\\0-Ls\\0invalid\\0" },
+  { pid = "1234", comm = "snmpd\\n", argv = expected_snmpd_argv .. "\\0-Lf\\0/tmp/snmp.log\\0" },
+}) do
+  assert(not snmp.snmpd_process_running(process.pid, process.comm, process.argv),
+    "nonstandard Net-SNMP invocation or listener override must not be ready")
+end
+
 local function agent_fixture(sections)
   local fake = {}
   function fake:foreach(package, section_type, callback)
