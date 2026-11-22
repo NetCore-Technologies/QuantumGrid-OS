@@ -582,8 +582,7 @@ function wait_for_state(sample_fn, sleep_fn, expected_enabled, expected_username
 					return state, true
 				end
 			else
-				if state.enabled == false and state.status == "disabled" and
-					state.process_running == false and
+				if state.enabled == false and state.process_running == false and
 					state.runtime_credentials_present == false and
 					state.persistent_inventory_available == true and
 					state.persistent_user_present == false and
