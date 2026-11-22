@@ -1493,7 +1493,6 @@ export interface RouterSnmpv3Status {
   firewall_rule_configured: boolean;
   firewall_perimeter_safe: boolean;
   firewall_conflict: boolean;
-  agent_listener_configured: boolean;
   managed_user_section: boolean;
   managed_firewall_rule: boolean;
   network_membership_verified: boolean;
@@ -1519,7 +1518,6 @@ export interface RouterSnmpv3UpdateResult {
   allow_write: string;
   restricted_oid: string;
   firewall_available: boolean;
-  agent_listener_configured: boolean;
   legacy_community_configured: boolean;
   legacy_network_firewall: boolean;
   firewall_inventory_available: boolean;
