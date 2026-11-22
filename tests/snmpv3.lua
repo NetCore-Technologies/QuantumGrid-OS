@@ -453,6 +453,8 @@ for _, disabled_state in ipairs({
   { persistent_inventory_available = false },
   { persistent_user_present = true },
   { persistent_usm_user_count = 1 },
+  { v3_user_section_present = true },
+  { v3_user_section_count = 1 },
 }) do
   local candidate = {
     available = true, enabled = false, firewall_inventory_available = true,
