@@ -4028,13 +4028,15 @@ local function snmpv3_status(uci, fs, persistent_username_override)
 	result.private_config_permissions = config_mode_secure
 	result.runtime_credentials_private = result.enabled and runtime_mode_secure or
 		(not result.enabled and not result.runtime_credentials_present)
+	local no_managed_user = persistent_username_override == false
 	local persistent_username = result.username ~= "" and result.username or persistent_username_override
+	if no_managed_user then persistent_username = nil end
 	local persistent = validator.inspect_persistent_usm_file(
 		fs, "/usr/lib/snmp/snmpd.conf", persistent_username ~= "" and persistent_username or nil)
 	if type(persistent) == "table" and persistent.available == true then
 		result.persistent_inventory_available = true
 		result.persistent_usm_user_count = tonumber(persistent.total) or 0
-		if persistent_username_override == false then
+		if no_managed_user then
 			result.persistent_user_present = false
 			result.persistent_user_matches = 0
 		else
