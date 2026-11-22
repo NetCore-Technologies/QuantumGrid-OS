@@ -3138,7 +3138,9 @@ function SnmpV3Settings({ status, refresh }: {
           : result.firewall_reloaded
             ? result.status === "disabled"
               ? "SNMP service stopped, the QuantumGrid UDP/161 rule was removed, and both generated runtime credentials and managed persistent USM keys were scrubbed."
-              : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. Firewall or legacy SNMP state remains in review."
+              : result.persistent_usm_user_count > 0
+                ? "SNMP service stopped and the managed user's runtime and persistent keys were scrubbed. " + result.persistent_usm_user_count + " unrelated persistent user record(s) were preserved and require review before SNMP is enabled again."
+                : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. Firewall or legacy SNMP state remains in review."
             : "SNMP service stopped and managed runtime and persistent credentials were scrubbed. The firewall was unavailable, so its UDP/161 rules still require out-of-band inspection.",
       });
       refresh();
