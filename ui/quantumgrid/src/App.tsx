@@ -3101,6 +3101,9 @@ function Snmpv3Settings({ status, refresh }: {
     status?.available &&
     status.firewall_available &&
     status.firewall_perimeter_safe &&
+    status.firewall_inventory_available &&
+    status.agent_listener_configured &&
+    status.legacy_network_firewall === false &&
     !hasLegacyAccess &&
     !status.firewall_conflict &&
     trustedZones.some((zone) => zone.name === sourceZone),
@@ -3130,7 +3133,9 @@ function Snmpv3Settings({ status, refresh }: {
         success: true,
         message: result.enabled
           ? "SNMPv3 authPriv is active for " + result.username + " on the " + result.source_zone + " zone. SHA authentication, AES privacy and read-only access were verified after restart."
-          : "The SNMP daemon has been disabled and the QuantumGrid-managed SNMPv3 user and firewall rule were removed.",
+          : result.firewall_available
+            ? "The SNMP daemon has been disabled, runtime credentials were scrubbed and the managed firewall rule was removed."
+            : "The SNMP daemon has been disabled and runtime credentials were scrubbed. The firewall service was unavailable, so firewall-rule cleanup could not be verified; inspect UDP/161 rules when the firewall service returns.",
       });
       refresh();
     } catch (cause) {
@@ -3149,14 +3154,24 @@ function Snmpv3Settings({ status, refresh }: {
       eyebrow="NET-SNMP · AUTHENTICATED + ENCRYPTED · READ ONLY"
       action={<Status active={Boolean(status?.enabled && status.status === "ready")}>{status?.status === "ready" ? "AUTHPRIV READY" : (status?.status ?? "unavailable").toUpperCase()}</Status>}
     >
-      {!status?.available || !status.firewall_available ? (
-        <div className="module-message">The SNMP daemon, UCI configuration or native firewall service is unavailable on this firmware.</div>
+      {!status?.available ? (
+        <div className="module-message">The SNMP daemon or its UCI configuration is unavailable on this firmware.</div>
       ) : (
         <form className="remote-syslog-form" onSubmit={save}>
           <div className="remote-syslog-warning" role="note">
             <strong>Read-only management access</strong>
             <span>QuantumGrid provisions SNMPv3 authPriv only: SHA authentication, AES privacy, no write access and the System Group OID subtree only. UDP/161 is permitted only from one uniquely mapped internal management zone. SNMPv1/v2c community access is not enabled.</span>
           </div>
+          {!status.agent_listener_configured && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The SNMP agent is not using the exact managed UDP/161 IPv4 and IPv6 listener profile. Enabling is blocked until custom or additional listener bindings are removed through a trusted maintenance path.
+            </div>
+          )}
+          {!status.firewall_available && (
+            <div className="module-message remote-syslog-error" role="alert">
+              The firewall service is unavailable. SNMPv3 cannot be enabled, but an active SNMP daemon can still be disabled and its generated credentials scrubbed.
+            </div>
+          )}
           {status.status === "review" && (
             <div className="module-message remote-syslog-error" role="alert">
               SNMP security posture requires review. Check legacy community configuration, UDP/161 firewall rules, the selected zone and credential-file permissions before enabling management access.
