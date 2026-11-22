@@ -1847,6 +1847,236 @@ end
 
 
 
+function action_wireless_radio_update()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/sbin/wifi") ~= true or fs.access("/etc/config/wireless") ~= true then
+		respond(503, { ok = false, error = "Wireless configuration or the Wi-Fi reload utility is unavailable." })
+		return
+	end
+
+	local validator = require "luci.quantumgrid.wireless"
+	local update, validation_error = validator.validate_radio_toggle(
+		http.formvalue("radio", true),
+		http.formvalue("enabled", true),
+		http.formvalue("expected_disabled", true),
+		http.formvalue("confirmed", true)
+	)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local radio_type_ok, radio_type = pcall(uci.get, uci, "wireless", update.radio, ".type")
+	if not radio_type_ok then
+		respond(503, { ok = false, error = "The selected wireless radio configuration could not be inspected." })
+		return
+	end
+	if radio_type ~= "wifi-device" then
+		respond(404, { ok = false, error = "Only an existing wireless radio device can be enabled or disabled." })
+		return
+	end
+	local previous_ok, previous_disabled = pcall(uci.get, uci, "wireless", update.radio, "disabled")
+	if not previous_ok then
+		respond(503, { ok = false, error = "The current wireless radio state could not be inspected safely." })
+		return
+	end
+	local current_disabled = previous_disabled == "1"
+	if current_disabled ~= update.expected_disabled then
+		respond(409, {
+			ok = false,
+			error = "The radio state changed after the page loaded. Refresh the wireless inventory and retry.",
+			radio = update.radio,
+			disabled = current_disabled
+		})
+		return
+	end
+
+	local function sample_radio()
+		local radios = wireless_status()
+		for _, radio in ipairs(radios) do
+			if type(radio) == "table" and radio.name == update.radio then return radio end
+		end
+		return nil
+	end
+
+	local initial_runtime = sample_radio()
+	if not initial_runtime or initial_runtime.config_available ~= true or
+		type(initial_runtime.up) ~= "boolean" then
+		respond(503, { ok = false, error = "The selected radio is missing from live wireless telemetry; no changes were made." })
+		return
+	end
+	if initial_runtime.disabled ~= current_disabled then
+		respond(409, { ok = false, error = "UCI and live radio configuration disagree. Refresh telemetry and inspect the radio before changing it." })
+		return
+	end
+	if update.desired_disabled and not current_disabled then
+		local network_inventory = wireless_network_inventory(uci, fs)
+		if not network_inventory.available or network_inventory.truncated then
+			respond(503, { ok = false, error = "The routed-network inventory is unavailable or truncated. QuantumGrid cannot prove that disabling this radio will preserve the administrator's management path." })
+			return
+		end
+		local management_network, route_error = network_interface_for_remote_address(
+			http.getenv("REMOTE_ADDR"), network_inventory.interfaces)
+		if not management_network then
+			respond(409, { ok = false, error = route_error .. " Use a wired or out-of-band management connection to disable radios." })
+			return
+		end
+		local management_ap_found = false
+		local ap_inventory_ok = pcall(function()
+			uci:foreach("wireless", "wifi-iface", function(section)
+				if section.mode ~= "ap" or section.device ~= update.radio then return end
+				for _, network in ipairs(wireless_option_list(section.network)) do
+					if network == management_network then management_ap_found = true end
+				end
+			end)
+		end)
+		if not ap_inventory_ok then
+			respond(503, { ok = false, error = "The AP-to-management-network inventory could not be inspected safely." })
+			return
+		end
+		if management_ap_found then
+			respond(409, {
+				ok = false,
+				error = "This radio carries an AP attached to the administrator's current management network. Disabling it could lock out the session; use a wired or independent out-of-band connection."
+			})
+			return
+		end
+	end
+
+	if current_disabled == update.desired_disabled then
+		respond(nil, {
+			ok = true,
+			radio = update.radio,
+			enabled = not current_disabled,
+			disabled = current_disabled,
+			runtime_up = initial_runtime.up,
+			changed = false,
+			reloaded = false,
+			rolled_back = false
+		})
+		return
+	end
+
+	local function restore_previous_state()
+		local restore_ok, restore_result
+		if previous_disabled == nil then
+			restore_ok, restore_result = pcall(uci.delete, uci, "wireless", update.radio, "disabled")
+		else
+			restore_ok, restore_result = pcall(uci.set, uci, "wireless", update.radio, "disabled", previous_disabled)
+		end
+		if not restore_ok or restore_result == false then
+			pcall(uci.revert, uci, "wireless")
+			return false, false
+		end
+		local commit_ok, committed = pcall(uci.commit, uci, "wireless")
+		if not commit_ok or committed ~= true then
+			pcall(uci.revert, uci, "wireless")
+			return false, false
+		end
+		local reload_ok, reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+		if not reload_ok or reload_status ~= 0 then return true, false end
+		local verified = false
+		for attempt = 1, 10 do
+			local state = sample_radio()
+			if state and state.config_available == true and state.disabled == current_disabled and
+				state.up == (not current_disabled) then
+				verified = true
+				break
+			end
+			if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
+		end
+		return true, verified
+	end
+
+	local desired_disabled_value = update.desired_disabled and "1" or nil
+	local stage_ok, stage_result
+	if desired_disabled_value then
+		stage_ok, stage_result = pcall(uci.set, uci, "wireless", update.radio, "disabled", desired_disabled_value)
+	else
+		stage_ok, stage_result = pcall(uci.delete, uci, "wireless", update.radio, "disabled")
+	end
+	if not stage_ok or stage_result ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "The radio state could not be staged; no Wi-Fi reload was attempted." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "wireless")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "The radio state could not be committed; no Wi-Fi reload was attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+	local runtime_verified = false
+	if reload_ok and reload_status == 0 then
+		for attempt = 1, 10 do
+			local state = sample_radio()
+			if state and state.config_available == true and
+				state.disabled == update.desired_disabled and state.up == update.enabled then
+				runtime_verified = true
+				break
+			end
+			if attempt < 10 then pcall(nixio.nanosleep, 0, 200000000) end
+		end
+	end
+	if not reload_ok or reload_status ~= 0 or not runtime_verified then
+		local restored, rollback_runtime_verified = restore_previous_state()
+		local rolled_back = restored and rollback_runtime_verified
+		record_audit(http, "wireless.radio.update", update.radio, "failed")
+		respond(502, {
+			ok = false,
+			error = rolled_back
+				and "The radio reload or live-state verification failed. Its previous configuration and runtime state were restored."
+				or "The radio reload or live-state verification failed and rollback could not be confirmed. Use wired or out-of-band management and inspect wireless state locally.",
+			rolled_back = rolled_back
+		})
+		return
+	end
+
+	record_audit(http, "wireless.radio.update", update.radio, "success")
+	respond(nil, {
+		ok = true,
+		radio = update.radio,
+		enabled = update.enabled,
+		disabled = update.desired_disabled,
+		runtime_up = true == update.enabled,
+		changed = true,
+		reloaded = true,
+		rolled_back = false
+	})
+end
+
+
 function action_usteer_update()
 	local http = require "luci.http"
 	local fs = require "nixio.fs"
