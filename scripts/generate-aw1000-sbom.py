@@ -69,6 +69,8 @@ def parse_manifest(path: Path) -> list[tuple[str, str]]:
 def sha256_file(path: Path) -> str:
     if path.is_symlink() or not path.is_file():
         raise SbomError(f"Release artifact {path} must be a regular, non-symlink file.")
+    if path.stat().st_size <= 0:
+        raise SbomError(f"Release artifact {path} is empty.")
     digest = hashlib.sha256()
     with path.open("rb") as handle:
         while True:
@@ -84,6 +86,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--firmware-image", required=True, type=Path)
     parser.add_argument("--packages-archive", required=True, type=Path)
+    parser.add_argument("--feeds-report", required=True, type=Path)
+    parser.add_argument("--phone-source-archive", required=True, type=Path)
+    parser.add_argument("--build-info", required=True, type=Path)
+    parser.add_argument("--build-config", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--version", required=True)
     parser.add_argument("--target", required=True)
@@ -109,6 +115,11 @@ def build_sbom(args: argparse.Namespace) -> dict:
     packages = parse_manifest(args.manifest)
     firmware_sha = sha256_file(args.firmware_image)
     package_archive_sha = sha256_file(args.packages_archive)
+    manifest_sha = sha256_file(args.manifest)
+    feeds_report_sha = sha256_file(args.feeds_report)
+    phone_source_sha = sha256_file(args.phone_source_archive)
+    build_info_sha = sha256_file(args.build_info)
+    build_config_sha = sha256_file(args.build_config)
     root_ref = (
         "pkg:generic/quantumgrid-os@"
         + quote(args.version, safe="._-")
@@ -150,6 +161,24 @@ def build_sbom(args: argparse.Namespace) -> dict:
             "hashes": [{"alg": "SHA-256", "content": package_archive_sha}],
         },
     ]
+    evidence_files = [
+        ("package-manifest", args.manifest, manifest_sha, "Exact installed OpenWrt package manifest used for the component inventory"),
+        ("openwrt-feed-report", args.feeds_report, feeds_report_sha, "Resolved OpenWrt package feed revisions"),
+        ("phone-source-archive", args.phone_source_archive, phone_source_sha, "Pinned AW1000 phone source archive"),
+        ("build-info", args.build_info, build_info_sha, "Resolved source commits and build provenance metadata"),
+        ("build-config", args.build_config, build_config_sha, "Exact QuantumGrid AW1000 firmware build configuration"),
+    ]
+    for artifact_id, path, digest, role in evidence_files:
+        components.append({
+            "type": "file",
+            "bom-ref": f"urn:quantumgrid:artifact:aw1000:{args.version}:{artifact_id}",
+            "name": path.name,
+            "version": args.version,
+            "hashes": [{"alg": "SHA-256", "content": digest}],
+            "properties": [
+                {"name": "quantumgrid:artifact-role", "value": role},
+            ],
+        })
     timestamp = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return {
         "bomFormat": "CycloneDX",
@@ -181,6 +210,11 @@ def build_sbom(args: argparse.Namespace) -> dict:
                     {"name": "quantumgrid:package-count", "value": str(len(packages))},
                     {"name": "quantumgrid:firmware-image-sha256", "value": firmware_sha},
                     {"name": "quantumgrid:package-archive-sha256", "value": package_archive_sha},
+                    {"name": "quantumgrid:package-manifest-sha256", "value": manifest_sha},
+                    {"name": "quantumgrid:openwrt-feed-report-sha256", "value": feeds_report_sha},
+                    {"name": "quantumgrid:phone-source-archive-sha256", "value": phone_source_sha},
+                    {"name": "quantumgrid:buildinfo-sha256", "value": build_info_sha},
+                    {"name": "quantumgrid:build-config-sha256", "value": build_config_sha},
                     {"name": "quantumgrid:inventory-source", "value": args.manifest.name},
                     {"name": "quantumgrid:inventory-method", "value": "Installed package names and versions only; licenses and transitive dependency metadata are not inferred from the image manifest."},
                 ],
