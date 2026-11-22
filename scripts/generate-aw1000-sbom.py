@@ -20,6 +20,7 @@ from urllib.parse import quote
 
 PACKAGE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$")
 PACKAGE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9+_.:~%-]{0,255}$")
+MAX_PACKAGES = 8192
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 
 
@@ -51,6 +52,8 @@ def parse_manifest(path: Path) -> list[tuple[str, str]]:
         name, _, version = fields
         if not PACKAGE_NAME.fullmatch(name) or not PACKAGE_VERSION.fullmatch(version):
             raise SbomError(f"Unsafe package name or version at manifest line {line_number}.")
+        if len(packages) >= MAX_PACKAGES:
+            raise SbomError("The image package manifest exceeds the 8,192-component SBOM safety limit.")
         previous = packages.get(name)
         if previous is not None:
             if previous != version:
@@ -179,6 +182,7 @@ def build_sbom(args: argparse.Namespace) -> dict:
                     {"name": "quantumgrid:firmware-image-sha256", "value": firmware_sha},
                     {"name": "quantumgrid:package-archive-sha256", "value": package_archive_sha},
                     {"name": "quantumgrid:inventory-source", "value": args.manifest.name},
+                    {"name": "quantumgrid:inventory-method", "value": "Installed package names and versions only; licenses and transitive dependency metadata are not inferred from the image manifest."},
                 ],
             },
         },
