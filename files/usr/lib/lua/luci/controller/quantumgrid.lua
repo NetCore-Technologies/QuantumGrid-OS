@@ -3960,7 +3960,7 @@ local function snmpv3_status(uci, fs, persistent_username_override)
 		result.allow_write = type(user.allow_write) == "string" and user.allow_write or ""
 		result.restricted_oid = type(user.RestrictedOID) == "string" and user.RestrictedOID or ""
 		result.user_source_zone = type(user.source_zone) == "string" and user.source_zone or ""
-		result.managed_user_section = validator.has_only_managed_user_options(user)
+		result.managed_user_section = validator.is_managed_user_section(user)
 	end
 	result.trusted_zones = {}
 	if result.firewall_available then
@@ -9149,7 +9149,7 @@ function action_snmpv3_update()
 			respond(409, { ok = false, error = "An unmanaged SNMPv3 user already exists. QuantumGrid will not overwrite or expose unmanaged SNMP users." })
 			return
 		end
-		if existing_v3 and not validator.has_only_managed_user_options(existing_v3) then
+		if existing_v3 and not validator.is_managed_user_section(existing_v3) then
 			respond(409, { ok = false, error = "The reserved QuantumGrid SNMPv3 user contains unmanaged options. No credentials were changed." })
 			return
 		end
@@ -9450,7 +9450,7 @@ function action_snmpv3_update()
 			end
 		end
 	else
-		if v3_snapshot and validator.has_only_managed_user_options(existing_v3) then
+		if v3_snapshot and validator.is_managed_user_section(existing_v3) then
 			local delete_ok, deleted = pcall(uci.delete, uci, "snmpd", "quantumgrid")
 			if not delete_ok or deleted == false then
 				pcall(uci.revert, uci, "snmpd")
