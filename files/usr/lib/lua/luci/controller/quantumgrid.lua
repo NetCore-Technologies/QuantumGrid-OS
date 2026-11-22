@@ -3926,6 +3926,7 @@ local function snmpv3_status(uci, fs)
 		legacy_community_configured = false,
 		legacy_network_firewall = false,
 		firewall_rule_configured = false,
+		firewall_rule_present = false,
 		firewall_perimeter_safe = false,
 		firewall_conflict = false,
 		process_running = false,
@@ -3986,7 +3987,12 @@ local function snmpv3_status(uci, fs)
 	end
 
 	local rule_ok, rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
-	if rule_ok and validator.has_only_managed_firewall_options(rule) then
+	if not rule_ok then
+		result.available = false
+		return result
+	end
+	result.firewall_rule_present = type(rule) == "table"
+	if validator.has_only_managed_firewall_options(rule) then
 		result.managed_firewall_rule = true
 		result.source_zone = type(rule.src) == "string" and rule.src or ""
 		local zone_networks = validator.trusted_zone_networks(uci, result.source_zone)
@@ -9321,12 +9327,31 @@ function action_snmpv3_update()
 			or "The SNMP daemon failed to restart and rollback could not be confirmed. Inspect the SNMP and firewall services locally.", 502)
 		return
 	end
-	local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
-	if update.enabled and (not runtime_mode_ok or runtime_mode == false) then
-		local rolled_back = restore_all()
-		fail(rolled_back and "The generated SNMP runtime credential file could not be protected with mode 0600; previous settings were restored."
-			or "The generated SNMP credential file permissions could not be secured and rollback could not be confirmed.", 502)
-		return
+	if update.enabled then
+		local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
+		if not runtime_mode_ok or runtime_mode == false then
+			local rolled_back = restore_all()
+			fail(rolled_back and "The generated SNMP runtime credential file could not be protected with mode 0600; previous settings were restored."
+				or "The generated SNMP credential file permissions could not be secured and rollback could not be confirmed.", 502)
+			return
+		end
+	else
+		local stopped = snmpv3_status(uci, fs)
+		if stopped.process_running then
+			local rolled_back = restore_all()
+			fail(rolled_back and "The SNMP daemon remained active after the disable request; previous settings were restored."
+				or "The SNMP daemon did not stop and rollback could not be confirmed. Use an out-of-band management path.", 502)
+			return
+		end
+		if fs.access("/var/run/snmpd.conf") == true then
+			local remove_ok, removed = pcall(os.remove, "/var/run/snmpd.conf")
+			if not remove_ok or removed ~= true or fs.access("/var/run/snmpd.conf") == true then
+				local rolled_back = restore_all()
+				fail(rolled_back and "The stopped SNMP daemon's generated credential file could not be scrubbed; previous settings were restored."
+					or "The generated SNMP credentials could not be scrubbed and rollback could not be confirmed.", 502)
+				return
+			end
+		end
 	end
 
 	local resulting = snmpv3_status(uci, fs)
@@ -9355,7 +9380,9 @@ function action_snmpv3_update()
 		firewall_rule_configured = resulting.firewall_rule_configured,
 		firewall_perimeter_safe = resulting.firewall_perimeter_safe,
 		process_running = resulting.process_running,
+		firewall_rule_present = resulting.firewall_rule_present,
 		private_config_permissions = resulting.private_config_permissions,
+		runtime_credentials_private = resulting.runtime_credentials_private,
 		restarted = true,
 		firewall_reloaded = true,
 		rolled_back = false,
