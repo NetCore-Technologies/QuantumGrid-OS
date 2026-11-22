@@ -600,7 +600,7 @@ function wait_for_state(sample_fn, sleep_fn, expected_enabled, expected_username
 					state.runtime_credentials_present == false and
 					state.persistent_inventory_available == true and
 					state.persistent_user_present == false and
-					(tonumber(state.persistent_usm_user_count) or -1) == 0 then
+					(tonumber(state.persistent_user_matches) or 0) == 0 then
 					return state, true
 				end
 			end
