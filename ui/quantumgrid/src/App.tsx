@@ -3183,9 +3183,14 @@ function SnmpV3Settings({ status, refresh }: {
               The Net-SNMP persistent user database could not be verified as a root-owned mode-0600 regular file inside a protected directory. QuantumGrid will not report SNMP as ready or confirm credential cleanup while this inventory is unavailable.
             </div>
           )}
-          {status.persistent_inventory_available && status.persistent_usm_user_count > 0 && (
+          {status.persistent_inventory_available && (
+            (status.enabled && (status.persistent_user_present !== true || status.persistent_user_matches !== 1 || status.persistent_usm_user_count !== 1)) ||
+            (!status.enabled && status.persistent_usm_user_count > 0)
+          ) && (
             <div className="module-message remote-syslog-error" role="alert">
-              Net-SNMP has {status.persistent_usm_user_count} persistent localized USM key record(s), with {status.persistent_user_matches} matching the configured managed user. QuantumGrid accepts readiness only with exactly one matching record and no additional persisted users; disable or rotate through the managed workflow to remove stale keys.
+              {status.enabled
+                ? "The managed SNMP user does not have exactly one matching localized USM key record, or additional persistent user records exist. Rotate through QuantumGrid's managed workflow; readiness is withheld until the inventory contains exactly the active managed user."
+                : "SNMP is disabled, but " + status.persistent_usm_user_count + " persistent Net-SNMP USM user record(s) remain. QuantumGrid removed only its managed user's keys and preserved unrelated users and engine state. Review the remaining records before enabling SNMP again."}
             </div>
           )}
           {!status.private_config_permissions && (
