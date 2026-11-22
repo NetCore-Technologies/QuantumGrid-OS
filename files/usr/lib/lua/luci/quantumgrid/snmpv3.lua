@@ -257,7 +257,9 @@ function classify_status(snapshot)
 		return "review"
 	end
 	if snapshot.enabled ~= true then
-		if snapshot.process_running == true or snapshot.firewall_rule_present == true then
+		if snapshot.process_running == true or snapshot.firewall_rule_present == true or
+			snapshot.runtime_credentials_present == true or snapshot.firewall_conflict == true or
+			snapshot.firewall_inventory_available ~= true then
 			return "review"
 		end
 		return "disabled"
@@ -278,8 +280,10 @@ function classify_status(snapshot)
 		snapshot.firewall_rule_configured ~= true or
 		snapshot.managed_user_section ~= true or
 		snapshot.managed_firewall_rule ~= true or
+		snapshot.firewall_inventory_available ~= true or
 		snapshot.private_config_permissions ~= true or
 		snapshot.runtime_credentials_private ~= true or
+		snapshot.runtime_credentials_present ~= true or
 		snapshot.process_running ~= true then
 		return "review"
 	end
