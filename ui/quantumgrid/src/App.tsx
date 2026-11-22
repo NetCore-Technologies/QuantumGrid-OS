@@ -3133,7 +3133,7 @@ function SnmpV3Settings({ status, refresh }: {
       setNotice({
         success: true,
         message: result.enabled
-          ? "SNMPv3 is active with SHA authentication, AES privacy, authPriv security, read-only MIB-II access and the " + result.source_zone + " management zone. Passphrases were not returned by the router."
+          ? "SNMPv3 is active with SHA authentication, AES privacy, authPriv security, read-only SNMP system-group access and the " + result.source_zone + " management zone. Passphrases were not returned by the router."
           : result.firewall_reloaded
             ? result.status === "disabled"
               ? "SNMP service stopped, the QuantumGrid UDP/161 rule was removed, and the generated runtime credential file was scrubbed."
@@ -3165,7 +3165,7 @@ function SnmpV3Settings({ status, refresh }: {
         <form className="remote-syslog-form" onSubmit={save}>
           <div className="remote-syslog-warning" role="note">
             <strong>SNMPv3 only · authentication and privacy required</strong>
-            <span>QuantumGrid provisions SHA authentication, AES encryption, authPriv security and read-only access to the standard MIB-II subtree. The agent remains disabled until explicitly enabled. No SNMPv1/v2c community string is created. The service is restricted to one internal firewall zone on UDP/161; ensure your NMS supports SNMPv3 USM with SHA and AES.</span>
+            <span>QuantumGrid provisions SHA authentication, AES encryption, authPriv security and read-only access to the SNMP system-group subtree only. The agent remains disabled until explicitly enabled. No SNMPv1/v2c community string is created. The service is restricted to one internal firewall zone on UDP/161; ensure your NMS supports SNMPv3 USM with SHA and AES.</span>
           </div>
           {!status.agent_listener_configured && (
             <div className="module-message remote-syslog-error" role="alert">
