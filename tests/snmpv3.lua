@@ -63,6 +63,34 @@ assert(not snmp.has_expected_agent_listener(agent_fixture({
 assert(not snmp.has_expected_agent_listener(agent_fixture({})),
   "missing SNMP listener configuration must fail closed")
 
+local function agent_fixture(sections)
+  local fake = {}
+  function fake:foreach(package, section_type, callback)
+    if package == "snmpd" and section_type == "agent" then
+      for _, section in ipairs(sections) do callback(section) end
+    end
+  end
+  return fake
+end
+local good_agent = {
+  [".name"] = "agent", [".type"] = "agent",
+  agentaddress = "UDP:161,UDP6:161",
+}
+assert(snmp.has_expected_agent_listener(agent_fixture({ good_agent })),
+  "the exact UDP/161 IPv4 and IPv6 listener profile is accepted")
+assert(not snmp.has_expected_agent_listener(agent_fixture({
+  { [".name"] = "agent", [".type"] = "agent", agentaddress = "UDP:161,UDP6:162" },
+})), "custom listener ports must not be reported as the managed SNMP endpoint")
+assert(not snmp.has_expected_agent_listener(agent_fixture({
+  { [".name"] = "agent", [".type"] = "agent", agentaddress = "UDP:161,UDP6:161", extra = "unexpected" },
+})), "additional agent options must not bypass the managed listener contract")
+assert(not snmp.has_expected_agent_listener(agent_fixture({
+  good_agent,
+  { [".name"] = "agent6", [".type"] = "agent", agentaddress = "UDP:161" },
+})), "multiple agent address sections must be rejected")
+assert(not snmp.has_expected_agent_listener(agent_fixture({})),
+  "missing SNMP listener configuration must fail closed")
+
 local managed_user = {
   [".name"] = "quantumgrid", [".type"] = "v3",
   username = "quantumgrid-nms", auth_type = "SHA",
@@ -180,6 +208,7 @@ local ready_status = snmp.classify_status({
 assert(ready_status == "ready")
 for _, overrides in ipairs({
   { user_source_zone = "wan" },
+  { agent_listener_configured = false },
   { agent_listener_configured = false },
   { network_membership_verified = false },
   { legacy_network_firewall = true },
