@@ -265,6 +265,7 @@ function classify_status(snapshot)
 		snapshot.privacy_type ~= "AES" or
 		snapshot.allow_write ~= "0" or
 		snapshot.restricted_oid ~= VALID_OID or
+		snapshot.managed_user_section ~= true or
 		snapshot.source_zone_class ~= "internal" or
 		snapshot.legacy_network_firewall == true or
 		snapshot.firewall_perimeter_safe ~= true or
