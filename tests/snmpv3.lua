@@ -35,12 +35,40 @@ end
 assert(snmp.trusted_zone_networks(ambiguous_zone_uci, "mgmt") == nil,
   "a network attached to multiple zones must be rejected")
 
+local function agent_fixture(sections)
+  local fake = {}
+  function fake:foreach(package, section_type, callback)
+    if package == "snmpd" and section_type == "agent" then
+      for _, section in ipairs(sections) do callback(section) end
+    end
+  end
+  return fake
+end
+local good_agent = {
+  [".name"] = "agent", [".type"] = "agent",
+  agentaddress = "UDP:161,UDP6:161",
+}
+assert(snmp.has_expected_agent_listener(agent_fixture({ good_agent })),
+  "the exact UDP/161 IPv4 and IPv6 listener profile is accepted")
+assert(not snmp.has_expected_agent_listener(agent_fixture({
+  { [".name"] = "agent", [".type"] = "agent", agentaddress = "UDP:161,UDP6:162" },
+})), "custom listener ports must not be reported as the managed SNMP endpoint")
+assert(not snmp.has_expected_agent_listener(agent_fixture({
+  { [".name"] = "agent", [".type"] = "agent", agentaddress = "UDP:161,UDP6:161", extra = "unexpected" },
+})), "additional agent options must not bypass the managed listener contract")
+assert(not snmp.has_expected_agent_listener(agent_fixture({
+  good_agent,
+  { [".name"] = "agent6", [".type"] = "agent", agentaddress = "UDP:161" },
+})), "multiple agent address sections must be rejected")
+assert(not snmp.has_expected_agent_listener(agent_fixture({})),
+  "missing SNMP listener configuration must fail closed")
+
 local managed_user = {
   [".name"] = "quantumgrid", [".type"] = "v3",
   username = "quantumgrid-nms", auth_type = "SHA",
   auth_pass = "StrongAuthPassphrase-2026!",
   privacy_type = "AES", privacy_pass = "StrongPrivacySecret-2026!",
-  allow_write = "0", RestrictedOID = ".1.3.6.1.2.1",
+  allow_write = "0", RestrictedOID = ".1.3.6.1.2.1.1",
   source_zone = "mgmt",
 }
 assert(snmp.has_only_managed_user_options(managed_user))
@@ -89,7 +117,7 @@ assert(valid and valid.enabled)
 assert(valid.username == "quantumgrid-nms")
 assert(valid.auth_type == "SHA" and valid.privacy_type == "AES")
 assert(valid.allow_write == "0" and valid.security_level == "authPriv")
-assert(valid.restricted_oid == ".1.3.6.1.2.1")
+assert(valid.restricted_oid == ".1.3.6.1.2.1.1")
 assert(valid.source_zone == "mgmt")
 assert(valid.auth_pass == input.auth_pass and valid.privacy_pass == input.privacy_pass)
 
@@ -126,11 +154,12 @@ local ready_status = snmp.classify_status({
   available = true,
   enabled = true,
   snmp_version = "v3",
+  agent_listener_configured = true,
   username = "quantumgrid-nms",
   auth_type = "SHA",
   privacy_type = "AES",
   allow_write = "0",
-  restricted_oid = ".1.3.6.1.2.1",
+  restricted_oid = ".1.3.6.1.2.1.1",
   source_zone_class = "internal",
   firewall_inventory_available = true,
   firewall_rule_present = true,
@@ -151,6 +180,7 @@ local ready_status = snmp.classify_status({
 assert(ready_status == "ready")
 for _, overrides in ipairs({
   { user_source_zone = "wan" },
+  { agent_listener_configured = false },
   { network_membership_verified = false },
   { legacy_network_firewall = true },
   { firewall_perimeter_safe = false },
@@ -164,8 +194,9 @@ for _, overrides in ipairs({
   local candidate = {}
   for key, value in pairs({
     available = true, enabled = true, snmp_version = "v3",
+    agent_listener_configured = true,
     username = "quantumgrid-nms", auth_type = "SHA", privacy_type = "AES",
-    allow_write = "0", restricted_oid = ".1.3.6.1.2.1",
+    allow_write = "0", restricted_oid = ".1.3.6.1.2.1.1",
     source_zone = "mgmt", user_source_zone = "mgmt",
     source_zone_class = "internal", firewall_inventory_available = true,
     firewall_rule_present = true, runtime_credentials_present = true,
