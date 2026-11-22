@@ -1505,6 +1505,12 @@ export interface RouterSnmpv3UpdateResult {
   auth_type: string;
   privacy_type: string;
   security_level: "authPriv";
+  allow_write: string;
+  restricted_oid: string;
+  firewall_rule_configured: boolean;
+  firewall_perimeter_safe: boolean;
+  process_running: boolean;
+  private_config_permissions: boolean;
   restarted: true;
   firewall_reloaded: true;
   rolled_back: false;
