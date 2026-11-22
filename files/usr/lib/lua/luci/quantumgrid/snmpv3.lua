@@ -353,6 +353,20 @@ function inspect_persistent_usm_file(fs, path, username, read_fn)
 	if username ~= nil and username ~= "" and not valid_username(username) then
 		return nil, "The managed SNMP username is invalid."
 	end
+	local directory = path:match("^(.*)/[^/]+$")
+	if type(directory) ~= "string" or directory == "" then
+		return nil, "The Net-SNMP persistent database path has no verifiable parent directory."
+	end
+	local directory_ok, directory_stat = pcall(fs.lstat, directory)
+	if not directory_ok then
+		return nil, "The Net-SNMP persistent directory metadata could not be read."
+	end
+	if directory_stat == nil then
+		return { available = true, present = false, total = 0, matches = 0, user_present = false }
+	end
+	if not private_root_directory(directory_stat) then
+		return nil, "The Net-SNMP persistent directory must be root-owned and not writable by group or other users."
+	end
 	local stat_ok, stat = pcall(fs.lstat, path)
 	if not stat_ok then
 		return nil, "The Net-SNMP persistent user database metadata could not be read."
