@@ -3966,18 +3966,20 @@ local function snmpv3_status(uci, fs)
 		result.privacy_type = type(user.privacy_type) == "string" and user.privacy_type or ""
 		result.allow_write = type(user.allow_write) == "string" and user.allow_write or ""
 		result.restricted_oid = type(user.RestrictedOID) == "string" and user.RestrictedOID or ""
-		result.source_zone = type(user.source_zone) == "string" and user.source_zone or ""
+		result.managed_user_section = user[".name"] == "quantumgrid"
 	end
 	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
 	result.firewall_perimeter_safe = perimeter_safe
-	result.source_zone_class = zones_readable and zones[result.source_zone] and
-		zones[result.source_zone].classification or "unknown"
 
 	local rule_ok, rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
 	if rule_ok and type(rule) == "table" and rule[".type"] == "rule" then
+		result.source_zone = type(rule.src) == "string" and rule.src or ""
+		result.source_zone_class = zones_readable and zones[result.source_zone] and
+			zones[result.source_zone].classification or "unknown"
 		result.firewall_rule_configured = rule.src == result.source_zone and
 			rule.proto == "udp" and rule.dest_port == "161" and
 			rule.target == "ACCEPT" and rule.family == "any" and
+			(rule.enabled == nil or rule.enabled == "1") and
 			result.source_zone_class == "internal" and perimeter_safe
 	end
 	local firewall_conflict = require("luci.quantumgrid.snmpv3").has_conflicting_firewall_rule(uci)
@@ -9158,8 +9160,11 @@ function action_snmpv3_update()
 			"/etc/init.d/firewall reload >/dev/null 2>&1")
 		local snmp_restart_ok, snmp_restart_status = pcall(sys.call,
 			"/etc/init.d/snmpd restart >/dev/null 2>&1")
-		local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
-		local runtime_private = runtime_mode_ok and runtime_mode ~= false
+		local runtime_private = true
+		if general_snapshot.enabled == "1" or fs.access("/var/run/snmpd.conf") == true then
+			local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
+			runtime_private = runtime_mode_ok and runtime_mode ~= false
+		end
 		return general_restored and v3_restored and rule_restored and
 			snmp_commit_ok and snmp_committed == true and
 			firewall_commit_ok and firewall_committed == true and config_private and
