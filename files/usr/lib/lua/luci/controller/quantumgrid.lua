@@ -9024,16 +9024,6 @@ function action_snmpv3_update()
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
 	end
-	if fs.access("/etc/config/snmpd") ~= true or fs.access("/etc/init.d/snmpd") ~= true or
-		fs.access("/usr/sbin/snmpd") ~= true or fs.access("/etc/config/firewall") ~= true or
-		fs.access("/etc/init.d/firewall") ~= true then
-		respond(503, {
-			ok = false,
-			error = "The SNMPv3 daemon, its UCI configuration or the native firewall service is unavailable."
-		})
-		return
-	end
-
 	local input = {
 		confirmed = http.formvalue("confirmed", true),
 		enabled = http.formvalue("enabled", true),
@@ -9042,7 +9032,27 @@ function action_snmpv3_update()
 		privacy_pass = http.formvalue("privacy_pass", true),
 		source_zone = http.formvalue("source_zone", true)
 	}
-	local zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
+	if fs.access("/etc/config/snmpd") ~= true or fs.access("/etc/init.d/snmpd") ~= true or
+		fs.access("/usr/sbin/snmpd") ~= true then
+		respond(503, {
+			ok = false,
+			error = "The SNMPv3 daemon or its UCI configuration is unavailable."
+		})
+		return
+	end
+	local firewall_available = fs.access("/etc/config/firewall") == true and
+		fs.access("/etc/init.d/firewall") == true
+	if input.enabled == "1" and not firewall_available then
+		respond(503, {
+			ok = false,
+			error = "The firewall service is unavailable; SNMPv3 cannot be enabled without a verified management-zone rule."
+		})
+		return
+	end
+	local zones, zones_readable, perimeter_safe = {}, false, false
+	if firewall_available then
+		zones, zones_readable, perimeter_safe = snmpv3_zone_inventory(uci)
+	end
 	if input.enabled == "1" and not zones_readable then
 		respond(503, { ok = false, error = "The firewall-zone inventory could not be read safely." })
 		return
@@ -9115,12 +9125,15 @@ function action_snmpv3_update()
 		end
 	end
 
-	local rule_read_ok, existing_rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
+	local rule_read_ok, existing_rule = true, nil
+	if firewall_available then
+		rule_read_ok, existing_rule = pcall(uci.get_all, uci, "firewall", "quantumgrid_snmpv3")
+	end
 	if not rule_read_ok then
 		respond(503, { ok = false, error = "The reserved SNMPv3 firewall rule could not be inspected." })
 		return
 	end
-	if type(existing_rule) == "table" and not validator.has_only_managed_firewall_options(existing_rule) then
+	if firewall_available and type(existing_rule) == "table" and not validator.has_only_managed_firewall_options(existing_rule) then
 		respond(409, { ok = false, error = "The reserved SNMPv3 firewall section has an incompatible type or unmanaged options." })
 		return
 	end
@@ -9184,32 +9197,41 @@ function action_snmpv3_update()
 
 	local function restore_all()
 		pcall(uci.revert, uci, "snmpd")
-		pcall(uci.revert, uci, "firewall")
+		if firewall_available then pcall(uci.revert, uci, "firewall") end
 		local general_restored = restore_section("snmpd", "general", "snmpd",
 			general_snapshot, { "enabled", "snmp_version", "network" })
 		local v3_restored = restore_section("snmpd", "quantumgrid", "v3",
 			v3_snapshot, { "username", "auth_type", "auth_pass", "privacy_type",
 				"privacy_pass", "allow_write", "RestrictedOID", "source_zone" })
-		local rule_restored = restore_section("firewall", "quantumgrid_snmpv3", "rule",
-			rule_snapshot, { "name", "src", "proto", "dest_port", "target", "family", "enabled" })
+		local rule_restored = true
+		if firewall_available then
+			rule_restored = restore_section("firewall", "quantumgrid_snmpv3", "rule",
+				rule_snapshot, { "name", "src", "proto", "dest_port", "target", "family", "enabled" })
+		end
 		local snmp_commit_ok, snmp_committed = false, false
-		local firewall_commit_ok, firewall_committed = false, false
+		local firewall_commit_ok, firewall_committed = true, true
 		if general_restored and v3_restored then
 			snmp_commit_ok, snmp_committed = pcall(uci.commit, uci, "snmpd")
 		end
-		if rule_restored then
+		if firewall_available and rule_restored then
 			firewall_commit_ok, firewall_committed = pcall(uci.commit, uci, "firewall")
 		end
 		local config_mode_ok, config_mode = pcall(fs.chmod, "/etc/config/snmpd", 384)
 		local config_private = config_mode_ok and config_mode ~= false
-		local firewall_reload_ok, firewall_reload_status = pcall(sys.call,
-			"/etc/init.d/firewall reload >/dev/null 2>&1")
+		local firewall_reload_ok, firewall_reload_status = true, 0
+		if firewall_available then
+			firewall_reload_ok, firewall_reload_status = pcall(sys.call,
+				"/etc/init.d/firewall reload >/dev/null 2>&1")
+		end
 		local snmp_restart_ok, snmp_restart_status = pcall(sys.call,
 			"/etc/init.d/snmpd restart >/dev/null 2>&1")
 		local runtime_private = true
-		if general_snapshot.enabled == "1" or fs.access("/var/run/snmpd.conf") == true then
+		if general_snapshot.enabled == "1" then
 			local runtime_mode_ok, runtime_mode = pcall(fs.chmod, "/var/run/snmpd.conf", 384)
 			runtime_private = runtime_mode_ok and runtime_mode ~= false
+		elseif fs.access("/var/run/snmpd.conf") == true then
+			local remove_ok, removed = pcall(os.remove, "/var/run/snmpd.conf")
+			runtime_private = remove_ok and removed == true and fs.access("/var/run/snmpd.conf") ~= true
 		end
 		return general_restored and v3_restored and rule_restored and
 			snmp_commit_ok and snmp_committed == true and
@@ -9262,6 +9284,11 @@ function action_snmpv3_update()
 				return
 			end
 		end
+		if not firewall_available then
+			pcall(uci.revert, uci, "snmpd")
+			fail("The firewall became unavailable before the SNMPv3 management rule could be staged.", 503)
+			return
+		end
 		if not ensure_section("firewall", "quantumgrid_snmpv3", "rule") then
 			pcall(uci.revert, uci, "snmpd")
 			pcall(uci.revert, uci, "firewall")
@@ -9294,7 +9321,7 @@ function action_snmpv3_update()
 				return
 			end
 		end
-		if rule_snapshot then
+		if firewall_available and rule_snapshot then
 			local delete_ok, deleted = pcall(uci.delete, uci, "firewall", "quantumgrid_snmpv3")
 			if not delete_ok or deleted == false then
 				pcall(uci.revert, uci, "snmpd")
@@ -9306,7 +9333,10 @@ function action_snmpv3_update()
 	end
 
 	local snmp_commit_ok, snmp_committed = pcall(uci.commit, uci, "snmpd")
-	local firewall_commit_ok, firewall_committed = pcall(uci.commit, uci, "firewall")
+	local firewall_commit_ok, firewall_committed = true, true
+	if firewall_available then
+		firewall_commit_ok, firewall_committed = pcall(uci.commit, uci, "firewall")
+	end
 	if not snmp_commit_ok or snmp_committed ~= true or
 		not firewall_commit_ok or firewall_committed ~= true then
 		local rolled_back = restore_all()
@@ -9325,9 +9355,12 @@ function action_snmpv3_update()
 		return
 	end
 
-	local firewall_reload_ok, firewall_reload_status = pcall(sys.call,
-		"/etc/init.d/firewall reload >/dev/null 2>&1")
-	if not firewall_reload_ok or firewall_reload_status ~= 0 then
+	local firewall_reload_ok, firewall_reload_status = true, 0
+	if firewall_available then
+		firewall_reload_ok, firewall_reload_status = pcall(sys.call,
+			"/etc/init.d/firewall reload >/dev/null 2>&1")
+	end
+	if firewall_available and (not firewall_reload_ok or firewall_reload_status ~= 0) then
 		local rolled_back = restore_all()
 		fail(rolled_back and "The firewall could not apply the SNMPv3 management-zone rule; previous settings were restored."
 			or "The firewall reload failed and rollback could not be confirmed. Inspect firewall and SNMP service state locally.", 502)
@@ -9404,7 +9437,7 @@ function action_snmpv3_update()
 		private_config_permissions = resulting.private_config_permissions,
 		runtime_credentials_private = resulting.runtime_credentials_private,
 		restarted = true,
-		firewall_reloaded = true,
+		firewall_reloaded = firewall_available and firewall_reload_ok and firewall_reload_status == 0 or false,
 		rolled_back = false,
 		sampled_at = resulting.sampled_at
 	})
