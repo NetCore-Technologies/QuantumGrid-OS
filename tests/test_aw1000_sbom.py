@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -78,13 +80,27 @@ class Aw1000SbomTests(unittest.TestCase):
         self.assertEqual(len(sbom["dependencies"][0]["dependsOn"]), 3)
 
     def test_cli_writes_json_and_refuses_to_overwrite_existing_sbom(self) -> None:
-        sbom = SBOM.build_sbom(self.args)
-        with self.output.open("x", encoding="utf-8") as handle:
-            json.dump(sbom, handle)
-        self.assertEqual(json.loads(self.output.read_text())["specVersion"], "1.6")
-        with self.assertRaises(FileExistsError):
-            with self.output.open("x", encoding="utf-8"):
-                pass
+        command = [
+            sys.executable,
+            str(SCRIPT),
+            "--manifest", str(self.manifest),
+            "--firmware-image", str(self.firmware),
+            "--packages-archive", str(self.packages),
+            "--output", str(self.output),
+            "--version", self.args.version,
+            "--target", self.args.target,
+            "--profile", self.args.profile,
+            "--build-profile", self.args.build_profile,
+            "--source-commit", self.args.source_commit,
+            "--openwrt-commit", self.args.openwrt_commit,
+        ]
+        first = subprocess.run(command, check=False, capture_output=True, text=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        sbom = json.loads(self.output.read_text(encoding="utf-8"))
+        self.assertEqual(sbom["specVersion"], "1.6")
+        second = subprocess.run(command, check=False, capture_output=True, text=True)
+        self.assertNotEqual(second.returncode, 0)
+        self.assertIn("File exists", second.stderr)
 
     def test_manifest_rejects_malformed_and_duplicate_rows(self) -> None:
         for invalid in (
