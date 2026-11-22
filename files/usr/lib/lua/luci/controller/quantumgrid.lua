@@ -3877,27 +3877,6 @@ local function snmpv3_zone_inventory(uci)
 end
 
 
-local function snmpv3_legacy_access_configured(uci)
-	local legacy = false
-	local checked = { "com2sec", "com2sec6", "access_default", "access_HostName", "access_HostIP" }
-	for _, section_type in ipairs(checked) do
-		local ok = pcall(function()
-			uci:foreach("snmpd", section_type, function() legacy = true end)
-		end)
-		if not ok then return nil end
-	end
-	local groups_ok = pcall(function()
-		uci:foreach("snmpd", "group", function(section)
-			if section.version == "v1" or section.version == "v2c" or section.version == "any" then
-				legacy = true
-			end
-		end)
-	end)
-	if not groups_ok then return nil end
-	return legacy
-end
-
-
 local function snmpv3_status(uci, fs)
 	local validator = require "luci.quantumgrid.snmpv3"
 	local result = {
@@ -3948,7 +3927,7 @@ local function snmpv3_status(uci, fs)
 	result.enabled = general.enabled == "1"
 	result.legacy_network_firewall = type(general.network) == "table" and #general.network > 0 or
 		(type(general.network) == "string" and general.network ~= "")
-	local legacy = snmpv3_legacy_access_configured(uci)
+	local legacy = validator.legacy_access_configured(uci)
 	if legacy == nil then
 		result.available = false
 		return result
@@ -9110,7 +9089,7 @@ function action_snmpv3_update()
 			})
 			return
 		end
-		local legacy = snmpv3_legacy_access_configured(uci)
+		local legacy = validator.legacy_access_configured(uci)
 		if legacy ~= false then
 			respond(409, {
 				ok = false,
