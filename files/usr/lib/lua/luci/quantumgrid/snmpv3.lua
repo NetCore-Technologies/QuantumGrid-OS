@@ -1,6 +1,6 @@
 module("luci.quantumgrid.snmpv3", package.seeall)
 
-local VALID_OID = ".1.3.6.1.2.1"
+local VALID_OID = ".1.3.6.1.2.1.1"
 local ALLOWED_SECRET_CHARACTERS =
 	"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,-./:;<=>?@[]^_{|}~"
 
@@ -173,6 +173,31 @@ function has_only_managed_firewall_options(section)
 	return true
 end
 
+function has_expected_agent_listener(uci)
+	if type(uci) ~= "table" or type(uci.foreach) ~= "function" then return false end
+	local count = 0
+	local valid = false
+	local ok = pcall(function()
+		uci:foreach("snmpd", "agent", function(section)
+			count = count + 1
+			if type(section) ~= "table" or section[".type"] ~= "agent" or
+				section[".name"] ~= "agent" then
+				valid = false
+				return
+			end
+			for option in pairs(section) do
+				if type(option) ~= "string" or
+					(option:sub(1, 1) ~= "." and option ~= "agentaddress") then
+					valid = false
+					return
+				end
+			end
+			valid = section.agentaddress == "UDP:161,UDP6:161"
+		end)
+	end)
+	return ok and count == 1 and valid
+end
+
 function private_root_file(stat)
 	if type(stat) ~= "table" or tonumber(stat.uid) ~= 0 then return false end
 	local mode = tonumber(stat.modedec or stat.mode)
@@ -264,6 +289,7 @@ function classify_status(snapshot)
 		end
 		return "disabled"
 	end
+	if snapshot.agent_listener_configured ~= true or
 	if snapshot.snmp_version ~= "v3" or
 		not valid_username(snapshot.username) or
 		snapshot.auth_type ~= "SHA" or
