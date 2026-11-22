@@ -50,6 +50,10 @@ const ready = {
   private_config_permissions: true,
   runtime_credentials_present: true,
   runtime_credentials_private: true,
+  persistent_inventory_available: true,
+  persistent_user_present: true,
+  persistent_user_matches: 1,
+  persistent_usm_user_count: 1,
   restarted: true,
   lock_released: true,
   firewall_reloaded: true,
@@ -120,6 +124,10 @@ test("rejects API success responses unless they prove SHA/AES authPriv, read-onl
     { ...ready, firewall_rule_configured: false },
     { ...ready, firewall_perimeter_safe: false },
     { ...ready, process_running: false },
+    { ...ready, persistent_inventory_available: false },
+    { ...ready, persistent_user_present: false },
+    { ...ready, persistent_user_matches: 0 },
+    { ...ready, persistent_usm_user_count: 2 },
     { ...ready, private_config_permissions: false },
     { ...ready, source_zone: "wan" },
     { ...ready, lock_released: false },
@@ -157,6 +165,10 @@ test("allows emergency SNMP disable when the firewall service is unavailable", a
     private_config_permissions: true,
     runtime_credentials_present: false,
     runtime_credentials_private: true,
+    persistent_inventory_available: true,
+    persistent_user_present: false,
+    persistent_user_matches: 0,
+    persistent_usm_user_count: 0,
   });
   const result = await updateRouterSnmpv3({
     enabled: false,
@@ -196,6 +208,10 @@ test("disables SNMPv3 without resending or retaining passphrases", async () => {
       private_config_permissions: true,
       runtime_credentials_present: false,
       runtime_credentials_private: true,
+      persistent_inventory_available: true,
+      persistent_user_present: false,
+      persistent_user_matches: 0,
+      persistent_usm_user_count: 0,
     });
   };
   const result = await updateRouterSnmpv3({
