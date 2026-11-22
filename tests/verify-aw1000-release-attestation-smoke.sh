@@ -84,6 +84,23 @@ fi
   exit 1
 }
 
+# Reject malformed versions before contacting GitHub.
+BAD_VERSION_IMAGE="$WORK/QuantumGrid-OS-vnot-semver-AW1000-squashfs-factory.ubi"
+cp "$IMAGE" "$BAD_VERSION_IMAGE"
+(
+  cd "$WORK"
+  sha256sum "$(basename "$BAD_VERSION_IMAGE")" > "$MANIFEST"
+)
+: > "$GH_ARGS_LOG"
+if sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$BAD_VERSION_IMAGE" "$MANIFEST" >/dev/null 2>&1; then
+  echo "ERROR: a malformed release version was accepted" >&2
+  exit 1
+fi
+[ ! -s "$GH_ARGS_LOG" ] || {
+  echo "ERROR: GitHub was contacted for an invalid release version" >&2
+  exit 1
+}
+
 # A failed attestation must fail even when the SHA-256 manifest is correct.
 (
   cd "$WORK"
@@ -94,4 +111,4 @@ if GH_FAIL=1 sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$IMAGE" "$
   exit 1
 fi
 
-echo "AW1000 release attestation verification: checksum-first and signer-workflow enforcement passed"
+echo "AW1000 release attestation verification: checksum-first, exact tag, SLSA v1 and hosted-runner policy passed"
