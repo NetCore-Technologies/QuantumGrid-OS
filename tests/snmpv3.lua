@@ -25,6 +25,20 @@ assert(networks and #networks == 1 and networks[1] == "lan")
 assert(snmp.trusted_zone_networks(zone_uci, "wan") == nil,
   "WAN zones must never be trusted SNMP sources")
 
+local function membership_fixture(network)
+  local fake = {}
+  function fake:foreach(package, section_type, callback)
+    if package == "firewall" and section_type == "zone" then
+      callback({ [".name"] = "mgmt", name = "mgmt", network = { network } })
+    end
+  end
+  return fake
+end
+for _, external_network in ipairs({ "wan", "wan6", "wwan", "wwan0", "cellular", "lte", "5g" }) do
+  assert(snmp.trusted_zone_networks(membership_fixture(external_network), "mgmt") == nil,
+    "an internal zone must not trust external logical network " .. external_network)
+end
+
 local ambiguous_zone_uci = {}
 function ambiguous_zone_uci:foreach(package, section_type, callback)
   if package == "firewall" and section_type == "zone" then
