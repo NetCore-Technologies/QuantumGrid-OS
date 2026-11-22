@@ -781,8 +781,10 @@ managed cleanup and firewall update succeed; live readiness requires exactly one
 record for the managed user and no additional persistent users.
 
 When disabling a managed user, unrelated persistent users are deliberately retained rather than
-silently deleted. The SNMP daemon remains disabled and QuantumGrid reports a review posture if
-other persistent user records remain; inspect those accounts before enabling SNMP again. If the
+silently deleted. A reserved UCI user section containing unknown options, or additional SNMPv3 user
+sections, is also preserved rather than destructively rewritten. The SNMP daemon remains disabled
+and QuantumGrid reports a review posture while any such user definitions or persistent records
+remain; inspect them through a trusted maintenance path before enabling SNMP again. If the
 persistent database or its directory fails ownership, type, mode, size or parse checks, the
 operation fails closed rather than modifying it. Rollback restores UCI/firewall configuration
 and restarts the previous daemon so Net-SNMP can re-localize its previous key.
