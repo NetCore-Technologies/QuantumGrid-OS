@@ -1501,6 +1501,10 @@ export interface RouterSnmpv3Status {
   private_config_permissions: boolean;
   runtime_credentials_present: boolean;
   runtime_credentials_private: boolean;
+  persistent_inventory_available: boolean;
+  persistent_user_present: boolean;
+  persistent_user_matches: number;
+  persistent_usm_user_count: number;
   sampled_at: number;
   trusted_zones?: RouterSnmpv3TrustedZone[];
 }
@@ -1533,6 +1537,10 @@ export interface RouterSnmpv3UpdateResult {
   private_config_permissions: boolean;
   runtime_credentials_present: boolean;
   runtime_credentials_private: boolean;
+  persistent_inventory_available: boolean;
+  persistent_user_present: boolean;
+  persistent_user_matches: number;
+  persistent_usm_user_count: number;
   restarted: true;
   lock_released: true;
   rolled_back: false;
@@ -3492,8 +3500,17 @@ export async function updateRouterSnmpv3(input: {
     !("firewall_rule_present" in payload) || typeof payload.firewall_rule_present !== "boolean" ||
     !("runtime_credentials_present" in payload) || typeof payload.runtime_credentials_present !== "boolean" ||
     !("runtime_credentials_private" in payload) || typeof payload.runtime_credentials_private !== "boolean" ||
-    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.agent_listener_configured !== true || payload.legacy_community_configured !== false || payload.legacy_network_firewall !== false || payload.firewall_inventory_available !== true || payload.firewall_conflict !== false || payload.managed_user_section !== true || payload.managed_firewall_rule !== true || payload.network_membership_verified !== true || payload.firewall_rule_present !== true || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true)) ||
-    (!input.enabled && (payload.process_running !== false || payload.runtime_credentials_present !== false || payload.runtime_credentials_private !== true || payload.status === "ready"))
+    !("persistent_inventory_available" in payload) || typeof payload.persistent_inventory_available !== "boolean" ||
+    !("persistent_user_present" in payload) || typeof payload.persistent_user_present !== "boolean" ||
+    !("persistent_user_matches" in payload) || typeof payload.persistent_user_matches !== "number" ||
+    !("persistent_usm_user_count" in payload) || typeof payload.persistent_usm_user_count !== "number" ||
+    (input.enabled && (payload.status !== "ready" || payload.username !== input.username || payload.source_zone !== input.sourceZone || payload.auth_type !== "SHA" || payload.privacy_type !== "AES" || payload.agent_listener_configured !== true || payload.legacy_community_configured !== false || payload.legacy_network_firewall !== false || payload.firewall_inventory_available !== true || payload.firewall_conflict !== false || payload.managed_user_section !== true || payload.managed_firewall_rule !== true || payload.network_membership_verified !== true || payload.firewall_rule_present !== true || payload.allow_write !== "0" || payload.restricted_oid !== ".1.3.6.1.2.1.1" || payload.firewall_rule_configured !== true || payload.firewall_perimeter_safe !== true || payload.process_running !== true || payload.private_config_permissions !== true || payload.runtime_credentials_present !== true || payload.runtime_credentials_private !== true ||
+      payload.persistent_inventory_available !== true || payload.persistent_user_present !== true ||
+      payload.persistent_user_matches !== 1 || payload.persistent_usm_user_count !== 1)) ||
+    (!input.enabled && (payload.process_running !== false || payload.runtime_credentials_present !== false ||
+      payload.runtime_credentials_private !== true || payload.persistent_inventory_available !== true ||
+      payload.persistent_user_present !== false || payload.persistent_user_matches !== 0 ||
+      payload.persistent_usm_user_count !== 0 || payload.status !== "disabled"))
   ) {
     throw new Error("The router did not confirm the selected read-only SNMPv3 authPriv and firewall posture.");
   }
