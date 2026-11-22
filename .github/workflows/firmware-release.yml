@@ -1,23 +1,11 @@
 name: QuantumGrid AW1000 firmware release
 
 on:
-  # Full OpenWrt builds run for published-version tags or an explicit manual dispatch.
-  # Routine main-branch changes are covered by the fast lint, build and firmware-smoke gates.
+  # Full OpenWrt builds run only for published-version tags or an explicit manual dispatch.
+  # Ordinary main-branch changes use the fast CI and firmware-smoke gates instead.
   push:
-    branches:
-      - main
     tags:
       - "qg-v*"
-    paths:
-      - ".github/workflows/firmware-release.yml"
-      - "build.sh"
-      - "configs/**"
-      - "files/**"
-      - "profiles/**"
-      - "scripts/**"
-      - "tests/**"
-      - "ui/quantumgrid/**"
-      - "quantumgrid-configure.sh"
   workflow_dispatch:
     inputs:
       openwrt_ref:
