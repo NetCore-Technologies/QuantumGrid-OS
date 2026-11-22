@@ -173,6 +173,33 @@ function has_only_managed_firewall_options(section)
 	return true
 end
 
+function legacy_access_configured(uci)
+	if type(uci) ~= "table" or type(uci.foreach) ~= "function" then return nil end
+	local legacy = false
+	local checked = {
+		"com2sec", "com2sec6", "access", "access_default",
+		"access_HostName", "access_HostIP", "trap_HostName", "trap_HostIP"
+	}
+	for _, section_type in ipairs(checked) do
+		local ok = pcall(function()
+			uci:foreach("snmpd", section_type, function() legacy = true end)
+		end)
+		if not ok then return nil end
+	end
+	local groups_ok = pcall(function()
+		uci:foreach("snmpd", "group", function(section)
+			if type(section) ~= "table" then
+				legacy = true
+			elseif section.version == "v1" or section.version == "v2c" or
+				section.version == "any" then
+				legacy = true
+			end
+		end)
+	end)
+	if not groups_ok then return nil end
+	return legacy
+end
+
 function has_expected_agent_listener(uci)
 	if type(uci) ~= "table" or type(uci.foreach) ~= "function" then return false end
 	local count = 0
