@@ -4033,8 +4033,8 @@ local function snmpv3_status(uci, fs, persistent_username_override)
 		fs, "/usr/lib/snmp/snmpd.conf", persistent_username ~= "" and persistent_username or nil)
 	if type(persistent) == "table" and persistent.available == true then
 		result.persistent_inventory_available = true
-		result.persistent_user_present = persistent.user_present == true
-		result.persistent_user_matches = tonumber(persistent.matches) or 0
+		result.persistent_user_present = persistent_username_override == false and false or persistent.user_present == true
+		result.persistent_user_matches = persistent_username_override == false and 0 or tonumber(persistent.matches) or 0
 		result.persistent_usm_user_count = tonumber(persistent.total) or 0
 	end
 	result.status = validator.classify_status(result)
@@ -9613,7 +9613,7 @@ function action_snmpv3_update()
 		end
 	end
 
-	local disabled_username = v3_snapshot and v3_snapshot.username or nil
+	local disabled_username = v3_snapshot and v3_snapshot.username or false
 	local resulting, state_ready = validator.wait_for_state(
 		function() return snmpv3_status(uci, fs, disabled_username) end,
 		function() return nixio.nanosleep(0, 200000000) end,
