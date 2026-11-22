@@ -42,6 +42,12 @@ local function legacy_fixture(section_type, sections)
       for _, section in ipairs(sections or {}) do callback(section) end
     end
   end
+  function fake.get_all(_, package, section)
+    if package == "snmpd" and section == "general" then
+      return { [".name"] = "general", [".type"] = "snmpd" }
+    end
+    return nil
+  end
   return fake
 end
 for _, section_type in ipairs({
@@ -64,6 +70,23 @@ assert(snmp.legacy_access_configured(legacy_fixture("group", {
 assert(snmp.legacy_access_configured(legacy_fixture("group", {
   { version = "usm" }
 })) == false)
+
+local general_trap = legacy_fixture("unmanaged", {})
+function general_trap.get_all(_, package, section)
+  if package == "snmpd" and section == "general" then
+    return { [".name"] = "general", [".type"] = "snmpd", trapcommunity = "legacy-secret" }
+  end
+end
+assert(snmp.legacy_access_configured(general_trap) == true,
+  "a general-section SNMP trap community must block the managed authPriv profile")
+
+local outgoing_sink = legacy_fixture("trapsink", { { community = "legacy-secret" } })
+assert(snmp.legacy_access_configured(outgoing_sink) == true,
+  "outgoing community-based trap destinations must be treated as unmanaged SNMP configuration")
+
+local executable_extension = legacy_fixture("extend", { { name = "custom", command = "/bin/sh" } })
+assert(snmp.legacy_access_configured(executable_extension) == true,
+  "unmanaged executable SNMP extensions must not coexist with the constrained system view")
 
 local expected_snmpd_argv = table.concat({
   "/usr/sbin/snmpd", "-f", "-r", "-p", "/var/run/snmpd.pid",
