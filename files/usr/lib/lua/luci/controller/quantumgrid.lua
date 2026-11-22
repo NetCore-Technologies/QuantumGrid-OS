@@ -8679,7 +8679,7 @@ function action_remote_syslog_update()
 					return
 				end
 			end
-		else
+		elseif tunnel_snapshot_exists then
 			if not set_option("stunnel", tunnel_name, "enabled", "0") then
 				pcall(uci.revert, uci, "system")
 				pcall(uci.revert, uci, "stunnel")
