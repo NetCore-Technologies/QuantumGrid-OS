@@ -133,10 +133,14 @@ function trusted_zone_networks(uci, zone_name)
 	if not ok or selected_count ~= 1 or type(selected_networks) ~= "table" or #selected_networks == 0 then
 		return nil, "The selected management zone has no unique, readable network membership."
 	end
+	local management = require "luci.quantumgrid.management_transport"
 	for _, network in ipairs(selected_networks) do
 		local memberships = owners[network]
 		if type(memberships) ~= "table" or #memberships ~= 1 or memberships[1] ~= zone_name then
 			return nil, "A management network is attached to multiple firewall zones; SNMP exposure is ambiguous."
+		end
+		if management.classify_firewall_zone_name(network) == "external" then
+			return nil, "The internal management zone contains a WAN or cellular network; SNMP exposure is unsafe."
 		end
 	end
 	table.sort(selected_networks)
