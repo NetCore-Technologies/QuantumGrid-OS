@@ -156,6 +156,9 @@ function classify_status(snapshot)
 		snapshot.allow_write ~= "0" or
 		snapshot.restricted_oid ~= VALID_OID or
 		snapshot.source_zone_class ~= "internal" or
+		snapshot.legacy_network_firewall == true or
+		snapshot.firewall_perimeter_safe ~= true or
+		snapshot.firewall_conflict == true or
 		snapshot.firewall_rule_configured ~= true or
 		snapshot.process_running ~= true then
 		return "review"
