@@ -30,6 +30,7 @@ Every completed build must include:
 - The exact AW1000 build configuration
 - `BUILDINFO.txt` and `SHA256SUMS`
 - `verify-aw1000-release-manifest.sh` for on-router checksum enforcement
+- `verify-aw1000-release-attestation.sh` for host-side GitHub/Sigstore provenance verification
 - `inspect-aw1000-install-target.sh` for read-only board, mount, MTD and tool inspection
 
 The factory `.ubi` is the only persistent AW1000 firmware image published by QuantumGrid.
@@ -43,7 +44,7 @@ asset's SHA-256 digest to the repository, source commit, workflow identity and b
 The checksum manifest remains useful for transfer-corruption checks, but it is not the
 publisher-authentication mechanism.
 
-Install and authenticate GitHub CLI, download the release assets, then verify them before transferring the factory image to the router:
+Install and authenticate GitHub CLI, download the release assets, then verify the factory image before transferring it to the router:
 
 ```bash
 sha256sum -c SHA256SUMS
@@ -51,8 +52,12 @@ sh verify-aw1000-release-attestation.sh QuantumGrid-OS-<version>-AW1000-squashfs
 ```
 
 The bundled host-side verifier checks the image digest first, then requires a GitHub artifact
-attestation from this repository and the exact firmware-release workflow. Do not flash an image
-when either step fails. The on-router installer still enforces SHA-256 only; it does not verify
+attestation from this repository, the exact firmware-release workflow, the precise `refs/tags/qg-v…`
+source ref inferred from the versioned image filename, SLSA provenance v1 and a GitHub-hosted
+runner. It rejects manual-build filenames and requires GitHub CLI 2.102.0 or newer because an
+older CLI compared `--source-ref` case-insensitively. The publish job itself runs only for a pushed
+version tag; a manual dispatch can build and attest inspection artifacts but cannot publish a
+release, even when dispatched against a tag. Do not flash an image when any verification step fails. The on-router installer still enforces SHA-256 only; it does not verify
 Sigstore attestations itself. Keep host-side verification as a required release-installation step.
 The initramfs `.itb` is a RAM-boot artifact and does not install persistent firmware.
 The AW1000 profile does not produce or publish a `sysupgrade.bin` image; the release workflow
