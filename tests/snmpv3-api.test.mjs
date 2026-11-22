@@ -31,9 +31,10 @@ const ready = {
   source_zone: "mgmt",
   auth_type: "SHA",
   privacy_type: "AES",
+  agent_listener_configured: true,
   security_level: "authPriv",
   allow_write: "0",
-  restricted_oid: ".1.3.6.1.2.1",
+  restricted_oid: ".1.3.6.1.2.1.1",
   firewall_available: true,
   firewall_rule_present: true,
   firewall_rule_configured: true,
@@ -70,8 +71,9 @@ test("enables read-only SNMPv3 authPriv through an authenticated same-origin req
   assert.equal(form.get("source_zone"), validInput.sourceZone);
   assert.equal(result.auth_type, "SHA");
   assert.equal(result.privacy_type, "AES");
+  assert.equal(result.agent_listener_configured, true);
   assert.equal(result.allow_write, "0");
-  assert.equal(result.restricted_oid, ".1.3.6.1.2.1");
+  assert.equal(result.restricted_oid, ".1.3.6.1.2.1.1");
   assert.equal(result.firewall_rule_configured, true);
   assert.equal(result.private_config_permissions, true);
 });
@@ -96,6 +98,7 @@ test("rejects API success responses unless they prove SHA/AES authPriv, read-onl
     { ...ready, status: "review" },
     { ...ready, auth_type: "MD5" },
     { ...ready, privacy_type: "DES" },
+    { ...ready, agent_listener_configured: false },
     { ...ready, allow_write: "1" },
     { ...ready, restricted_oid: ".1" },
     { ...ready, firewall_rule_configured: false },
