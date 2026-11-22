@@ -68,9 +68,15 @@ repartition flash, change MIBIB, write bootloader data or attempt to support exp
 1. Connect the UART console and boot the matching AW1000 initramfs temporarily using the
    device's U-Boot/TFTP procedure above. Do not run the installer from an installed NoobWRT or
    OpenWrt root filesystem.
-2. Copy the read-only `inspect-aw1000-install-target.sh` helper as well if the target layout has not yet been recorded. Copy the factory UBI image, `install-aw1000-ubi.sh`, `verify-aw1000-release-manifest.sh`
-   and `SHA256SUMS` into the same directory on the RAM-booted router (for example `/tmp`).
-   You may also verify the release on your Linux host with `sha256sum -c SHA256SUMS` before transfer.
+2. Before transfer, verify all release checksums and the factory image's GitHub attestation on your Linux host:
+
+   ```sh
+   sha256sum -c SHA256SUMS
+   sh verify-aw1000-release-attestation.sh QuantumGrid-OS-<version>-AW1000-squashfs-factory.ubi SHA256SUMS
+   ```
+
+   Copy the read-only `inspect-aw1000-install-target.sh` helper as well if the target layout has not yet been recorded. Copy only the factory UBI image, `install-aw1000-ubi.sh`, `verify-aw1000-release-manifest.sh`
+   and `SHA256SUMS` into the same directory on the RAM-booted router (for example `/tmp`). The host-side attestation tool runs on the trusted Linux workstation, not on the router.
 3. Run the read-only preflight first:
 
    ```sh
