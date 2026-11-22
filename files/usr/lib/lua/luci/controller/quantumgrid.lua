@@ -9003,8 +9003,22 @@ function action_snmpv3_update()
 	local host_header = http.getenv("HTTP_HOST")
 	local origin = http.getenv("HTTP_ORIGIN")
 	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+	local update_lock_path = "/tmp/quantumgrid-snmpv3-update.lock"
+	local update_lock_acquired = false
 
 	local function respond(status, payload)
+		if update_lock_acquired then
+			local release_ok, release_status = pcall(sys.call,
+				"/bin/rmdir " .. update_lock_path .. " >/dev/null 2>&1")
+				update_lock_acquired = false
+			payload.lock_released = release_ok and release_status == 0
+			if not payload.lock_released then
+				payload.ok = false
+				payload.error = (payload.error and (payload.error .. " ") or "") ..
+					"The SNMP update lock could not be released; inspect and clear " .. update_lock_path .. " before another change."
+				status = status or 500
+			end
+		end
 		if status then
 			http.status(status, status == 400 and "Bad Request" or
 				status == 403 and "Forbidden" or status == 404 and "Not Found" or
@@ -9026,6 +9040,17 @@ function action_snmpv3_update()
 		respond(403, { ok = false, error = "A same-origin request is required." })
 		return
 	end
+	if fs.access("/bin/mkdir") ~= true or fs.access("/bin/rmdir") ~= true then
+		respond(503, { ok = false, error = "Atomic SNMP configuration locking utilities are unavailable." })
+		return
+	end
+	local lock_ok, lock_status = pcall(sys.call,
+		"/bin/mkdir " .. update_lock_path .. " >/dev/null 2>&1")
+	if not lock_ok or lock_status ~= 0 then
+		respond(409, { ok = false, error = "Another SNMPv3 configuration update is active. Retry after it finishes." })
+		return
+	end
+	update_lock_acquired = true
 	local input = {
 		confirmed = http.formvalue("confirmed", true),
 		enabled = http.formvalue("enabled", true),
