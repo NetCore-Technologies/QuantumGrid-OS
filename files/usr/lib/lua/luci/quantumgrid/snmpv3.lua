@@ -249,6 +249,85 @@ function private_root_file(stat)
 	return mode ~= nil and mode % 512 == 384
 end
 
+local function persistent_octet_string(value)
+	if type(value) ~= "string" then return nil end
+	if value:match("^[A-Za-z0-9 ]+$") then return '"' .. value .. '"' end
+	local hex = {}
+	for index = 1, #value do
+		hex[index] = string.format("%02x", value:byte(index))
+	end
+	return "0x" .. table.concat(hex)
+end
+
+local function persistent_line_tokens(line)
+	local tokens = {}
+	for token in line:gmatch("%S+") do table.insert(tokens, token) end
+	return tokens
+end
+
+function inspect_persistent_usm_users(content)
+	if type(content) ~= "string" or #content > 4 * 1024 * 1024 then
+		return nil, "The Net-SNMP persistent user database is missing, unreadable or too large to inspect safely."
+	end
+	local total = 0
+	local records = {}
+	for line in (content .. "\n"):gmatch("(.-)\n") do
+		local tokens = persistent_line_tokens(line)
+		if tokens[1] == "usmUser" then
+			if #tokens < 11 then
+				return nil, "The Net-SNMP persistent user database contains a malformed usmUser record."
+			end
+			total = total + 1
+			table.insert(records, {
+				username_token = tokens[5],
+				security_name_token = tokens[6]
+			})
+		end
+	end
+	return { total = total, records = records }
+end
+
+function strip_persistent_usm_users(content, usernames)
+	local inventory, inventory_error = inspect_persistent_usm_users(content)
+	if not inventory then return nil, 0, inventory_error end
+	if type(usernames) ~= "table" then return nil, 0, "A username list is required." end
+	local encoded = {}
+	for _, username in ipairs(usernames) do
+		if not valid_username(username) then return nil, 0, "A managed SNMP username is invalid." end
+		encoded[persistent_octet_string(username)] = true
+	end
+	local output = {}
+	local removed = 0
+	for line in (content .. "\n"):gmatch("(.-)\n") do
+		local tokens = persistent_line_tokens(line)
+		local remove = tokens[1] == "usmUser" and
+			(encoded[tokens[5]] == true or encoded[tokens[6]] == true)
+		if remove then
+			removed = removed + 1
+		else
+			table.insert(output, line)
+		end
+	end
+	local result = table.concat(output, "\n")
+	if result ~= "" then result = result .. "\n" end
+	return result, removed
+end
+
+function persistent_user_matches(content, username)
+	local inventory, inventory_error = inspect_persistent_usm_users(content)
+	if not inventory then return nil, inventory_error end
+	if username == nil or username == "" then return inventory.total > 0, inventory.total end
+	if not valid_username(username) then return nil, "The managed SNMP username is invalid." end
+	local encoded = persistent_octet_string(username)
+	local matches = 0
+	for _, record in ipairs(inventory.records) do
+		if record.username_token == encoded or record.security_name_token == encoded then
+			matches = matches + 1
+		end
+	end
+	return matches > 0, matches, inventory.total
+end
+
 function snmpd_process_running(pid_contents, comm_contents, cmdline_contents)
 	if type(pid_contents) ~= "string" then return false end
 	local pid_text = pid_contents:match("^%s*(%d+)%s*$")
