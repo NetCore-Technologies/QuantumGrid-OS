@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -1972,6 +1972,99 @@ function Mwan3HealthEditor({ config, refresh }: {
   );
 }
 
+function Mwan3MemberEditor({ config, interfaces, refresh }: {
+  config: RouterMwan3MemberConfig;
+  interfaces: RouterMwan3InterfaceConfig[];
+  refresh: () => void;
+}) {
+  const availableInterfaces = interfaces
+    .map((item) => item.section)
+    .filter((name) => /^[A-Za-z0-9_-]{1,32}$/.test(name))
+    .sort((left, right) => left.localeCompare(right));
+  const [interfaceName, setInterfaceName] = useState(
+    availableInterfaces.includes(config.interface) ? config.interface : availableInterfaces[0] ?? "",
+  );
+  const [metric, setMetric] = useState(config.metric);
+  const [weight, setWeight] = useState(config.weight);
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const save = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!confirmed || saving || !availableInterfaces.includes(interfaceName)) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      await updateRouterMwan3Member(config.section, interfaceName, metric, weight, confirmed);
+      setNotice({
+        success: true,
+        message: "Member settings were saved and mwan3 restarted. Every policy referencing this member now uses the new metric and weight.",
+      });
+      setConfirmed(false);
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The Multi-WAN member update failed.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <details className="mwan3-member-editor">
+      <summary>Member · {config.section}</summary>
+      {!config.valid ? (
+        <div className="module-message">
+          This member has invalid or unavailable interface, metric or weight settings. Review all fields before applying.
+        </div>
+      ) : null}
+      <form onSubmit={save}>
+        <div className="mwan3-health-editor-grid">
+          <label>
+            WAN interface
+            <select value={interfaceName} onChange={(event) => setInterfaceName(event.target.value)}>
+              {availableInterfaces.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label>
+            Routing metric
+            <input type="number" min={1} max={255} step={1} value={metric}
+              onChange={(event) => setMetric(Number(event.target.value))} />
+            <small>Lower metrics take precedence over higher metrics.</small>
+          </label>
+          <label>
+            Load-balancing weight
+            <input type="number" min={1} max={100} step={1} value={weight}
+              onChange={(event) => setWeight(Number(event.target.value))} />
+            <small>Weight is used when eligible members share the same metric.</small>
+          </label>
+        </div>
+        <div className="mwan3-member-policies">
+          <small>REFERENCED BY POLICIES</small>
+          <b>{config.policies.length > 0 ? config.policies.join(" · ") : "No policy references reported"}</b>
+        </div>
+        <div className="module-message">
+          This edits only the existing member section. Policies and traffic rules are not created or reassigned. Changing a member affects every policy that references it.
+        </div>
+        <label className="mwan3-editor-confirm">
+          <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+          I understand this restarts mwan3 and may interrupt failover and existing routed sessions.
+        </label>
+        <div className="mwan3-editor-actions">
+          <button className="hero-button" type="submit" disabled={!confirmed || saving || availableInterfaces.length === 0}>
+            {saving ? "Saving and restarting…" : "Save member settings"}
+          </button>
+          {notice ? <span className={notice.success ? "mwan3-editor-notice success" : "mwan3-editor-notice error"}>{notice.message}</span> : null}
+        </div>
+      </form>
+    </details>
+  );
+}
+
+
 function NetworkControlPage({
   routerOverview,
   stats,
@@ -2485,7 +2578,32 @@ function NetworkControlPage({
           <div className="module-message">The configuration inventory is capped at 16 sections. Only the displayed subset can be edited here.</div>
         ) : null}
         <div className="module-message">
-          These controls edit only health-check options on an existing mwan3 interface. They do not create WAN interfaces, change firewall policy rules, alter load-balancing weights, or configure network devices. The mwan3 service is restarted after a successful commit; keep local or out-of-band access available when changing the active management WAN.
+          These controls edit only health-check options on existing mwan3 interfaces. They do not create WAN interfaces, change firewall policy rules, or configure network devices. Use the separate member editor to change metric and weight values. The mwan3 service is restarted after a successful commit; keep local or out-of-band access available when changing the active management WAN.
+        </div>
+      </Panel>
+
+      <Panel title="Multi-WAN load-balancing members" eyebrow="GUARDED · EXISTING MEMBERS ONLY">
+        {!mwan3 ? (
+          <div className="module-message">Multi-WAN configuration telemetry is unavailable.</div>
+        ) : !mwan3.config_available || !mwan3.config_members_available ? (
+          <div className="module-message">The mwan3 member/interface inventory is unavailable or incomplete. No member write controls are exposed.</div>
+        ) : mwan3.config_members.length === 0 ? (
+          <div className="module-message">No existing mwan3 member sections were found. QuantumGrid does not create members or policies here.</div>
+        ) : (
+          <div className="mwan3-config-list">
+            {mwan3.config_members.map((member) => (
+              <Mwan3MemberEditor key={member.section} config={member} interfaces={mwan3.config_interfaces} refresh={refresh} />
+            ))}
+          </div>
+        )}
+        {mwan3?.config_member_truncated ? (
+          <div className="module-message">The member inventory is capped at 32 sections. Only the displayed members can be edited here.</div>
+        ) : null}
+        {mwan3?.config_member_invalid_count ? (
+          <div className="module-message">{mwan3.config_member_invalid_count} member section(s) could not be projected safely and were not exposed for editing.</div>
+        ) : null}
+        <div className="module-message">
+          Metric and weight are read from existing member sections referenced by mwan3 policies. Lower metrics take precedence; equal-metric eligible members share traffic according to their relative weights. These values describe routing configuration, not measured traffic shares. Member updates do not change policy membership or firewall traffic rules.
         </div>
       </Panel>
 

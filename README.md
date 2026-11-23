@@ -362,7 +362,7 @@ it reports missing and unreferenced tables without claiming they are invalid or 
 Multi-WAN panel reads mwan3 tracking state, logical interface state, tracked-target latency/loss
 and elapsed online/offline time, with search and spreadsheet-safe CSV export. The tracker result
 and netifd interface state are deliberately shown separately. A further read-only view exposes
-active IPv4/IPv6 policy weights and mwan3 directly connected networks. Each WAN also reports
+active IPv4/IPv6 policy weights, guarded edits to existing mwan3 member metric/weight settings, and mwan3 directly connected networks. Each WAN also reports
 measured RX/TX Mbps from successive kernel byte-counter samples, with sample interval and N/A
 handling for first samples, resets or stale intervals. These rates are not link-speed estimates or
 policy traffic-share measurements; the views do not change failover policy or simulate packet
