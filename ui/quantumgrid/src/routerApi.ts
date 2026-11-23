@@ -4445,7 +4445,10 @@ export async function createRouterOfficeInterZoneRule(input: {
     throw new Error("Enter a valid rule name using 1–64 letters, digits, dots, underscores or hyphens.");
   }
   const validZone = (value: string) => /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
-  if (!validZone(input.source) || !validZone(input.destination) || input.source === input.destination) {
+  const externalZones = new Set(["wan", "wan6", "wwan", "cellular", "internet", "lte", "5g", "uplink"]);
+  if (!validZone(input.source) || !validZone(input.destination) ||
+      externalZones.has(input.source.toLowerCase()) || externalZones.has(input.destination.toLowerCase()) ||
+      input.source === input.destination) {
     throw new Error("Select two different existing internal firewall zones.");
   }
   if (input.protocol !== "tcp" && input.protocol !== "udp" && input.protocol !== "tcp udp" && input.protocol !== "icmp") {

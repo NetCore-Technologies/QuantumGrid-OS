@@ -1117,8 +1117,9 @@ reject_service_rule("bad-proto", "guest", "corp", "all", "192.168.20.30", "443",
 reject_service_rule("bad-port", "guest", "corp", "tcp", "192.168.20.30", "65536", "", "ACCEPT", nil, nil, "invalid destination port")
 reject_service_rule("icmp-port", "guest", "corp", "icmp", "192.168.20.30", "443", "", "REJECT", nil, nil, "ICMP port")
 reject_service_rule("bad-target", "guest", "corp", "tcp", "192.168.20.30", "443", "", "DROP", nil, nil, "unsupported target")
-reject_service_rule("guest-to-corp-https", "guest", "corp", "udp", "192.168.20.30", "443", "", "ACCEPT", nil, nil,
-  "duplicate managed rule name", { { name = "guest-to-corp-https", source = "guest", destination = "corp" } })
+reject_service_rule("guest-to-corp-https", "guest", "corp", "udp", "192.168.20.30", "443", "", "ACCEPT", nil,
+  { { name = "guest-to-corp-https", source = "guest", destination = "corp" } },
+  "duplicate managed rule name")
 reject_service_rule("duplicate", "guest", "corp", "tcp", "192.168.20.30", "443", "192.168.30.50", "ACCEPT", nil,
   { { name = "existing", source = "guest", destination = "corp", protocol = "tcp",
       destination_ip = "192.168.20.30", destination_port = 443, source_ip = "192.168.30.50", target = "ACCEPT" } },
