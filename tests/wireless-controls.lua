@@ -157,6 +157,21 @@ local enterprise_with_psk = wireless.validate_update(
 )
 assert(enterprise_with_psk == nil, "WPA2-Enterprise must not accept a personal passphrase as a RADIUS secret")
 
+local valid_remove = wireless.validate_remove("radio0", "qg_ap_128", "1")
+assert(valid_remove and valid_remove.radio == "radio0" and valid_remove.section == "qg_ap_128")
+local function reject_remove(radio, section, confirmed, label)
+	local result, err = wireless.validate_remove(radio, section, confirmed)
+	assert(result == nil, label .. " should be rejected")
+	assert(type(err) == "string" and #err > 0, label .. " should explain rejection")
+end
+reject_remove("../radio0", "qg_ap_1", "1", "path-like radio")
+reject_remove("radio0", "default_radio0", "1", "administrator-owned AP section")
+reject_remove("radio0", "qg_ap_0", "1", "zero AP section")
+reject_remove("radio0", "qg_ap_129", "1", "out-of-range AP section")
+reject_remove("radio0", "qg_ap_01", "1", "non-canonical AP section")
+reject_remove("radio0", "qg_ap_1;uci", "1", "command-like AP section")
+reject_remove("radio0", "qg_ap_1", "0", "missing AP removal confirmation")
+
 local function rejected(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, label)
 	local result, err = wireless.validate_update(
 		radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed

@@ -114,6 +114,24 @@ function validate_create(radio, ssid, encryption, key, hidden, confirmed)
 	}
 end
 
+function validate_remove(radio, section, confirmed)
+	if not valid_section(radio) then
+		return nil, "Invalid wireless radio section name."
+	end
+	if type(section) ~= "string" then
+		return nil, "Invalid QuantumGrid-managed AP section."
+	end
+	local suffix = section:match("^qg_ap_(%d+)$")
+	local number = tonumber(suffix)
+	if not suffix or not number or number < 1 or number > 128 or tostring(number) ~= suffix then
+		return nil, "Only QuantumGrid-created AP sections qg_ap_1 through qg_ap_128 can be removed here."
+	end
+	if confirmed ~= "1" then
+		return nil, "Explicit confirmation is required because removing an AP disconnects its clients and reloads Wi-Fi."
+	end
+	return { radio = radio, section = section }
+end
+
 function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, radius_server, radius_port, radius_secret, accounting_server, accounting_port, accounting_secret)
 	if not valid_section(radio) then
 		return nil, "Invalid radio section name."
