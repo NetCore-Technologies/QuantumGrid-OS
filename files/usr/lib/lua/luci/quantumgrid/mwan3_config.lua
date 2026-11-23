@@ -272,3 +272,104 @@ function M.restore(uci, section, snapshot)
 end
 
 return M
+
+
+local MEMBER_OPTIONS = { "interface", "metric", "weight" }
+
+function M.validate_member_update(input, interfaces)
+  if type(input) ~= "table" then return nil, "Multi-WAN member settings must be an object." end
+  if not valid_section(input.section) then
+    return nil, "Choose an existing mwan3 member section."
+  end
+  if not valid_section(input.interface) or type(interfaces) ~= "table" or interfaces[input.interface] ~= true then
+    return nil, "Choose an existing mwan3 interface for this member."
+  end
+  local metric = bounded_integer(input.metric, 1, 255)
+  local weight = bounded_integer(input.weight, 1, 100)
+  if not metric then return nil, "Member metric must be a whole number from 1 to 255." end
+  if not weight then return nil, "Member weight must be a whole number from 1 to 100." end
+  return {
+    section = input.section,
+    interface = input.interface,
+    metric = tostring(metric),
+    weight = tostring(weight),
+  }
+end
+
+function M.project_member_section(name, section, interfaces, policy_membership)
+  if not valid_section(name) or type(section) ~= "table" or section[".type"] ~= "member" then
+    return nil
+  end
+  local interface = type(section.interface) == "string" and section.interface or ""
+  local metric = bounded_integer(section.metric == nil and "1" or section.metric, 1, 255)
+  local weight = bounded_integer(section.weight == nil and "1" or section.weight, 1, 100)
+  local policies = {}
+  if type(policy_membership) == "table" and type(policy_membership[name]) == "table" then
+    local seen = {}
+    for _, policy in ipairs(policy_membership[name]) do
+      if valid_section(policy) and not seen[policy] then
+        seen[policy] = true
+        policies[#policies + 1] = policy
+      end
+    end
+  end
+  table.sort(policies)
+  return {
+    section = name,
+    interface = interface,
+    metric = metric or 1,
+    weight = weight or 1,
+    policies = policies,
+    valid = valid_section(interface) and type(interfaces) == "table" and
+      interfaces[interface] == true and metric ~= nil and weight ~= nil,
+  }
+end
+
+function M.snapshot_member(section)
+  if type(section) ~= "table" or section[".type"] ~= "member" then return nil end
+  local result = {}
+  for _, option in ipairs(MEMBER_OPTIONS) do
+    local value = section[option]
+    if value == nil then
+      result[option] = false
+    elseif type(value) == "string" or type(value) == "number" then
+      result[option] = tostring(value)
+    else
+      return nil
+    end
+  end
+  return result
+end
+
+function M.stage_member_update(uci, section, update)
+  if type(uci) ~= "table" or not valid_section(section) or
+    type(update) ~= "table" or update.section ~= section then return false end
+  local values = {
+    interface = update.interface,
+    metric = update.metric,
+    weight = update.weight,
+  }
+  for _, option in ipairs(MEMBER_OPTIONS) do
+    local ok, result = pcall(uci.set, uci, "mwan3", section, option, values[option])
+    if not ok or result ~= true then return false end
+  end
+  return true
+end
+
+function M.restore_member(uci, section, snapshot)
+  if type(uci) ~= "table" or not valid_section(section) or type(snapshot) ~= "table" then
+    return false
+  end
+  for _, option in ipairs(MEMBER_OPTIONS) do
+    local previous = snapshot[option]
+    local ok, result
+    if previous == false then
+      ok, result = pcall(uci.delete, uci, "mwan3", section, option)
+    else
+      ok, result = pcall(uci.set, uci, "mwan3", section, option, previous)
+    end
+    if not ok or result ~= true then return false end
+  end
+  local commit_ok, committed = pcall(uci.commit, uci, "mwan3")
+  return commit_ok and committed == true
+end

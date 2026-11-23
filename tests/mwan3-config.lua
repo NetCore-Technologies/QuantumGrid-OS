@@ -177,3 +177,66 @@ assert(stored.flush_conntrack == "never" and stored.family == "ipv4")
 assert(uci.commits == 1)
 
 print("mwan3-config: validation, projection and rollback snapshot tests passed")
+
+
+local member_interfaces = { wan = true, wwan = true }
+local member_update, member_error = config.validate_member_update({
+  section = "wan_m1_w3", interface = "wan", metric = "1", weight = "3"
+}, member_interfaces)
+assert(member_update, member_error)
+assert(member_update.section == "wan_m1_w3" and member_update.interface == "wan")
+assert(member_update.metric == "1" and member_update.weight == "3")
+local projected_member = config.project_member_section("wan_m1_w3", {
+  [".type"] = "member", interface = "wan", metric = "1", weight = "3"
+}, member_interfaces, { wan_m1_w3 = { "balanced", "wan_only" } })
+assert(projected_member and projected_member.valid)
+assert(projected_member.policies[1] == "balanced" and projected_member.policies[2] == "wan_only")
+
+for _, bad in ipairs({
+  { section = "../member", interface = "wan", metric = "1", weight = "1" },
+  { section = "wan_m1_w3", interface = "unknown", metric = "1", weight = "1" },
+  { section = "wan_m1_w3", interface = "wan", metric = "0", weight = "1" },
+  { section = "wan_m1_w3", interface = "wan", metric = "256", weight = "1" },
+  { section = "wan_m1_w3", interface = "wan", metric = "1.5", weight = "1" },
+  { section = "wan_m1_w3", interface = "wan", metric = "1", weight = "0" },
+  { section = "wan_m1_w3", interface = "wan", metric = "1", weight = "101" },
+}) do
+  assert(config.validate_member_update(bad, member_interfaces) == nil,
+    "invalid member metric, weight, interface or section was accepted")
+end
+local invalid_member_projection = config.project_member_section("bad_member", {
+  [".type"] = "member", interface = "unknown", metric = "0", weight = "999"
+}, member_interfaces)
+assert(invalid_member_projection and not invalid_member_projection.valid)
+
+local member_original = {
+  [".type"] = "member", interface = "wan", metric = "2", weight = "4",
+  custom_option = "keep-me"
+}
+local member_snapshot = config.snapshot_member(member_original)
+assert(member_snapshot and member_snapshot.interface == "wan")
+local member_stored = {}
+for key, value in pairs(member_original) do member_stored[key] = value end
+local member_uci = {}
+function member_uci:set(package, section, option, value)
+  assert(package == "mwan3" and section == "wan_m1_w3")
+  member_stored[option] = value
+  return true
+end
+function member_uci:delete(package, section, option)
+  assert(package == "mwan3" and section == "wan_m1_w3")
+  member_stored[option] = nil
+  return true
+end
+function member_uci:commit(package)
+  assert(package == "mwan3")
+  self.commits = (self.commits or 0) + 1
+  return true
+end
+assert(config.stage_member_update(member_uci, "wan_m1_w3", member_update))
+assert(member_stored.interface == "wan" and member_stored.metric == "1" and member_stored.weight == "3")
+assert(member_stored.custom_option == "keep-me", "unmanaged member options must remain untouched")
+assert(config.restore_member(member_uci, "wan_m1_w3", member_snapshot))
+assert(member_stored.interface == "wan" and member_stored.metric == "2" and member_stored.weight == "4")
+assert(member_stored.custom_option == "keep-me")
+assert(member_uci.commits == 1)
