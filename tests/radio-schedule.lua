@@ -19,10 +19,18 @@ local sunday=assert(schedule.validate({radio="radio2",enabled="1",days="7",start
 assert(schedule.is_active(sunday,7,1380) and schedule.is_active(sunday,1,120))
 local disabled=assert(schedule.validate({radio="radio0",enabled="0",days="1,2,3,4,5",start_time="08:00",end_time="22:00",confirmed="1"}))
 assert(schedule.desired_disabled(disabled,1,30)==nil,"disabled schedule preserves manual radio state")
-local restored=schedule.from_config({[".type"]="schedule",radio="radio0",enabled="1",days="1 2 3 4 5",start_time="08:00",end_time="22:00"},"radio0")
+local restored=schedule.from_config({[".type"]="schedule",radio="radio0",enabled="1",base_disabled="0",days="1 2 3 4 5",start_time="08:00",end_time="22:00"},"radio0")
 assert(restored and restored.days_csv=="1,2,3,4,5")
 assert(schedule.from_config({[".type"]="other",radio="radio0",enabled="1",days="1",start_time="08:00",end_time="22:00"},"radio0")==nil)
-assert(schedule.from_config({[".type"]="schedule",radio="radio1",enabled="1",days="1",start_time="08:00",end_time="22:00"},"radio0")==nil)
+assert(schedule.from_config({[".type"]="schedule",radio="radio1",enabled="1",base_disabled="0",days="1",start_time="08:00",end_time="22:00"},"radio0")==nil)
+assert(schedule.from_config({[".type"]="schedule",radio="radio0",enabled="1",days="1",start_time="08:00",end_time="22:00"},"radio0")==nil,"enabled schedule must save the manual-state baseline")
+local baseline=assert(schedule.from_config({[".type"]="schedule",radio="radio0",enabled="1",base_disabled="0",days="1",start_time="08:00",end_time="22:00"},"radio0"))
+assert(schedule.desired_disabled(baseline,1,500)==false and schedule.desired_disabled(baseline,1,400)==true)
+local paused=assert(schedule.from_config({[".type"]="schedule",radio="radio0",enabled="0",base_disabled="0",days="1",start_time="08:00",end_time="22:00"},"radio0"))
+assert(schedule.desired_disabled(paused,1,30)==false,"disabled schedule restores original radio state")
+local no_baseline=assert(schedule.from_config({[".type"]="schedule",radio="radio0",enabled="0",days="1",start_time="08:00",end_time="22:00"},"radio0"))
+assert(schedule.desired_disabled(no_baseline,1,30)==nil,"unmanaged schedule leaves manual state unchanged")
+assert(schedule.from_config({[".type"]="schedule",radio="radio0",enabled="1",base_disabled="1",days="1",start_time="08:00",end_time="22:00"},"radio0")==nil,"managed schedule rejects disabled baseline")
 for _, bad in ipairs({
  {radio="../radio0"},{enabled="true"},{confirmed="0"},{days=""},{days="0"},{days="8"},
  {days="1,1"},{days="1,,2"},{days="1, 8"},{start_time="24:00"},{start_time="8:00"},

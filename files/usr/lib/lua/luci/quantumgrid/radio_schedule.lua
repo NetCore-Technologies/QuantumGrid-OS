@@ -44,10 +44,10 @@ function M.from_config(section, radio)
 	local parsed = M.validate({radio=radio, enabled=section.enabled, days=section.days,
 		start_time=section.start_time, end_time=section.end_time, confirmed="1"})
 	if not parsed then return nil end
-	if section.base_disabled ~= nil and section.base_disabled ~= "0" and section.base_disabled ~= "1" then return nil end
-	if parsed.enabled and section.base_disabled == nil then return nil end
-	parsed.base_disabled_present = section.base_disabled ~= nil
-	parsed.base_disabled = section.base_disabled == "1"
+	if section.base_disabled ~= nil and section.base_disabled ~= "0" then return nil end
+	if parsed.enabled and section.base_disabled ~= "0" then return nil end
+	parsed.base_disabled_present = section.base_disabled == "0"
+	parsed.base_disabled = false
 	return parsed
 end
 local function selected(schedule, day)
@@ -68,7 +68,12 @@ function M.is_active(schedule, weekday, minute_of_day)
 		(selected(schedule, previous_day) and minute_of_day < end_minutes)
 end
 function M.desired_disabled(schedule, weekday, minute_of_day)
-	if type(schedule) ~= "table" or schedule.enabled ~= true then return nil end
+	if type(schedule) ~= "table" then return nil end
+	if schedule.enabled ~= true then
+		if schedule.base_disabled_present == true then return false end
+		return nil
+	end
+	if schedule.base_disabled_present ~= true or schedule.base_disabled ~= false then return nil end
 	return not M.is_active(schedule, weekday, minute_of_day)
 end
 return M
