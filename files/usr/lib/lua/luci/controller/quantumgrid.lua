@@ -3319,60 +3319,40 @@ local function cellular_status(fs)
 		or fs.access("/dev/ttyUSB3") == true
 	local qmi_available = fs.access("/dev/cdc-wdm0") == true
 		and fs.access("/sbin/uqmi") == true
-	local result = {
+	local sample = {
 		modem_present = modem_present,
 		qmi_available = qmi_available,
-		device = qmi_available and "/dev/cdc-wdm0" or "",
 		sampled_at = now
 	}
 
 	if qmi_available then
 		local util = require "luci.util"
 		local jsonc = require "luci.jsonc"
-		local serving_ok, serving_output = pcall(util.exec, "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-serving-system")
-		if serving_ok and type(serving_output) == "string" then
-			local parse_ok, serving = pcall(jsonc.parse, serving_output)
-			if parse_ok and type(serving) == "table" then
-				result.registration = tostring(serving.registration or "")
-				result.registered = serving.registration == "registered"
-				result.operator = tostring(serving.plmn_description or "")
-				result.mcc = tonumber(serving.plmn_mcc)
-				result.mnc = tonumber(serving.plmn_mnc)
-				result.roaming = serving.roaming == true
-				result.radio_interfaces = {}
-				for _, radio in ipairs(serving.radio_interface or {}) do
-					if type(radio) == "string" then table.insert(result.radio_interfaces, radio) end
-				end
+		local function read_json(command)
+			local command_ok, output = pcall(util.exec, command)
+			if not command_ok or type(output) ~= "string" or #output > 8192 then
+				return nil
 			end
+			local parse_ok, parsed = pcall(jsonc.parse, output)
+			if not parse_ok or type(parsed) ~= "table" then return nil end
+			return parsed
 		end
 
-		local signal_ok, signal_output = pcall(util.exec, "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info")
-		if signal_ok and type(signal_output) == "string" then
-			local parse_ok, signal = pcall(jsonc.parse, signal_output)
-			if parse_ok and type(signal) == "table" then
-				result.signal_type = tostring(signal.type or "")
-				result.rssi_dbm = tonumber(signal.rssi)
-				result.rsrp_dbm = tonumber(signal.rsrp)
-				result.rsrq_db = tonumber(signal.rsrq)
-				result.snr_db = tonumber(signal.snr)
-			end
-		end
+		sample.serving = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-serving-system")
+		sample.signal = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info")
 
-		local data_ok, data_output = pcall(util.exec, "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status")
-		if data_ok and type(data_output) == "string" then
-			local parse_ok, data_status = pcall(jsonc.parse, data_output)
-			if parse_ok and type(data_status) == "string" then
-				result.data_status = data_status
-			end
+		local data_status = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status")
+		if type(data_status) == "table" and type(data_status.data_status) == "string" then
+			sample.data_status = data_status.data_status
 		end
 	end
 
+	local normalizer = require "luci.quantumgrid.cellular"
+	local result = normalizer.normalize_status(sample)
 	cellular_cache = result
 	cellular_cache_at = now
 	return result
 end
-
-
 local function conntrack_status(fs)
 	local count_path = "/proc/sys/net/netfilter/nf_conntrack_count"
 	local maximum_path = "/proc/sys/net/netfilter/nf_conntrack_max"

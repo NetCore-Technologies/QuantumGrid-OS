@@ -213,6 +213,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/audit.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/snmpv3.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/cellular.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
@@ -220,6 +221,8 @@ jobs:
         run: lua5.1 tests/sqm-controls.lua
       - name: Test per-client DSCP policy validation and inventory
         run: lua5.1 tests/qos.lua
+      - name: Test bounded cellular modem telemetry
+        run: lua5.1 tests/cellular-status.lua
       - name: Test bounded mwan3 tracker telemetry
         run: lua5.1 tests/mwan3-status.lua
       - name: Test redacted WireGuard peer telemetry
