@@ -174,7 +174,7 @@ test("loads weekly radio schedules with same-origin no-store semantics", async (
       radio:"radio0",configured:true,valid:true,enabled:true,
       days:[1,2,3,4,5],start_time:"08:00",end_time:"22:00",
       runtime_available:true,runtime_managed:true,runtime_enabled:true,
-      desired_enabled:true,runtime_matches:true,router_local_time:"08:00:15",router_weekday:1,
+      runtime_config_disabled:false,desired_enabled:true,runtime_matches:true,router_local_time:"08:00:15",router_weekday:1,
     }]});
   };
   const schedules = await getRouterWirelessRadioSchedules();
@@ -186,7 +186,7 @@ test("loads weekly radio schedules with same-origin no-store semantics", async (
     radio:"radio0",configured:true,valid:true,enabled:true,
     days:[1,2,3,4,5],start_time:"08:00",end_time:"22:00",
     runtime_available:true,runtime_managed:true,runtime_enabled:true,
-    desired_enabled:true,runtime_matches:true,router_local_time:"08:00:15",router_weekday:1,
+    runtime_config_disabled:false,desired_enabled:true,runtime_matches:true,router_local_time:"08:00:15",router_weekday:1,
   });
 });
 
@@ -224,6 +224,7 @@ test("rejects claimed live telemetry when required runtime fields are missing", 
       radio: "radio0", configured: true, valid: true, enabled: true,
       days: [1], start_time: "08:00", end_time: "22:00",
       runtime_available: true, runtime_managed: true,
+      runtime_enabled: false, runtime_config_disabled: false,
       desired_enabled: true, runtime_matches: true,
       router_local_time: "08:00:00", router_weekday: 1,
     }],

@@ -2143,7 +2143,8 @@ function action_wireless_radio_schedule()
 				item.router_local_time = local_time
 				item.router_weekday = weekday
 				if runtime_available then
-					item.runtime_enabled = live.up == true and disabled ~= "1"
+					item.runtime_enabled = live.up == true
+					item.runtime_config_disabled = disabled == "1"
 				end
 				if parsed then
 					local desired_disabled = manager.desired_disabled(parsed, weekday, minute_of_day)
@@ -2152,7 +2153,8 @@ function action_wireless_radio_schedule()
 						item.runtime_managed = true
 						item.desired_enabled = desired_enabled
 						if runtime_available then
-							item.runtime_matches = item.runtime_enabled == desired_enabled
+							item.runtime_matches = item.runtime_enabled == desired_enabled and
+								item.runtime_config_disabled == desired_disabled
 						end
 				end
 				order[#order + 1] = radio
