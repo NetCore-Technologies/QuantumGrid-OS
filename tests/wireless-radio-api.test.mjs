@@ -327,7 +327,7 @@ test("AP creation rejects unsafe identities, insecure modes and malformed creden
   await assert.rejects(createRouterWirelessAp({ ...base, encryption: "none" }), /must use WPA2-Personal/);
   await assert.rejects(createRouterWirelessAp({ ...base, encryption: "wpa2" }), /must use WPA2-Personal/);
   await assert.rejects(createRouterWirelessAp({ ...base, key: "short" }), /8–63 bytes/);
-  await assert.rejects(createRouterWirelessAp({ ...base, key: "bad\\npassphrase" }), /control characters/);
+  await assert.rejects(createRouterWirelessAp({ ...base, key: "bad\npassphrase" }), /control characters/);
 });
 
 test("AP creation refuses a response that does not prove live runtime verification", async () => {
