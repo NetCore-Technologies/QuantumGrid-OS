@@ -1,122 +1,40 @@
 #!/usr/bin/lua
 package.path = "/usr/lib/lua/?.lua;/usr/lib/lua/?/init.lua;" .. package.path
+
 local uci = require("luci.model.uci").cursor()
-local schedule_module = require "luci.quantumgrid.radio_schedule"
 local sys = require "luci.sys"
 local ubus = require "ubus"
 local nixio = require "nixio"
-local function log(message) io.stderr:write("quantumgrid-radio-scheduler: " .. message .. "\n") end
+local scheduler = require "luci.quantumgrid.radio_scheduler"
+
+local function log(message)
+	io.stderr:write("quantumgrid-radio-scheduler: " .. message .. "\n")
+end
+
 local function runtime_status()
- local connection=ubus.connect()
- if not connection then return nil end
- local ok,result=pcall(connection.call,connection,"network.wireless","status",{})
- pcall(connection.close,connection)
- if not ok or type(result)~="table" then return nil end
- return result
+	local connection = ubus.connect()
+	if not connection then return nil end
+	local ok, result = pcall(connection.call, connection, "network.wireless", "status", {})
+	pcall(connection.close, connection)
+	if not ok or type(result) ~= "table" then return nil end
+	return result
 end
-local function verify_runtime(changes,previous_state)
- for attempt=1,12 do
-  local status=runtime_status()
-  local matches=type(status)=="table"
-  if matches then
-   for _,change in ipairs(changes) do
-    local expected_up
-    if previous_state then expected_up=change.previous_up else expected_up=not change.desired_disabled end
-    local radio=status[change.radio]
-    if type(radio)~="table" or radio.up~=expected_up then matches=false;break end
-   end
-  end
-  if matches then return true end
-  if attempt<12 then pcall(nixio.nanosleep,0,250000000) end
- end
- return false
-end
-local function restore_changes(changes)
- for _,change in ipairs(changes) do
-  local ok,result
-  if change.previous_disabled==nil then ok,result=pcall(uci.delete,uci,"wireless",change.radio,"disabled")
-  else ok,result=pcall(uci.set,uci,"wireless",change.radio,"disabled",change.previous_disabled) end
-  if not ok or result~=true then pcall(uci.revert,uci,"wireless");return false end
- end
- local ok,committed=pcall(uci.commit,uci,"wireless")
- if not ok or committed~=true then pcall(uci.revert,uci,"wireless");return false end
- local reload_ok,status=pcall(sys.call,"/sbin/wifi reload >/dev/null 2>&1")
- if not reload_ok or status~=0 then return false end
- return verify_runtime(changes,true)
-end
-local function run_once()
- local now=os.date("*t")
- local weekday=((now.wday+5)%7)+1
- local minute_of_day=now.hour*60+now.min
- local schedules,invalid,counts={},{},{}
- local inventory_ok=pcall(function()
-  uci:foreach("quantumgrid-radio","schedule",function(section)
-   if type(section)~="table" then return end
-   local radio=section.radio
-   if type(radio)~="string" or #radio>32 or not radio:match("^[%w_%-]+$") then return end
-   counts[radio]=(counts[radio] or 0)+1
-   if section[".name"]~=radio then invalid[radio]=true;return end
-   local parsed=schedule_module.from_config(section,radio)
-   if not parsed then invalid[radio]=true;return end
-   schedules[radio]=parsed
-  end)
- end)
- if not inventory_ok then log("schedule inventory unavailable; no changes made");return end
- local runtime=runtime_status()
- if type(runtime)~="table" then log("wireless runtime inventory unavailable; no changes made");return end
- local changes,clear_baselines={},{}
- for radio,schedule in pairs(schedules) do
-  if counts[radio]==1 and not invalid[radio] then
-   local desired=schedule_module.desired_disabled(schedule,weekday,minute_of_day)
-   if desired~=nil then
-    local config_ok,wireless=pcall(uci.get_all,uci,"wireless",radio)
-    local live=runtime[radio]
-    if config_ok and type(wireless)=="table" and wireless[".type"]=="wifi-device" and type(live)=="table" and type(live.up)=="boolean" then
-     local previous_disabled=wireless.disabled
-     local config_change=desired~=(previous_disabled=="1") or (not desired and previous_disabled~=nil)
-     local runtime_change=live.up~=(not desired)
-     if config_change or runtime_change then
-      changes[#changes+1]={radio=radio,previous_disabled=previous_disabled,previous_up=live.up,desired_disabled=desired}
-     end
-     if not schedule.enabled and schedule.base_disabled_present then clear_baselines[#clear_baselines+1]=radio end
-    else log("scheduled radio cannot be verified as a live wifi-device; skipped") end
-   end
-  elseif counts[radio]~=1 or invalid[radio] then log("duplicate or invalid schedule skipped") end
- end
- if #changes>0 then
-  for _,change in ipairs(changes) do
-   local ok,result
-   if change.desired_disabled then ok,result=pcall(uci.set,uci,"wireless",change.radio,"disabled","1")
-   else ok,result=pcall(uci.delete,uci,"wireless",change.radio,"disabled") end
-   if not ok or result~=true then pcall(uci.revert,uci,"wireless");log("could not stage scheduled radio state; no reload attempted");return end
-  end
-  local commit_ok,committed=pcall(uci.commit,uci,"wireless")
-  if not commit_ok or committed~=true then pcall(uci.revert,uci,"wireless");log("could not commit scheduled state; no reload attempted");return end
-  local reload_ok,status=pcall(sys.call,"/sbin/wifi reload >/dev/null 2>&1")
-  if not reload_ok or status~=0 or not verify_runtime(changes,false) then
-   if restore_changes(changes) then log("scheduled reload/runtime verification failed; previous configuration and runtime restored")
-   else log("scheduled reload failed and rollback could not be confirmed") end
-   return
-  end
-  log("scheduled radio state applied and live runtime state verified")
- end
- if #clear_baselines>0 then
-  local cleared,seen=true,{}
-  for _,radio in ipairs(clear_baselines) do
-   if not seen[radio] then
-    seen[radio]=true
-    local ok,result=pcall(uci.delete,uci,"quantumgrid-radio",radio,"base_disabled")
-    if not ok or result~=true then cleared=false;break end
-   end
-  end
-  if cleared then
-   local ok,committed=pcall(uci.commit,uci,"quantumgrid-radio")
-   if not ok or committed~=true then pcall(uci.revert,uci,"quantumgrid-radio");log("baseline cleanup will retry") end
-  else pcall(uci.revert,uci,"quantumgrid-radio");log("baseline cleanup could not be staged; retrying") end
- end
-end
+
+local dependencies = {
+	runtime_status = runtime_status,
+	reload = function()
+		local ok, status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+		return ok and status == 0
+	end,
+	sleep = function(seconds)
+		local nanos = math.floor(seconds * 1000000000)
+		pcall(nixio.nanosleep, 0, nanos)
+	end,
+	log = log
+}
+
 while true do
- local ok,err=pcall(run_once)
- if not ok then log("scheduler cycle failed safely: "..tostring(err)) end
- os.execute("/bin/sleep 30")
+	local ok, err = pcall(scheduler.run_once, uci, dependencies, os.date("*t"))
+	if not ok then log("scheduler cycle failed safely: " .. tostring(err)) end
+	os.execute("/bin/sleep 30")
 end

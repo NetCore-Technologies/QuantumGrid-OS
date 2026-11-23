@@ -217,6 +217,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/snmpv3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/cellular.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/radio_schedule.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/radio_scheduler.lua
           luac5.1 -p files/usr/bin/quantumgrid-radio-scheduler
           sh -n files/etc/init.d/quantumgrid-radio-scheduler
           sh -n files/etc/uci-defaults/97-quantumgrid-radio-scheduler
@@ -229,6 +230,8 @@ jobs:
         run: lua5.1 tests/qos.lua
       - name: Test bounded weekly wireless radio schedules
         run: lua5.1 tests/radio-schedule.lua
+      - name: Test weekly radio scheduler runtime transitions and rollback
+        run: lua5.1 tests/radio-scheduler-runtime.lua
       - name: Test bounded cellular modem telemetry
         run: lua5.1 tests/cellular-status.lua
       - name: Test bounded mwan3 tracker telemetry
