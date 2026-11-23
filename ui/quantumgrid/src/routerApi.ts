@@ -1618,6 +1618,7 @@ const SQM_CLIENT_QOS_DOWNLOAD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgri
 const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const WIRELESS_RADIO_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-update";
+const WIRELESS_RADIO_SCHEDULE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-schedule";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
@@ -2254,6 +2255,112 @@ export async function updateRouterWirelessConfig(input: {
     throw new Error("The router did not confirm the wireless configuration and Wi-Fi reload.");
   }
   return payload as RouterWirelessUpdateResult;
+}
+
+export interface RouterWirelessRadioSchedule {
+  radio: string; configured: boolean; valid: boolean; enabled: boolean;
+  days: number[]; start_time: string; end_time: string; error?: string;
+}
+export interface RouterWirelessRadioScheduleUpdateResult extends RouterWirelessRadioSchedule {
+  ok: true; apply_after_seconds: 30;
+}
+export async function getRouterWirelessRadioSchedules(): Promise<RouterWirelessRadioSchedule[]> {
+  const response = await fetch(WIRELESS_RADIO_SCHEDULE_URL, {
+    method: "GET", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Radio schedules require an active router administrator session."
+      : "The router returned an invalid radio schedule response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null || !response.ok ||
+      !("ok" in payload) || payload.ok !== true ||
+      !("schedules" in payload) || !Array.isArray(payload.schedules)) {
+    throw new Error(typeof payload === "object" && payload !== null && "error" in payload && typeof payload.error === "string"
+      ? payload.error : "The router returned an invalid radio schedule inventory.");
+  }
+  const output: RouterWirelessRadioSchedule[] = [];
+  const seen = new Set<string>();
+  for (const item of payload.schedules) {
+    if (typeof item !== "object" || item === null ||
+        !("radio" in item) || typeof item.radio !== "string" || !/^[A-Za-z0-9_-]{1,32}$/.test(item.radio) ||
+        !("configured" in item) || item.configured !== true ||
+        !("valid" in item) || typeof item.valid !== "boolean" ||
+        !("enabled" in item) || typeof item.enabled !== "boolean ||
+        !("days" in item) || !Array.isArray(item.days) ||
+        !("start_time" in item) || typeof item.start_time !== "string ||
+        !("end_time" in item) || typeof item.end_time !== "string") {
+      throw new Error("The router returned an invalid radio schedule record.");
+    }
+    if (seen.has(item.radio)) throw new Error("The router returned duplicate radio schedule records.");
+    seen.add(item.radio);
+    if (item.days.length > 7 || new Set(item.days).size !== item.days.length ||
+        item.days.some((day) => typeof day !== "number" || !Number.isInteger(day) || day < 1 || day > 7)) {
+      throw new Error("The router returned an invalid radio schedule weekday list.");
+    }
+    output.push({
+      radio: item.radio, configured: true, valid: item.valid, enabled: item.enabled,
+      days: [...item.days], start_time: item.start_time, end_time: item.end_time,
+      ...("error" in item && typeof item.error === "string" ? { error: item.error } : {}),
+    });
+  }
+  return output;
+}
+export async function updateRouterWirelessRadioSchedule(input: {
+  radio: string; enabled: boolean; days: number[]; startTime: string; endTime: string;
+}): Promise<RouterWirelessRadioScheduleUpdateResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(input.radio)) throw new Error("Invalid wireless radio section name.");
+  if (typeof input.enabled !== "boolean" || !Array.isArray(input.days) ||
+      input.days.length < 1 || input.days.length > 7 ||
+      input.days.some((day) => !Number.isInteger(day) || day < 1 || day > 7) ||
+      new Set(input.days).size !== input.days.length) {
+    throw new Error("Choose one or more unique weekdays and an explicit schedule state.");
+  }
+  const validTime = (value: string) => typeof value === "string" && /^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  if (!validTime(input.startTime) || !validTime(input.endTime) || input.startTime === input.endTime) {
+    throw new Error("Choose two different valid 24-hour times.");
+  }
+  const days = [...input.days].sort((a, b) => a - b);
+  const form = new URLSearchParams();
+  form.set("radio", input.radio);
+  form.set("enabled", input.enabled ? "1" : "0");
+  form.set("days", days.join(","));
+  form.set("start_time", input.startTime);
+  form.set("end_time", input.endTime);
+  form.set("confirmed", "1");
+  const response = await fetch(WIRELESS_RADIO_SCHEDULE_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Radio schedules require an active router administrator session."
+      : "The router returned an invalid schedule update response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid schedule update response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("radio" in payload) || payload.radio !== input.radio ||
+      !("configured" in payload) || payload.configured !== true ||
+      !("valid" in payload) || payload.valid !== true ||
+      !("enabled" in payload) || payload.enabled !== input.enabled ||
+      !("days" in payload) || !Array.isArray(payload.days) ||
+      payload.days.length !== days.length || payload.days.some((day, index) => day !== days[index]) ||
+      !("start_time" in payload) || payload.start_time !== input.startTime ||
+      !("end_time" in payload) || payload.end_time !== input.endTime ||
+      !("apply_after_seconds" in payload) || payload.apply_after_seconds !== 30) {
+    throw new Error("The router did not confirm the requested weekly radio schedule.");
+  }
+  return {
+    ok: true, radio: input.radio, configured: true, valid: true, enabled: input.enabled,
+    days, start_time: input.startTime, end_time: input.endTime, apply_after_seconds: 30,
+  };
 }
 
 export interface RouterWirelessRadioUpdateResult {

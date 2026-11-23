@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { updateRouterWirelessRadio } from "../ui/quantumgrid/src/routerApi.ts";
+import { updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule } from "../ui/quantumgrid/src/routerApi.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -161,4 +161,68 @@ test("radio API rejects server errors and non-JSON session failures", async () =
     updateRouterWirelessRadio({ radio: "radio0", enabled: true, expectedDisabled: true }),
     /active router administrator session/,
   );
+});
+
+
+test("loads weekly radio schedules with same-origin no-store semantics", async () => {
+  let url = "";
+  let init;
+  globalThis.fetch = async (target, options) => {
+    url = String(target);
+    init = options;
+    return jsonResponse({ok:true,schedules:[{
+      radio:"radio0",configured:true,valid:true,enabled:true,
+      days:[1,2,3,4,5],start_time:"08:00",end_time:"22:00",
+    }]});
+  };
+  const schedules = await getRouterWirelessRadioSchedules();
+  assert.equal(url,"/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-schedule");
+  assert.equal(init.method,"GET");
+  assert.equal(init.credentials,"same-origin");
+  assert.equal(init.cache,"no-store");
+  assert.deepEqual(schedules[0],{
+    radio:"radio0",configured:true,valid:true,enabled:true,
+    days:[1,2,3,4,5],start_time:"08:00",end_time:"22:00",
+  });
+});
+
+test("saves a weekly radio schedule through confirmed same-origin POST", async () => {
+  let url = "";
+  let init;
+  globalThis.fetch = async (target, options) => {
+    url = String(target);
+    init = options;
+    return jsonResponse({
+      ok:true,radio:"radio1",configured:true,valid:true,enabled:false,
+      days:[1,5,7],start_time:"22:00",end_time:"06:00",apply_after_seconds:30,
+    });
+  };
+  const result = await updateRouterWirelessRadioSchedule({
+    radio:"radio1",enabled:false,days:[7,1,5],startTime:"22:00",endTime:"06:00",
+  });
+  assert.equal(url,"/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-schedule");
+  assert.equal(init.method,"POST");
+  assert.equal(init.credentials,"same-origin");
+  assert.equal(init.cache,"no-store");
+  const form = new URLSearchParams(init.body);
+  assert.equal(form.get("radio"),"radio1");
+  assert.equal(form.get("enabled"),"0");
+  assert.equal(form.get("days"),"1,5,7");
+  assert.equal(form.get("start_time"),"22:00");
+  assert.equal(form.get("end_time"),"06:00");
+  assert.equal(form.get("confirmed"),"1");
+  assert.equal(result.apply_after_seconds,30);
+});
+
+test("schedule API rejects unsafe radio, weekday and time values before network access", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not run for invalid input"); };
+  await assert.rejects(updateRouterWirelessRadioSchedule({
+    radio:"../radio0",enabled:true,days:[1],startTime:"08:00",endTime:"22:00",
+  }),/Invalid wireless radio/);
+  await assert.rejects(updateRouterWirelessRadioSchedule({
+    radio:"radio0",enabled:true,days:[1,1],startTime:"08:00",endTime:"22:00",
+  }),/unique weekdays/);
+  await assert.rejects(updateRouterWirelessRadioSchedule({
+    radio:"radio0",enabled:true,days:[1],startTime:"24:00",endTime:"22:00",
+  }),/valid 24-hour times/);
 });
