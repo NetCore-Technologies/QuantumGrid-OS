@@ -4957,7 +4957,6 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
     void getRouterWirelessRadioSchedules().then((schedules) => {
       if (!active) return;
       const saved = schedules.find((item) => item.radio === radio.name);
