@@ -190,6 +190,47 @@ test("loads weekly radio schedules with same-origin no-store semantics", async (
   });
 });
 
+test("preserves unknown runtime status without inventing an enabled or disabled result", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true,
+    schedules: [{
+      radio: "radio1",
+      configured: true,
+      valid: true,
+      enabled: true,
+      days: [1, 2, 3, 4, 5],
+      start_time: "08:00",
+      end_time: "22:00",
+      runtime_available: false,
+      runtime_managed: true,
+      desired_enabled: true,
+      router_local_time: "07:59:45",
+      router_weekday: 1,
+    }],
+  });
+  const [schedule] = await getRouterWirelessRadioSchedules();
+  assert.equal(schedule.runtime_available, false);
+  assert.equal(schedule.runtime_managed, true);
+  assert.equal(schedule.desired_enabled, true);
+  assert.equal(schedule.runtime_enabled, undefined);
+  assert.equal(schedule.runtime_matches, undefined);
+  assert.equal(schedule.router_local_time, "07:59:45");
+});
+
+test("rejects claimed live telemetry when required runtime fields are missing", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true,
+    schedules: [{
+      radio: "radio0", configured: true, valid: true, enabled: true,
+      days: [1], start_time: "08:00", end_time: "22:00",
+      runtime_available: true, runtime_managed: true,
+      desired_enabled: true, runtime_matches: true,
+      router_local_time: "08:00:00", router_weekday: 1,
+    }],
+  });
+  await assert.rejects(getRouterWirelessRadioSchedules(), /invalid radio schedule record/);
+});
+
 test("saves a weekly radio schedule through confirmed same-origin POST", async () => {
   let url = "";
   let init;
