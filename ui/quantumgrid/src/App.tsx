@@ -7813,8 +7813,6 @@ function SqmClientQosManager({
   const [saving, setSaving] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState("");
   const [removing, setRemoving] = useState("");
-  const [pendingToggle, setPendingToggle] = useState<{ section: string; enabled: boolean } | null>(null);
-  const [toggling, setToggling] = useState("");
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
   const activeSource = sourceZones.some((zone) => zone.name === sourceZone) ? sourceZone : sourceZones[0]?.name ?? "";
   const activeDestination = destinationZones.some((zone) => zone.name === destinationZone) ? destinationZone : destinationZones[0]?.name ?? "";
@@ -9454,6 +9452,8 @@ function OfficeInterZoneRuleManager({
   const [saving, setSaving] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState("");
   const [removing, setRemoving] = useState("");
+  const [pendingToggle, setPendingToggle] = useState<{ section: string; enabled: boolean } | null>(null);
+  const [toggling, setToggling] = useState("");
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
 
   const eligibleInterfaces = interfaces.filter((item) => item.protocol === "static");
