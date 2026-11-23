@@ -2100,6 +2100,7 @@ function action_wireless_radio_schedule()
 		http.write_json(payload)
 	end
 
+	-- READ_ONLY_HTTPS_GUARD: schedule inventory is read-only but remains TLS-only.
 	if not require_https(http) then return end
 	if method == "GET" then
 		local indexed, order = {}, {}
