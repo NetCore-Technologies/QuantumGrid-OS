@@ -236,6 +236,10 @@ jobs:
         run: lua5.1 tests/cellular-status.lua
       - name: Test bounded mwan3 tracker telemetry
         run: lua5.1 tests/mwan3-status.lua
+      - name: Test mwan3 member validation and rollback snapshots
+        run: lua5.1 tests/mwan3-config.lua
+      - name: Test mwan3 health and member API contracts
+        run: node --experimental-strip-types --test ../../tests/mwan3-config-api.test.mjs
       - name: Test redacted WireGuard peer telemetry
         run: lua5.1 tests/wireguard-status.lua
       - name: Test read-only conntrack capacity telemetry
