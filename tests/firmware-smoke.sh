@@ -2651,7 +2651,7 @@ grep -Fq 'enterprise_missing_accounting_field' "$ROOT/tests/wireless-controls.lu
 grep -Fq 'use an empty value to disable accounting' "$ROOT/files/usr/lib/lua/luci/quantumgrid/wireless.lua"
 grep -Fq 'Enable RADIUS accounting (optional)' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'acct_server", "acct_port", "acct_secret"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
-grep -Fq '"ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w", "dynamic_vlan"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq '"ssid", "network", "encryption", "key", "hidden", "auth_server", "auth_port", "auth_secret", "acct_server", "acct_port", "acct_secret", "ieee80211w", "ieee80211k", "ieee80211v", "dynamic_vlan"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'restore_wireless_snapshot(uci, update.radio, update.section, snapshot)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'current_radius_server ~= update.radius_server' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'valid_text(radius_secret, 16, 128, "RADIUS shared secret")' "$ROOT/files/usr/lib/lua/luci/quantumgrid/wireless.lua"
