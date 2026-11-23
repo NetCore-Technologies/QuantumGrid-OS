@@ -43,6 +43,10 @@ end
 local function ipv6(value)
   if type(value) ~= "string" or #value < 2 or #value > 39 then return false end
   if not value:match("^[%x:]+$") then return false end
+  -- A single leading/trailing colon is never valid; only the two-character
+  -- compression marker may touch either address boundary.
+  if value:sub(1, 1) == ":" and value:sub(1, 2) ~= "::" then return false end
+  if value:sub(-1) == ":" and value:sub(-2) ~= "::" then return false end
 
   local double = value:find("::", 1, true)
   if double then
