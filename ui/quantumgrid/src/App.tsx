@@ -1866,8 +1866,6 @@ function Mwan3HealthEditor({ config, refresh }: {
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
-  const [runtimeSummary, setRuntimeSummary] = useState("Live radio state has not been checked.");
-  const [refreshingRuntime, setRefreshingRuntime] = useState(false);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -4967,6 +4965,8 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
   const [saving, setSaving] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const [runtimeSummary, setRuntimeSummary] = useState("Live radio state has not been checked.");
+  const [refreshingRuntime, setRefreshingRuntime] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -5006,7 +5006,7 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
       if (active) setLoading(false);
     });
     return () => { active = false; };
-  }, [radio.name]);
+  }, [radio.name, radio.up]);
 
   const save = async () => {
     if (!confirmed || saving || loading || radio.config_available !== true) return;
