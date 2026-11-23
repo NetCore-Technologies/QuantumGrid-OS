@@ -41,8 +41,14 @@ function M.validate(input)
 end
 function M.from_config(section, radio)
 	if type(section) ~= "table" or section[".type"] ~= "schedule" or section.radio ~= radio then return nil end
-	return M.validate({radio=radio, enabled=section.enabled, days=section.days,
+	local parsed = M.validate({radio=radio, enabled=section.enabled, days=section.days,
 		start_time=section.start_time, end_time=section.end_time, confirmed="1"})
+	if not parsed then return nil end
+	if section.base_disabled ~= nil and section.base_disabled ~= "0" and section.base_disabled ~= "1" then return nil end
+	if parsed.enabled and section.base_disabled == nil then return nil end
+	parsed.base_disabled_present = section.base_disabled ~= nil
+	parsed.base_disabled = section.base_disabled == "1"
+	return parsed
 end
 local function selected(schedule, day)
 	for _, d in ipairs(schedule.days or {}) do if d == day then return true end end

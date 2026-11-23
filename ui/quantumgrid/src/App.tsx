@@ -6376,7 +6376,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
     }
     setClientHistoryState((current) => ({ ...current, samples: [], error }));
   };
-  const applyChannelRecommendation = async (nowSeconds: number) => {
+  async function applyChannelRecommendation(nowSeconds: number) {
     const review = pendingChannelChange;
     if (!review || !channelChangeConfirmed || channelChangeSaving) return;
     const scanAgeSeconds = scan ? nowSeconds - scan.scanned_at : Number.POSITIVE_INFINITY;
@@ -6459,7 +6459,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
     } finally {
       setChannelChangeSaving(false);
     }
-  };
+  }
 
   const runWirelessScan = async () => {
     setPendingChannelChange(null);
