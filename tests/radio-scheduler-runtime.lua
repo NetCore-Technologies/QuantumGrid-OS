@@ -117,6 +117,15 @@ do
 	assert(runtime.radio0.up == true and state.reloads == 2)
 end
 
+-- Unexpected UCI disabled values are not coerced into an enabled/disabled state.
+do
+	local uci, deps, runtime, state = fixture(enabled_schedule, "unexpected", true)
+	local ok, result = scheduler.run_once(uci, deps, { wday = 2, hour = 7, min = 0 })
+	assert(ok and result.changed_radios == 0)
+	assert(uci.packages.wireless.radio0.disabled == "unexpected" and state.reloads == 0)
+	assert(#state.logs > 0)
+end
+
 -- Unavailable runtime telemetry must not trigger a UCI write or reload.
 do
 	local uci, deps, runtime, state = fixture(enabled_schedule, nil, true)

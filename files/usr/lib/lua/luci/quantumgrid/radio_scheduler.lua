@@ -128,19 +128,23 @@ function M.run_once(uci, deps, now)
 				if config_ok and type(wireless) == "table" and wireless[".type"] == "wifi-device" and
 					type(live) == "table" and type(live.up) == "boolean" then
 					local previous_disabled = wireless.disabled
-					local config_change = desired_disabled ~= (previous_disabled == "1") or
-						(not desired_disabled and previous_disabled ~= nil)
-					local runtime_change = live.up ~= (not desired_disabled)
-					if config_change or runtime_change then
-						changes[#changes + 1] = {
-							radio = radio,
-							previous_disabled = previous_disabled,
-							previous_up = live.up,
-							desired_disabled = desired_disabled
-						}
-					end
-					if not schedule.enabled and schedule.base_disabled_present then
-						clear_baselines[#clear_baselines + 1] = radio
+					if previous_disabled ~= nil and previous_disabled ~= "0" and previous_disabled ~= "1" then
+						log(deps, "radio disabled option contains an invalid value; the scheduled radio was skipped")
+					else
+						local config_change = desired_disabled ~= (previous_disabled == "1") or
+							(not desired_disabled and previous_disabled ~= nil)
+						local runtime_change = live.up ~= (not desired_disabled)
+						if config_change or runtime_change then
+							changes[#changes + 1] = {
+								radio = radio,
+								previous_disabled = previous_disabled,
+								previous_up = live.up,
+								desired_disabled = desired_disabled
+							}
+						end
+						if not schedule.enabled and schedule.base_disabled_present then
+							clear_baselines[#clear_baselines + 1] = radio
+						end
 					end
 				else
 					log(deps, "a scheduled radio does not resolve to a verifiable live wifi-device; it was skipped")

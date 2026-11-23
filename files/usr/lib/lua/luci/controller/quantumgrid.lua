@@ -2206,6 +2206,10 @@ function action_wireless_radio_schedule()
 			respond(503, { ok = false, error = "The current radio state could not be inspected safely." })
 			return
 		end
+		if disabled ~= nil and disabled ~= "0" then
+			respond(409, { ok = false, error = "The current radio disabled flag is invalid; inspect wireless configuration before scheduling." })
+			return
+		end
 		local live_up = false
 		for _, item in ipairs(wireless_status()) do
 			if item.name == update.radio and item.config_available == true and item.disabled == false and item.up == true then
