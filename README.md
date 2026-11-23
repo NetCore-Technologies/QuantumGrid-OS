@@ -495,9 +495,12 @@ through this manager, so router-management access policy remains separately cont
 
 A forwarding entry is a directional permission, not a firewall packet-path test. The separate
 zone-policy editor can change existing zone output/forward defaults and masquerading while leaving
-router INPUT read-only. This control does not edit individual rule ordering, NAT redirects, traffic
-shaping, address sets or policy-routing. Review the complete fw4 ruleset and test the actual path
-between clients before deploying segmentation to a production office.
+router INPUT read-only. A separate managed service-rule editor can add or remove a single-host IPv4
+TCP/UDP/TCP+UDP/ICMP ACCEPT/REJECT rule between internal zones that already have an explicit
+forwarding; the destination and optional source host must belong to validated static subnets attached
+to those zones. It does not edit arbitrary rule order, WAN input, address sets, traffic shaping or
+policy-routing. Review the complete fw4 ruleset and test the actual path between clients before
+deploying segmentation to a production office.
 
 ## Managed firewall zone policy
 
@@ -513,8 +516,10 @@ checks the current administrator's IPv4 route. The change is blocked when the se
 carries that route, or when the route cannot be proven. This is a management-plane safeguard,
 not a substitute for an out-of-band recovery path. Masquerading changes source-NAT behaviour
 and can alter connectivity; review the zone's networks and test real client traffic after
-applying changes. The UI and API do not edit individual firewall rules, NAT redirects, address
-sets or policy-routing entries through this zone editor.
+applying changes. This zone-policy editor does not edit individual firewall rules, NAT
+redirects, address sets or policy-routing entries. A separate narrow internal IPv4 service-rule
+manager uses explicit zone forwardings and validated single-host subnets; it is not a general-purpose
+firewall editor.
 
 ## Routed IPv4 office segment provisioning
 

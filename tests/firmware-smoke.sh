@@ -5423,3 +5423,12 @@ grep -Fq 'function updateRouterSnmpv3(input:' "$ROOT/ui/quantumgrid/src/routerAp
 grep -Fq 'title="SNMPv3 network management"' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'system.snmpv3.update' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'snmpv3-api.test.mjs' "$ROOT/.github/workflows/ci.yml"
+
+# Guarded internal IPv4 inter-zone service rule manager.
+grep -Fq 'office-interzone-rule-add' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'office-interzone-rule-remove' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'function validate_office_interzone_rule' "$ROOT/files/usr/lib/lua/luci/quantumgrid/office_networks.lua"
+grep -Fq 'action_office_interzone_rule_add' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'OfficeInterZoneRuleManager' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'createRouterOfficeInterZoneRule' "$ROOT/ui/quantumgrid/src/routerApi.ts"
+grep -Fq 'office-port-forward-api.test.mjs' "$ROOT/.github/workflows/ci.yml"

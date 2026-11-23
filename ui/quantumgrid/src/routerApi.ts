@@ -4519,8 +4519,9 @@ export async function createRouterOfficeInterZoneRule(input: {
       !("protocol" in payload) || payload.protocol !== input.protocol ||
       !("source_ip" in payload) || payload.source_ip !== sourceIp ||
       !("destination_ip" in payload) || payload.destination_ip !== input.destinationIp ||
-      !("destination_port" in payload) ||
-      (input.protocol === "icmp" ? payload.destination_port !== undefined : payload.destination_port !== Number(destinationPort)) ||
+      (input.protocol === "icmp"
+        ? ("destination_port" in payload && payload.destination_port !== undefined && payload.destination_port !== null)
+        : (!("destination_port" in payload) || payload.destination_port !== Number(destinationPort))) ||
       !("target" in payload) || payload.target !== input.target ||
       !("enabled" in payload) || payload.enabled !== true ||
       !("reloaded" in payload) || payload.reloaded !== true ||

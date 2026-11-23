@@ -8972,6 +8972,12 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         item.source + " → " + item.destination,
         "", "", "", item.destination_ip, "",
       ]),
+      ...(inventory.filter_rules ?? []).map((item) => [
+        exportedAt, "Internal IPv4 service rule", item.name, item.destination_ip,
+        item.protocol + (item.destination_port ? " " + item.destination_port : ""),
+        (item.enabled ? item.target : "DISABLED") + (item.source_ip ? " · from " + item.source_ip : ""),
+        item.source + " → " + item.destination, "", "", "", "", "",
+      ]),
       ...(inventory.dhcp_scopes ?? []).map((item) => [
         exportedAt, "DHCP scope", item.name, item.interface, "start=" + item.start,
         "limit=" + (item.limit ?? "unknown") + "; lease=" + item.lease_time + "; ignored=" + item.ignore + "; dhcpv6=" + item.dhcpv6 + "; ra=" + item.ra + "; pool=" + (item.range_valid ? item.pool_start_ip + "-" + item.pool_end_ip : item.range_error) + "; overlaps=" + item.overlap,
