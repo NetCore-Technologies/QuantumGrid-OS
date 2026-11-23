@@ -1253,6 +1253,46 @@ export interface RouterOfficeStaticLease {
   ipv4: string;
 }
 
+export type RouterOfficeInterZoneProtocol = "tcp" | "udp" | "tcp udp" | "icmp";
+export type RouterOfficeInterZoneTarget = "ACCEPT" | "REJECT";
+
+export interface RouterOfficeInterZoneRule {
+  section: string;
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficeInterZoneProtocol;
+  source_ip?: string;
+  destination_ip: string;
+  destination_port?: number;
+  target: RouterOfficeInterZoneTarget;
+  enabled: boolean;
+}
+
+export interface RouterOfficeInterZoneRuleCreateResult {
+  ok: true;
+  section: string;
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficeInterZoneProtocol;
+  source_ip: string;
+  destination_ip: string;
+  destination_port?: number;
+  target: RouterOfficeInterZoneTarget;
+  enabled: true;
+  reloaded: true;
+  rolled_back: false;
+}
+
+export interface RouterOfficeInterZoneRuleRemoveResult {
+  ok: true;
+  section: string;
+  removed: true;
+  reloaded: true;
+  rolled_back: false;
+}
+
 export interface RouterOfficeNetworks {
   available: boolean;
   firewall_available: boolean;
@@ -1271,6 +1311,8 @@ export interface RouterOfficeNetworks {
   forwardings: RouterOfficeForwarding[];
   forwarding_count: number;
   redirects: RouterOfficePortForward[];
+  filter_rules: RouterOfficeInterZoneRule[];
+  filter_rule_count: number;
   redirect_count: number;
   ipv6_pinholes: RouterOfficeIpv6Pinhole[];
   ipv6_pinhole_count: number;
@@ -1677,6 +1719,8 @@ const BRIDGE_VLAN_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-
 const BRIDGE_VLAN_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/bridge-vlan-remove";
 const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-add";
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
+const OFFICE_INTERZONE_RULE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-interzone-rule-add";
+const OFFICE_INTERZONE_RULE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-interzone-rule-remove";
 const OFFICE_PORT_FORWARD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-add";
 const OFFICE_PORT_FORWARD_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-remove";
 const OFFICE_PORT_FORWARD_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-toggle";
@@ -4386,6 +4430,155 @@ export async function createRouterOfficeSegment(input: {
   return payload as RouterOfficeSegmentCreateResult;
 }
 
+
+export async function createRouterOfficeInterZoneRule(input: {
+  name: string;
+  source: string;
+  destination: string;
+  protocol: RouterOfficeInterZoneProtocol;
+  sourceIp?: string;
+  destinationIp: string;
+  destinationPort?: string;
+  target: RouterOfficeInterZoneTarget;
+}): Promise<RouterOfficeInterZoneRuleCreateResult> {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(input.name)) {
+    throw new Error("Enter a valid rule name using 1–64 letters, digits, dots, underscores or hyphens.");
+  }
+  const validZone = (value: string) => /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
+  if (!validZone(input.source) || !validZone(input.destination) || input.source === input.destination) {
+    throw new Error("Select two different existing internal firewall zones.");
+  }
+  if (input.protocol !== "tcp" && input.protocol !== "udp" && input.protocol !== "tcp udp" && input.protocol !== "icmp") {
+    throw new Error("Protocol must be TCP, UDP, TCP + UDP or IPv4 ICMP.");
+  }
+  if (input.target !== "ACCEPT" && input.target !== "REJECT") {
+    throw new Error("Rule action must be ACCEPT or REJECT.");
+  }
+  const validIpv4 = (value: string) => {
+    const parts = value.split(".");
+    return parts.length === 4 && parts.every((part) =>
+      /^(0|[1-9][0-9]{0,2})$/.test(part) && Number(part) <= 255
+    );
+  };
+  if (!validIpv4(input.destinationIp)) {
+    throw new Error("Destination must be a valid dotted-decimal IPv4 address.");
+  }
+  const sourceIp = input.sourceIp?.trim() ?? "";
+  if (sourceIp && !validIpv4(sourceIp)) {
+    throw new Error("Optional source must be a valid dotted-decimal IPv4 address.");
+  }
+  let destinationPort = "";
+  if (input.protocol === "icmp") {
+    if (input.destinationPort && input.destinationPort.trim() !== "") {
+      throw new Error("IPv4 ICMP rules do not use a destination port.");
+    }
+  } else {
+    const port = input.destinationPort ?? "";
+    if (!/^[0-9]{1,5}$/.test(port) || Number(port) < 1 || Number(port) > 65535) {
+      throw new Error("Destination port must be a whole number from 1 to 65535.");
+    }
+    destinationPort = String(Number(port));
+  }
+
+  const form = new URLSearchParams();
+  form.set("name", input.name);
+  form.set("source", input.source);
+  form.set("destination", input.destination);
+  form.set("protocol", input.protocol);
+  form.set("destination_ip", input.destinationIp);
+  form.set("source_ip", sourceIp);
+  form.set("destination_port", destinationPort);
+  form.set("target", input.target);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_INTERZONE_RULE_ADD_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Inter-zone firewall changes require an active router administrator session."
+      : "The router returned an invalid inter-zone rule response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid inter-zone rule response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || typeof payload.section !== "string" || !/^qg_office_rule_[1-9][0-9]*$/.test(payload.section) ||
+      !("name" in payload) || payload.name !== input.name ||
+      !("source" in payload) || payload.source !== input.source ||
+      !("destination" in payload) || payload.destination !== input.destination ||
+      !("protocol" in payload) || payload.protocol !== input.protocol ||
+      !("source_ip" in payload) || payload.source_ip !== sourceIp ||
+      !("destination_ip" in payload) || payload.destination_ip !== input.destinationIp ||
+      !("destination_port" in payload) ||
+      (input.protocol === "icmp" ? payload.destination_port !== undefined : payload.destination_port !== Number(destinationPort)) ||
+      !("target" in payload) || payload.target !== input.target ||
+      !("enabled" in payload) || payload.enabled !== true ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the managed inter-zone rule and firewall reload.");
+  }
+  return {
+    ok: true,
+    section: payload.section,
+    name: input.name,
+    source: input.source,
+    destination: input.destination,
+    protocol: input.protocol,
+    source_ip: sourceIp,
+    destination_ip: input.destinationIp,
+    ...(input.protocol === "icmp" ? {} : { destination_port: Number(destinationPort) }),
+    target: input.target,
+    enabled: true,
+    reloaded: true,
+    rolled_back: false,
+  };
+}
+
+export async function removeRouterOfficeInterZoneRule(section: string): Promise<RouterOfficeInterZoneRuleRemoveResult> {
+  if (!/^qg_office_rule_[1-9][0-9]*$/.test(section)) {
+    throw new Error("Invalid managed inter-zone firewall rule section.");
+  }
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_INTERZONE_RULE_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Inter-zone firewall changes require an active router administrator session."
+      : "The router returned an invalid inter-zone removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid inter-zone removal response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("removed" in payload) || payload.removed !== true ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm managed inter-zone rule removal and firewall reload.");
+  }
+  return { ok: true, section, removed: true, reloaded: true, rolled_back: false };
+}
 
 export async function createRouterOfficePortForward(input: {
   name: string;
