@@ -73,7 +73,8 @@ function M.desired_disabled(schedule, weekday, minute_of_day)
 		if schedule.base_disabled_present == true then return false end
 		return nil
 	end
-	if schedule.base_disabled_present ~= true or schedule.base_disabled ~= false then return nil end
+	-- Persisted schedules are checked by from_config; this pure evaluator is also
+	-- used for validated, not-yet-persisted drafts and unit tests.
 	return not M.is_active(schedule, weekday, minute_of_day)
 end
 return M
