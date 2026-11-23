@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -9287,6 +9287,15 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
         forwardings={inventory?.forwardings ?? []}
         refresh={refresh}
       />
+      <OfficeInterZoneRuleManager
+        available={Boolean(inventory?.firewall_available)}
+        truncated={Boolean(inventory?.truncated)}
+        zones={zones}
+        interfaces={interfaces}
+        forwardings={inventory?.forwardings ?? []}
+        rules={inventory?.filter_rules ?? []}
+        refresh={refresh}
+      />
       <OfficePortForwardManager
         available={Boolean(inventory?.firewall_available)}
         truncated={Boolean(inventory?.truncated)}
@@ -9325,6 +9334,260 @@ function OfficeNetworksPage({ routerOverview, refresh }: {
     </div>
   );
 }
+function OfficeInterZoneRuleManager({
+  available,
+  truncated,
+  zones,
+  interfaces,
+  forwardings,
+  rules,
+  refresh,
+}: {
+  available: boolean;
+  truncated: boolean;
+  zones: RouterOfficeFirewallZone[];
+  interfaces: RouterOfficeInterface[];
+  forwardings: RouterOfficeForwarding[];
+  rules: RouterOfficeInterZoneRule[];
+  refresh: () => void;
+}) {
+  const externalZones = new Set(["wan", "wan6", "wwan", "cellular"]);
+  const isInternalZone = (zone: RouterOfficeFirewallZone) =>
+    !externalZones.has(zone.name.toLowerCase()) &&
+    zone.networks.every((network) => !externalZones.has(network.toLowerCase()));
+  const internalZones = zones.filter(isInternalZone);
+  const internalNames = new Set(internalZones.map((zone) => zone.name));
+  const pairs = forwardings.filter((item) =>
+    internalNames.has(item.source) && internalNames.has(item.destination) &&
+    item.source !== item.destination
+  );
+  const sourceOptions = [...new Set(pairs.map((item) => item.source))].sort();
+  const [source, setSource] = useState("");
+  const selectedSource = sourceOptions.includes(source) ? source : sourceOptions[0] ?? "";
+  const destinationOptions = [...new Set(pairs
+    .filter((item) => item.source === selectedSource)
+    .map((item) => item.destination))].sort();
+  const [destination, setDestination] = useState("");
+  const selectedDestination = destinationOptions.includes(destination)
+    ? destination
+    : destinationOptions[0] ?? "";
+  const [name, setName] = useState("");
+  const [protocol, setProtocol] = useState<RouterOfficeInterZoneRule["protocol"]>("tcp");
+  const [sourceIp, setSourceIp] = useState("");
+  const [destinationIp, setDestinationIp] = useState("");
+  const [destinationPort, setDestinationPort] = useState("443");
+  const [target, setTarget] = useState<RouterOfficeInterZoneRule["target"]>("ACCEPT");
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pendingRemoval, setPendingRemoval] = useState("");
+  const [removing, setRemoving] = useState("");
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const eligibleInterfaces = interfaces.filter((item) => item.protocol === "static");
+  const isHostInZone = (address: string, zoneName: string) => {
+    if (!address) return false;
+    const zone = internalZones.find((item) => item.name === zoneName);
+    if (!zone) return false;
+    return eligibleInterfaces.some((iface) => iface.firewall_zones.includes(zoneName) &&
+      iface.ipv4.some((gateway) => ipv4SubnetContainsHost(address, gateway, iface.netmask)));
+  };
+  const ipv4Pattern = /^(0|[1-9]\d{0,2})(\.(0|[1-9]\d{0,2})){3}$/;
+  const destinationValid = ipv4Pattern.test(destinationIp) &&
+    destinationIp.split(".").every((part) => Number(part) <= 255) &&
+    isHostInZone(destinationIp, selectedDestination);
+  const sourceOptionalValid = sourceIp.trim() === "" ||
+    (ipv4Pattern.test(sourceIp.trim()) &&
+      sourceIp.trim().split(".").every((part) => Number(part) <= 255) &&
+      isHostInZone(sourceIp.trim(), selectedSource));
+  const portValid = protocol === "icmp" || (/^[0-9]{1,5}$/.test(destinationPort) &&
+    Number(destinationPort) >= 1 && Number(destinationPort) <= 65535);
+  const nameValid = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$/.test(name);
+  const ready = available && !truncated && pairs.length > 0 &&
+    nameValid && destinationValid && sourceOptionalValid && portValid &&
+    Boolean(selectedSource && selectedDestination) && confirmed && !saving;
+  const updateField = <T,>(setter: (value: T) => void) => (value: T) => {
+    setter(value);
+    setConfirmed(false);
+    setNotice(null);
+  };
+
+  const addRule = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!ready) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterOfficeInterZoneRule({
+        name: name.trim(),
+        source: selectedSource,
+        destination: selectedDestination,
+        protocol,
+        sourceIp: sourceIp.trim() || undefined,
+        destinationIp: destinationIp.trim(),
+        destinationPort: protocol === "icmp" ? undefined : destinationPort,
+        target,
+      });
+      setNotice({
+        success: true,
+        message: "Internal service rule " + result.name + " was committed and the firewall reload completed.",
+      });
+      setName("");
+      setSourceIp("");
+      setDestinationIp("");
+      setDestinationPort("443");
+      setConfirmed(false);
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The inter-zone service rule could not be added.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeRule = async (section: string) => {
+    if (removing || !section) return;
+    setRemoving(section);
+    setNotice(null);
+    try {
+      await removeRouterOfficeInterZoneRule(section);
+      setNotice({ success: true, message: "The managed inter-zone service rule was removed and the firewall reload completed." });
+      setPendingRemoval("");
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The inter-zone rule could not be removed.",
+      });
+    } finally {
+      setRemoving("");
+    }
+  };
+
+  return (
+    <Panel title="Internal IPv4 service rules" eyebrow="MANAGED FIREWALL RULES · EXISTING FORWARDING ONLY">
+      {!available ? (
+        <div className="module-message">Firewall configuration inventory is unavailable. No rule controls are exposed.</div>
+      ) : truncated ? (
+        <div className="module-message">The network/firewall inventory is truncated. Resolve the incomplete inventory before changing service rules.</div>
+      ) : pairs.length === 0 ? (
+        <div className="module-message">No internal source-to-destination zone forwarding exists. Create and verify an explicit internal forwarding above before adding a service rule.</div>
+      ) : (
+        <>
+          <div className="office-interzone-notice">
+            Rules are limited to one IPv4 destination host and one protocol/service between existing internal zones. They do not create zone forwarding, allow WAN input, change zone default policies or manage administrator-owned firewall rules.
+          </div>
+          <form className="office-interzone-editor" onSubmit={addRule}>
+            <div className="office-interzone-fields">
+              <label>
+                <span>RULE NAME</span>
+                <input value={name} onChange={(event) => updateField(setName)(event.target.value)} maxLength={64} placeholder="guest-to-corp-https" required />
+              </label>
+              <label>
+                <span>SOURCE ZONE</span>
+                <select value={selectedSource} onChange={(event) => {
+                  setSource(event.target.value);
+                  setDestination("");
+                  setConfirmed(false);
+                  setNotice(null);
+                }}>
+                  {sourceOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>DESTINATION ZONE</span>
+                <select value={selectedDestination} onChange={(event) => updateField(setDestination)(event.target.value)}>
+                  {destinationOptions.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>PROTOCOL</span>
+                <select value={protocol} onChange={(event) => updateField(setProtocol)(event.target.value as RouterOfficeInterZoneRule["protocol"])}>
+                  <option value="tcp">TCP</option>
+                  <option value="udp">UDP</option>
+                  <option value="tcp udp">TCP + UDP</option>
+                  <option value="icmp">IPv4 ICMP</option>
+                </select>
+              </label>
+              <label>
+                <span>DESTINATION IPv4 HOST</span>
+                <input value={destinationIp} onChange={(event) => updateField(setDestinationIp)(event.target.value)} maxLength={15} inputMode="decimal" placeholder="192.168.20.30" required />
+                <small>Must belong to the selected destination zone's existing static subnet.</small>
+              </label>
+              {protocol === "icmp" ? null : (
+                <label>
+                  <span>DESTINATION PORT</span>
+                  <input value={destinationPort} onChange={(event) => updateField(setDestinationPort)(event.target.value)} maxLength={5} inputMode="numeric" placeholder="443" required />
+                </label>
+              )}
+              <label>
+                <span>SOURCE IPv4 HOST (OPTIONAL)</span>
+                <input value={sourceIp} onChange={(event) => updateField(setSourceIp)(event.target.value)} maxLength={15} inputMode="decimal" placeholder="Any host in source zone" />
+                <small>Leave blank for any source host in the selected source zone.</small>
+              </label>
+              <label>
+                <span>RULE ACTION</span>
+                <select value={target} onChange={(event) => updateField(setTarget)(event.target.value as RouterOfficeInterZoneRule["target"])}>
+                  <option value="ACCEPT">Allow this service (ACCEPT)</option>
+                  <option value="REJECT">Reject this service (REJECT)</option>
+                </select>
+              </label>
+            </div>
+            {name && !nameValid ? <small className="office-interzone-validation">Use 1–64 letters, digits, dots, underscores or hyphens; start with a letter or digit.</small> : null}
+            {destinationIp && !destinationValid ? <small className="office-interzone-validation">Destination must be a valid host inside the selected destination-zone subnet.</small> : null}
+            {sourceIp && !sourceOptionalValid ? <small className="office-interzone-validation">Optional source must be a valid host inside the selected source-zone subnet.</small> : null}
+            {protocol !== "icmp" && destinationPort && !portValid ? <small className="office-interzone-validation">Enter a port from 1 to 65535.</small> : null}
+            <label className="office-interzone-confirm">
+              <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+              I authorize this narrow IPv4 firewall rule and understand that ACCEPT/REJECT takes effect only on the already-forwarded source-to-destination path.
+            </label>
+            <div className="office-interzone-actions">
+              <button type="submit" className="hero-button" disabled={!ready}>
+                {saving ? "Applying rule…" : "Add internal service rule"}
+              </button>
+              <span>Firewall reload is checked. A failed add is removed; a failed removal restores the original managed rule.</span>
+            </div>
+          </form>
+          <div className="office-interzone-list">
+            <div className="office-interzone-list-heading">
+              <strong>Managed internal IPv4 rules</strong>
+              <span>{rules.length} / 64</span>
+            </div>
+            {rules.length === 0 ? (
+              <div className="module-message">No QuantumGrid-managed internal IPv4 service rules are configured.</div>
+            ) : rules.map((rule) => (
+              <div className="office-interzone-row" key={rule.section}>
+                <div className="office-interzone-identity">
+                  <strong>{rule.name}</strong>
+                  <span>{rule.source} → {rule.destination} · {rule.protocol.toUpperCase()}{rule.destination_port ? " " + rule.destination_port : ""}</span>
+                  <small>{rule.source_ip ? "From " + rule.source_ip + " · " : "Any source in source zone · "}{rule.destination_ip}</small>
+                </div>
+                <div className="office-interzone-state">
+                  <Status active={rule.enabled}>{rule.enabled ? rule.target : "DISABLED"}</Status>
+                  {pendingRemoval === rule.section ? (
+                    <div className="office-interzone-remove-confirm">
+                      <button className="office-remove-confirm" type="button" disabled={Boolean(removing)} onClick={() => void removeRule(rule.section)}>
+                        {removing === rule.section ? "Removing…" : "Confirm remove"}
+                      </button>
+                      <button className="office-remove-cancel" type="button" disabled={Boolean(removing)} onClick={() => setPendingRemoval("")}>Cancel</button>
+                    </div>
+                  ) : (
+                    <button className="office-remove-start" type="button" disabled={Boolean(removing)} onClick={() => setPendingRemoval(rule.section)}>Remove</button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      {notice ? <div className={notice.success ? "module-message office-reservation-success" : "module-message office-reservation-error"} role={notice.success ? "status" : "alert"}>{notice.message}</div> : null}
+    </Panel>
+  );
+}
+
+
 function OfficePortForwardManager({
   available,
   truncated,

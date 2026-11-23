@@ -10337,6 +10337,28 @@ input::placeholder {
 }
 
 
+.office-interzone-notice { margin-bottom: 12px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.office-interzone-editor { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.018); }
+.office-interzone-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.office-interzone-fields label { display: grid; gap: 6px; min-width: 0; }
+.office-interzone-fields label > span { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.office-interzone-fields input, .office-interzone-fields select { width: 100%; min-width: 0; }
+.office-interzone-fields small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.office-interzone-validation { color: var(--warning, #d69b3f); font-size: 11px; }
+.office-interzone-confirm { display: flex; align-items: flex-start; gap: 8px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.office-interzone-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.office-interzone-actions > span { color: var(--muted); font-size: 10px; }
+.office-interzone-list { display: grid; gap: 8px; margin-top: 14px; }
+.office-interzone-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.office-interzone-list-heading span { color: var(--muted); }
+.office-interzone-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px; border: 1px solid var(--line); border-radius: 10px; }
+.office-interzone-identity { display: grid; gap: 4px; min-width: 0; }
+.office-interzone-identity strong { font-size: 12px; overflow-wrap: anywhere; }
+.office-interzone-identity span, .office-interzone-identity small { color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.office-interzone-state { display: grid; justify-items: end; gap: 8px; }
+.office-interzone-remove-confirm { display: flex; gap: 6px; }
+@media (max-width: 820px) { .office-interzone-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .office-interzone-fields { grid-template-columns: 1fr; } .office-interzone-row { align-items: flex-start; flex-direction: column; } .office-interzone-state { justify-items: start; } }
 .office-port-forward-list {
   display: grid;
   gap: 8px;
