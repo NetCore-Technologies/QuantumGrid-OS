@@ -59,4 +59,71 @@ local malformed = tuning.inspect({
 })
 assert(not malformed.available, "malformed current kernel values fail closed")
 
-print("network-tuning: allowlisted kernel choices and runtime inventory validation passed")
+
+local live = {
+	["/proc/sys/net/ipv4/tcp_congestion_control"] = "bbr",
+	["/proc/sys/net/core/default_qdisc"] = "fq_codel",
+}
+local function fake_deps(options)
+	options = options or {}
+	return {
+		read = function(path) return live[path] end,
+		write = function(path, value)
+			if options.fail_path == path and not options.fail_once then return false end
+			if options.fail_path == path and options.fail_once then
+				options.fail_once = false
+				return false
+			end
+			if options.reject_value == value then return true end
+			live[path] = value
+			return true
+		end,
+	}
+end
+
+-- A successful transaction updates both fixed kernel paths and confirms read-back.
+local updated = assert(tuning.apply({
+	congestion_control = "cubic", default_qdisc = "cake", confirmed = "1"
+}, snapshot, fake_deps()))
+assert(updated.changed and live["/proc/sys/net/ipv4/tcp_congestion_control"] == "cubic")
+assert(live["/proc/sys/net/core/default_qdisc"] == "cake")
+
+-- A partial write failure restores both old kernel settings.
+live["/proc/sys/net/ipv4/tcp_congestion_control"] = "bbr"
+live["/proc/sys/net/core/default_qdisc"] = "fq_codel"
+local failed, reason, rolled_back = tuning.apply({
+	congestion_control = "cubic", default_qdisc = "cake", confirmed = "1"
+}, snapshot, fake_deps({ fail_path = "/proc/sys/net/core/default_qdisc" }))
+assert(failed == nil and reason and rolled_back)
+assert(live["/proc/sys/net/ipv4/tcp_congestion_control"] == "bbr")
+assert(live["/proc/sys/net/core/default_qdisc"] == "fq_codel")
+
+-- Read-back mismatch is not reported as success and still attempts rollback.
+live["/proc/sys/net/ipv4/tcp_congestion_control"] = "bbr"
+live["/proc/sys/net/core/default_qdisc"] = "fq_codel"
+local calls = 0
+local mismatched = tuning.apply({
+	congestion_control = "cubic", default_qdisc = "cake", confirmed = "1"
+}, snapshot, {
+	read = function(path)
+		calls = calls + 1
+		if calls == 3 then return "bbr" end
+		return live[path]
+	end,
+	write = function(path, value) live[path] = value; return true end
+})
+assert(mismatched == nil)
+assert(live["/proc/sys/net/ipv4/tcp_congestion_control"] == "bbr")
+assert(live["/proc/sys/net/core/default_qdisc"] == "fq_codel")
+
+-- Re-applying the current state is a no-op and does not write anything.
+local writes = 0
+local no_op = assert(tuning.apply({
+	congestion_control = "bbr", default_qdisc = "fq_codel", confirmed = "1"
+}, snapshot, {
+	read = function(path) return live[path] end,
+	write = function() writes = writes + 1; return true end
+}))
+assert(not no_op.changed and writes == 0)
+
+print("network-tuning: bounded allowlists, no-op, runtime write/read-back and rollback tests passed")

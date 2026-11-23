@@ -108,4 +108,54 @@ function M.validate(input, snapshot)
 	}
 end
 
+function M.apply(input, snapshot, deps)
+	local update, validation_error = M.validate(input, snapshot)
+	if not update then return nil, validation_error, false end
+	if type(deps) ~= "table" or type(deps.write) ~= "function" or type(deps.read) ~= "function" then
+		return nil, "Kernel tuning write/read dependencies are unavailable.", false
+	end
+	if update.congestion_control == update.previous_congestion_control and
+		update.default_qdisc == update.previous_default_qdisc then
+		return {
+			changed = false,
+			congestion_control = update.congestion_control,
+			default_qdisc = update.default_qdisc,
+			rolled_back = false
+		}
+	end
+
+	local cc_path = "/proc/sys/net/ipv4/tcp_congestion_control"
+	local qdisc_path = "/proc/sys/net/core/default_qdisc"
+	local function write(path, value)
+		local ok, result = pcall(deps.write, path, value)
+		return ok and result == true
+	end
+	local function read(path)
+		local ok, value = pcall(deps.read, path)
+		if not ok or type(value) ~= "string" then return nil end
+		return value:match("^%s*(.-)%s*$")
+	end
+	local applied = write(cc_path, update.congestion_control)
+	if applied then applied = write(qdisc_path, update.default_qdisc) end
+	if applied then
+		applied = read(cc_path) == update.congestion_control and
+			read(qdisc_path) == update.default_qdisc
+	end
+	if applied then
+		return {
+			changed = true,
+			congestion_control = update.congestion_control,
+			default_qdisc = update.default_qdisc,
+			rolled_back = false
+		}
+	end
+
+	local restored_cc = write(cc_path, update.previous_congestion_control)
+	local restored_qdisc = write(qdisc_path, update.previous_default_qdisc)
+	local rollback_verified = restored_cc and restored_qdisc and
+		read(cc_path) == update.previous_congestion_control and
+		read(qdisc_path) == update.previous_default_qdisc
+	return nil, "The kernel rejected or did not retain the requested values.", rollback_verified == true
+end
+
 return M
