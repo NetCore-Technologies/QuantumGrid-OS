@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { updateRouterMwan3Interface } from "../ui/quantumgrid/src/routerApi.ts";
+import { updateRouterMwan3Interface, updateRouterMwan3Member } from "../ui/quantumgrid/src/routerApi.ts";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -128,4 +128,52 @@ test("Multi-WAN API rejects incomplete or mismatched router confirmations", asyn
     ),
     /did not confirm the Multi-WAN health-check update/,
   );
+});
+
+
+test("Multi-WAN member API updates an existing member's interface, metric and weight with confirmed restart", async () => {
+  let requestUrl = "";
+  let requestInit: RequestInit | undefined;
+  globalThis.fetch = async (url, init) => {
+    requestUrl = String(url);
+    requestInit = init;
+    return jsonResponse({
+      ok: true, section: "wan_m1_w3", interface: "wan", metric: 1, weight: 3,
+      restarted: true, rolled_back: false,
+    });
+  };
+  const result = await updateRouterMwan3Member("wan_m1_w3", "wan", 1, 3, true);
+  assert.equal(requestUrl, "/cgi-bin/luci/admin/services/quantumgrid/mwan3-member-update");
+  assert.equal(requestInit?.method, "POST");
+  assert.equal(requestInit?.credentials, "same-origin");
+  assert.equal(requestInit?.cache, "no-store");
+  const form = new URLSearchParams(String(requestInit?.body));
+  assert.equal(form.get("section"), "wan_m1_w3");
+  assert.equal(form.get("interface"), "wan");
+  assert.equal(form.get("metric"), "1");
+  assert.equal(form.get("weight"), "3");
+  assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.restarted, true);
+  assert.equal(result.rolled_back, false);
+});
+
+test("Multi-WAN member API rejects unsafe sections, interfaces and out-of-range metrics/weights before fetch", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not run for invalid member values"); };
+  await assert.rejects(updateRouterMwan3Member("../member", "wan", 1, 1, true), /section name/);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "../wan", 1, 1, true), /existing mwan3 interface/);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 0, 1, true), /metric/);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 256, 1, true), /metric/);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 1, 0, true), /weight/);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 1, 101, true), /weight/);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 1, 1, false), /Confirm the Multi-WAN member/);
+});
+
+test("Multi-WAN member API rejects unconfirmed or mismatched router restart responses", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true, section: "wan_m1_w3", interface: "wan", metric: 2, weight: 3,
+    restarted: true, rolled_back: false,
+  });
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 1, 3, true), /did not confirm/);
+  globalThis.fetch = async () => jsonResponse({ ok: false, error: "mwan3 restart failed." }, 502);
+  await assert.rejects(updateRouterMwan3Member("wan_m1_w3", "wan", 1, 3, true), /mwan3 restart failed/);
 });

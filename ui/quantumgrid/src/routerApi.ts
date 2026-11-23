@@ -343,6 +343,25 @@ export interface RouterMwan3TrackTarget {
   packet_loss_percent?: number;
 }
 
+export interface RouterMwan3MemberConfig {
+  section: string;
+  interface: string;
+  metric: number;
+  weight: number;
+  policies: string[];
+  valid: boolean;
+}
+
+export interface RouterMwan3MemberUpdateResult {
+  ok: true;
+  section: string;
+  interface: string;
+  metric: number;
+  weight: number;
+  restarted: true;
+  rolled_back: false;
+}
+
 export interface RouterMwan3InterfaceConfig {
   section: string;
   enabled: boolean;
@@ -418,6 +437,11 @@ export interface RouterMwan3Status {
   config_count: number;
   config_truncated: boolean;
   config_interfaces: RouterMwan3InterfaceConfig[];
+  config_members_available: boolean;
+  config_member_count: number;
+  config_member_truncated: boolean;
+  config_member_invalid_count: number;
+  config_members: RouterMwan3MemberConfig[];
 }
 
 export interface RouterSqmQueueUpdateResult {
@@ -1612,6 +1636,7 @@ const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const MWAN3_INTERFACE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/mwan3-interface-update";
+const MWAN3_MEMBER_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/mwan3-member-update";
 const SQM_CAKE_PROFILE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cake-profile";
 const SQM_CLIENT_QOS_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-add";
 const SQM_CLIENT_QOS_DOWNLOAD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-download-add";
@@ -2667,6 +2692,70 @@ export async function updateRouterSqmQueue(
   return payload as RouterSqmQueueUpdateResult;
 }
 
+
+export async function updateRouterMwan3Member(
+  section: string,
+  interfaceName: string,
+  metric: number,
+  weight: number,
+  confirmed: boolean,
+): Promise<RouterMwan3MemberUpdateResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(section)) {
+    throw new Error("Invalid mwan3 member section name.");
+  }
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(interfaceName)) {
+    throw new Error("Choose an existing mwan3 interface.");
+  }
+  if (!Number.isInteger(metric) || metric < 1 || metric > 255) {
+    throw new Error("Member metric must be a whole number from 1 to 255.");
+  }
+  if (!Number.isInteger(weight) || weight < 1 || weight > 100) {
+    throw new Error("Member weight must be a whole number from 1 to 100.");
+  }
+  if (!confirmed) throw new Error("Confirm the Multi-WAN member change before applying it.");
+
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("interface", interfaceName);
+  form.set("metric", String(metric));
+  form.set("weight", String(weight));
+  form.set("confirmed", "1");
+
+  const response = await fetch(MWAN3_MEMBER_UPDATE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Multi-WAN member changes require an active router administrator session."
+      : "The router returned an invalid Multi-WAN member response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid Multi-WAN member response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("interface" in payload) || payload.interface !== interfaceName ||
+      !("metric" in payload) || payload.metric !== metric ||
+      !("weight" in payload) || payload.weight !== weight ||
+      !("restarted" in payload) || payload.restarted !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the Multi-WAN member update and service restart.");
+  }
+  return {
+    ok: true, section, interface: interfaceName, metric, weight,
+    restarted: true, rolled_back: false,
+  };
+}
 
 export async function updateRouterMwan3Interface(
   section: string,
