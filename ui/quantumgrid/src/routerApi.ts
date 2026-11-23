@@ -2289,9 +2289,9 @@ export async function getRouterWirelessRadioSchedules(): Promise<RouterWirelessR
         !("radio" in item) || typeof item.radio !== "string" || !/^[A-Za-z0-9_-]{1,32}$/.test(item.radio) ||
         !("configured" in item) || item.configured !== true ||
         !("valid" in item) || typeof item.valid !== "boolean" ||
-        !("enabled" in item) || typeof item.enabled !== "boolean ||
+        !("enabled" in item) || typeof item.enabled !== "boolean" ||
         !("days" in item) || !Array.isArray(item.days) ||
-        !("start_time" in item) || typeof item.start_time !== "string ||
+        !("start_time" in item) || typeof item.start_time !== "string" ||
         !("end_time" in item) || typeof item.end_time !== "string") {
       throw new Error("The router returned an invalid radio schedule record.");
     }
