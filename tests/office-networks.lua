@@ -1077,4 +1077,99 @@ assert(pinhole_inventory.ipv6_pinhole_count == 2
   and pinhole_inventory.ipv6_pinholes[2].enabled == false,
   "IPv6 pinhole inventory must discard malformed sections/non-global addresses and preserve enabled state")
 
+
+local service_zones = {
+  { name = "corp", networks = { "corp" } },
+  { name = "guest", networks = { "guest" } },
+  { name = "wan", networks = { "wan" } },
+}
+local service_interfaces = {
+  { name = "corp", ipv4 = { "192.168.20.1" }, netmask = "255.255.255.0" },
+  { name = "guest", ipv4 = { "192.168.30.1" }, netmask = "255.255.255.0" },
+}
+local service_forwardings = { { source = "guest", destination = "corp" } }
+local valid_service_rule, service_error = office.validate_office_interzone_rule(
+  "guest-to-corp-https", "guest", "corp", "tcp", "192.168.20.30", "443",
+  "192.168.30.50", "ACCEPT", service_zones, service_interfaces, service_forwardings, {})
+assert(valid_service_rule and valid_service_rule.protocol == "tcp"
+  and valid_service_rule.source_ip == "192.168.30.50"
+  and valid_service_rule.destination_port == "443", service_error or "valid internal service rule expected")
+local icmp_service_rule = office.validate_office_interzone_rule(
+  "guest-to-corp-ping", "guest", "corp", "icmp", "192.168.20.30", "",
+  "", "REJECT", service_zones, service_interfaces, service_forwardings, {})
+assert(icmp_service_rule and icmp_service_rule.destination_port == nil and icmp_service_rule.target == "REJECT")
+
+local function reject_service_rule(name, source, destination, protocol, ip, port, source_ip, target, forwardings, existing, label)
+  local result, err = office.validate_office_interzone_rule(
+    name, source, destination, protocol, ip, port, source_ip, target,
+    service_zones, service_interfaces, forwardings or service_forwardings, existing or {})
+  assert(result == nil, label .. " must be rejected")
+  assert(type(err) == "string" and #err > 0, label .. " should explain its rejection")
+end
+reject_service_rule("../bad", "guest", "corp", "tcp", "192.168.20.30", "443", "", "ACCEPT", nil, nil, "path-like rule name")
+reject_service_rule("wan-rule", "wan", "corp", "tcp", "192.168.20.30", "443", "", "ACCEPT", nil, nil, "external source zone")
+reject_service_rule("external-dest", "guest", "wan", "tcp", "192.168.20.30", "443", "", "ACCEPT", nil, nil, "external destination zone")
+reject_service_rule("missing-forward", "guest", "corp", "tcp", "192.168.20.30", "443", "", "ACCEPT", {}, nil, "missing explicit zone forwarding")
+reject_service_rule("unknown-host", "guest", "corp", "tcp", "192.168.21.30", "443", "", "ACCEPT", nil, nil, "destination outside zone subnet")
+reject_service_rule("gateway-host", "guest", "corp", "tcp", "192.168.20.1", "443", "", "ACCEPT", nil, nil, "router gateway destination")
+reject_service_rule("bad-source-host", "guest", "corp", "tcp", "192.168.20.30", "443", "192.168.31.20", "ACCEPT", nil, nil, "source outside source-zone subnet")
+reject_service_rule("bad-proto", "guest", "corp", "all", "192.168.20.30", "443", "", "ACCEPT", nil, nil, "unbounded protocol")
+reject_service_rule("bad-port", "guest", "corp", "tcp", "192.168.20.30", "65536", "", "ACCEPT", nil, nil, "invalid destination port")
+reject_service_rule("icmp-port", "guest", "corp", "icmp", "192.168.20.30", "443", "", "REJECT", nil, nil, "ICMP port")
+reject_service_rule("bad-target", "guest", "corp", "tcp", "192.168.20.30", "443", "", "DROP", nil, nil, "unsupported target")
+reject_service_rule("guest-to-corp-https", "guest", "corp", "udp", "192.168.20.30", "443", "", "ACCEPT", nil, nil,
+  "duplicate managed rule name", { { name = "guest-to-corp-https", source = "guest", destination = "corp" } })
+reject_service_rule("duplicate", "guest", "corp", "tcp", "192.168.20.30", "443", "192.168.30.50", "ACCEPT", nil,
+  { { name = "existing", source = "guest", destination = "corp", protocol = "tcp",
+      destination_ip = "192.168.20.30", destination_port = 443, source_ip = "192.168.30.50", target = "ACCEPT" } },
+  "duplicate service rule")
+
+local service_snapshot = office.snapshot_office_interzone_rule({
+  [".type"] = "rule", [".name"] = "qg_office_rule_1",
+  name = "QuantumGrid inter-zone rule: guest-to-corp-https",
+  src = "guest", dest = "corp", proto = { "tcp" }, src_ip = "192.168.30.50",
+  dest_ip = "192.168.20.30", dest_port = "443", family = "ipv4",
+  target = "ACCEPT", enabled = "1"
+})
+assert(service_snapshot and service_snapshot.section == "qg_office_rule_1"
+  and service_snapshot.values.dest_ip == "192.168.20.30")
+assert(office.summarize_office_interzone_rule({
+  [".type"] = "rule", [".name"] = "qg_office_rule_1",
+  name = "QuantumGrid inter-zone rule: guest-to-corp-https",
+  src = "guest", dest = "corp", proto = "tcp", src_ip = "192.168.30.50",
+  dest_ip = "192.168.20.30", dest_port = "443", family = "ipv4",
+  target = "ACCEPT", enabled = "0"
+}).enabled == false)
+assert(office.snapshot_office_interzone_rule({
+  [".type"] = "rule", [".name"] = "cfg_custom", name = "Administrator custom rule",
+  src = "guest", dest = "corp", proto = "tcp", dest_ip = "192.168.20.30",
+  dest_port = "443", family = "ipv4", target = "ACCEPT"
+}) == nil, "unowned administrator rules must never be removable through this manager")
+assert(office.snapshot_office_interzone_rule({
+  [".type"] = "rule", [".name"] = "qg_office_rule_1",
+  name = "QuantumGrid inter-zone rule: guest-to-corp-https",
+  src = "guest", dest = "corp", proto = "tcp", src_port = "22",
+  dest_ip = "192.168.20.30", dest_port = "443", family = "ipv4",
+  target = "ACCEPT"
+}) == nil, "managed rules with unapproved extra match options must fail closed")
+
+local service_inventory = office.build_inventory({
+  available = true, firewall_available = true,
+  filter_rules = {
+    { section = "qg_office_rule_1", name = "guest-to-corp-https", source = "guest",
+      destination = "corp", protocol = "tcp", source_ip = "192.168.30.50",
+      destination_ip = "192.168.20.30", destination_port = 443, target = "ACCEPT", enabled = true },
+    { section = "qg_office_rule_2", name = "guest-to-corp-icmp", source = "guest",
+      destination = "corp", protocol = "icmp", destination_ip = "192.168.20.30",
+      target = "REJECT", enabled = false },
+    { section = "../unsafe", name = "unsafe", source = "wan", destination = "corp",
+      protocol = "all", destination_ip = "192.168.20.30", target = "ACCEPT" }
+  }
+})
+assert(service_inventory.filter_rule_count == 2
+  and service_inventory.filter_rules[1].destination_port == 443
+  and service_inventory.filter_rules[2].protocol == "icmp"
+  and service_inventory.filter_rules[2].enabled == false,
+  "office inventory must expose only normalized managed IPv4 service rules")
+
 print("office-networks: IPv4/IPv6 VLAN, DHCP, forwarding, pinhole and SSID tests passed")

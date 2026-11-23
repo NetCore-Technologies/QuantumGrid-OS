@@ -967,6 +967,214 @@ function validate_office_port_forward(
 	}
 end
 
+function validate_office_interzone_rule(
+	name, source, destination, protocol, destination_ip, destination_port, source_ip,
+	target, zones, interfaces, forwardings, existing)
+	if type(name) ~= "string" or #name < 1 or #name > 64
+		or not name:match("^[A-Za-z0-9][A-Za-z0-9_.%-]*$") then
+		return nil, "Rule name must be 1–64 letters, digits, dots, underscores or hyphens and start with a letter or digit."
+	end
+	if type(source) ~= "string" or #source > 64 or not source:match("^[%w_.%-]+$") then
+		return nil, "Select an existing internal source firewall zone."
+	end
+	if type(destination) ~= "string" or #destination > 64 or not destination:match("^[%w_.%-]+$") then
+		return nil, "Select an existing internal destination firewall zone."
+	end
+	if source == destination then return nil, "Source and destination zones must be different." end
+
+	local source_zone, destination_zone = nil, nil
+	local source_count, destination_count = 0, 0
+	for _, zone in ipairs(type(zones) == "table" and zones or {}) do
+		if type(zone) == "table" then
+			if zone.name == source then source_zone = zone; source_count = source_count + 1 end
+			if zone.name == destination then destination_zone = zone; destination_count = destination_count + 1 end
+		end
+	end
+	if source_count ~= 1 or destination_count ~= 1 then
+		return nil, "Both selected firewall zones must exist exactly once in the current inventory."
+	end
+	if is_external_zone(source_zone) or is_external_zone(destination_zone) then
+		return nil, "Inter-zone service rules are limited to internal LAN/office zones. Use the managed WAN port-forward or IPv6 pinhole controls for external access."
+	end
+
+	local forwarding_found = false
+	for _, forwarding in ipairs(type(forwardings) == "table" and forwardings or {}) do
+		if type(forwarding) == "table" and forwarding.source == source
+			and forwarding.destination == destination then
+			forwarding_found = true
+			break
+		end
+	end
+	if not forwarding_found then
+		return nil, "Create and verify an explicit source-to-destination zone forwarding before adding a service-specific rule."
+	end
+
+	local protocols = protocol_set(protocol)
+	if protocol ~= "icmp" and not protocols then
+		return nil, "Protocol must be TCP, UDP, TCP + UDP or IPv4 ICMP."
+	end
+	if protocol == "icmp" and destination_port ~= nil and destination_port ~= "" then
+		return nil, "IPv4 ICMP rules do not use a destination port."
+	end
+	local port = nil
+	if protocol ~= "icmp" then
+		local port_error
+		port, port_error = port_number(destination_port, "Destination port")
+		if not port then return nil, port_error end
+	end
+	if target ~= "ACCEPT" and target ~= "REJECT" then
+		return nil, "Rule action must be explicitly set to ACCEPT or REJECT."
+	end
+	if not valid_ipv4(destination_ip) or not usable_ipv4_host(destination_ip) then
+		return nil, "Destination must be a usable dotted-decimal IPv4 host inside the selected destination zone."
+	end
+	local destination_match = false
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and contains(zone_networks(destination_zone.networks), iface.name) then
+			for _, address in ipairs(values(iface.ipv4, 8)) do
+				if ipv4_in_subnet(destination_ip, address, iface.netmask) then
+					destination_match = true
+					break
+				end
+			end
+		end
+		if destination_match then break end
+	end
+	if not destination_match then
+		return nil, "Destination IPv4 host must belong to a validated static subnet attached to the selected destination zone."
+	end
+
+	local normalized_source_ip = nil
+	if source_ip ~= nil and source_ip ~= "" then
+		if not valid_ipv4(source_ip) or not usable_ipv4_host(source_ip) then
+			return nil, "Optional source must be a usable dotted-decimal IPv4 host."
+		end
+		local source_match = false
+		for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+			if type(iface) == "table" and contains(zone_networks(source_zone.networks), iface.name) then
+				for _, address in ipairs(values(iface.ipv4, 8)) do
+					if ipv4_in_subnet(source_ip, address, iface.netmask) then
+						source_match = true
+						break
+					end
+				end
+			end
+			if source_match then break end
+		end
+		if not source_match then
+			return nil, "Optional source IPv4 host must belong to a validated static subnet attached to the selected source zone."
+		end
+		normalized_source_ip = source_ip
+	end
+
+	for _, rule in ipairs(type(existing) == "table" and existing or {}) do
+		if type(rule) == "table" then
+			if rule.name == name then return nil, "An inter-zone firewall rule with this name already exists." end
+			if rule.source == source and rule.destination == destination
+				and rule.protocol == protocol and rule.destination_ip == destination_ip
+				and (rule.source_ip or nil) == normalized_source_ip
+				and (tonumber(rule.destination_port) or nil) == (tonumber(port) or nil)
+				and rule.target == target then
+				return nil, "An identical inter-zone firewall rule already exists."
+			end
+		end
+	end
+
+	return {
+		name = name,
+		source = source,
+		destination = destination,
+		protocol = protocol,
+		source_ip = normalized_source_ip,
+		destination_ip = destination_ip,
+		destination_port = port,
+		target = target
+	}
+end
+
+function snapshot_office_interzone_rule(snapshot)
+	if type(snapshot) ~= "table" or snapshot[".type"] ~= "rule"
+		or type(snapshot[".name"]) ~= "string" or not snapshot[".name"]:match("^qg_office_rule_[1-9]%d*$") then
+		return nil, "A QuantumGrid-managed inter-zone firewall rule section is required."
+	end
+	local raw_name = type(snapshot.name) == "string" and snapshot.name or ""
+	local display_name = raw_name:match("^QuantumGrid inter%-zone rule: ([A-Za-z0-9][A-Za-z0-9_.%-]*)$")
+	local protocol = snapshot.proto
+	if type(protocol) == "table" then protocol = table.concat(protocol, " ") end
+	local source = snapshot.src
+	local destination = snapshot.dest
+	local destination_ip = snapshot.dest_ip
+	local source_ip = snapshot.src_ip
+	local target = type(snapshot.target) == "string" and snapshot.target:upper() or ""
+	local family = snapshot.family or "ipv4"
+	local enabled = snapshot.enabled
+	local destination_port = snapshot.dest_port
+	if not display_name or type(source) ~= "string" or not source:match("^[%w_.%-]+$")
+		or type(destination) ~= "string" or not destination:match("^[%w_.%-]+$")
+		or source == destination or family ~= "ipv4"
+		or (protocol ~= "tcp" and protocol ~= "udp" and protocol ~= "tcp udp" and protocol ~= "icmp")
+		or (target ~= "ACCEPT" and target ~= "REJECT")
+		or not valid_ipv4(destination_ip) or not usable_ipv4_host(destination_ip)
+		or (enabled ~= nil and enabled ~= "0" and enabled ~= "1") then
+		return nil, "The selected rule no longer matches the managed IPv4 inter-zone rule format."
+	end
+	if source_ip ~= nil and (not valid_ipv4(source_ip) or not usable_ipv4_host(source_ip)) then
+		return nil, "The managed inter-zone rule has an invalid source IPv4 address."
+	end
+	if protocol == "icmp" then
+		if destination_port ~= nil and destination_port ~= "" then
+			return nil, "The managed ICMP rule has an unexpected destination port."
+		end
+	else
+		local port = port_number(tostring(destination_port or ""), "Destination port")
+		if not port then return nil, "The managed inter-zone rule has an invalid destination port." end
+	end
+
+	local allowed = {
+		name = true, src = true, dest = true, proto = true, src_ip = true,
+		dest_ip = true, dest_port = true, family = true, target = true, enabled = true
+	}
+	local values_copy = {}
+	for key, value in pairs(snapshot) do
+		if type(key) == "string" and key:sub(1, 1) ~= "." then
+			if not allowed[key] then
+				return nil, "The managed inter-zone rule contains an unsupported extra match or option."
+			end
+			values_copy[key] = value
+		end
+	end
+	return {
+		section = snapshot[".name"],
+		name = display_name,
+		source = source,
+		destination = destination,
+		protocol = protocol,
+		source_ip = source_ip,
+		destination_ip = destination_ip,
+		destination_port = tonumber(destination_port),
+		target = target,
+		enabled = enabled ~= "0",
+		values = values_copy
+	}
+end
+
+function summarize_office_interzone_rule(snapshot)
+	local parsed = snapshot_office_interzone_rule(snapshot)
+	if not parsed then return nil end
+	return {
+		section = parsed.section,
+		name = parsed.name,
+		source = parsed.source,
+		destination = parsed.destination,
+		protocol = parsed.protocol,
+		source_ip = parsed.source_ip,
+		destination_ip = parsed.destination_ip,
+		destination_port = parsed.destination_port,
+		target = parsed.target,
+		enabled = parsed.enabled
+	}
+end
+
 function validate_office_ipv6_pinhole(
 	name, source, destination, protocol, destination_ip, destination_port,
 	zones, interfaces, existing)
@@ -1548,6 +1756,8 @@ end
 function build_inventory(source)
 	source = type(source) == "table" and source or {}
 	local result = {
+		filter_rules = {},
+		filter_rule_count = 0,
 		available = source.available == true,
 		firewall_available = source.firewall_available == true,
 		wireless_available = source.wireless_available == true,
@@ -1642,6 +1852,45 @@ function build_inventory(source)
 	end
 	result.redirect_count = #result.redirects
 	if #source_redirects > #result.redirects then result.truncated = true end
+
+	local source_filter_rules = type(source.filter_rules) == "table" and source.filter_rules or {}
+	for _, item in ipairs(source_filter_rules) do
+		if type(item) == "table" and #result.filter_rules < 64 then
+			local section = token(item.section, 64)
+			local name = clean(item.name, 64)
+			local source_zone = token(item.source, 64)
+			local destination_zone = token(item.destination, 64)
+			local protocol = item.protocol == "tcp" or item.protocol == "udp"
+				or item.protocol == "tcp udp" or item.protocol == "icmp"
+			local destination_ip = type(item.destination_ip) == "string" and item.destination_ip or ""
+			local source_ip = type(item.source_ip) == "string" and item.source_ip or nil
+			local destination_port = tonumber(item.destination_port)
+			local target = type(item.target) == "string" and item.target:upper() or ""
+			if section and name ~= "" and source_zone and destination_zone
+				and source_zone ~= destination_zone and protocol
+				and valid_ipv4(destination_ip) and usable_ipv4_host(destination_ip)
+				and (source_ip == nil or valid_ipv4(source_ip) and usable_ipv4_host(source_ip))
+				and (target == "ACCEPT" or target == "REJECT")
+				and ((item.protocol == "icmp" and item.destination_port == nil) or
+					(item.protocol ~= "icmp" and destination_port and destination_port >= 1
+						and destination_port <= 65535 and destination_port == math.floor(destination_port))) then
+				table.insert(result.filter_rules, {
+					section = section,
+					name = name,
+					source = source_zone,
+					destination = destination_zone,
+					protocol = item.protocol,
+					source_ip = source_ip,
+					destination_ip = destination_ip,
+					destination_port = destination_port,
+					target = target,
+					enabled = item.enabled ~= false
+				})
+			end
+		end
+	end
+	result.filter_rule_count = #result.filter_rules
+	if #source_filter_rules > #result.filter_rules then result.truncated = true end
 
 	local source_pinholes = type(source.ipv6_pinholes) == "table" and source.ipv6_pinholes or {}
 	for _, item in ipairs(source_pinholes) do
