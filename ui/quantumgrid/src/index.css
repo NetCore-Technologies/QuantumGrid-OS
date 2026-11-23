@@ -1786,6 +1786,16 @@ button:disabled {
   color: var(--muted2);
 }
 .wireless-channel-inventory { display: grid; gap: 12px; margin-top: 14px; }
+.wireless-radio-schedule { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--border, rgba(255,255,255,.12)); border-radius: 10px; }
+.wireless-radio-schedule > summary { cursor: pointer; font-size: 12px; font-weight: 700; letter-spacing: .04em; }
+.wireless-radio-schedule-enabled, .wireless-radio-schedule-confirm, .wireless-radio-schedule-days label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.wireless-radio-schedule-days { display: flex; flex-wrap: wrap; gap: 10px; }
+.wireless-radio-schedule-times { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.wireless-radio-schedule-times label { display: grid; gap: 6px; font-size: 11px; color: var(--muted, #8c98a5); }
+.wireless-radio-schedule-times input { min-width: 0; }
+.wireless-radio-schedule-help { margin: 0; color: var(--muted, #8c98a5); font-size: 11px; line-height: 1.5; }
+@media (max-width: 560px) { .wireless-radio-schedule-times { grid-template-columns: 1fr; } }
+
 .wireless-channel-section { min-width: 0; padding-top: 12px; border-top: 1px solid var(--line); }
 .wireless-channel-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 9px; }
 .wireless-channel-heading strong { font-size: 9px; }

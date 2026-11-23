@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -4944,6 +4944,161 @@ function WirelessRadioControl({ radio, refresh }: { radio: RouterWirelessRadio; 
 }
 
 
+function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio }) {
+  const [enabled, setEnabled] = useState(false);
+  const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [startTime, setStartTime] = useState("08:00");
+  const [endTime, setEndTime] = useState("22:00");
+  const [configured, setConfigured] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    void getRouterWirelessRadioSchedules().then((schedules) => {
+      if (!active) return;
+      const saved = schedules.find((item) => item.radio === radio.name);
+      if (!saved) {
+        setConfigured(false);
+        setEnabled(false);
+        setDays([1, 2, 3, 4, 5]);
+        setStartTime("08:00");
+        setEndTime("22:00");
+        return;
+      }
+      setConfigured(true);
+      setEnabled(saved.enabled);
+      if (saved.valid) {
+        setDays(saved.days);
+        setStartTime(saved.start_time);
+        setEndTime(saved.end_time);
+      } else {
+        setNotice({
+          success: false,
+          message: saved.error || "The saved schedule is invalid. Review and save a corrected schedule.",
+        });
+      }
+    }).catch((error) => {
+      if (active) {
+        setNotice({
+          success: false,
+          message: error instanceof Error ? error.message : "The radio schedule could not be loaded.",
+        });
+      }
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [radio.name]);
+
+  const save = async () => {
+    if (!confirmed || saving || loading || radio.config_available !== true) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterWirelessRadioSchedule({
+        radio: radio.name,
+        enabled,
+        days,
+        startTime,
+        endTime,
+      });
+      setConfigured(true);
+      setNotice({
+        success: true,
+        message: result.enabled
+          ? "Weekly schedule saved. The router evaluates radio state at the next scheduler check (within 30 seconds)."
+          : "Weekly schedule disabled. The saved manual radio state will be restored before schedule management stops.",
+      });
+      setConfirmed(false);
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The weekly radio schedule could not be saved.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const dayOptions = [
+    { value: 1, label: "Mon" },
+    { value: 2, label: "Tue" },
+    { value: 3, label: "Wed" },
+    { value: 4, label: "Thu" },
+    { value: 5, label: "Fri" },
+    { value: 6, label: "Sat" },
+    { value: 7, label: "Sun" },
+  ];
+
+  return (
+    <details className="wireless-radio-schedule">
+      <summary>
+        Weekly radio schedule {configured ? (enabled ? "· ENABLED" : "· DISABLED") : "· NOT CONFIGURED"}
+      </summary>
+      {loading ? <div className="module-message">Loading saved schedule…</div> : (
+        <>
+          <label className="wireless-radio-schedule-enabled">
+            <input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />
+            Enable automatic weekly radio control
+          </label>
+          <div className="wireless-radio-schedule-days" aria-label="Schedule weekdays">
+            {dayOptions.map((day) => (
+              <label key={day.value}>
+                <input
+                  type="checkbox"
+                  checked={days.includes(day.value)}
+                  onChange={(event) => setDays((current) => event.target.checked
+                    ? [...current, day.value].sort((left, right) => left - right)
+                    : current.filter((value) => value !== day.value))}
+                />
+                {day.label}
+              </label>
+            ))}
+          </div>
+          <div className="wireless-radio-schedule-times">
+            <label>
+              Radio on from
+              <input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+            </label>
+            <label>
+              Radio off at
+              <input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
+            </label>
+          </div>
+          <p className="wireless-radio-schedule-help">
+            Times use the router's local timezone. Overnight windows are supported. Outside the selected window, the radio is disabled. Keep a wired or independent out-of-band management path before scheduling radios that carry client access.
+          </p>
+          <label className="wireless-radio-schedule-confirm">
+            <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+            I understand this schedule can disconnect Wi-Fi clients and that disabling it restores the saved manual radio state.
+          </label>
+          <button
+            type="button"
+            className="hero-button"
+            disabled={!confirmed || saving || loading || !radio.config_available}
+            onClick={() => void save()}
+          >
+            {saving ? "Saving schedule…" : "Save weekly schedule"}
+          </button>
+        </>
+      )}
+      {notice ? (
+        <div
+          className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"}
+          role={notice.success ? "status" : "alert"}
+        >
+          {notice.message}
+        </div>
+      ) : null}
+    </details>
+  );
+}
+
+
 function WirelessRadioInventory({
   radios,
   available,
@@ -4995,6 +5150,7 @@ function WirelessRadioInventory({
             <span>{radio.channels?.length ? `${radio.channels.length} channel entries` : "Not reported"}</span>
           </div>
           {manage && refresh ? <WirelessRadioControl radio={radio} refresh={refresh} /> : null}
+          {manage ? <WirelessRadioScheduleControl radio={radio} /> : null}
           {radio.channels?.length ? (
             <div className="wireless-channel-chips">
               {radio.channels.map((channel) => (
