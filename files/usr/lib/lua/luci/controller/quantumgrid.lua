@@ -3770,47 +3770,20 @@ end
 
 local function cellular_status(fs)
 	local now = os.time()
-	if cellular_cache and now - cellular_cache_at < 8 then
+	if cellular_cache and type(cellular_cache_at) == "number" and
+		now >= cellular_cache_at and now - cellular_cache_at < 8 then
 		return cellular_cache
 	end
 
-	local modem_present = fs.access("/dev/cdc-wdm0") == true
-		or fs.access("/dev/ttyUSB2") == true
-		or fs.access("/dev/ttyUSB3") == true
-	local qmi_available = fs.access("/dev/cdc-wdm0") == true
-		and fs.access("/sbin/uqmi") == true
-	local sample = {
-		modem_present = modem_present,
-		qmi_available = qmi_available,
-		sampled_at = now
-	}
-
-	if qmi_available then
-		local util = require "luci.util"
-		local jsonc = require "luci.jsonc"
-		local function read_json(command)
-			local command_ok, output = pcall(util.exec, command)
-			if not command_ok or type(output) ~= "string" or #output > 8192 then
-				return nil
-			end
-			local parse_ok, parsed = pcall(jsonc.parse, output)
-			if not parse_ok or (type(parsed) ~= "table" and type(parsed) ~= "string") then return nil end
-			return parsed
-		end
-
-		sample.serving = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-serving-system")
-		sample.signal = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info")
-
-		local data_status = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status")
-		if type(data_status) == "string" then
-			sample.data_status = data_status
-		elseif type(data_status) == "table" and type(data_status.data_status) == "string" then
-			sample.data_status = data_status.data_status
-		end
-	end
-
-	local normalizer = require "luci.quantumgrid.cellular"
-	local result = normalizer.normalize_status(sample)
+	local util = require "luci.util"
+	local jsonc = require "luci.jsonc"
+	local collector = require "luci.quantumgrid.cellular"
+	local result = collector.collect_status({
+		now = now,
+		access = function(path) return fs.access(path) end,
+		exec = function(command) return util.exec(command) end,
+		parse = function(output) return jsonc.parse(output) end
+	})
 	cellular_cache = result
 	cellular_cache_at = now
 	return result

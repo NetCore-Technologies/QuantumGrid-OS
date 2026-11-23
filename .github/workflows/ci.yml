@@ -234,6 +234,8 @@ jobs:
         run: lua5.1 tests/radio-scheduler-runtime.lua
       - name: Test bounded cellular modem telemetry
         run: lua5.1 tests/cellular-status.lua
+      - name: Test bounded cellular QMI command collection
+        run: lua5.1 tests/cellular-collector.lua
       - name: Test bounded mwan3 tracker telemetry
         run: lua5.1 tests/mwan3-status.lua
       - name: Test mwan3 member validation and rollback snapshots

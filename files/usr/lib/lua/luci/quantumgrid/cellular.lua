@@ -119,4 +119,54 @@ function M.normalize_status(input)
 	return result
 end
 
+
+local QMI_COMMANDS = {
+	serving = "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-serving-system",
+	signal = "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info",
+	data = "/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status"
+}
+
+local function safe_access(access, path)
+	local ok, result = pcall(access, path)
+	return ok and result == true
+end
+
+local function read_qmi_value(dependencies, command)
+	local command_ok, output = pcall(dependencies.exec, command)
+	if not command_ok or type(output) ~= "string" or #output < 1 or #output > 8192 then
+		return nil
+	end
+	local parse_ok, parsed = pcall(dependencies.parse, output)
+	if not parse_ok or (type(parsed) ~= "table" and type(parsed) ~= "string") then
+		return nil
+	end
+	return parsed
+end
+
+function M.collect_status(dependencies)
+	if type(dependencies) ~= "table" or type(dependencies.access) ~= "function" or
+		type(dependencies.exec) ~= "function" or type(dependencies.parse) ~= "function" then
+		return M.normalize_status(nil)
+	end
+
+	local sampled_at = bounded_integer(dependencies.now, 0, 4102444800) or 0
+	local cdc_device = safe_access(dependencies.access, "/dev/cdc-wdm0")
+	local modem_present = cdc_device or
+		safe_access(dependencies.access, "/dev/ttyUSB2") or
+		safe_access(dependencies.access, "/dev/ttyUSB3")
+	local qmi_available = cdc_device and safe_access(dependencies.access, "/sbin/uqmi")
+
+	local sample = { modem_present = modem_present, qmi_available = qmi_available, sampled_at = sampled_at }
+	if qmi_available then
+		sample.serving = read_qmi_value(dependencies, QMI_COMMANDS.serving)
+		sample.signal = read_qmi_value(dependencies, QMI_COMMANDS.signal)
+		local data_status = read_qmi_value(dependencies, QMI_COMMANDS.data)
+		if type(data_status) == "string" then sample.data_status = data_status
+		elseif type(data_status) == "table" and type(data_status.data_status) == "string" then
+			sample.data_status = data_status.data_status
+		end
+	end
+	return M.normalize_status(sample)
+end
+
 return M
