@@ -1229,7 +1229,7 @@ grep -Fq 'record_audit(http, "system.config.restore"' "$ROOT/files/usr/lib/lua/l
 grep -Fq 'local restore_audit_attempted = false' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'if not restore_authorized or restore_audit_attempted then return false end' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'restore_audit_attempted = true' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
-grep -Fq '"system.config.restore" = true' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
+grep -Fq '["system.config.restore"] = true' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'record_audit(http, "hardware.led.update"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'record_audit(http, audit_action' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'record_audit(http, "admin.password.setup"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
