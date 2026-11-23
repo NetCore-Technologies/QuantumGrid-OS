@@ -268,6 +268,48 @@ test("inter-zone API rejects WAN zones, invalid hosts, protocols, targets and po
   await assert.rejects(createRouterOfficeInterZoneRule({ ...base, protocol: "icmp", destinationPort: "443" }), /do not use a destination port/);
 });
 
+test("enables or disables only a managed inter-zone rule with explicit confirmation", async () => {
+  let url = "";
+  let init;
+  globalThis.fetch = async (target, options) => {
+    url = String(target);
+    init = options;
+    return jsonResponse({
+      ok: true, section: "qg_office_rule_7", enabled: false,
+      reloaded: true, changed: true, rolled_back: false,
+    });
+  };
+  const result = await setRouterOfficeInterZoneRuleEnabled("qg_office_rule_7", false);
+  assert.equal(url, "/cgi-bin/luci/admin/services/quantumgrid/office-interzone-rule-toggle");
+  assert.equal(init.method, "POST");
+  assert.equal(init.credentials, "same-origin");
+  assert.equal(init.cache, "no-store");
+  const form = new URLSearchParams(init.body);
+  assert.equal(form.get("section"), "qg_office_rule_7");
+  assert.equal(form.get("enabled"), "0");
+  assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.enabled, false);
+  assert.equal(result.changed, true);
+  assert.equal(result.reloaded, true);
+});
+
+test("inter-zone rule toggle recognises a no-op without claiming a firewall reload", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true, section: "qg_office_rule_7", enabled: true,
+    reloaded: false, changed: false, rolled_back: false,
+  });
+  const result = await setRouterOfficeInterZoneRuleEnabled("qg_office_rule_7", true);
+  assert.equal(result.enabled, true);
+  assert.equal(result.changed, false);
+  assert.equal(result.reloaded, false);
+});
+
+test("inter-zone rule toggle rejects non-managed identifiers before fetch", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not run for invalid section"); };
+  await assert.rejects(setRouterOfficeInterZoneRuleEnabled("cfg_custom", false), /managed inter-zone/);
+  await assert.rejects(setRouterOfficeInterZoneRuleEnabled("../qg_office_rule_1", true), /managed inter-zone/);
+});
+
 test("removes only a managed inter-zone rule section and checks firewall reload", async () => {
   let url = "";
   let init;

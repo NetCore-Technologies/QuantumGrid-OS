@@ -1285,6 +1285,15 @@ export interface RouterOfficeInterZoneRuleCreateResult {
   rolled_back: false;
 }
 
+export interface RouterOfficeInterZoneRuleToggleResult {
+  ok: true;
+  section: string;
+  enabled: boolean;
+  reloaded: boolean;
+  rolled_back: false;
+  changed: boolean;
+}
+
 export interface RouterOfficeInterZoneRuleRemoveResult {
   ok: true;
   section: string;
@@ -1721,6 +1730,7 @@ const OFFICE_FORWARDING_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/offi
 const OFFICE_FORWARDING_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-forwarding-remove";
 const OFFICE_INTERZONE_RULE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-interzone-rule-add";
 const OFFICE_INTERZONE_RULE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-interzone-rule-remove";
+const OFFICE_INTERZONE_RULE_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-interzone-rule-toggle";
 const OFFICE_PORT_FORWARD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-add";
 const OFFICE_PORT_FORWARD_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-remove";
 const OFFICE_PORT_FORWARD_TOGGLE_URL = "/cgi-bin/luci/admin/services/quantumgrid/office-port-forward-toggle";
@@ -4545,6 +4555,58 @@ export async function createRouterOfficeInterZoneRule(input: {
     enabled: true,
     reloaded: true,
     rolled_back: false,
+  };
+}
+
+export async function setRouterOfficeInterZoneRuleEnabled(
+  section: string,
+  enabled: boolean,
+): Promise<RouterOfficeInterZoneRuleToggleResult> {
+  if (!/^qg_office_rule_[1-9][0-9]*$/.test(section)) {
+    throw new Error("Invalid managed inter-zone firewall rule section.");
+  }
+  if (typeof enabled !== "boolean") throw new Error("The rule enabled state must be explicit.");
+  const form = new URLSearchParams();
+  form.set("section", section);
+  form.set("enabled", enabled ? "1" : "0");
+  form.set("confirmed", "1");
+  const response = await fetch(OFFICE_INTERZONE_RULE_TOGGLE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Inter-zone firewall changes require an active router administrator session."
+      : "The router returned an invalid inter-zone rule state response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid inter-zone rule state response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("enabled" in payload) || payload.enabled !== enabled ||
+      !("reloaded" in payload) || typeof payload.reloaded !== "boolean" ||
+      !("changed" in payload) || typeof payload.changed !== "boolean" ||
+      payload.reloaded !== payload.changed ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the managed rule state and firewall reload.");
+  }
+  return {
+    ok: true,
+    section,
+    enabled,
+    reloaded: payload.reloaded,
+    rolled_back: false,
+    changed: payload.changed,
   };
 }
 
