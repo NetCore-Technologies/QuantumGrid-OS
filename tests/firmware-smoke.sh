@@ -681,7 +681,7 @@ grep -Fq 'function applyChannelRecommendation' "$ROOT/ui/quantumgrid/src/App.tsx
 grep -Fq 'action_wireless_radio_schedule' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'updateRouterWirelessRadioSchedule' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'WirelessRadioScheduleControl' "$ROOT/ui/quantumgrid/src/App.tsx"
-grep -Fq 'base_disabled' "$ROOT/files/usr/bin/quantumgrid-radio-scheduler"
+grep -Fq 'base_disabled' "$ROOT/files/usr/lib/lua/luci/quantumgrid/radio_scheduler.lua"
 grep -Fq 'expectedCurrentChannel?: string' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'expected_current_channel' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'validate_expected_current_channel' "$ROOT/files/usr/lib/lua/luci/quantumgrid/wireless.lua"

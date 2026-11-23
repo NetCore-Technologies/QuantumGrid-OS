@@ -2298,7 +2298,7 @@ export async function getRouterWirelessRadioSchedules(): Promise<RouterWirelessR
     if (seen.has(item.radio)) throw new Error("The router returned duplicate radio schedule records.");
     seen.add(item.radio);
     if (item.days.length > 7 || new Set(item.days).size !== item.days.length ||
-        item.days.some((day) => typeof day !== "number" || !Number.isInteger(day) || day < 1 || day > 7)) {
+        item.days.some((day: unknown) => typeof day !== "number" || !Number.isInteger(day) || day < 1 || day > 7)) {
       throw new Error("The router returned an invalid radio schedule weekday list.");
     }
     output.push({
