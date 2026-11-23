@@ -5441,3 +5441,6 @@ grep -Fq 'function action_network_tuning' "$ROOT/files/usr/lib/lua/luci/controll
 grep -Fq 'function M.apply(input, snapshot, deps)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/network_tuning.lua"
 grep -Fq 'NetworkRuntimeTuningPanel' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'getRouterNetworkTuning' "$ROOT/ui/quantumgrid/src/routerApi.ts"
+grep -Fq 'type RouterNetworkTuningInventory' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'Apply runtime defaults' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'tcp_available_congestion_control' "$ROOT/files/usr/lib/lua/luci/quantumgrid/network_tuning.lua"

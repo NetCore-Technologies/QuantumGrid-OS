@@ -107,7 +107,7 @@ local mismatched = tuning.apply({
 }, snapshot, {
 	read = function(path)
 		calls = calls + 1
-		if calls == 3 then return "bbr" end
+		if calls == 1 then return "not-applied" end
 		return live[path]
 	end,
 	write = function(path, value) live[path] = value; return true end
