@@ -1226,8 +1226,6 @@ function index()
 	entry({"admin", "services", "quantumgrid", "office-port-forward-toggle"}, call("action_office_port_forward_toggle")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-interzone-rule-add"}, call("action_office_interzone_rule_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-interzone-rule-remove"}, call("action_office_interzone_rule_remove")).leaf = true
-	entry({"admin", "services", "quantumgrid", "office-interzone-rule-add"}, call("action_office_interzone_rule_add")).leaf = true
-	entry({"admin", "services", "quantumgrid", "office-interzone-rule-remove"}, call("action_office_interzone_rule_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-add"}, call("action_office_ipv6_pinhole_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-remove"}, call("action_office_ipv6_pinhole_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "office-ipv6-pinhole-toggle"}, call("action_office_ipv6_pinhole_toggle")).leaf = true
@@ -4637,38 +4635,6 @@ local function office_network_status(uci, fs)
 					section = section_name, name = display_name, source = source_zone,
 					destination = destination_zone, protocol = protocol,
 					destination_ip = destination_ip, destination_port = destination_port,
-					enabled = section.enabled ~= "0"
-				})
-			end
-			if #source.filter_rules >= 64 then source.truncated = true; return end
-			local summary = validator.summarize_office_interzone_rule(section)
-			if summary then table.insert(source.filter_rules, summary) end
-		end)
-			local section_name = tostring(section[".name"] or "")
-			local raw_name = tostring(section.name or "")
-			local display_name = raw_name:match("^QuantumGrid IPv6 pinhole: ([A-Za-z0-9][A-Za-z0-9_.%-]*)$")
-			local source_zone = tostring(section.src or "")
-			local destination_zone = tostring(section.dest or "")
-			local protocol = section.proto
-			if type(protocol) == "table" then protocol = table.concat(protocol, " ") end
-			protocol = tostring(protocol or "")
-			local destination_port = tonumber(section.dest_port)
-			local destination_ip = tostring(section.dest_ip or "")
-			if display_name and section_name:match("^[%w_.%-]+$")
-				and source_zone:match("^[%w_.%-]+$") and destination_zone:match("^[%w_.%-]+$")
-				and section.family == "ipv6" and section.target == "ACCEPT"
-				and (protocol == "tcp" or protocol == "udp" or protocol == "tcp udp")
-				and destination_port and destination_port >= 1 and destination_port <= 65535
-				and destination_port == math.floor(destination_port)
-				and destination_ip:find(":", 1, true) then
-				table.insert(source.ipv6_pinholes, {
-					section = section_name,
-					name = display_name,
-					source = source_zone,
-					destination = destination_zone,
-					protocol = protocol,
-					destination_ip = destination_ip,
-					destination_port = destination_port,
 					enabled = section.enabled ~= "0"
 				})
 			end
