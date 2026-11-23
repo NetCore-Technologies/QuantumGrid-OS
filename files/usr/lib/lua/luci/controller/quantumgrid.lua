@@ -1200,6 +1200,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-ap-create"}, call("action_wireless_ap_create")).leaf = true
+	entry({"admin", "services", "quantumgrid", "wireless-ap-remove"}, call("action_wireless_ap_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-radio-update"}, call("action_wireless_radio_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-radio-schedule"}, call("action_wireless_radio_schedule")).leaf = true
 	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
@@ -2068,6 +2069,203 @@ function action_wireless_ap_create()
 	})
 end
 
+
+
+
+
+
+function action_wireless_ap_remove()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local nixio = require "nixio"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.wireless"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/sbin/wifi") ~= true or fs.access("/etc/config/wireless") ~= true then
+		respond(503, { ok = false, error = "Wireless configuration or the Wi-Fi reload utility is unavailable." })
+		return
+	end
+
+	local removal, validation_error = validator.validate_remove(
+		http.formvalue("radio", true),
+		http.formvalue("section", true),
+		http.formvalue("confirmed", true))
+	if not removal then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local radio_type_ok, radio_type = pcall(uci.get, uci, "wireless", removal.radio, ".type")
+	local section_type_ok, section_type = pcall(uci.get, uci, "wireless", removal.section, ".type")
+	local ap_ok, ap = pcall(uci.get_all, uci, "wireless", removal.section)
+	if not radio_type_ok or not section_type_ok or not ap_ok then
+		respond(503, { ok = false, error = "The radio and AP configuration could not be inspected safely." })
+		return
+	end
+	if radio_type ~= "wifi-device" then
+		respond(404, { ok = false, error = "The selected wireless radio does not exist." })
+		return
+	end
+	if section_type ~= "wifi-iface" or type(ap) ~= "table" or
+		ap.device ~= removal.radio or ap.mode ~= "ap" then
+		respond(404, { ok = false, error = "The selected QuantumGrid AP section does not exist on this radio." })
+		return
+	end
+	if type(ap.ssid) ~= "string" or #ap.ssid < 1 or #ap.ssid > 32 or ap.ssid:find("[%z\1-\31\127]") then
+		respond(409, { ok = false, error = "The managed AP has an invalid SSID; inspect its configuration before removal." })
+		return
+	end
+
+	-- Runtime verification is keyed by radio and SSID. Refuse ambiguity rather
+	-- than claiming that the wrong same-SSID BSS was removed.
+	local same_ssid_count = 0
+	local inventory_ok = pcall(function()
+		uci:foreach("wireless", "wifi-iface", function(section)
+			if type(section) == "table" and section.device == removal.radio and
+				section.mode == "ap" and section.ssid == ap.ssid then
+				same_ssid_count = same_ssid_count + 1
+			end
+		end)
+	end)
+	if not inventory_ok then
+		respond(503, { ok = false, error = "The AP inventory could not be read safely." })
+		return
+	end
+	if same_ssid_count ~= 1 then
+		respond(409, { ok = false, error = "More than one AP on this radio uses the same SSID. Resolve the ambiguity before removing one." })
+		return
+	end
+
+	-- Snapshot all UCI options in memory only. Secrets are never returned or audited.
+	local snapshot, snapshot_safe = {}, true
+	for option, value in pairs(ap) do
+		if option ~= ".type" and option ~= ".name" then
+			if type(option) ~= "string" or option:find("[%c]") then
+				snapshot_safe = false
+				break
+			elseif type(value) == "string" then
+				snapshot[option] = value
+			elseif type(value) == "table" then
+				local list = {}
+				for index, item in ipairs(value) do
+					if type(item) ~= "string" then snapshot_safe = false; break end
+					list[index] = item
+				end
+				if not snapshot_safe then break end
+				snapshot[option] = list
+			else
+				snapshot_safe = false
+				break
+			end
+		end
+	end
+	if not snapshot_safe or snapshot.device ~= removal.radio or snapshot.mode ~= "ap" or snapshot.ssid ~= ap.ssid then
+		respond(409, { ok = false, error = "The AP settings cannot be safely snapshotted for rollback." })
+		return
+	end
+
+	local function runtime_ap_present()
+		local status = ubus_call("network.wireless", "status", {})
+		if type(status) ~= "table" then return nil end
+		local radio = status[removal.radio]
+		if type(radio) ~= "table" then return nil end
+		if radio.up ~= true then return false end
+		if type(radio.interfaces) ~= "table" then return nil end
+		for _, iface in ipairs(radio.interfaces) do
+			local config = type(iface) == "table" and type(iface.config) == "table" and iface.config or {}
+			if config.mode == "ap" and config.ssid == ap.ssid then return true end
+		end
+		return false
+	end
+
+	local originally_live = runtime_ap_present()
+	if originally_live == nil then
+		respond(503, { ok = false, error = "Wireless runtime status is unavailable; the AP was not removed." })
+		return
+	end
+
+	local function wait_for_runtime(expected_present)
+		for attempt = 1, 12 do
+			local present = runtime_ap_present()
+			if present == expected_present then return true end
+			if attempt < 12 then pcall(nixio.nanosleep, 0, 250000000) end
+		end
+		return false
+	end
+
+	local delete_ok, deleted = pcall(uci.delete, uci, "wireless", removal.section)
+	if not delete_ok or deleted ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "The AP section could not be staged for removal; no Wi-Fi reload was attempted." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "wireless")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, { ok = false, error = "The AP removal could not be committed; Wi-Fi reload was not attempted." })
+		return
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+	local runtime_verified = reload_ok and reload_status == 0 and wait_for_runtime(false)
+	if not runtime_verified then
+		local restore_ok, restored = pcall(uci.section, uci, "wireless", "wifi-iface", removal.section, snapshot)
+		local restore_commit_ok, restore_committed = false, false
+		if restore_ok and restored == removal.section then
+			restore_commit_ok, restore_committed = pcall(uci.commit, uci, "wireless")
+		end
+		if not restore_ok or restored ~= removal.section or not restore_commit_ok or restore_committed ~= true then
+			pcall(uci.revert, uci, "wireless")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if restore_ok and restored == removal.section and restore_commit_ok and restore_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+		end
+		local rolled_back = rollback_reload_ok and rollback_reload_status == 0 and wait_for_runtime(originally_live) == true
+		record_audit(http, "wireless.ap.remove", removal.section, "failed")
+		respond(502, {
+			ok = false,
+			rolled_back = rolled_back == true,
+			error = rolled_back
+				and "AP removal could not be verified. Its previous configuration was restored."
+				or "AP removal could not be verified and rollback could not be fully confirmed. Inspect wireless configuration and runtime status locally."
+		})
+		return
+	end
+
+	record_audit(http, "wireless.ap.remove", removal.section, "success")
+	respond(nil, {
+		ok = true, radio = removal.radio, section = removal.section,
+		ssid = ap.ssid, network = type(ap.network) == "string" and ap.network or "",
+		removed = true, reloaded = true, runtime_verified = true, rolled_back = false
+	})
+end
 
 
 
