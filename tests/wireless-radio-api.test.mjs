@@ -241,8 +241,8 @@ test("saves a weekly radio schedule through confirmed same-origin POST", async (
     return jsonResponse({
       ok:true,radio:"radio1",configured:true,valid:true,enabled:false,
       days:[1,5,7],start_time:"22:00",end_time:"06:00",
-      runtime_available:true,runtime_managed:true,runtime_enabled:true,
-      runtime_config_disabled:false,desired_enabled:true,runtime_matches:true,
+      runtime_available:true,runtime_managed:true,runtime_enabled:false,
+      runtime_config_disabled:true,desired_enabled:true,runtime_matches:false,
       router_local_time:"22:00:02",router_weekday:1,apply_after_seconds:30,
     });
   };
@@ -262,7 +262,9 @@ test("saves a weekly radio schedule through confirmed same-origin POST", async (
   assert.equal(form.get("confirmed"),"1");
   assert.equal(result.apply_after_seconds,30);
   assert.equal(result.runtime_available,true);
-  assert.equal(result.runtime_matches,true);
+  assert.equal(result.runtime_enabled,false);
+  assert.equal(result.runtime_config_disabled,true);
+  assert.equal(result.runtime_matches,false);
   assert.equal(result.router_weekday,1);
   assert.equal(result.router_local_time,"22:00:02");
 });

@@ -2313,8 +2313,11 @@ function action_wireless_radio_schedule()
 			desired_enabled = not desired_disabled
 		end
 	end
-	local runtime_enabled = runtime_available and live.up == true or nil
-	local runtime_config_disabled = runtime_available and current_disabled == "1" or nil
+	local runtime_enabled, runtime_config_disabled
+	if runtime_available then
+		runtime_enabled = live.up == true
+		runtime_config_disabled = current_disabled == "1"
+	end
 	local runtime_matches = nil
 	if runtime_available and runtime_managed then
 		runtime_matches = runtime_enabled == desired_enabled and runtime_config_disabled == not desired_enabled
