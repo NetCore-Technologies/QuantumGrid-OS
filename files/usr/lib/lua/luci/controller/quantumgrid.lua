@@ -1139,6 +1139,116 @@ function action_wifi_scan()
 end
 
 
+local function network_tuning_inventory(fs)
+	local module = require "luci.quantumgrid.network_tuning"
+	local kernel = read_file("/proc/sys/kernel/osrelease") or ""
+	local modules_dep = ""
+	if kernel:match("^[%w%.%+_%-]+$") then
+		local path = "/lib/modules/" .. kernel .. "/modules.dep"
+		if fs.access(path) == true then
+			local contents = read_file(path)
+			if type(contents) == "string" and #contents <= 4 * 1024 * 1024 then
+				modules_dep = contents
+			end
+		end
+	end
+	return module.inspect({
+		read = read_file,
+		access = function(path) return fs.access(path) == true end,
+		modules_dep = modules_dep
+	})
+end
+
+function action_network_tuning()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local module = require "luci.quantumgrid.network_tuning"
+	local method = http.getenv("REQUEST_METHOD")
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status == 400 and "Bad Request" or status == 403 and "Forbidden" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if not require_https(http) then return end
+	if method == "GET" then
+		local inventory = network_tuning_inventory(fs)
+		if not inventory.available then
+			respond(503, { ok = false, available = false, error = inventory.error })
+			return
+		end
+		respond(nil, { ok = true, available = true, inventory = inventory })
+		return
+	end
+	if method ~= "POST" then
+		respond(405, { ok = false, error = "GET or POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing live TCP and qdisc defaults." })
+		return
+	end
+
+	local current = network_tuning_inventory(fs)
+	if not current.available then
+		respond(503, { ok = false, error = current.error or "Kernel tuning inventory is unavailable." })
+		return
+	end
+	local result, apply_error, rolled_back = module.apply({
+		congestion_control = http.formvalue("congestion_control", true),
+		default_qdisc = http.formvalue("default_qdisc", true),
+		confirmed = http.formvalue("confirmed", true)
+	}, current, {
+		read = read_file,
+		write = function(path, value)
+			if path ~= "/proc/sys/net/ipv4/tcp_congestion_control" and
+				path ~= "/proc/sys/net/core/default_qdisc" then return false end
+			local file = io.open(path, "w")
+			if not file then return false end
+			local write_ok = file:write(value, "\n")
+			local close_ok = file:close()
+			return write_ok ~= nil and close_ok == true
+		end
+	})
+	if not result then
+		record_audit(http, "system.network-tuning", "tcp/qdisc", rolled_back and "failed-rolled-back" or "failed-rollback-unverified")
+		respond(502, {
+			ok = false,
+			rolled_back = rolled_back == true,
+			error = apply_error or "The runtime network tuning update could not be applied."
+		})
+		return
+	end
+
+	record_audit(http, "system.network-tuning", "tcp/qdisc", result.changed and "success" or "no-change")
+	respond(nil, {
+		ok = true,
+		changed = result.changed,
+		congestion_control = result.congestion_control,
+		default_qdisc = result.default_qdisc,
+		runtime_only = true,
+		reloaded = false,
+		rolled_back = false
+	})
+end
+
+
+
+
 function action_latency_test()
 	local http = require "luci.http"
 	local host = http.getenv("HTTP_HOST")
@@ -1190,6 +1300,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "api"}, call("action_api")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wifi-scan"}, call("action_wifi_scan")).leaf = true
 	entry({"admin", "services", "quantumgrid", "latency-test"}, call("action_latency_test")).leaf = true
+	entry({"admin", "services", "quantumgrid", "network-tuning"}, call("action_network_tuning")).leaf = true
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "mwan3-interface-update"}, call("action_mwan3_interface_update")).leaf = true
