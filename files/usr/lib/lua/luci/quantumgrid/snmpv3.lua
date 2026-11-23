@@ -548,6 +548,8 @@ function classify_status(snapshot)
 			snapshot.runtime_credentials_present == true or snapshot.firewall_conflict == true or
 			snapshot.firewall_inventory_available ~= true or
 			snapshot.persistent_inventory_available ~= true or
+			snapshot.persistent_user_present == true or
+			(tonumber(snapshot.persistent_user_matches) or 0) > 0 or
 			snapshot.v3_user_section_present == true or
 			(tonumber(snapshot.v3_user_section_count) or 0) > 0 or
 			(tonumber(snapshot.persistent_usm_user_count) or 0) > 0 then
