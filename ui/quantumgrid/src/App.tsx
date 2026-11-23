@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, setRouterOfficeInterZoneRuleEnabled, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, setRouterOfficeInterZoneRuleEnabled, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, getRouterNetworkTuning, updateRouterNetworkTuning, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -11494,6 +11494,124 @@ function HardwareIoControlPage({ routerOverview, refresh }: {
 }
 
 
+function NetworkRuntimeTuningPanel() {
+  const [inventory, setInventory] = useState<RouterNetworkTuningInventory | null>(null);
+  const [congestionControl, setCongestionControl] = useState("");
+  const [defaultQdisc, setDefaultQdisc] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    void getRouterNetworkTuning().then((result) => {
+      if (!active) return;
+      setInventory(result);
+      setCongestionControl(result.current_congestion_control);
+      setDefaultQdisc(result.current_default_qdisc);
+    }).catch((error) => {
+      if (active) setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "Kernel network tuning inventory is unavailable.",
+      });
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, []);
+
+  const save = async () => {
+    if (!inventory || !confirmed || saving ||
+        !inventory.congestion_controls.includes(congestionControl) ||
+        !inventory.default_qdiscs.includes(defaultQdisc)) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await updateRouterNetworkTuning({ congestionControl, defaultQdisc });
+      setInventory((previous) => previous ? {
+        ...previous,
+        current_congestion_control: result.congestion_control,
+        current_default_qdisc: result.default_qdisc,
+      } : previous);
+      setConfirmed(false);
+      setNotice({
+        success: true,
+        message: result.changed
+          ? "Kernel accepted both values and the controller verified them by reading the live /proc/sys settings."
+          : "Both settings already matched the requested values; no kernel write was required.",
+      });
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "Runtime network tuning could not be applied.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changed = Boolean(inventory) &&
+    (congestionControl !== inventory.current_congestion_control ||
+      defaultQdisc !== inventory.current_default_qdisc);
+
+  return (
+    <Panel title="Runtime TCP and queueing defaults" eyebrow="KERNEL-REPORTED ALLOW-LISTS · RUNTIME ONLY">
+      {loading ? (
+        <div className="module-message">Reading kernel-supported congestion controls and queueing disciplines…</div>
+      ) : !inventory ? (
+        <div className="module-message">The running kernel did not expose a complete, safe network tuning inventory. No write controls are available.</div>
+      ) : (
+        <>
+          <div className="network-tuning-grid">
+            <label>
+              <span>TCP CONGESTION CONTROL</span>
+              <select value={congestionControl} disabled={saving} onChange={(event) => {
+                setCongestionControl(event.target.value);
+                setConfirmed(false);
+                setNotice(null);
+              }}>
+                {inventory.congestion_controls.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+              <small>Current live value: {inventory.current_congestion_control}</small>
+            </label>
+            <label>
+              <span>DEFAULT QUEUEING DISCIPLINE</span>
+              <select value={defaultQdisc} disabled={saving} onChange={(event) => {
+                setDefaultQdisc(event.target.value);
+                setConfirmed(false);
+                setNotice(null);
+              }}>
+                {inventory.default_qdiscs.map((value) => <option key={value} value={value}>{value}</option>)}
+              </select>
+              <small>Current live value: {inventory.current_default_qdisc}</small>
+            </label>
+          </div>
+          <div className="module-message">
+            These choices come from the running kernel. The update changes only the two allowlisted runtime sysctl values and is lost on reboot. TCP congestion control affects new TCP connections; the default qdisc is used when a network device is created without an explicit qdisc. It does not replace SQM/CAKE, rewrite existing interface qdiscs or prove a latency/throughput improvement.
+          </div>
+          <label className="network-tuning-confirm">
+            <input type="checkbox" checked={confirmed} disabled={saving || !changed} onChange={(event) => setConfirmed(event.target.checked)} />
+            I understand this changes live kernel defaults and may affect new network connections/devices. I have an independent management path and can recover the router if connectivity changes.
+          </label>
+          <div className="network-tuning-actions">
+            <button type="button" className="hero-button" disabled={!confirmed || !changed || saving} onClick={() => void save()}>
+              {saving ? "Applying and verifying…" : "Apply runtime defaults"}
+            </button>
+            <span>{changed ? "Changes will be verified against /proc/sys after both writes." : "The selected values already match the current kernel settings."}</span>
+          </div>
+        </>
+      )}
+      {notice ? (
+        <div className={notice.success ? "module-message remote-syslog-success" : "module-message remote-syslog-error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
+    </Panel>
+  );
+}
+
+
 function AdvancedControlPage({ routerOverview, refresh }: {
   routerOverview: RouterOverview | null;
   refresh: () => void;
@@ -11620,9 +11738,9 @@ function AdvancedControlPage({ routerOverview, refresh }: {
       <section className="module-hero">
         <div className="module-icon"><Settings size={25} /></div>
         <div>
-          <div className="setup-kicker">READ-ONLY PLATFORM INVENTORY</div>
+          <div className="setup-kicker">PLATFORM INVENTORY · BOUNDED RUNTIME TUNING</div>
           <h1>Advanced</h1>
-          <p>Firmware identity, target platform, loaded kernel modules, installed service scripts, diagnostic tools and flash partitions reported by the running router.</p>
+          <p>Firmware identity, running kernel state, supported runtime network defaults, kernel modules, service scripts, diagnostic tools and storage reported by the router.</p>
           <div className="platform-actions">
             <button className="hero-button" onClick={refresh}><RefreshCw size={16} /> Refresh platform inventory</button>
             <button className="hero-button" onClick={exportPlatformInventory} disabled={!platform?.available}>Export inventory CSV</button>
@@ -11691,6 +11809,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
             </div>
             <div className="module-message">Values come from the authenticated router telemetry sample. Unavailable CPU or thermal readings stay marked N/A; this panel does not estimate missing values.</div>
           </Panel>
+          <NetworkRuntimeTuningPanel />
           <Panel title="NSS / EDMA / PPE readiness" eyebrow="DEVICE TREE · KERNEL MODULES · FIRMWARE">
             {acceleration ? (
               <>
@@ -11892,7 +12011,7 @@ function AdvancedControlPage({ routerOverview, refresh }: {
           </div>
         </>
       )}
-      <div className="module-message">This page is read-only. It does not install packages, load/unload modules, change service state or write firmware. Export quotes values and neutralises spreadsheet formula prefixes. Module and service presence are reported separately from operational status.</div>
+      <div className="module-message">The platform and hardware inventories are read-only. The dedicated network-tuning panel changes only the kernel-reported TCP congestion-control and default-qdisc values at runtime; it does not install packages, load/unload modules, change services or write persistent configuration/firmware. Export quotes values and neutralises spreadsheet formula prefixes. Module and service presence are reported separately from operational status.</div>
     </div>
   );
 }

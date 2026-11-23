@@ -5434,3 +5434,10 @@ grep -Fq 'action_office_interzone_rule_add' "$ROOT/files/usr/lib/lua/luci/contro
 grep -Fq 'OfficeInterZoneRuleManager' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'createRouterOfficeInterZoneRule' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'office-port-forward-api.test.mjs' "$ROOT/.github/workflows/ci.yml"
+
+# Bounded runtime TCP congestion-control and default qdisc editor.
+grep -Fq 'network-tuning' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'function action_network_tuning' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'function M.apply(input, snapshot, deps)' "$ROOT/files/usr/lib/lua/luci/quantumgrid/network_tuning.lua"
+grep -Fq 'NetworkRuntimeTuningPanel' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'getRouterNetworkTuning' "$ROOT/ui/quantumgrid/src/routerApi.ts"

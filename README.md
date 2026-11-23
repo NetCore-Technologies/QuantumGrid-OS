@@ -259,8 +259,7 @@ block devices and important system mounts, including total/available capacity an
 statvfs is supported. These checks are read-only; service-script presence is not presented as proof
 that a service is running. The Advanced page adds a live runtime-health snapshot from the
 authenticated telemetry sample and exports uptime, CPU, memory, temperature and 1/5/15-minute
-load averages alongside the hardware inventory in a spreadsheet-safe support CSV. Advanced policy
-controls remain unconnected and read-only.
+load averages alongside the hardware inventory in a spreadsheet-safe support CSV. Advanced policy controls remain limited to a bounded runtime TCP congestion-control and default-qdisc editor. It uses only kernel-reported/installed choices, verifies the live values and attempts rollback on partial failure; changes are not persistent across reboot and do not prove traffic shaping or performance improvement.
 
 The build host must have the OpenWrt build prerequisites installed. Firmware compilation
 requires substantial disk space, RAM and time; use a Linux build host with sufficient resources.
