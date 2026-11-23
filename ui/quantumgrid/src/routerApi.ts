@@ -2388,12 +2388,36 @@ export async function updateRouterWirelessRadioSchedule(input: {
       payload.days.length !== days.length || payload.days.some((day, index) => day !== days[index]) ||
       !("start_time" in payload) || payload.start_time !== input.startTime ||
       !("end_time" in payload) || payload.end_time !== input.endTime ||
+      !("runtime_available" in payload) || typeof payload.runtime_available !== "boolean" ||
+      !("runtime_managed" in payload) || typeof payload.runtime_managed !== "boolean" ||
+      !("router_local_time" in payload) || typeof payload.router_local_time !== "string" ||
+      !("router_weekday" in payload) || typeof payload.router_weekday !== "number" ||
+      !Number.isInteger(payload.router_weekday) || payload.router_weekday < 1 || payload.router_weekday > 7 ||
+      (payload.runtime_available && (
+        !("runtime_enabled" in payload) || typeof payload.runtime_enabled !== "boolean" ||
+        !("runtime_config_disabled" in payload) || typeof payload.runtime_config_disabled !== "boolean"
+      )) ||
+      (payload.runtime_managed && (!("desired_enabled" in payload) || typeof payload.desired_enabled !== "boolean")) ||
+      (payload.runtime_available && payload.runtime_managed && (
+        !("runtime_matches" in payload) || typeof payload.runtime_matches !== "boolean" ||
+        payload.runtime_matches !== (payload.runtime_enabled === payload.desired_enabled &&
+          payload.runtime_config_disabled === !payload.desired_enabled)
+      )) ||
       !("apply_after_seconds" in payload) || payload.apply_after_seconds !== 30) {
     throw new Error("The router did not confirm the requested weekly radio schedule.");
   }
   return {
     ok: true, radio: input.radio, configured: true, valid: true, enabled: input.enabled,
-    days, start_time: input.startTime, end_time: input.endTime, apply_after_seconds: 30,
+    days, start_time: input.startTime, end_time: input.endTime,
+    runtime_available: payload.runtime_available,
+    runtime_managed: payload.runtime_managed,
+    ...("runtime_enabled" in payload && typeof payload.runtime_enabled === "boolean" ? { runtime_enabled: payload.runtime_enabled } : {}),
+    ...("runtime_config_disabled" in payload && typeof payload.runtime_config_disabled === "boolean" ? { runtime_config_disabled: payload.runtime_config_disabled } : {}),
+    ...("desired_enabled" in payload && typeof payload.desired_enabled === "boolean" ? { desired_enabled: payload.desired_enabled } : {}),
+    ...("runtime_matches" in payload && typeof payload.runtime_matches === "boolean" ? { runtime_matches: payload.runtime_matches } : {}),
+    router_local_time: payload.router_local_time,
+    router_weekday: payload.router_weekday,
+    apply_after_seconds: 30,
   };
 }
 

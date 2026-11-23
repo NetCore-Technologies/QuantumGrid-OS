@@ -2292,11 +2292,47 @@ function action_wireless_radio_schedule()
 		return
 	end
 
+	local clock = os.date("*t")
+	local router_weekday = ((clock.wday + 5) % 7) + 1
+	local router_local_time = os.date("%H:%M:%S") or ""
+	local live_inventory = ubus_call("network.wireless", "status", {})
+	local live = type(live_inventory) == "table" and live_inventory[update.radio] or nil
+	local current_disabled_ok, current_disabled = pcall(uci.get, uci, "wireless", update.radio, "disabled")
+	local runtime_available = type(live) == "table" and type(live.up) == "boolean" and
+		current_disabled_ok and (current_disabled == nil or current_disabled == "0" or current_disabled == "1")
+	local saved = manager.from_config({
+		[".type"] = "schedule", radio = update.radio, enabled = values.enabled,
+		days = values.days, start_time = values.start_time, end_time = values.end_time,
+		base_disabled = values.base_disabled
+	}, update.radio)
+	local runtime_managed, desired_enabled = false, nil
+	if saved then
+		local desired_disabled = manager.desired_disabled(saved, router_weekday, clock.hour * 60 + clock.min)
+		if desired_disabled ~= nil then
+			runtime_managed = true
+			desired_enabled = not desired_disabled
+		end
+	end
+	local runtime_enabled = runtime_available and live.up == true or nil
+	local runtime_config_disabled = runtime_available and current_disabled == "1" or nil
+	local runtime_matches = nil
+	if runtime_available and runtime_managed then
+		runtime_matches = runtime_enabled == desired_enabled and runtime_config_disabled == not desired_enabled
+	end
+
 	record_audit(http, "wireless.radio.schedule", update.radio, "success")
 	respond(nil, {
 		ok = true, radio = update.radio, configured = true, valid = true,
 		enabled = update.enabled, days = update.days,
 		start_time = update.start_time, end_time = update.end_time,
+		runtime_available = runtime_available == true,
+		runtime_managed = runtime_managed,
+		runtime_enabled = runtime_enabled,
+		runtime_config_disabled = runtime_config_disabled,
+		desired_enabled = desired_enabled,
+		runtime_matches = runtime_matches,
+		router_local_time = router_local_time,
+		router_weekday = router_weekday,
 		apply_after_seconds = 30
 	})
 end

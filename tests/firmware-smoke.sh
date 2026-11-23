@@ -2460,7 +2460,7 @@ grep -Fq 'inspect_quantumgrid_config_archive' "$ROOT/files/usr/lib/lua/luci/cont
 grep -Fq 'sysupgrade -r' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'quantumgrid-config-archive.lock' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'local function acquire_config_archive_lock(sys)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
-grep -Fq 'local function release_archive_lock' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq 'local release_archive_lock = acquire_config_archive_lock(sys)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'local lock_released = release_archive_lock()' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'rollback_archive = rollback_path' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'member path is not recognised' "$ROOT/files/usr/lib/lua/luci/quantumgrid/config_backup.lua"
