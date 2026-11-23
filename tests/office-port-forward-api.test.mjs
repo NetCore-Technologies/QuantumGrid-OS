@@ -264,7 +264,7 @@ test("inter-zone API rejects WAN zones, invalid hosts, protocols, targets and po
   await assert.rejects(createRouterOfficeInterZoneRule({ ...base, destinationIp: "192.168.020.30" }), /valid dotted-decimal/);
   await assert.rejects(createRouterOfficeInterZoneRule({ ...base, protocol: "all" }), /Protocol must be/);
   await assert.rejects(createRouterOfficeInterZoneRule({ ...base, target: "DROP" }), /ACCEPT or REJECT/);
-  await assert.rejects(createRouterOfficeInterZoneRule({ ...base, destinationPort: "65536" }), /destination port/ii);
+  await assert.rejects(createRouterOfficeInterZoneRule({ ...base, destinationPort: "65536" }), /destination port/i);
   await assert.rejects(createRouterOfficeInterZoneRule({ ...base, protocol: "icmp", destinationPort: "443" }), /do not use a destination port/);
 });
 
