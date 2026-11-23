@@ -2258,8 +2258,21 @@ export async function updateRouterWirelessConfig(input: {
 }
 
 export interface RouterWirelessRadioSchedule {
-  radio: string; configured: boolean; valid: boolean; enabled: boolean;
-  days: number[]; start_time: string; end_time: string; error?: string;
+  radio: string;
+  configured: boolean;
+  valid: boolean;
+  enabled: boolean;
+  days: number[];
+  start_time: string;
+  end_time: string;
+  runtime_available: boolean;
+  runtime_managed: boolean;
+  runtime_enabled?: boolean;
+  desired_enabled?: boolean;
+  runtime_matches?: boolean;
+  router_local_time: string;
+  router_weekday: number;
+  error?: string;
 }
 export interface RouterWirelessRadioScheduleUpdateResult extends RouterWirelessRadioSchedule {
   ok: true; apply_after_seconds: 30;
@@ -2292,7 +2305,15 @@ export async function getRouterWirelessRadioSchedules(): Promise<RouterWirelessR
         !("enabled" in item) || typeof item.enabled !== "boolean" ||
         !("days" in item) || !Array.isArray(item.days) ||
         !("start_time" in item) || typeof item.start_time !== "string" ||
-        !("end_time" in item) || typeof item.end_time !== "string") {
+        !("end_time" in item) || typeof item.end_time !== "string" ||
+        !("runtime_available" in item) || typeof item.runtime_available !== "boolean" ||
+        !("runtime_managed" in item) || typeof item.runtime_managed !== "boolean" ||
+        !("router_local_time" in item) || typeof item.router_local_time !== "string" ||
+        !("router_weekday" in item) || typeof item.router_weekday !== "number" ||
+        !Number.isInteger(item.router_weekday) || item.router_weekday < 1 || item.router_weekday > 7 ||
+        (item.runtime_available && (!("runtime_enabled" in item) || typeof item.runtime_enabled !== "boolean")) ||
+        (item.runtime_managed && (!("desired_enabled" in item) || typeof item.desired_enabled !== "boolean")) ||
+        ("runtime_matches" in item && typeof item.runtime_matches !== "boolean")) {
       throw new Error("The router returned an invalid radio schedule record.");
     }
     if (seen.has(item.radio)) throw new Error("The router returned duplicate radio schedule records.");
@@ -2304,6 +2325,13 @@ export async function getRouterWirelessRadioSchedules(): Promise<RouterWirelessR
     output.push({
       radio: item.radio, configured: true, valid: item.valid, enabled: item.enabled,
       days: [...item.days], start_time: item.start_time, end_time: item.end_time,
+      runtime_available: item.runtime_available,
+      runtime_managed: item.runtime_managed,
+      ...("runtime_enabled" in item && typeof item.runtime_enabled === "boolean" ? { runtime_enabled: item.runtime_enabled } : {}),
+      ...("desired_enabled" in item && typeof item.desired_enabled === "boolean" ? { desired_enabled: item.desired_enabled } : {}),
+      ...("runtime_matches" in item && typeof item.runtime_matches === "boolean" ? { runtime_matches: item.runtime_matches } : {}),
+      router_local_time: item.router_local_time,
+      router_weekday: item.router_weekday,
       ...("error" in item && typeof item.error === "string" ? { error: item.error } : {}),
     });
   }
