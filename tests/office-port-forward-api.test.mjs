@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
   createRouterOfficeInterZoneRule,
+  setRouterOfficeInterZoneRuleEnabled,
   removeRouterOfficeInterZoneRule,
   createRouterOfficePortForward,
   removeRouterOfficePortForward,
