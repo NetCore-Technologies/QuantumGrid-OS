@@ -2104,6 +2104,14 @@ function action_wireless_radio_schedule()
 	if not require_https(http) then return end
 	if method == "GET" then
 		local indexed, order = {}, {}
+		local clock = os.date("*t")
+		local weekday = ((clock.wday + 5) % 7) + 1
+		local minute_of_day = clock.hour * 60 + clock.min
+		local local_time = os.date("%H:%M:%S") or ""
+		-- Use the lightweight radio status RPC; the full iwinfo inventory is already
+		-- available separately to the Wi-Fi page.
+		local live_inventory = ubus_call("network.wireless", "status", {}) or {}
+		local live_inventory_available = type(live_inventory) == "table"
 		local inventory_ok = pcall(function()
 			uci:foreach("quantumgrid-radio", "schedule", function(section)
 				if type(section) ~= "table" then return end
@@ -2112,10 +2120,11 @@ function action_wireless_radio_schedule()
 				if indexed[radio] then
 					indexed[radio].valid = false
 					indexed[radio].error = "Duplicate schedule records exist for this radio."
+					indexed[radio].runtime_managed = false
 					return
 				end
 				local parsed = manager.from_config(section, radio)
-				indexed[radio] = parsed and {
+				local item = parsed and {
 					radio = radio, configured = true, valid = true, enabled = parsed.enabled,
 					days = parsed.days, start_time = parsed.start_time, end_time = parsed.end_time
 				} or {
@@ -2123,7 +2132,30 @@ function action_wireless_radio_schedule()
 					days = {}, start_time = "", end_time = "",
 					error = "The saved schedule is invalid and requires review."
 				}
+				local live = live_inventory_available and live_inventory[radio] or nil
+				local disabled_ok, disabled = pcall(uci.get, uci, "wireless", radio, "disabled")
+				local runtime_available = live_inventory_available and type(live) == "table" and
+					type(live.up) == "boolean" and disabled_ok and
+					(disabled == nil or disabled == "0" or disabled == "1")
+				item.runtime_available = runtime_available == true
+				item.runtime_managed = false
+				item.router_local_time = local_time
+				item.router_weekday = weekday
+				if runtime_available then
+					item.runtime_enabled = live.up == true and disabled ~= "1"
+				end
+				if parsed then
+					local desired_disabled = manager.desired_disabled(parsed, weekday, minute_of_day)
+					if desired_disabled ~= nil then
+						local desired_enabled = not desired_disabled
+						item.runtime_managed = true
+						item.desired_enabled = desired_enabled
+						if runtime_available then
+							item.runtime_matches = item.runtime_enabled == desired_enabled
+						end
+				end
 				order[#order + 1] = radio
+				indexed[radio] = item
 			end)
 		end)
 		if not inventory_ok then
