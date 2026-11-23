@@ -1199,6 +1199,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-download-add"}, call("action_sqm_client_qos_download_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "wireless-ap-create"}, call("action_wireless_ap_create")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-radio-update"}, call("action_wireless_radio_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-radio-schedule"}, call("action_wireless_radio_schedule")).leaf = true
 	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
@@ -1895,6 +1896,178 @@ function action_wireless_update()
 		rolled_back = false
 	})
 end
+
+
+
+function action_wireless_ap_create()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local sys = require "luci.sys"
+	local uci = require("luci.model.uci").cursor()
+	local validator = require "luci.quantumgrid.wireless"
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+				"Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then respond(405, {ok=false,error="POST is required."}); return end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, {ok=false,error="A same-origin request is required."}); return
+	end
+	if fs.access("/sbin/wifi") ~= true or fs.access("/etc/config/wireless") ~= true or
+		fs.access("/etc/config/network") ~= true or fs.access("/etc/config/firewall") ~= true then
+		respond(503, {ok=false,error="Wireless, network, firewall or Wi-Fi reload configuration is unavailable."}); return
+	end
+
+	local update, validation_error = validator.validate_create(
+		http.formvalue("radio", true), http.formvalue("ssid", true),
+		http.formvalue("encryption", true), http.formvalue("key", true),
+		http.formvalue("hidden", true), http.formvalue("confirmed", true))
+	if not update then respond(400, {ok=false,error=validation_error}); return end
+
+	local type_ok, radio_type = pcall(uci.get, uci, "wireless", update.radio, ".type")
+	local disabled_ok, radio_disabled = pcall(uci.get, uci, "wireless", update.radio, "disabled")
+	if not type_ok or not disabled_ok then
+		respond(503, {ok=false,error="The selected radio could not be inspected safely."}); return
+	end
+	if radio_type ~= "wifi-device" then
+		respond(404, {ok=false,error="Only an existing wireless radio can receive a new AP."}); return
+	end
+	if radio_disabled == "1" then
+		respond(409, {ok=false,error="Enable the selected radio and verify it is running before creating another AP."}); return
+	end
+	local runtime_status = ubus_call("network.wireless", "status", {}) or {}
+	local runtime_radio = runtime_status[update.radio]
+	if type(runtime_radio) ~= "table" or runtime_radio.up ~= true then
+		respond(409, {ok=false,error="The selected radio is not reporting a live running state. No AP was created."}); return
+	end
+
+	local network_inventory = wireless_network_inventory(uci, fs)
+	if not network_inventory.available or network_inventory.truncated then
+		respond(503, {ok=false,error="Network or firewall inventories are unavailable or truncated; the new SSID cannot be safely bound."}); return
+	end
+	local office_validator = require "luci.quantumgrid.office_networks"
+	local binding, binding_error = office_validator.validate_wireless_network_binding(
+		http.formvalue("network", true), network_inventory.interfaces, network_inventory.zones)
+	if not binding then respond(400, {ok=false,error=binding_error}); return end
+
+	local ap_count, duplicate_ssid = 0, false
+	local inventory_ok = pcall(function()
+		uci:foreach("wireless", "wifi-iface", function(section)
+			if type(section) == "table" and section.device == update.radio and section.mode == "ap" then
+				ap_count = ap_count + 1
+				if section.ssid == update.ssid then duplicate_ssid = true end
+			end
+		end)
+	end)
+	if not inventory_ok then
+		respond(503, {ok=false,error="The existing AP inventory could not be read safely."}); return
+	end
+	if ap_count >= 16 then
+		respond(409, {ok=false,error="This radio already has the maximum of 16 AP interfaces managed by this creation workflow."}); return
+	end
+	if duplicate_ssid then
+		respond(409, {ok=false,error="An AP with this SSID already exists on the selected radio."}); return
+	end
+
+	local section_id
+	for index = 1, 128 do
+		local candidate = "qg_ap_" .. tostring(index)
+		local ok, existing_type = pcall(uci.get, uci, "wireless", candidate, ".type")
+		if not ok then
+			respond(503, {ok=false,error="The wireless section namespace could not be inspected safely."}); return
+		end
+		if existing_type == nil then section_id = candidate; break end
+	end
+	if not section_id then
+		respond(409, {ok=false,error="No free QuantumGrid AP section identifier is available; inspect wireless configuration locally."}); return
+	end
+
+	local values = {
+		device=update.radio, mode="ap", network=binding.network, ssid=update.ssid,
+		encryption=update.encryption, key=update.key, hidden=update.hidden
+	}
+	if update.encryption == "sae" then values.ieee80211w = "2"
+	elseif update.encryption == "sae-mixed" then values.ieee80211w = "1" end
+
+	local section_ok, created = pcall(uci.section, uci, "wireless", "wifi-iface", section_id, values)
+	if not section_ok or created ~= section_id then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, {ok=false,error="The new AP section could not be staged; no changes were committed."}); return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "wireless")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "wireless")
+		respond(500, {ok=false,error="The new AP configuration could not be committed; Wi-Fi reload was not attempted."}); return
+	end
+
+	local function runtime_has_ap()
+		local status = ubus_call("network.wireless", "status", {}) or {}
+		local current = status[update.radio]
+		if type(current) ~= "table" or current.up ~= true then return false end
+		for _, iface in ipairs(current.interfaces or {}) do
+			local config = type(iface.config) == "table" and iface.config or {}
+			if config.mode == "ap" and config.ssid == update.ssid and
+				type(iface.ifname) == "string" and iface.ifname:match("^[%w_.%-]+$") then
+				return true
+			end
+		end
+		return false
+	end
+
+	local reload_ok, reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+	local runtime_verified = false
+	if reload_ok and reload_status == 0 then
+		local nixio = require "nixio"
+		for attempt = 1, 12 do
+			if runtime_has_ap() then runtime_verified = true; break end
+			if attempt < 12 then pcall(nixio.nanosleep, 0, 250000000) end
+		end
+	end
+	if not runtime_verified then
+		local remove_ok, removed = pcall(uci.delete, uci, "wireless", section_id)
+		local commit_rollback_ok, rollback_committed = false, false
+		if remove_ok and removed == true then
+			commit_rollback_ok, rollback_committed = pcall(uci.commit, uci, "wireless")
+		end
+		local rollback_reload_ok, rollback_reload_status = false, -1
+		if remove_ok and removed == true and commit_rollback_ok and rollback_committed == true then
+			rollback_reload_ok, rollback_reload_status = pcall(sys.call, "/sbin/wifi reload >/dev/null 2>&1")
+		else
+			pcall(uci.revert, uci, "wireless")
+		end
+		local rolled_back = rollback_reload_ok and rollback_reload_status == 0 and not runtime_has_ap()
+		record_audit(http, "wireless.ap.create", section_id, "failed")
+		respond(502, {
+			ok=false, rolled_back=rolled_back == true,
+			error=rolled_back
+				and "The new AP did not appear in live wireless status. Its configuration was removed and Wi-Fi was reloaded."
+				or "The new AP did not become live and automatic rollback could not be fully verified. Inspect wireless configuration and runtime status locally."
+		})
+		return
+	end
+
+	record_audit(http, "wireless.ap.create", section_id, "success")
+	respond(nil, {
+		ok=true, radio=update.radio, section=section_id, ssid=update.ssid,
+		network=binding.network, encryption=update.encryption, hidden=update.hidden == "1",
+		key_set=true, reloaded=true, runtime_verified=true, rolled_back=false
+	})
+end
+
 
 
 

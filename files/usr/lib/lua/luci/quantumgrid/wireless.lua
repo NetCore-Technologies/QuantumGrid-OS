@@ -94,6 +94,26 @@ function validate_expected_current_channel(expected, current)
 	return true
 end
 
+function validate_create(radio, ssid, encryption, key, hidden, confirmed)
+	if not valid_section(radio) then return nil, "Invalid wireless radio section name." end
+	local valid_ssid, ssid_error = valid_text(ssid, 1, 32, "SSID")
+	if not valid_ssid then return nil, ssid_error end
+	if encryption ~= "psk2" and encryption ~= "sae" and encryption ~= "sae-mixed" then
+		return nil, "New APs must use WPA2-Personal, WPA3-Personal or WPA2/WPA3 transition security."
+	end
+	if type(key) ~= "string" then return nil, "Wireless passphrase must be text." end
+	local valid_key, key_error = valid_text(key, 8, 63, "Wireless passphrase")
+	if not valid_key then return nil, key_error end
+	if hidden ~= "0" and hidden ~= "1" then return nil, "Hidden SSID must be exactly 0 or 1." end
+	if confirmed ~= "1" then
+		return nil, "Explicit confirmation is required because creating an AP reloads Wi-Fi and may disconnect clients."
+	end
+	return {
+		radio = radio, ssid = valid_ssid, encryption = encryption, key = valid_key,
+		hidden = hidden, ieee80211k = "0", ieee80211v = "0"
+	}
+end
+
 function validate_update(radio, section, ssid, encryption, key, hidden, channel, htmode, txpower, allow_open, confirmed, radius_server, radius_port, radius_secret, accounting_server, accounting_port, accounting_secret)
 	if not valid_section(radio) then
 		return nil, "Invalid radio section name."

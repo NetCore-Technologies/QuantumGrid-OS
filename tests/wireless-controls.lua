@@ -207,4 +207,29 @@ for _, expected in ipairs({ "", "0", "234", "001", "1.5", "../wifi", "1;uci" }) 
     "invalid expected channel must be rejected: " .. expected)
 end
 
+
+local create_ap = wireless.validate_create(
+	"radio0", "QuantumGrid Guest", "sae-mixed", "secure-guest-passphrase", "0", "1")
+assert(create_ap and create_ap.radio == "radio0" and create_ap.ssid == "QuantumGrid Guest")
+assert(create_ap.encryption == "sae-mixed" and create_ap.key == "secure-guest-passphrase")
+assert(create_ap.ieee80211k == "0" and create_ap.ieee80211v == "0")
+assert(wireless.validate_create("radio0", "Hidden", "sae", "valid-passphrase-123", "1", "1").hidden == "1")
+
+local function reject_create(radio, ssid, encryption, key, hidden, confirmed, label)
+	local result, err = wireless.validate_create(radio, ssid, encryption, key, hidden, confirmed)
+	assert(result == nil, label .. " should be rejected")
+	assert(type(err) == "string" and #err > 0, label .. " should explain the rejection")
+end
+reject_create("../radio0", "Guest", "psk2", "valid-passphrase-123", "0", "1", "path-like radio")
+reject_create("radio0", "", "psk2", "valid-passphrase-123", "0", "1", "empty SSID")
+reject_create("radio0", string.rep("x", 33), "psk2", "valid-passphrase-123", "0", "1", "oversized SSID")
+reject_create("radio0", "Bad\nSSID", "psk2", "valid-passphrase-123", "0", "1", "control character in SSID")
+reject_create("radio0", "Guest", "none", "", "0", "1", "open network")
+reject_create("radio0", "Guest", "wpa2", "", "0", "1", "enterprise security without RADIUS configuration")
+reject_create("radio0", "Guest", "psk2", "short", "0", "1", "short passphrase")
+reject_create("radio0", "Guest", "psk2", string.rep("x", 64), "0", "1", "oversized passphrase")
+reject_create("radio0", "Guest", "psk2", "valid-passphrase-123\n", "0", "1", "control character in passphrase")
+reject_create("radio0", "Guest", "psk2", "valid-passphrase-123", "true", "1", "non-canonical hidden flag")
+reject_create("radio0", "Guest", "psk2", "valid-passphrase-123", "0", "0", "missing disconnect acknowledgement")
+
 print("wireless-controls: all validation tests passed")
