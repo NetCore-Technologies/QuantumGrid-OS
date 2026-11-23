@@ -379,11 +379,15 @@ local function authorized_keys_status(fs)
     result.other_writable = math.floor(permissions / 2) % 2 == 1
   end
 
-  local key_inventory = inspect_authorized_keys(fs, selected.path, result.size_bytes)
-  result.key_inventory_available = key_inventory.available
-  result.key_count = key_inventory.key_count
-  result.invalid_line_count = key_inventory.invalid_line_count
-  result.key_algorithms = key_inventory.key_algorithms
+  -- Never follow a symlink or special file while inspecting authorised keys.
+  -- A known non-regular file is a review finding, not an unavailable/unknown result.
+  if result.regular_file == true then
+    local key_inventory = inspect_authorized_keys(fs, selected.path, result.size_bytes)
+    result.key_inventory_available = key_inventory.available
+    result.key_count = key_inventory.key_count
+    result.invalid_line_count = key_inventory.invalid_line_count
+    result.key_algorithms = key_inventory.key_algorithms
+  end
 
   local directory_ok, directory_stat = lstat(fs, selected.directory)
   if directory_ok then
@@ -398,20 +402,26 @@ local function authorized_keys_status(fs)
     end
   end
 
-  if result.size_bytes == nil or result.root_owned == nil or
+  local known_unsafe = result.size_bytes == 0 or
+    (type(result.size_bytes) == "number" and result.size_bytes > 65536) or
+    result.root_owned == false or result.regular_file == false or
+    result.owner_readable == false or result.group_writable == true or
+    result.other_writable == true or result.directory_root_owned == false or
+    result.directory_valid == false or result.directory_group_writable == true or
+    result.directory_other_writable == true or
+    (result.regular_file == true and
+      (result.size_bytes == 0 or result.key_count == 0 or result.invalid_line_count > 0))
+  local evidence_incomplete = result.size_bytes == nil or result.root_owned == nil or
     result.regular_file == nil or result.owner_readable == nil or
     result.group_writable == nil or result.other_writable == nil or
     result.directory_root_owned == nil or result.directory_valid == nil or
     result.directory_group_writable == nil or result.directory_other_writable == nil or
-    not result.key_inventory_available then
-    result.status = "unknown"
-  elseif result.size_bytes == 0 or result.size_bytes > 65536 or
-    result.key_count == 0 or result.invalid_line_count > 0 or
-    not result.root_owned or not result.regular_file or not result.owner_readable or
-    result.group_writable or result.other_writable or
-    not result.directory_root_owned or not result.directory_valid or
-    result.directory_group_writable or result.directory_other_writable then
+    (result.regular_file == true and not result.key_inventory_available)
+
+  if known_unsafe then
     result.status = "review"
+  elseif evidence_incomplete then
+    result.status = "unknown"
   else
     result.status = "present"
   end

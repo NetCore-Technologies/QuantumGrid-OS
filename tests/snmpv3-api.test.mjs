@@ -102,7 +102,12 @@ test("rejects weak credentials, unsafe user names, same secrets and unsafe zones
   await assert.rejects(updateRouterSnmpv3({ ...validInput, authPassphrase: "short" }), /authentication passphrase/);
   await assert.rejects(updateRouterSnmpv3({ ...validInput, privacyPassphrase: "short" }), /privacy passphrase/);
   await assert.rejects(updateRouterSnmpv3({ ...validInput, authPassphrase: validInput.privacyPassphrase }), /must be different/);
-  await assert.rejects(updateRouterSnmpv3({ ...validInput, sourceZone: "wan" }), /trusted internal management firewall zone/);
+  for (const sourceZone of ["wan", "wan6", "wwan", "cellular", "lte", "5g", "fiber-edge"]) {
+    await assert.rejects(
+      updateRouterSnmpv3({ ...validInput, sourceZone }),
+      /trusted internal management firewall zone/,
+    );
+  }
   await assert.rejects(updateRouterSnmpv3({ ...validInput, authPassphrase: "StrongSecretWith Space-2026!" }), /supported ASCII/);
   await assert.rejects(updateRouterSnmpv3({ ...validInput, privacyPassphrase: "StrongSecretWith\"Quote-2026!" }), /supported ASCII/);
 });

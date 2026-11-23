@@ -3483,6 +3483,10 @@ function isValidSnmpv3Secret(value: string): boolean {
   return true;
 }
 
+const SNMPV3_TRUSTED_MANAGEMENT_ZONES = new Set([
+  "lan", "mgmt", "management", "corp", "office", "home", "trusted", "internal",
+]);
+
 export async function updateRouterSnmpv3(input: {
   enabled: boolean;
   username: string;
@@ -3503,7 +3507,8 @@ export async function updateRouterSnmpv3(input: {
     if (input.authPassphrase === input.privacyPassphrase) {
       throw new Error("SNMPv3 authentication and privacy passphrases must be different.");
     }
-    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(input.sourceZone)) {
+    if (!/^[A-Za-z][A-Za-z0-9_.-]{0,31}$/.test(input.sourceZone) ||
+        !SNMPV3_TRUSTED_MANAGEMENT_ZONES.has(input.sourceZone.toLowerCase())) {
       throw new Error("Choose a trusted internal management firewall zone.");
     }
   }

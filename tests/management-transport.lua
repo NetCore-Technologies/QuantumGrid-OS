@@ -235,10 +235,17 @@ uci, fs = fixture("1", {
     ["/etc/dropbear/authorized_keys"] = { size = 128, uid = 0, mode = 33152, type = "lnk" }
   }
 })
+local symlink_authorized_keys_read = false
+local original_readfile = fs.readfile
+fs.readfile = function(path)
+  if path == "/etc/dropbear/authorized_keys" then symlink_authorized_keys_read = true end
+  return original_readfile(path)
+end
 local symlink_authorized_keys = transport.inspect(uci, fs)
 assert(symlink_authorized_keys.ssh_authorized_keys.regular_file == false)
 assert(symlink_authorized_keys.ssh_authorized_keys.status == "review")
 assert(symlink_authorized_keys.ssh_status == "review")
+assert(not symlink_authorized_keys_read, "a known symlink must not be followed or read")
 
 uci, fs = fixture("1", {
   stat_overrides = {
