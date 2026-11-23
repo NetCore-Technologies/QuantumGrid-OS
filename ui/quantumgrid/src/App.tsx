@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5562,7 +5562,7 @@ function WirelessApCreateWizard({
   const selectedRadio = availableRadios.find((item) => item.name === radio) ?? availableRadios[0];
   const externalZones = new Set(["wan", "wan6", "wwan", "cellular"]);
   const eligibleNetworks = networkInterfaces.filter((item) =>
-    item.protocol === "static" && item.device.length > 0 && item.firewall_zones.length > 0 &&
+    item.protocol === "static" && item.device.length > 0 && item.firewall_zones.length === 1 &&
     item.firewall_zones.every((zone) => !externalZones.has(zone.toLowerCase())));
   const selectedNetwork = eligibleNetworks.find((item) => item.name === network);
   const ssidBytes = new TextEncoder().encode(ssid).length;
@@ -5653,6 +5653,69 @@ function WirelessApCreateWizard({
         </button>
       </div>
       {notice ? <div className={notice.success ? "wireless-config-result success" : "wireless-config-result error"} role={notice.success ? "status" : "alert"}>{notice.message}</div> : null}
+    </div>
+  );
+}
+
+
+
+function WirelessApRemovalControl({ config, refresh }: {
+  config: RouterWirelessConfig;
+  refresh: () => void;
+}) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const managed = /^qg_ap_([1-9]\d{0,2})$/.exec(config.section);
+  if (!managed || Number(managed[1]) > 128) return null;
+
+  const remove = async () => {
+    if (!confirmed || saving) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await removeRouterWirelessAp({
+        radio: config.radio,
+        section: config.section,
+        confirmed: true,
+      });
+      setConfirmed(false);
+      setNotice({
+        success: true,
+        message: "AP " + result.ssid + " was removed from " + result.radio +
+          " and its absence was confirmed in live wireless status.",
+      });
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The managed AP could not be removed.",
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="wireless-ap-remove">
+      <div>
+        <strong>QuantumGrid-managed AP</strong>
+        <span>{config.section} · {config.ssid} · {config.radio}</span>
+      </div>
+      <label>
+        <input type="checkbox" checked={confirmed} disabled={saving} onChange={(event) => setConfirmed(event.target.checked)} />
+        I understand this removes the SSID, disconnects its clients and reloads Wi-Fi. The router will verify that the AP is absent and attempt to restore it if removal fails.
+      </label>
+      <div className="wireless-config-actions">
+        <button type="button" className="hero-button wifi-export-button" disabled={!confirmed || saving} onClick={() => void remove()}>
+          {saving ? "Removing and verifying…" : "Remove this AP"}
+        </button>
+      </div>
+      {notice ? (
+        <div className={notice.success ? "wireless-config-result success" : "wireless-config-result error"} role={notice.success ? "status" : "alert"}>
+          {notice.message}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -6957,14 +7020,16 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
                   <div className="module-message">Edit existing AP interfaces below. Additional AP creation verifies the new BSS in live wireless status and removes the new section if activation fails.</div>
                   <div className="wireless-config-list">
                     {wirelessConfigs.sections.map((config) => (
-                      <WirelessConfigEditor
-                        key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.dynamic_vlan, config.radius_vlan_unmanaged, config.radius_vlan_mappings.map((item) => item.vid + ":" + item.network).join(","), config.channel, config.htmode, config.txpower, config.key_set, config.ieee80211k, config.ieee80211v].join(":")}
-                        config={config}
-                        radio={radios.find((item) => item.name === config.radio)}
-                        networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
-                        officeInventory={routerOverview?.office_networks}
-                        refresh={refresh}
-                      />
+                      <div className="wireless-config-list-item" key={config.section}>
+                        <WirelessConfigEditor
+                          config={config}
+                          radio={radios.find((item) => item.name === config.radio)}
+                          networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
+                          officeInventory={routerOverview?.office_networks}
+                          refresh={refresh}
+                        />
+                        <WirelessApRemovalControl config={config} refresh={refresh} />
+                      </div>
                     ))}
                   </div>
                 </>
