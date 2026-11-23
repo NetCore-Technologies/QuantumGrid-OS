@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, setRouterOfficeInterZoneRuleEnabled, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -7813,6 +7813,8 @@ function SqmClientQosManager({
   const [saving, setSaving] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState("");
   const [removing, setRemoving] = useState("");
+  const [pendingToggle, setPendingToggle] = useState<{ section: string; enabled: boolean } | null>(null);
+  const [toggling, setToggling] = useState("");
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
   const activeSource = sourceZones.some((zone) => zone.name === sourceZone) ? sourceZone : sourceZones[0]?.name ?? "";
   const activeDestination = destinationZones.some((zone) => zone.name === destinationZone) ? destinationZone : destinationZones[0]?.name ?? "";
@@ -9518,6 +9520,30 @@ function OfficeInterZoneRuleManager({
     }
   };
 
+  const toggleRule = async (section: string, enabled: boolean) => {
+    if (!section || toggling) return;
+    setToggling(section);
+    setNotice(null);
+    try {
+      const result = await setRouterOfficeInterZoneRuleEnabled(section, enabled);
+      setNotice({
+        success: true,
+        message: result.changed
+          ? "The managed inter-zone rule is now " + (result.enabled ? "enabled" : "disabled") + " and the firewall reload completed."
+          : "The managed inter-zone rule already had the requested state; no firewall reload was needed.",
+      });
+      setPendingToggle(null);
+      refresh();
+    } catch (error) {
+      setNotice({
+        success: false,
+        message: error instanceof Error ? error.message : "The inter-zone rule state could not be changed.",
+      });
+    } finally {
+      setToggling("");
+    }
+  };
+
   const removeRule = async (section: string) => {
     if (removing || !section) return;
     setRemoving(section);
@@ -9639,13 +9665,25 @@ function OfficeInterZoneRuleManager({
                   <Status active={rule.enabled}>{rule.enabled ? rule.target : "DISABLED"}</Status>
                   {pendingRemoval === rule.section ? (
                     <div className="office-interzone-remove-confirm">
-                      <button className="office-remove-confirm" type="button" disabled={Boolean(removing)} onClick={() => void removeRule(rule.section)}>
+                      <button className="office-remove-confirm" type="button" disabled={Boolean(removing) || Boolean(toggling)} onClick={() => void removeRule(rule.section)}>
                         {removing === rule.section ? "Removing…" : "Confirm remove"}
                       </button>
-                      <button className="office-remove-cancel" type="button" disabled={Boolean(removing)} onClick={() => setPendingRemoval("")}>Cancel</button>
+                      <button className="office-remove-cancel" type="button" disabled={Boolean(removing) || Boolean(toggling)} onClick={() => setPendingRemoval("")}>Cancel</button>
+                    </div>
+                  ) : pendingToggle?.section === rule.section ? (
+                    <div className="office-interzone-remove-confirm">
+                      <button className="office-remove-confirm" type="button" disabled={Boolean(toggling) || Boolean(removing)} onClick={() => void toggleRule(rule.section, pendingToggle.enabled)}>
+                        {toggling === rule.section ? "Applying…" : "Confirm " + (pendingToggle.enabled ? "enable" : "disable")}
+                      </button>
+                      <button className="office-remove-cancel" type="button" disabled={Boolean(toggling) || Boolean(removing)} onClick={() => setPendingToggle(null)}>Cancel</button>
                     </div>
                   ) : (
-                    <button className="office-remove-start" type="button" disabled={Boolean(removing)} onClick={() => setPendingRemoval(rule.section)}>Remove</button>
+                    <div className="office-interzone-controls">
+                      <button className="office-interzone-toggle" type="button" disabled={Boolean(toggling) || Boolean(removing)} onClick={() => setPendingToggle({ section: rule.section, enabled: !rule.enabled })}>
+                        {rule.enabled ? "Disable" : "Enable"}
+                      </button>
+                      <button className="office-remove-start" type="button" disabled={Boolean(removing) || Boolean(toggling)} onClick={() => setPendingRemoval(rule.section)}>Remove</button>
+                    </div>
                   )}
                 </div>
               </div>
