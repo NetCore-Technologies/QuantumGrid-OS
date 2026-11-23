@@ -27,7 +27,7 @@ printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(
 SOURCE_REF="refs/tags/qg-$VERSION"
 
 # Reject transfer corruption before making a network request to GitHub.
-"$SCRIPT_DIR/verify-aw1000-release-manifest.sh" "$IMAGE" "$MANIFEST"
+sh "$SCRIPT_DIR/verify-aw1000-release-manifest.sh" "$IMAGE" "$MANIFEST"
 
 command -v gh >/dev/null 2>&1 || die "GitHub CLI (gh) is required for publisher/build-provenance verification."
 GH_VERSION=$(gh version 2>/dev/null | awk 'NR == 1 && $1 == "gh" && $2 == "version" { print $3 }')

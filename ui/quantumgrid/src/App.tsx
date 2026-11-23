@@ -5847,33 +5847,45 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
   const networkOptions = networkInterfaces
     .filter((item) => item.protocol === "static" && item.device !== "" && item.name !== "loopback")
     .slice().sort((left, right) => left.name.localeCompare(right.name));
-  const [enabled, setEnabled] = useState(status?.configured_enabled ?? false);
-  const [network, setNetwork] = useState(status?.network ?? networkOptions[0]?.name ?? "");
-  const [ssids, setSsids] = useState<string[]>(status?.ssid_list ?? []);
-  const [aggressiveness, setAggressiveness] = useState(String(status?.aggressiveness ?? 1));
-  const [bandInterval, setBandInterval] = useState(String(status?.band_steering_interval ?? 30000));
-  const [bandMinSnr, setBandMinSnr] = useState(String(status?.band_steering_min_snr ?? -65));
-  const [bandThreshold, setBandThreshold] = useState(String(status?.band_steering_threshold ?? 5));
-  const [loadThreshold, setLoadThreshold] = useState(String(status?.load_balancing_threshold ?? 0));
+  type UsteerDraft = {
+    enabled: boolean;
+    network: string;
+    ssids: string[];
+    aggressiveness: string;
+    bandInterval: string;
+    bandMinSnr: string;
+    bandThreshold: string;
+    loadThreshold: string;
+  };
+  const [draft, setDraft] = useState<UsteerDraft | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
-  const ssidOptionsKey = ssidOptions.join("\u0000");
-
-  useEffect(() => {
-    if (!status || dirty) return;
-    setEnabled(status.configured_enabled);
-    setNetwork(status.network || networkOptions[0]?.name || "");
-    setSsids(status.ssid_list.length > 0 ? status.ssid_list : (ssidOptions[0] ? [ssidOptions[0]] : []));
-    setAggressiveness(String(status.aggressiveness));
-    setBandInterval(String(status.band_steering_interval));
-    setBandMinSnr(String(status.band_steering_min_snr));
-    setBandThreshold(String(status.band_steering_threshold));
-    setLoadThreshold(String(status.load_balancing_threshold));
-    setLoaded(true);
-  }, [status?.sampled_at, status?.configured, status?.network, status?.status, status?.ssid_list.join("\u0000"), ssidOptionsKey, dirty]);
+  const enabled = draft?.enabled ?? status?.configured_enabled ?? false;
+  const network = draft?.network ?? status?.network ?? networkOptions[0]?.name ?? "";
+  const ssids = draft?.ssids ?? (status?.ssid_list.length
+    ? status.ssid_list
+    : (ssidOptions[0] ? [ssidOptions[0]] : []));
+  const aggressiveness = draft?.aggressiveness ?? String(status?.aggressiveness ?? 1);
+  const bandInterval = draft?.bandInterval ?? String(status?.band_steering_interval ?? 30000);
+  const bandMinSnr = draft?.bandMinSnr ?? String(status?.band_steering_min_snr ?? -65);
+  const bandThreshold = draft?.bandThreshold ?? String(status?.band_steering_threshold ?? 5);
+  const loadThreshold = draft?.loadThreshold ?? String(status?.load_balancing_threshold ?? 0);
+  const loaded = Boolean(status);
+  const updateDraft = (changes: Partial<UsteerDraft>) => {
+    setDraft((current) => ({
+      enabled: current?.enabled ?? enabled,
+      network: current?.network ?? network,
+      ssids: current?.ssids ?? ssids,
+      aggressiveness: current?.aggressiveness ?? aggressiveness,
+      bandInterval: current?.bandInterval ?? bandInterval,
+      bandMinSnr: current?.bandMinSnr ?? bandMinSnr,
+      bandThreshold: current?.bandThreshold ?? bandThreshold,
+      loadThreshold: current?.loadThreshold ?? loadThreshold,
+      ...changes,
+    }));
+    setNotice(null);
+  };
 
   const selectedAps = configs.filter((config) => ssids.includes(config.ssid) && !config.interface_disabled && !config.radio_disabled);
   const missingKOrV = ssids.some((ssid) => {
@@ -5892,7 +5904,6 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
   const statusLabel = !status ? "WAITING" : status.running && !status.policy_verified ? "POLICY REVIEW" :
     status.status === "cluster" ? "CLUSTER PEERS" :
     status.status === "local_only" ? "LOCAL ONLY" : status.status.replace(/_/g, " ").toUpperCase();
-  const markDirty = () => { setDirty(true); setNotice(null); };
 
   const save = async () => {
     if (!confirmed || !loaded || saving || !safeReady) return;
@@ -5909,15 +5920,16 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
         bandSteeringThreshold: Number(bandThreshold),
         loadBalancingThreshold: Number(loadThreshold),
       });
-      setEnabled(result.enabled);
-      setNetwork(result.network);
-      setSsids(result.ssid_list);
-      setAggressiveness(String(result.aggressiveness));
-      setBandInterval(String(result.band_steering_interval));
-      setBandMinSnr(String(result.band_steering_min_snr));
-      setBandThreshold(String(result.band_steering_threshold));
-      setLoadThreshold(String(result.load_balancing_threshold));
-      setDirty(false);
+      setDraft({
+        enabled: result.enabled,
+        network: result.network,
+        ssids: result.ssid_list,
+        aggressiveness: String(result.aggressiveness),
+        bandInterval: String(result.band_steering_interval),
+        bandMinSnr: String(result.band_steering_min_snr),
+        bandThreshold: String(result.band_steering_threshold),
+        loadThreshold: String(result.load_balancing_threshold),
+      });
       setConfirmed(false);
       setNotice({
         success: true,
@@ -5992,7 +6004,7 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
           ) : null}
           <div className="wireless-config-options">
             <label>
-              <input type="checkbox" checked={enabled} disabled={saving} onChange={(event) => { setEnabled(event.target.checked); markDirty(); }} />
+              <input type="checkbox" checked={enabled} disabled={saving} onChange={(event) => updateDraft({ enabled: event.target.checked })} />
               <span>Enable managed multi-AP roaming</span>
             </label>
           </div>
@@ -6001,7 +6013,7 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
               <div className="office-editor-grid">
                 <label className="wireless-config-field">
                   <span>INTER-AP NETWORK</span>
-                  <select value={network} disabled={saving} onChange={(event) => { setNetwork(event.target.value); markDirty(); }}>
+                  <select value={network} disabled={saving} onChange={(event) => updateDraft({ network: event.target.value })}>
                     <option value="">Choose an existing internal network</option>
                     {networkOptions.map((item) => (
                       <option value={item.name} key={item.name}>{item.name} · {item.device || item.l3_device || "device unavailable"}</option>
@@ -6011,7 +6023,7 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
                 </label>
                 <label className="wireless-config-field">
                   <span>BSS-TRANSITION AGGRESSIVENESS</span>
-                  <select value={aggressiveness} disabled={saving} onChange={(event) => { setAggressiveness(event.target.value); markDirty(); }}>
+                  <select value={aggressiveness} disabled={saving} onChange={(event) => updateDraft({ aggressiveness: event.target.value })}>
                     <option value="0">0 · No active transition</option>
                     <option value="1">1 · Passive BSS transition request</option>
                     <option value="2">2 · Disassociation imminent</option>
@@ -6028,10 +6040,11 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
                       checked={ssids.includes(ssid)}
                       disabled={saving}
                       onChange={(event) => {
-                        setSsids((current) => event.target.checked
-                          ? [...current, ssid].sort()
-                          : current.filter((item) => item !== ssid));
-                        markDirty();
+                        updateDraft({
+                          ssids: event.target.checked
+                            ? [...ssids, ssid].sort()
+                            : ssids.filter((item) => item !== ssid),
+                        });
                       }}
                     />
                     <span>{ssid}</span>
@@ -6044,19 +6057,19 @@ function UsteerRoamingManager({ status, wirelessConfigs, networkInterfaces, refr
               <div className="office-editor-grid">
                 <label className="wireless-config-field">
                   <span>BAND-STEERING INTERVAL (MS)</span>
-                  <input type="number" min="0" max="300000" step="1000" value={bandInterval} disabled={saving} onChange={(event) => { setBandInterval(event.target.value); markDirty(); }} />
+                  <input type="number" min="0" max="300000" step="1000" value={bandInterval} disabled={saving} onChange={(event) => updateDraft({ bandInterval: event.target.value })} />
                 </label>
                 <label className="wireless-config-field">
                   <span>MINIMUM SIGNAL (DBM)</span>
-                  <input type="number" min="-90" max="-35" step="1" value={bandMinSnr} disabled={saving} onChange={(event) => { setBandMinSnr(event.target.value); markDirty(); }} />
+                  <input type="number" min="-90" max="-35" step="1" value={bandMinSnr} disabled={saving} onChange={(event) => updateDraft({ bandMinSnr: event.target.value })} />
                 </label>
                 <label className="wireless-config-field">
                   <span>BAND CLIENT THRESHOLD</span>
-                  <input type="number" min="0" max="20" step="1" value={bandThreshold} disabled={saving} onChange={(event) => { setBandThreshold(event.target.value); markDirty(); }} />
+                  <input type="number" min="0" max="20" step="1" value={bandThreshold} disabled={saving} onChange={(event) => updateDraft({ bandThreshold: event.target.value })} />
                 </label>
                 <label className="wireless-config-field">
                   <span>LOAD-BALANCING CLIENT THRESHOLD</span>
-                  <input type="number" min="0" max="32" step="1" value={loadThreshold} disabled={saving} onChange={(event) => { setLoadThreshold(event.target.value); markDirty(); }} />
+                  <input type="number" min="0" max="32" step="1" value={loadThreshold} disabled={saving} onChange={(event) => updateDraft({ loadThreshold: event.target.value })} />
                 </label>
               </div>
               {missingKOrV ? <div className="module-message">Enable both 802.11k neighbor reports and 802.11v BSS transitions on every active local AP broadcasting each selected SSID.</div> : null}
@@ -6363,10 +6376,10 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
     }
     setClientHistoryState((current) => ({ ...current, samples: [], error }));
   };
-  const applyChannelRecommendation = async () => {
+  const applyChannelRecommendation = async (nowSeconds: number) => {
     const review = pendingChannelChange;
     if (!review || !channelChangeConfirmed || channelChangeSaving) return;
-    const scanAgeSeconds = scan ? Math.floor(Date.now() / 1000) - scan.scanned_at : Number.POSITIVE_INFINITY;
+    const scanAgeSeconds = scan ? nowSeconds - scan.scanned_at : Number.POSITIVE_INFINITY;
     if (!scan || scanAgeSeconds < 0 || scanAgeSeconds > 180) {
       setChannelChangeNotice({ success: false, message: "The Wi-Fi scan is missing or older than three minutes. Run a fresh scan before applying a channel recommendation." });
       setPendingChannelChange(null);
@@ -6716,7 +6729,7 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
                       I understand this changes the radio for every AP on it, reloads Wi-Fi and temporarily disconnects associated clients.
                     </label>
                     <div className="wireless-config-actions">
-                      <button className="hero-button" disabled={!channelChangeConfirmed || channelChangeSaving} onClick={() => void applyChannelRecommendation()}>
+                      <button className="hero-button" disabled={!channelChangeConfirmed || channelChangeSaving} onClick={() => void applyChannelRecommendation(Math.floor(Date.now() / 1000))}>
                         {channelChangeSaving ? "Applying channel…" : "Apply channel " + pendingChannelChange.recommendedChannel}
                       </button>
                       <button className="hero-button wifi-export-button" disabled={channelChangeSaving} onClick={() => { setPendingChannelChange(null); setChannelChangeConfirmed(false); }}>Cancel</button>
