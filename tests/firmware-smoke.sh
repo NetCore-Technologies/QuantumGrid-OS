@@ -5383,6 +5383,6 @@ grep -Fq 'The firewall service is unavailable' "$ROOT/ui/quantumgrid/src/App.tsx
 grep -Fq 'result.firewall_reloaded' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'os.remove, "/var/run/snmpd.conf"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function updateRouterSnmpv3(input:' "$ROOT/ui/quantumgrid/src/routerApi.ts"
-grep -Fq 'SNMPv3 management' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'title="SNMPv3 network management"' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'system.snmpv3.update' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'snmpv3-api.test.mjs' "$ROOT/.github/workflows/ci.yml"
