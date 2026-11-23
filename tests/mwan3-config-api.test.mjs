@@ -22,7 +22,7 @@ const input = {
   interval: 5,
   down: 3,
   up: 5,
-  initialState: "online" as const,
+  initialState: "online",
   confirmed: true,
 };
 
@@ -46,7 +46,7 @@ function responseFor(values = input) {
 
 test("Multi-WAN API submits confirmed existing-interface health settings and verifies restart", async () => {
   let requestUrl = "";
-  let requestInit: RequestInit | undefined;
+  let requestInit;
   globalThis.fetch = async (url, init) => {
     requestUrl = String(url);
     requestInit = init;
@@ -88,7 +88,7 @@ test("Multi-WAN API rejects unconfirmed changes before network access", async ()
 
 test("Multi-WAN API rejects unsafe sections, targets, duplicates and invalid probe ranges", async () => {
   globalThis.fetch = async () => { throw new Error("fetch must not run for invalid input"); };
-  const run = (patch: Partial<typeof input>) => {
+  const run = (patch) => {
     const value = { ...input, ...patch };
     return updateRouterMwan3Interface(
       value.section, value.enabled, value.trackIps, value.reliability, value.count,
@@ -133,7 +133,7 @@ test("Multi-WAN API rejects incomplete or mismatched router confirmations", asyn
 
 test("Multi-WAN member API updates an existing member's interface, metric and weight with confirmed restart", async () => {
   let requestUrl = "";
-  let requestInit: RequestInit | undefined;
+  let requestInit;
   globalThis.fetch = async (url, init) => {
     requestUrl = String(url);
     requestInit = init;
