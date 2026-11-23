@@ -222,12 +222,15 @@ jobs:
           sh -n files/etc/init.d/quantumgrid-radio-scheduler
           sh -n files/etc/uci-defaults/97-quantumgrid-radio-scheduler
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/network_tuning.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
       - name: Test bounded SQM queue update validation
         run: lua5.1 tests/sqm-controls.lua
       - name: Test per-client DSCP policy validation and inventory
         run: lua5.1 tests/qos.lua
+      - name: Test allowlisted runtime network tuning inventory and validation
+        run: lua5.1 tests/network-tuning.lua
       - name: Test bounded weekly wireless radio schedules
         run: lua5.1 tests/radio-schedule.lua
       - name: Test weekly radio scheduler runtime transitions and rollback
