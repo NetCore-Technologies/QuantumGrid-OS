@@ -2156,6 +2156,7 @@ function action_wireless_radio_schedule()
 							item.runtime_matches = item.runtime_enabled == desired_enabled and
 								item.runtime_config_disabled == desired_disabled
 						end
+					end
 				end
 				order[#order + 1] = radio
 				indexed[radio] = item
