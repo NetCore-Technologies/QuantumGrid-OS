@@ -159,7 +159,7 @@ function validate_client_download_policy(mac, destination_ip, source_zone, desti
 	if not source or not destination then
 		return nil, "Both firewall zones must already exist in the current inventory."
 	end
-	if not is_external_zone(source) or is_external_zone(destination) then
+	if not is_external_zone(source, interfaces) or is_external_zone(destination, interfaces) then
 		return nil, "Download marking must travel from an existing WAN/WWAN zone to an internal LAN/office zone."
 	end
 

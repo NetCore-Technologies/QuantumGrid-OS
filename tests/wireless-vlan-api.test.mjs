@@ -32,6 +32,8 @@ const input = {
   channel: "auto",
   htmode: "auto",
   txpower: "auto",
+  ieee80211k: false,
+  ieee80211v: false,
   allowOpen: false,
 };
 
@@ -42,6 +44,8 @@ const success = {
   ssid: "Staff-Secure",
   network: "corp20",
   encryption: "wpa2",
+  ieee80211k: false,
+  ieee80211v: false,
   hidden: false,
   channel: "auto",
   htmode: "auto",
