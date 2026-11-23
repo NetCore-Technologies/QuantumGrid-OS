@@ -2430,20 +2430,28 @@ function action_mwan3_member_update()
 	end
 
 	local validator = require "luci.quantumgrid.mwan3_config"
-	local interfaces, existing_members, inventory_ok = {}, {}, true
-	local inventory_result = pcall(function()
+	local interfaces, existing_members = {}, {}
+	local interface_count, member_count, inventory_overflow = 0, 0, false
+	local inventory_ok = pcall(function()
 		uci:foreach("mwan3", "interface", function(section)
+			interface_count = interface_count + 1
+			if interface_count > 64 then inventory_overflow = true; return end
 			local name = type(section[".name"]) == "string" and section[".name"] or ""
 			if name:match("^[%w_%-]+$") and #name <= 32 then interfaces[name] = true end
 		end)
 		uci:foreach("mwan3", "member", function(section)
+			member_count = member_count + 1
+			if member_count > 128 then inventory_overflow = true; return end
 			local name = type(section[".name"]) == "string" and section[".name"] or ""
 			if name:match("^[%w_%-]+$") and #name <= 32 then existing_members[name] = section end
 		end)
 	end)
-	inventory_ok = inventory_result
 	if not inventory_ok then
 		respond(503, { ok = false, error = "The mwan3 interface/member inventory could not be read safely." })
+		return
+	end
+	if inventory_overflow then
+		respond(409, { ok = false, error = "The mwan3 interface/member inventory exceeds the safe edit limit; reduce or review the configuration through trusted local administration." })
 		return
 	end
 
@@ -2455,6 +2463,19 @@ function action_mwan3_member_update()
 	}, interfaces)
 	if not update then
 		respond(400, { ok = false, error = validation_error })
+		return
+	end
+	if fs.access("/etc/config/network") ~= true then
+		respond(503, { ok = false, error = "The OpenWrt network interface configuration is unavailable." })
+		return
+	end
+	local network_type_ok, network_type = pcall(uci.get, uci, "network", update.interface, ".type")
+	if not network_type_ok then
+		respond(503, { ok = false, error = "The selected OpenWrt network interface could not be inspected." })
+		return
+	end
+	if network_type ~= "interface" then
+		respond(409, { ok = false, error = "The mwan3 interface does not map to an existing OpenWrt network interface." })
 		return
 	end
 

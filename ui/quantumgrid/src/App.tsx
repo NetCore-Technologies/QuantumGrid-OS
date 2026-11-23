@@ -2592,7 +2592,7 @@ function NetworkControlPage({
         ) : (
           <div className="mwan3-config-list">
             {mwan3.config_members.map((member) => (
-              <Mwan3MemberEditor key={member.section} config={member} interfaces={mwan3.config_interfaces} refresh={refresh} />
+              <Mwan3MemberEditor key={`${member.section}:${member.interface}:${member.metric}:${member.weight}`} config={member} interfaces={mwan3.config_interfaces} refresh={refresh} />
             ))}
           </div>
         )}
