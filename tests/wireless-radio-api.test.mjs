@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp } from "../ui/quantumgrid/src/routerApi.ts";
+import { updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp } from "../ui/quantumgrid/src/routerApi.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -340,4 +340,55 @@ test("AP creation refuses a response that does not prove live runtime verificati
     radio: "radio0", ssid: "Guest", network: "guest",
     encryption: "psk2", key: "secure-guest-passphrase", hidden: false,
   }), /did not confirm the new AP/);
+});
+
+
+test("removes only a QuantumGrid-managed AP through a confirmed same-origin request", async () => {
+  let url = "";
+  let init;
+  globalThis.fetch = async (target, options) => {
+    url = String(target);
+    init = options;
+    return jsonResponse({
+      ok: true, radio: "radio0", section: "qg_ap_12",
+      ssid: "QuantumGrid Guest", network: "guest",
+      removed: true, reloaded: true, runtime_verified: true, rolled_back: false,
+    });
+  };
+  const result = await removeRouterWirelessAp({
+    radio: "radio0", section: "qg_ap_12", confirmed: true,
+  });
+  assert.equal(url, "/cgi-bin/luci/admin/services/quantumgrid/wireless-ap-remove");
+  assert.equal(init.method, "POST");
+  assert.equal(init.credentials, "same-origin");
+  assert.equal(init.cache, "no-store");
+  const form = new URLSearchParams(init.body);
+  assert.equal(form.get("radio"), "radio0");
+  assert.equal(form.get("section"), "qg_ap_12");
+  assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.runtime_verified, true);
+  assert.equal(result.rolled_back, false);
+});
+
+test("AP removal rejects administrator-owned and unconfirmed sections before fetch", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not run for unsafe AP removal"); };
+  await assert.rejects(removeRouterWirelessAp({
+    radio: "radio0", section: "default_radio0", confirmed: true,
+  }), /QuantumGrid-created AP/);
+  await assert.rejects(removeRouterWirelessAp({
+    radio: "radio0", section: "qg_ap_129", confirmed: true,
+  }), /QuantumGrid-created AP/);
+  await assert.rejects(removeRouterWirelessAp({
+    radio: "radio0", section: "qg_ap_2", confirmed: false,
+  }), /confirmation is required/);
+});
+
+test("AP removal propagates a failed runtime verification and rollback result", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: false, rolled_back: false,
+    error: "AP removal could not be verified and rollback could not be fully confirmed.",
+  }, 502);
+  await assert.rejects(removeRouterWirelessAp({
+    radio: "radio0", section: "qg_ap_2", confirmed: true,
+  }), /rollback could not be fully confirmed/);
 });

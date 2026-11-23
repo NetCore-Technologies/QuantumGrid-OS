@@ -1657,6 +1657,7 @@ const SQM_CLIENT_QOS_DOWNLOAD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgri
 const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
 const WIRELESS_AP_CREATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-ap-create";
+const WIRELESS_AP_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-ap-remove";
 const WIRELESS_RADIO_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-update";
 const WIRELESS_RADIO_SCHEDULE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-schedule";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
@@ -2108,6 +2109,84 @@ export async function createRouterWirelessAp(input: {
     ok: true, radio: input.radio, section: payload.section, ssid: input.ssid,
     network: input.network, encryption: input.encryption, hidden: input.hidden,
     key_set: true, reloaded: true, runtime_verified: true, rolled_back: false,
+  };
+}
+
+
+export interface RouterWirelessApRemoveResult {
+  ok: true;
+  radio: string;
+  section: string;
+  ssid: string;
+  network: string;
+  removed: true;
+  reloaded: true;
+  runtime_verified: true;
+  rolled_back: false;
+}
+
+export async function removeRouterWirelessAp(input: {
+  radio: string;
+  section: string;
+  confirmed: boolean;
+}): Promise<RouterWirelessApRemoveResult> {
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(input.radio)) {
+    throw new Error("Select an existing wireless radio.");
+  }
+  const match = /^qg_ap_([1-9]\d{0,2})$/.exec(input.section);
+  if (!match || Number(match[1]) > 128) {
+    throw new Error("Only a QuantumGrid-created AP can be removed here.");
+  }
+  if (input.confirmed !== true) {
+    throw new Error("Explicit AP removal confirmation is required.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("radio", input.radio);
+  form.set("section", input.section);
+  form.set("confirmed", "1");
+  const response = await fetch(WIRELESS_AP_REMOVE_URL, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+    },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Removing an AP requires an active router administrator session."
+      : "The router returned an invalid AP removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) {
+    throw new Error("The router returned an invalid AP removal response.");
+  }
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("radio" in payload) || payload.radio !== input.radio ||
+      !("section" in payload) || payload.section !== input.section ||
+      !("ssid" in payload) || typeof payload.ssid !== "string" ||
+      !("network" in payload) || typeof payload.network !== "string" ||
+      !("removed" in payload) || payload.removed !== true ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("runtime_verified" in payload) || payload.runtime_verified !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm AP removal and live runtime absence.");
+  }
+  return {
+    ok: true,
+    radio: input.radio,
+    section: input.section,
+    ssid: payload.ssid,
+    network: payload.network,
+    removed: true,
+    reloaded: true,
+    runtime_verified: true,
+    rolled_back: false,
   };
 }
 
