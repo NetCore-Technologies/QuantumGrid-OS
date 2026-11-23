@@ -3334,7 +3334,7 @@ local function cellular_status(fs)
 				return nil
 			end
 			local parse_ok, parsed = pcall(jsonc.parse, output)
-			if not parse_ok or type(parsed) ~= "table" then return nil end
+			if not parse_ok or (type(parsed) ~= "table" and type(parsed) ~= "string") then return nil end
 			return parsed
 		end
 
@@ -3342,7 +3342,9 @@ local function cellular_status(fs)
 		sample.signal = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-signal-info")
 
 		local data_status = read_json("/sbin/uqmi -s -d /dev/cdc-wdm0 -t 1000 --get-data-status")
-		if type(data_status) == "table" and type(data_status.data_status) == "string" then
+		if type(data_status) == "string" then
+			sample.data_status = data_status
+		elseif type(data_status) == "table" and type(data_status.data_status) == "string" then
 			sample.data_status = data_status.data_status
 		end
 	end
