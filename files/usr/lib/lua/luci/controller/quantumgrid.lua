@@ -1150,6 +1150,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-remove"}, call("action_sqm_client_qos_remove")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-update"}, call("action_wireless_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "wireless-radio-update"}, call("action_wireless_radio_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "wireless-radio-schedule"}, call("action_wireless_radio_schedule")).leaf = true
 	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
@@ -2073,6 +2074,189 @@ function action_wireless_radio_update()
 		changed = true,
 		reloaded = true,
 		rolled_back = false
+	})
+end
+
+
+function action_wireless_radio_schedule()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local manager = require "luci.quantumgrid.radio_schedule"
+	local method = http.getenv("REQUEST_METHOD")
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 403 and "Forbidden" or status == 404 and "Not Found" or
+				status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+				status == 503 and "Service Unavailable" or "Internal Server Error")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if not require_https(http) then return end
+	if method == "GET" then
+		local indexed, order = {}, {}
+		local inventory_ok = pcall(function()
+			uci:foreach("quantumgrid-radio", "schedule", function(section)
+				if type(section) ~= "table" then return end
+				local radio = section.radio
+				if type(radio) ~= "string" or #radio > 32 or not radio:match("^[%w_%-]+$") then return end
+				if indexed[radio] then
+					indexed[radio].valid = false
+					indexed[radio].error = "Duplicate schedule records exist for this radio."
+					return
+				end
+				local parsed = manager.from_config(section, radio)
+				indexed[radio] = parsed and {
+					radio = radio, configured = true, valid = true, enabled = parsed.enabled,
+					days = parsed.days, start_time = parsed.start_time, end_time = parsed.end_time
+				} or {
+					radio = radio, configured = true, valid = false, enabled = section.enabled == "1",
+					days = {}, start_time = "", end_time = "",
+					error = "The saved schedule is invalid and requires review."
+				}
+				order[#order + 1] = radio
+			end)
+		end)
+		if not inventory_ok then
+			respond(503, { ok = false, error = "The radio schedule inventory could not be read safely." })
+			return
+		end
+		local schedules = {}
+		for _, radio in ipairs(order) do
+			if indexed[radio] then
+				schedules[#schedules + 1] = indexed[radio]
+				indexed[radio] = nil
+			end
+		end
+		respond(nil, { ok = true, schedules = schedules })
+		return
+	end
+
+	if method ~= "POST" then
+		respond(405, { ok = false, error = "GET or POST is required." })
+		return
+	end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if fs.access("/etc/config/wireless") ~= true or fs.access("/etc/config/quantumgrid-radio") ~= true then
+		respond(503, { ok = false, error = "Wireless or radio-schedule configuration is unavailable." })
+		return
+	end
+
+	local update, validation_error = manager.validate({
+		radio = http.formvalue("radio", true),
+		enabled = http.formvalue("enabled", true),
+		days = http.formvalue("days", true),
+		start_time = http.formvalue("start_time", true),
+		end_time = http.formvalue("end_time", true),
+		confirmed = http.formvalue("confirmed", true)
+	})
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local type_ok, radio_type = pcall(uci.get, uci, "wireless", update.radio, ".type")
+	if not type_ok then
+		respond(503, { ok = false, error = "The selected radio could not be inspected." })
+		return
+	end
+	if radio_type ~= "wifi-device" then
+		respond(404, { ok = false, error = "Only an existing wireless radio can be scheduled." })
+		return
+	end
+
+	local existing, count = nil, 0
+	local inventory_ok = pcall(function()
+		uci:foreach("quantumgrid-radio", "schedule", function(section)
+			if type(section) == "table" and section.radio == update.radio then
+				count = count + 1
+				existing = section
+			end
+		end)
+	end)
+	if not inventory_ok or count > 1 then
+		respond(409, { ok = false, error = "The schedule inventory is ambiguous; resolve duplicate records before editing." })
+		return
+	end
+	if existing and existing[".name"] ~= update.radio then
+		respond(409, { ok = false, error = "The schedule section name does not match the radio identity." })
+		return
+	end
+
+	local baseline = existing and existing.base_disabled or nil
+	if existing and baseline ~= nil and baseline ~= "0" then
+		respond(409, { ok = false, error = "The saved manual radio state is invalid; inspect wireless configuration before editing." })
+		return
+	end
+	if update.enabled and baseline == nil then
+		local disabled_ok, disabled = pcall(uci.get, uci, "wireless", update.radio, "disabled")
+		if not disabled_ok then
+			respond(503, { ok = false, error = "The current radio state could not be inspected safely." })
+			return
+		end
+		local live_up = false
+		for _, item in ipairs(wireless_status()) do
+			if item.name == update.radio and item.config_available == true and item.disabled == false and item.up == true then
+				live_up = true
+				break
+			end
+		end
+		if disabled == "1" or not live_up then
+			respond(409, { ok = false, error = "Manually enable the radio and verify it is running before scheduling it." })
+			return
+		end
+		baseline = "0"
+	end
+
+	local values = {
+		radio = update.radio,
+		enabled = update.enabled and "1" or "0",
+		days = update.days_value,
+		start_time = update.start_time,
+		end_time = update.end_time
+	}
+	if baseline ~= nil then values.base_disabled = baseline end
+
+	local staged = true
+	if existing then
+		for option, value in pairs(values) do
+			local ok, result = pcall(uci.set, uci, "quantumgrid-radio", update.radio, option, value)
+			if not ok or result ~= true then staged = false; break end
+		end
+	else
+		local ok, created = pcall(uci.section, uci, "quantumgrid-radio", "schedule", update.radio, values)
+		staged = ok and created == update.radio
+	end
+	if not staged then
+		pcall(uci.revert, uci, "quantumgrid-radio")
+		respond(500, { ok = false, error = "The radio schedule could not be staged; no configuration was committed." })
+		return
+	end
+
+	local commit_ok, committed = pcall(uci.commit, uci, "quantumgrid-radio")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "quantumgrid-radio")
+		respond(500, { ok = false, error = "The radio schedule could not be committed." })
+		return
+	end
+
+	record_audit(http, "wireless.radio.schedule", update.radio, "success")
+	respond(nil, {
+		ok = true, radio = update.radio, configured = true, valid = true,
+		enabled = update.enabled, days = update.days,
+		start_time = update.start_time, end_time = update.end_time,
+		apply_after_seconds = 30
 	})
 end
 
