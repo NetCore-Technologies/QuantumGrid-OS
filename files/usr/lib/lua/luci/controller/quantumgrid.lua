@@ -363,15 +363,24 @@ local function mwan3_status(uci, fs)
 		config_count = 0,
 		config_truncated = false,
 		config_invalid_count = 0,
-		config_interfaces = {}
+		config_interfaces = {},
+		config_members_available = false,
+		config_member_count = 0,
+		config_member_truncated = false,
+		config_member_invalid_count = 0,
+		config_members = {}
 	}
 	if result.config_available then
 		local config = require "luci.quantumgrid.mwan3_config"
 		local config_ok = pcall(function()
+			local existing_interfaces = {}
 			uci:foreach("mwan3", "interface", function(section)
 				result.config_count = result.config_count + 1
+				local name = type(section[".name"]) == "string" and section[".name"] or ""
+				if name:match("^[%w_%-]+$") and #name <= 32 then
+					existing_interfaces[name] = true
+				end
 				if #result.config_interfaces < 16 then
-					local name = tostring(section[".name"] or "")
 					local projected = config.project_section(name, section)
 					if projected then
 						table.insert(result.config_interfaces, projected)
@@ -382,11 +391,51 @@ local function mwan3_status(uci, fs)
 					result.config_truncated = true
 				end
 			end)
+
+			local policy_membership = {}
+			uci:foreach("mwan3", "policy", function(section)
+				local policy = type(section[".name"]) == "string" and section[".name"] or ""
+				if not policy:match("^[%w_%-]+$") or #policy > 32 then return end
+				local members = section.use_member
+				if type(members) == "string" then
+					local values = {}
+					for value in members:gmatch("%S+") do values[#values + 1] = value end
+					members = values
+				end
+				if type(members) ~= "table" then return end
+				for _, member in ipairs(members) do
+					if type(member) == "string" and member:match("^[%w_%-]+$") and #member <= 32 then
+						policy_membership[member] = policy_membership[member] or {}
+						table.insert(policy_membership[member], policy)
+					end
+				end
+			end)
+
+			uci:foreach("mwan3", "member", function(section)
+				result.config_member_count = result.config_member_count + 1
+				if #result.config_members < 32 then
+					local name = type(section[".name"]) == "string" and section[".name"] or ""
+					local projected = config.project_member_section(name, section, existing_interfaces, policy_membership)
+					if projected then
+						table.insert(result.config_members, projected)
+					else
+						result.config_member_invalid_count = result.config_member_invalid_count + 1
+					end
+				else
+					result.config_member_truncated = true
+				end
+			end)
 		end)
+		result.config_members_available = config_ok
 		if not config_ok then
 			result.config_available = false
 			result.config_interfaces = {}
+			result.config_members = {}
+			result.config_members_available = false
 		end
+		table.sort(result.config_members, function(left, right)
+			return left.section < right.section
+		end)
 	end
 	if not result.installed then return result end
 
@@ -1144,6 +1193,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "password"}, call("action_set_password")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-update"}, call("action_sqm_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "mwan3-interface-update"}, call("action_mwan3_interface_update")).leaf = true
+	entry({"admin", "services", "quantumgrid", "mwan3-member-update"}, call("action_mwan3_member_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-cake-profile"}, call("action_sqm_cake_profile")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-add"}, call("action_sqm_client_qos_add")).leaf = true
 	entry({"admin", "services", "quantumgrid", "sqm-client-qos-download-add"}, call("action_sqm_client_qos_download_add")).leaf = true
@@ -2337,6 +2387,131 @@ function action_wireless_radio_schedule()
 		router_local_time = router_local_time,
 		router_weekday = router_weekday,
 		apply_after_seconds = 30
+	})
+end
+
+
+function action_mwan3_member_update()
+	local http = require "luci.http"
+	local sys = require "luci.sys"
+	local fs = require "nixio.fs"
+	local uci = require("luci.model.uci").cursor()
+	local host = http.getenv("HTTP_HOST")
+	local origin = http.getenv("HTTP_ORIGIN")
+	local scheme = http.getenv("HTTPS") == "on" and "https" or "http"
+
+	local function respond(status, payload)
+		if status then http.status(status, status == 400 and "Bad Request" or
+			status == 403 and "Forbidden" or status == 404 and "Not Found" or
+			status == 405 and "Method Not Allowed" or status == 409 and "Conflict" or
+			status == 502 and "Bad Gateway" or status == 503 and "Service Unavailable" or
+			"Internal Server Error") end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "POST" then
+		respond(405, { ok = false, error = "POST is required." })
+		return
+	end
+	if not require_https(http) then return end
+	if not host or origin ~= scheme .. "://" .. host then
+		respond(403, { ok = false, error = "A same-origin request is required." })
+		return
+	end
+	if http.formvalue("confirmed", true) ~= "1" then
+		respond(400, { ok = false, error = "Explicit confirmation is required before changing Multi-WAN member weights or priorities." })
+		return
+	end
+	if fs.access("/etc/init.d/mwan3") ~= true or fs.access("/etc/config/mwan3") ~= true then
+		respond(503, { ok = false, error = "The native mwan3 service or configuration is unavailable." })
+		return
+	end
+
+	local validator = require "luci.quantumgrid.mwan3_config"
+	local interfaces, existing_members, inventory_ok = {}, {}, true
+	local inventory_result = pcall(function()
+		uci:foreach("mwan3", "interface", function(section)
+			local name = type(section[".name"]) == "string" and section[".name"] or ""
+			if name:match("^[%w_%-]+$") and #name <= 32 then interfaces[name] = true end
+		end)
+		uci:foreach("mwan3", "member", function(section)
+			local name = type(section[".name"]) == "string" and section[".name"] or ""
+			if name:match("^[%w_%-]+$") and #name <= 32 then existing_members[name] = section end
+		end)
+	end)
+	inventory_ok = inventory_result
+	if not inventory_ok then
+		respond(503, { ok = false, error = "The mwan3 interface/member inventory could not be read safely." })
+		return
+	end
+
+	local update, validation_error = validator.validate_member_update({
+		section = http.formvalue("section", true),
+		interface = http.formvalue("interface", true),
+		metric = http.formvalue("metric", true),
+		weight = http.formvalue("weight", true)
+	}, interfaces)
+	if not update then
+		respond(400, { ok = false, error = validation_error })
+		return
+	end
+
+	local current = existing_members[update.section]
+	if type(current) ~= "table" or current[".type"] ~= "member" then
+		respond(404, { ok = false, error = "Only an existing mwan3 member section can be edited." })
+		return
+	end
+	for name, member in pairs(existing_members) do
+		if name ~= update.section and type(member) == "table" and
+			member.interface == update.interface and tostring(member.metric or "1") == update.metric then
+			respond(409, { ok = false, error = "Another existing member already uses this interface and metric. Review duplicate member definitions before saving." })
+			return
+		end
+	end
+
+	local snapshot = validator.snapshot_member(current)
+	if not snapshot then
+		respond(409, { ok = false, error = "The existing mwan3 member cannot be snapshotted safely; no change was made." })
+		return
+	end
+	if not validator.stage_member_update(uci, update.section, update) then
+		pcall(uci.revert, uci, "mwan3")
+		respond(500, { ok = false, error = "The mwan3 member settings could not be staged; no restart was attempted." })
+		return
+	end
+	local commit_ok, committed = pcall(uci.commit, uci, "mwan3")
+	if not commit_ok or committed ~= true then
+		pcall(uci.revert, uci, "mwan3")
+		respond(500, { ok = false, error = "The mwan3 member settings could not be committed; no restart was attempted." })
+		return
+	end
+
+	local restart_ok, restart_status = pcall(sys.call, "/etc/init.d/mwan3 restart >/dev/null 2>&1")
+	if not restart_ok or restart_status ~= 0 then
+		local rollback_saved = validator.restore_member(uci, update.section, snapshot)
+		local rollback_restart_ok, rollback_restart_status = false, -1
+		if rollback_saved then
+			rollback_restart_ok, rollback_restart_status = pcall(sys.call, "/etc/init.d/mwan3 restart >/dev/null 2>&1")
+		end
+		local recovered = rollback_saved and rollback_restart_ok and rollback_restart_status == 0
+		record_audit(http, "mwan3.member.update", update.section, "failed")
+		respond(502, {
+			ok = false,
+			error = recovered
+				and "mwan3 restart failed. The previous member settings were restored and the service restarted."
+				or "mwan3 restart failed and member rollback could not be confirmed. Inspect mwan3 configuration and routing locally.",
+			rolled_back = recovered
+		})
+		return
+	end
+
+	record_audit(http, "mwan3.member.update", update.section, "success")
+	respond(nil, {
+		ok = true, section = update.section, interface = update.interface,
+		metric = tonumber(update.metric), weight = tonumber(update.weight),
+		restarted = true, rolled_back = false
 	})
 end
 
