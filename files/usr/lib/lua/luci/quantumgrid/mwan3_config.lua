@@ -271,9 +271,6 @@ function M.restore(uci, section, snapshot)
   return commit_ok and committed == true
 end
 
-return M
-
-
 local MEMBER_OPTIONS = { "interface", "metric", "weight" }
 
 function M.validate_member_update(input, interfaces)
@@ -373,3 +370,5 @@ function M.restore_member(uci, section, snapshot)
   local commit_ok, committed = pcall(uci.commit, uci, "mwan3")
   return commit_ok and committed == true
 end
+
+return M
