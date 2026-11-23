@@ -30,6 +30,7 @@ assert(audit.encode_event({ timestamp = 5, action = "sqm.client-qos.add", target
 assert(audit.encode_event({ timestamp = 5, action = "sqm.client-qos.download.add", target = "cfg_client_download_1", outcome = "success" }) ~= nil, "client download QoS additions should be allowlisted")
 assert(audit.encode_event({ timestamp = 6, action = "system.config.restore", target = "arcadyan-aw1000", outcome = "success" }) ~= nil, "configuration restore events should be allowlisted")
 assert(audit.encode_event({ timestamp = 6, action = "sqm.client-qos.remove", target = "cfg_client_1", outcome = "success" }) ~= nil, "client QoS removals should be allowlisted")
+assert(audit.encode_event({ timestamp = 7, action = "mwan3.member.update", target = "wan_m1_w3", outcome = "success" }) ~= nil, "mwan3 member changes should be allowlisted")
 
 local function expect_invalid(event, label)
   local result, err = audit.encode_event(event)
@@ -49,11 +50,14 @@ local function decode(line)
   if line == "two" then
     return { timestamp = 2, actor = "root", remote_ip = "192.0.2.2", action = "system.config.backup", target = "sysupgrade", outcome = "success" }
   end
+  if line == "three" then
+    return { timestamp = 3, actor = "root", remote_ip = "192.0.2.3", action = "mwan3.member.update", target = "wan_m1_w3", outcome = "success" }
+  end
   return { timestamp = 3, action = "untrusted.action", outcome = "success" }
 end
-local parsed = audit.parse_log("one\nbad\ntwo\ninvalid-action", decode)
-assert(parsed.available and parsed.count == 4)
-assert(#parsed.events == 2 and parsed.events[1].timestamp == 2 and parsed.events[2].timestamp == 1, "events must be returned newest first and invalid rows skipped")
+local parsed = audit.parse_log("one\nbad\ntwo\nthree\ninvalid-action", decode)
+assert(parsed.available and parsed.count == 5)
+assert(#parsed.events == 3 and parsed.events[1].timestamp == 3 and parsed.events[2].timestamp == 2 and parsed.events[3].timestamp == 1, "events must be returned newest first and invalid rows skipped; mwan3 member change must be retained")
 assert(audit.parse_log(nil, decode).available == false, "missing log should be unavailable")
 
 local long = {}

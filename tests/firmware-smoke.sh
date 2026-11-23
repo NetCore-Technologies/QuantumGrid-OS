@@ -536,6 +536,7 @@ grep -Fq 'command = "/sbin/ip -4 rule show"' "$ROOT/files/usr/lib/lua/luci/contr
 grep -Fq 'command = "/sbin/ip -6 rule show"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'policy_rules_available = rule_inventory.available' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'policy_rules = rule_inventory.rules' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
+grep -Fq '["mwan3.member.update"] = true' "$ROOT/files/usr/lib/lua/luci/quantumgrid/audit.lua"
 grep -Fq 'local function mwan3_status(uci, fs)' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'ubus_call("mwan3", "status"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'mwan3 = mwan3' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"

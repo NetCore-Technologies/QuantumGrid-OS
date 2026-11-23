@@ -12,6 +12,7 @@ local ALLOWED_ACTIONS = {
 	["sqm.update"] = true,
 	["sqm.cake-profile"] = true,
 	["mwan3.interface.update"] = true,
+	["mwan3.member.update"] = true,
 	["sqm.client-qos.add"] = true,
 	["sqm.client-qos.download.add"] = true,
 	["sqm.client-qos.remove"] = true,
