@@ -930,11 +930,12 @@ reported posture must not be interpreted as proof that a service is or is not re
   audited upload and static-reservation IPv4 download DSCP marking on validated firewall-zone paths.
   Download rules cover all IP protocols and are tied to unique static DHCP reservations; reservation
   changes that would orphan these rules are blocked.
-- **Active development:** wider UI-to-ubus control wiring, per-client bandwidth and priority policies,
-  controlled-load bufferbloat testing, radio
-  intelligence/scheduling and modem observability. Curated CAKE profiles and upload-side DSCP
-  policies are configuration controls; they do not prove ingress/egress shaping or measured
-  latency improvement without hardware testing.
+- **Active development:** wider UI-to-ubus control wiring, per-client bandwidth caps/guarantees,
+  controlled-load bufferbloat testing, automatic radio optimisation and modem observability.
+  Weekly radio schedules and guarded radio enable/disable controls are integrated with a 30-second
+  procd worker, saved manual-state restoration, live ubus verification and rollback tests. Curated
+  CAKE profiles and DSCP policies are configuration controls; they do not prove ingress/egress
+  shaping or measured latency improvement without physical hardware testing.
 - **Research / planned:** compatible NSS/EDMA/PPE path, hardware benchmark suite and wider device support.
 
 See the [public roadmap](https://netcore-technologies.github.io/QuantumGrid-OS/roadmap.html).
