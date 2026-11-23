@@ -929,14 +929,14 @@ reported posture must not be interpreted as proof that a service is or is not re
   profiles with same-origin validation, preserved unrelated qdisc options, restart checks and
   rollback handling,
   Hardware I/O with read-only GPIO/button inventory
-  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, a
+  and guarded runtime LED brightness, Office Networks VLAN/bridge/firewall/SSID/DHCP inventory with CSV export, guarded bridge VLAN and inter-zone firewall controls, managed internal IPv4 service-rule add/enable/disable/remove actions, routed IPv4 segment provisioning, static DHCP reservation add/edit/remove, and DHCP scope create/edit/enable/disable/remove controls, native remote syslog forwarding controls, authenticated explicit-confirmation configuration backup downloads, a
   redacted local administrative audit history with bounded retention, read-only live root-qdisc
   matching for enabled SQM queues with explicit incomplete/unavailable states, and guarded,
-  audited upload and static-reservation IPv4 download DSCP marking on validated firewall-zone paths.
+  audited upload and static-reservation IPv4 download DSCP marking on validated firewall-zone paths, read-only QMI modem telemetry for registration, serving radio, roaming, data-session state and RF metrics, and guarded QuantumGrid-managed AP creation/removal.
   Download rules cover all IP protocols and are tied to unique static DHCP reservations; reservation
   changes that would orphan these rules are blocked.
 - **Active development:** wider UI-to-ubus control wiring, per-client bandwidth caps/guarantees,
-  controlled-load bufferbloat testing, automatic radio optimisation and modem observability.
+  controlled-load bufferbloat testing and fully automatic radio/channel optimisation.
   Weekly radio schedules and guarded radio enable/disable controls are integrated with a 30-second
   procd worker, saved manual-state restoration, live ubus verification and rollback tests. Curated
   CAKE profiles and DSCP policies are configuration controls; they do not prove ingress/egress
