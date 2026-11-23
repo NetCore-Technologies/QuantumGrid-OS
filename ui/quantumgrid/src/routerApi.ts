@@ -2167,7 +2167,12 @@ export async function updateRouterNetworkTuning(input: {
   }
   const payload: unknown = await response.json();
   if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid network tuning update response.");
-  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if ("error" in payload && typeof payload.error === "string") {
+    const recoveryNote = "rolled_back" in payload && payload.rolled_back === false
+      ? " Rollback could not be verified; inspect both kernel values from a trusted maintenance session before relying on this router."
+      : "";
+    throw new Error(payload.error + recoveryNote);
+  }
   if (!response.ok || !("ok" in payload) || payload.ok !== true ||
       !("changed" in payload) || typeof payload.changed !== "boolean" ||
       !("congestion_control" in payload) || payload.congestion_control !== input.congestionControl ||

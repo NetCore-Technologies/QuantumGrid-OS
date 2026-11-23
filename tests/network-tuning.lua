@@ -69,11 +69,11 @@ local function fake_deps(options)
 	return {
 		read = function(path) return live[path] end,
 		write = function(path, value)
-			if options.fail_path == path and not options.fail_once then return false end
 			if options.fail_path == path and options.fail_once then
 				options.fail_once = false
 				return false
 			end
+			if options.fail_path == path and options.fail_always then return false end
 			if options.reject_value == value then return true end
 			live[path] = value
 			return true
@@ -93,7 +93,7 @@ live["/proc/sys/net/ipv4/tcp_congestion_control"] = "bbr"
 live["/proc/sys/net/core/default_qdisc"] = "fq_codel"
 local failed, reason, rolled_back = tuning.apply({
 	congestion_control = "cubic", default_qdisc = "cake", confirmed = "1"
-}, snapshot, fake_deps({ fail_path = "/proc/sys/net/core/default_qdisc" }))
+}, snapshot, fake_deps({ fail_path = "/proc/sys/net/core/default_qdisc", fail_once = true }))
 assert(failed == nil and reason and rolled_back)
 assert(live["/proc/sys/net/ipv4/tcp_congestion_control"] == "bbr")
 assert(live["/proc/sys/net/core/default_qdisc"] == "fq_codel")
