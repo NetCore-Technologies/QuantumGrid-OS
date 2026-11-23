@@ -231,6 +231,8 @@ jobs:
         run: lua5.1 tests/qos.lua
       - name: Test allowlisted runtime network tuning inventory and validation
         run: lua5.1 tests/network-tuning.lua
+      - name: Test runtime network tuning API contract
+        run: node --experimental-strip-types --test ../../tests/network-tuning-api.test.mjs
       - name: Test bounded weekly wireless radio schedules
         run: lua5.1 tests/radio-schedule.lua
       - name: Test weekly radio scheduler runtime transitions and rollback

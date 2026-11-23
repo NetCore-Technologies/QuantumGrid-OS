@@ -787,6 +787,24 @@ export interface RouterRuntimeDeviceProfile {
   observed_board_name?: string;
 }
 
+export interface RouterNetworkTuningInventory {
+  available: true;
+  congestion_controls: string[];
+  current_congestion_control: string;
+  default_qdiscs: string[];
+  current_default_qdisc: string;
+  runtime_only: true;
+}
+export interface RouterNetworkTuningUpdateResult {
+  ok: true;
+  changed: boolean;
+  congestion_control: string;
+  default_qdisc: string;
+  runtime_only: true;
+  reloaded: false;
+  rolled_back: false;
+}
+
 export interface RouterPlatformStatus {
   available: boolean;
   device_profile?: RouterRuntimeDeviceProfile;
@@ -1698,6 +1716,7 @@ const STATIC_ROUTE_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/static-ro
 const STATIC_ROUTE_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/static-route-remove";
 const PASSWORD_URL = "/cgi-bin/luci/admin/services/quantumgrid/password";
 const WIFI_SCAN_URL = "/cgi-bin/luci/admin/services/quantumgrid/wifi-scan";
+const NETWORK_TUNING_URL = "/cgi-bin/luci/admin/services/quantumgrid/network-tuning";
 const LATENCY_TEST_URL = "/cgi-bin/luci/admin/services/quantumgrid/latency-test";
 const SQM_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-update";
 const MWAN3_INTERFACE_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/mwan3-interface-update";
@@ -2068,6 +2087,101 @@ export async function scanRouterWifi(): Promise<RouterWifiScan> {
     throw new Error("The router returned an invalid Wi-Fi scan response.");
   }
   return payload as RouterWifiScan;
+}
+
+function parseRouterNetworkTuning(value: unknown): RouterNetworkTuningInventory {
+  if (typeof value !== "object" || value === null ||
+      !("available" in value) || value.available !== true ||
+      !("congestion_controls" in value) || !Array.isArray(value.congestion_controls) ||
+      !("current_congestion_control" in value) || typeof value.current_congestion_control !== "string" ||
+      !("default_qdiscs" in value) || !Array.isArray(value.default_qdiscs) ||
+      !("current_default_qdisc" in value) || typeof value.current_default_qdisc !== "string" ||
+      !("runtime_only" in value) || value.runtime_only !== true) {
+    throw new Error("The router returned an invalid runtime network tuning inventory.");
+  }
+  const safeChoice = (item: unknown) => typeof item === "string" && /^[A-Za-z0-9_-]{1,32}$/.test(item);
+  if (value.congestion_controls.length === 0 || value.congestion_controls.length > 32 ||
+      value.congestion_controls.some((item) => !safeChoice(item)) ||
+      new Set(value.congestion_controls).size !== value.congestion_controls.length ||
+      !value.congestion_controls.includes(value.current_congestion_control)) {
+    throw new Error("The router returned an invalid TCP congestion-control allow-list.");
+  }
+  if (value.default_qdiscs.length === 0 || value.default_qdiscs.length > 16 ||
+      value.default_qdiscs.some((item) => !safeChoice(item)) ||
+      new Set(value.default_qdiscs).size !== value.default_qdiscs.length ||
+      !value.default_qdiscs.includes(value.current_default_qdisc)) {
+    throw new Error("The router returned an invalid default qdisc allow-list.");
+  }
+  return {
+    available: true,
+    congestion_controls: [...value.congestion_controls],
+    current_congestion_control: value.current_congestion_control,
+    default_qdiscs: [...value.default_qdiscs],
+    current_default_qdisc: value.current_default_qdisc,
+    runtime_only: true,
+  };
+}
+
+export async function getRouterNetworkTuning(): Promise<RouterNetworkTuningInventory> {
+  const response = await fetch(NETWORK_TUNING_URL, {
+    method: "GET", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Network tuning requires an active router administrator session."
+      : "The router returned an invalid network tuning response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid network tuning response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true || !("inventory" in payload)) {
+    throw new Error("The router did not provide a usable runtime network tuning inventory.");
+  }
+  return parseRouterNetworkTuning(payload.inventory);
+}
+
+export async function updateRouterNetworkTuning(input: {
+  congestionControl: string;
+  defaultQdisc: string;
+}): Promise<RouterNetworkTuningUpdateResult> {
+  const safeChoice = (value: string) => /^[A-Za-z0-9_-]{1,32}$/.test(value);
+  if (!safeChoice(input.congestionControl) || !safeChoice(input.defaultQdisc)) {
+    throw new Error("Choose values from the router-reported kernel allow-lists.");
+  }
+  const form = new URLSearchParams();
+  form.set("congestion_control", input.congestionControl);
+  form.set("default_qdisc", input.defaultQdisc);
+  form.set("confirmed", "1");
+  const response = await fetch(NETWORK_TUNING_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const type = response.headers.get("content-type") ?? "";
+  if (!type.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Network tuning requires an active router administrator session."
+      : "The router returned an invalid network tuning update response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid network tuning update response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("changed" in payload) || typeof payload.changed !== "boolean" ||
+      !("congestion_control" in payload) || payload.congestion_control !== input.congestionControl ||
+      !("default_qdisc" in payload) || payload.default_qdisc !== input.defaultQdisc ||
+      !("runtime_only" in payload) || payload.runtime_only !== true ||
+      !("reloaded" in payload) || payload.reloaded !== false ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the runtime network tuning values.");
+  }
+  return {
+    ok: true, changed: payload.changed,
+    congestion_control: input.congestionControl, default_qdisc: input.defaultQdisc,
+    runtime_only: true, reloaded: false, rolled_back: false,
+  };
 }
 
 export async function runRouterLatencyTest(): Promise<RouterLatencyTest> {
