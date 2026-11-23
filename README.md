@@ -495,7 +495,7 @@ through this manager, so router-management access policy remains separately cont
 
 A forwarding entry is a directional permission, not a firewall packet-path test. The separate
 zone-policy editor can change existing zone output/forward defaults and masquerading while leaving
-router INPUT read-only. A separate managed service-rule editor can add or remove a single-host IPv4
+router INPUT read-only. A separate managed service-rule editor can add, enable/disable and remove a single-host IPv4
 TCP/UDP/TCP+UDP/ICMP ACCEPT/REJECT rule between internal zones that already have an explicit
 forwarding; the destination and optional source host must belong to validated static subnets attached
 to those zones. It does not edit arbitrary rule order, WAN input, address sets, traffic shaping or
