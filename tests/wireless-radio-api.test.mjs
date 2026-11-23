@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
-import { updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule } from "../ui/quantumgrid/src/routerApi.ts";
+import { updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp } from "../ui/quantumgrid/src/routerApi.ts";
 
 const originalFetch = globalThis.fetch;
 
@@ -280,4 +280,64 @@ test("schedule API rejects unsafe radio, weekday and time values before network 
   await assert.rejects(updateRouterWirelessRadioSchedule({
     radio:"radio0",enabled:true,days:[1],startTime:"24:00",endTime:"22:00",
   }),/valid 24-hour times/);
+});
+
+
+test("creates an additional AP on an existing radio with same-origin and live-runtime confirmation", async () => {
+  let url = "";
+  let init;
+  globalThis.fetch = async (target, options) => {
+    url = String(target);
+    init = options;
+    return jsonResponse({
+      ok: true, radio: "radio0", section: "qg_ap_1", ssid: "QuantumGrid Guest",
+      network: "guest", encryption: "sae-mixed", hidden: false, key_set: true,
+      reloaded: true, runtime_verified: true, rolled_back: false,
+    });
+  };
+  const result = await createRouterWirelessAp({
+    radio: "radio0", ssid: "QuantumGrid Guest", network: "guest",
+    encryption: "sae-mixed", key: "secure-guest-passphrase", hidden: false,
+  });
+  assert.equal(url, "/cgi-bin/luci/admin/services/quantumgrid/wireless-ap-create");
+  assert.equal(init.method, "POST");
+  assert.equal(init.credentials, "same-origin");
+  assert.equal(init.cache, "no-store");
+  const form = new URLSearchParams(init.body);
+  assert.equal(form.get("radio"), "radio0");
+  assert.equal(form.get("ssid"), "QuantumGrid Guest");
+  assert.equal(form.get("network"), "guest");
+  assert.equal(form.get("encryption"), "sae-mixed");
+  assert.equal(form.get("key"), "secure-guest-passphrase");
+  assert.equal(form.get("hidden"), "0");
+  assert.equal(form.get("confirmed"), "1");
+  assert.equal(result.runtime_verified, true);
+  assert.equal(result.rolled_back, false);
+});
+
+test("AP creation rejects unsafe identities, insecure modes and malformed credentials before fetch", async () => {
+  globalThis.fetch = async () => { throw new Error("fetch must not run for invalid AP input"); };
+  const base = {
+    radio: "radio0", ssid: "Guest", network: "guest",
+    encryption: "psk2", key: "secure-guest-passphrase", hidden: false,
+  };
+  await assert.rejects(createRouterWirelessAp({ ...base, radio: "../radio0" }), /existing wireless radio/);
+  await assert.rejects(createRouterWirelessAp({ ...base, network: "../wan" }), /existing internal routed network/);
+  await assert.rejects(createRouterWirelessAp({ ...base, ssid: "x".repeat(33) }), /SSID/);
+  await assert.rejects(createRouterWirelessAp({ ...base, encryption: "none" }), /must use WPA2-Personal/);
+  await assert.rejects(createRouterWirelessAp({ ...base, encryption: "wpa2" }), /must use WPA2-Personal/);
+  await assert.rejects(createRouterWirelessAp({ ...base, key: "short" }), /8–63 bytes/);
+  await assert.rejects(createRouterWirelessAp({ ...base, key: "bad\\npassphrase" }), /control characters/);
+});
+
+test("AP creation refuses a response that does not prove live runtime verification", async () => {
+  globalThis.fetch = async () => jsonResponse({
+    ok: true, radio: "radio0", section: "qg_ap_1", ssid: "Guest", network: "guest",
+    encryption: "psk2", hidden: false, key_set: true,
+    reloaded: true, runtime_verified: false, rolled_back: false,
+  });
+  await assert.rejects(createRouterWirelessAp({
+    radio: "radio0", ssid: "Guest", network: "guest",
+    encryption: "psk2", key: "secure-guest-passphrase", hidden: false,
+  }), /did not confirm the new AP/);
 });

@@ -168,6 +168,20 @@ export interface RouterWirelessConfigInventory {
   sections: RouterWirelessConfig[];
 }
 
+export interface RouterWirelessApCreateResult {
+  ok: true;
+  radio: string;
+  section: string;
+  ssid: string;
+  network: string;
+  encryption: "psk2" | "sae" | "sae-mixed";
+  hidden: boolean;
+  key_set: true;
+  reloaded: true;
+  runtime_verified: true;
+  rolled_back: false;
+}
+
 export interface RouterWirelessUpdateResult {
   ok: true;
   radio: string;
@@ -1642,6 +1656,7 @@ const SQM_CLIENT_QOS_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-cli
 const SQM_CLIENT_QOS_DOWNLOAD_ADD_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-download-add";
 const SQM_CLIENT_QOS_REMOVE_URL = "/cgi-bin/luci/admin/services/quantumgrid/sqm-client-qos-remove";
 const WIRELESS_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-update";
+const WIRELESS_AP_CREATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-ap-create";
 const WIRELESS_RADIO_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-update";
 const WIRELESS_RADIO_SCHEDULE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-schedule";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
@@ -2036,6 +2051,64 @@ function hasControlCharacters(value: string): boolean {
     if (code < 0x20 || code === 0x7f) return true;
   }
   return false;
+}
+
+export async function createRouterWirelessAp(input: {
+  radio: string; ssid: string; network: string;
+  encryption: "psk2" | "sae" | "sae-mixed"; key: string; hidden: boolean;
+}): Promise<RouterWirelessApCreateResult> {
+  const validSection = (value: string) => /^[A-Za-z0-9_-]{1,32}$/.test(value);
+  if (!validSection(input.radio)) throw new Error("Select an existing wireless radio.");
+  if (!/^[A-Za-z0-9_.-]{1,64}$/.test(input.network) || input.network === "." || input.network === "..") {
+    throw new Error("Select one existing internal routed network.");
+  }
+  if (input.ssid.length < 1 || new TextEncoder().encode(input.ssid).length > 32 || hasControlCharacters(input.ssid)) {
+    throw new Error("SSID must be 1–32 bytes and cannot contain control characters.");
+  }
+  if (input.encryption !== "psk2" && input.encryption !== "sae" && input.encryption !== "sae-mixed") {
+    throw new Error("New APs must use WPA2-Personal, WPA3-Personal or WPA2/WPA3 transition security.");
+  }
+  const keyBytes = new TextEncoder().encode(input.key).length;
+  if (keyBytes < 8 || keyBytes > 63 || hasControlCharacters(input.key)) {
+    throw new Error("The wireless passphrase must be 8–63 bytes and cannot contain control characters.");
+  }
+  if (typeof input.hidden !== "boolean") throw new Error("Hidden SSID must be an explicit boolean value.");
+
+  const form = new URLSearchParams();
+  form.set("radio", input.radio); form.set("ssid", input.ssid); form.set("network", input.network);
+  form.set("encryption", input.encryption); form.set("key", input.key);
+  form.set("hidden", input.hidden ? "1" : "0"); form.set("confirmed", "1");
+  const response = await fetch(WIRELESS_AP_CREATE_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403 ? "Creating an AP requires an active router administrator session."
+      : "The router returned an invalid AP creation response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid AP creation response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("radio" in payload) || payload.radio !== input.radio ||
+      !("section" in payload) || typeof payload.section !== "string" || !validSection(payload.section) ||
+      !("ssid" in payload) || payload.ssid !== input.ssid ||
+      !("network" in payload) || payload.network !== input.network ||
+      !("encryption" in payload) || payload.encryption !== input.encryption ||
+      !("hidden" in payload) || payload.hidden !== input.hidden ||
+      !("key_set" in payload) || payload.key_set !== true ||
+      !("reloaded" in payload) || payload.reloaded !== true ||
+      !("runtime_verified" in payload) || payload.runtime_verified !== true ||
+      !("rolled_back" in payload) || payload.rolled_back !== false) {
+    throw new Error("The router did not confirm the new AP and its live runtime state.");
+  }
+  return {
+    ok: true, radio: input.radio, section: payload.section, ssid: input.ssid,
+    network: input.network, encryption: input.encryption, hidden: input.hidden,
+    key_set: true, reloaded: true, runtime_verified: true, rolled_back: false,
+  };
 }
 
 export async function updateRouterWirelessConfig(input: {

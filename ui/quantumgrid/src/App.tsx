@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -5539,6 +5539,125 @@ type InterfaceCounterDelta = {
   sampleSeconds: number | null;
 };
 
+function WirelessApCreateWizard({
+  radios,
+  networkInterfaces,
+  refresh,
+}: {
+  radios: RouterWirelessRadio[];
+  networkInterfaces: RouterOfficeInterface[];
+  refresh: () => void;
+}) {
+  const [radio, setRadio] = useState("");
+  const [ssid, setSsid] = useState("");
+  const [network, setNetwork] = useState("");
+  const [encryption, setEncryption] = useState<"psk2" | "sae" | "sae-mixed">("sae-mixed");
+  const [passphrase, setPassphrase] = useState("");
+  const [hidden, setHidden] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+
+  const availableRadios = radios.filter((item) => item.config_available && !item.disabled && item.up);
+  const selectedRadio = availableRadios.find((item) => item.name === radio) ?? availableRadios[0];
+  const externalZones = new Set(["wan", "wan6", "wwan", "cellular"]);
+  const eligibleNetworks = networkInterfaces.filter((item) =>
+    item.protocol === "static" && item.device.length > 0 && item.firewall_zones.length > 0 &&
+    item.firewall_zones.every((zone) => !externalZones.has(zone.toLowerCase())));
+  const selectedNetwork = eligibleNetworks.find((item) => item.name === network);
+  const ssidBytes = new TextEncoder().encode(ssid).length;
+  const keyBytes = new TextEncoder().encode(passphrase).length;
+  const ready = Boolean(selectedRadio && selectedNetwork) &&
+    ssidBytes >= 1 && ssidBytes <= 32 && !hasAsciiControlCharacters(ssid) &&
+    keyBytes >= 8 && keyBytes <= 63 && !hasAsciiControlCharacters(passphrase) &&
+    confirmed && !saving;
+
+  const create = async () => {
+    if (!ready || !selectedRadio || !selectedNetwork) return;
+    setSaving(true);
+    setNotice(null);
+    try {
+      const result = await createRouterWirelessAp({
+        radio: selectedRadio.name, ssid, network: selectedNetwork.name,
+        encryption, key: passphrase, hidden,
+      });
+      setPassphrase("");
+      setConfirmed(false);
+      setNotice({
+        success: true,
+        message: "AP " + result.ssid + " was created on " + result.radio +
+          " and appeared in live wireless status. Its network is " + result.network + ".",
+      });
+      refresh();
+    } catch (error) {
+      setNotice({ success: false, message: error instanceof Error ? error.message : "The new AP could not be created." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="wireless-ap-create">
+      <div className="wireless-ap-create-heading">
+        <div>
+          <strong>Create an additional access point</strong>
+          <span>Existing radio · Existing internal network · Runtime-verified activation</span>
+        </div>
+      </div>
+      <div className="wireless-config-grid">
+        <label className="wireless-config-field">
+          <span>WIRELESS RADIO</span>
+          <select value={selectedRadio?.name ?? ""} onChange={(event) => setRadio(event.target.value)} disabled={saving || availableRadios.length === 0}>
+            {availableRadios.length === 0 ? <option value="">No live enabled radio available</option> :
+              availableRadios.map((item) => <option value={item.name} key={item.name}>{item.name}</option>)}
+          </select>
+          <small>Only existing radios reporting an enabled live state are available.</small>
+        </label>
+        <label className="wireless-config-field">
+          <span>SSID</span>
+          <input value={ssid} maxLength={32} onChange={(event) => { setSsid(event.target.value); setConfirmed(false); }} autoComplete="off" />
+        </label>
+        <label className="wireless-config-field">
+          <span>ROUTED NETWORK / VLAN</span>
+          <select value={selectedNetwork?.name ?? ""} onChange={(event) => { setNetwork(event.target.value); setConfirmed(false); }} disabled={saving || eligibleNetworks.length === 0}>
+            <option value="">Select one internal static network</option>
+            {eligibleNetworks.map((item) => <option value={item.name} key={item.name}>{item.name} · {item.device} · {item.firewall_zones.join(", ")}</option>)}
+          </select>
+          <small>Only existing static internal interfaces with a known non-WAN firewall zone are offered.</small>
+        </label>
+        <label className="wireless-config-field">
+          <span>SECURITY</span>
+          <select value={encryption} onChange={(event) => { setEncryption(event.target.value as "psk2" | "sae" | "sae-mixed"); setConfirmed(false); }}>
+            <option value="sae-mixed">WPA2 / WPA3 Personal (transition)</option>
+            <option value="sae">WPA3-Personal (SAE)</option>
+            <option value="psk2">WPA2-Personal (AES)</option>
+          </select>
+        </label>
+        <label className="wireless-config-field">
+          <span>WI-FI PASSPHRASE</span>
+          <input type="password" value={passphrase} onChange={(event) => { setPassphrase(event.target.value); setConfirmed(false); }} autoComplete="new-password" />
+          <small>8–63 bytes. The secret is not returned in API responses or audit events.</small>
+        </label>
+        <label className="wireless-config-options">
+          <input type="checkbox" checked={hidden} onChange={(event) => { setHidden(event.target.checked); setConfirmed(false); }} />
+          Hide this SSID
+        </label>
+      </div>
+      <label className="wireless-config-confirm">
+        <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+        I understand that applying the new AP reloads Wi-Fi and can briefly disconnect clients on this radio. I have a wired or out-of-band management path.
+      </label>
+      <div className="wireless-config-actions">
+        <button type="button" className="hero-button" disabled={!ready} onClick={() => void create()}>
+          {saving ? "Creating and verifying AP…" : "Create access point"}
+        </button>
+      </div>
+      {notice ? <div className={notice.success ? "wireless-config-result success" : "wireless-config-result error"} role={notice.success ? "status" : "alert"}>{notice.message}</div> : null}
+    </div>
+  );
+}
+
+
 function WirelessConfigEditor({
   config,
   radio,
@@ -6828,23 +6947,28 @@ function WifiControlPage({ routerOverview, refresh }: { routerOverview: RouterOv
             <div className="module-message">Waiting for the router's wireless configuration inventory.</div>
           ) : !wirelessConfigs.available ? (
             <div className="module-message">The router could not read /etc/config/wireless. Configuration controls remain unavailable.</div>
-          ) : wirelessConfigs.sections.length === 0 ? (
-            <div className="module-message">No existing AP-mode wireless interfaces were found. QuantumGrid does not create a new radio or SSID from this panel.</div>
           ) : (
             <>
-              <div className="module-message">Edit existing AP interfaces only. SSID, WPA security, hidden-network state and the selected radio channel are saved together. The server checks channel availability, commits UCI and reloads Wi-Fi; on reload failure it attempts to restore the previous settings.</div>
-              <div className="wireless-config-list">
-                {wirelessConfigs.sections.map((config) => (
-                  <WirelessConfigEditor
-                    key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.dynamic_vlan, config.radius_vlan_unmanaged, config.radius_vlan_mappings.map((item) => item.vid + ":" + item.network).join(","), config.channel, config.htmode, config.txpower, config.key_set, config.ieee80211k, config.ieee80211v].join(":")}
-                    config={config}
-                    radio={radios.find((item) => item.name === config.radio)}
-                    networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
-                    officeInventory={routerOverview?.office_networks}
-                    refresh={refresh}
-                  />
-                ))}
-              </div>
+              <WirelessApCreateWizard radios={radios} networkInterfaces={routerOverview?.office_networks?.interfaces ?? []} refresh={refresh} />
+              {wirelessConfigs.sections.length === 0 ? (
+                <div className="module-message">No AP-mode interfaces exist yet. Create an additional AP above using a live existing radio and a validated internal network.</div>
+              ) : (
+                <>
+                  <div className="module-message">Edit existing AP interfaces below. Additional AP creation verifies the new BSS in live wireless status and removes the new section if activation fails.</div>
+                  <div className="wireless-config-list">
+                    {wirelessConfigs.sections.map((config) => (
+                      <WirelessConfigEditor
+                        key={[config.section, config.ssid, config.networks.join(","), config.encryption, config.hidden, config.dynamic_vlan, config.radius_vlan_unmanaged, config.radius_vlan_mappings.map((item) => item.vid + ":" + item.network).join(","), config.channel, config.htmode, config.txpower, config.key_set, config.ieee80211k, config.ieee80211v].join(":")}
+                        config={config}
+                        radio={radios.find((item) => item.name === config.radio)}
+                        networkInterfaces={routerOverview?.office_networks?.interfaces ?? []}
+                        officeInventory={routerOverview?.office_networks}
+                        refresh={refresh}
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
             </>
           )}
         </Panel>
