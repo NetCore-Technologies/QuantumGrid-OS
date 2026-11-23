@@ -1,0 +1,4 @@
+#!/bin/sh
+# No radio is changed until an administrator explicitly enables a schedule.
+[ -x /etc/init.d/quantumgrid-radio-scheduler ] && /etc/init.d/quantumgrid-radio-scheduler enable
+exit 0

@@ -1,0 +1,69 @@
+#!/usr/bin/lua
+package.path = "/usr/lib/lua/?.lua;/usr/lib/lua/?/init.lua;" .. package.path
+local uci = require("luci.model.uci").cursor()
+local schedule_module = require "luci.quantumgrid.radio_schedule"
+local sys = require "luci.sys"
+local function log(message) io.stderr:write("quantumgrid-radio-scheduler: " .. message .. "\n") end
+local function safe_radio(v) return type(v)=="string" and #v>=1 and #v<=32 and v:match("^[%w_%-]+$")~=nil end
+local function restore_changes(changes)
+	for _, c in ipairs(changes) do
+		local ok, result
+		if c.previous_disabled == nil then ok,result=pcall(uci.delete,uci,"wireless",c.radio,"disabled")
+		else ok,result=pcall(uci.set,uci,"wireless",c.radio,"disabled",c.previous_disabled) end
+		if not ok or result ~= true then pcall(uci.revert,uci,"wireless"); return false end
+	end
+	local ok, committed=pcall(uci.commit,uci,"wireless")
+	if not ok or committed ~= true then pcall(uci.revert,uci,"wireless"); return false end
+	local reload_ok, status=pcall(sys.call,"/sbin/wifi reload >/dev/null 2>&1")
+	return reload_ok and status == 0
+end
+local function run_once()
+	local now=os.date("*t")
+	local weekday=((now.wday+5)%7)+1
+	local minute_of_day=now.hour*60+now.min
+	local schedules, invalid, counts={},{},{}
+	local inventory_ok=pcall(function()
+		uci:foreach("quantumgrid-radio","schedule",function(section)
+			if type(section)~="table" then return end
+			local name, radio=section[".name"], section.radio
+			if not safe_radio(name) or name ~= radio then return end
+			counts[radio]=(counts[radio] or 0)+1
+			local parsed=schedule_module.from_config(section,radio)
+			if not parsed then invalid[radio]=true; return end
+			schedules[radio]=parsed
+		end)
+	end)
+	if not inventory_ok then log("schedule inventory could not be read; no radio changes were made"); return end
+	local changes={}
+	for radio, schedule in pairs(schedules) do
+		if counts[radio]==1 and not invalid[radio] and schedule.enabled then
+			local desired=schedule_module.desired_disabled(schedule,weekday,minute_of_day)
+			local ok, wireless=pcall(uci.get_all,uci,"wireless",radio)
+			if ok and type(wireless)=="table" and wireless[".type"]=="wifi-device" then
+				local previous=wireless.disabled
+				if desired ~= (previous=="1") or (not desired and previous ~= nil) then
+					changes[#changes+1]={radio=radio,previous_disabled=previous,desired_disabled=desired}
+				end
+			else log("scheduled radio does not resolve to an existing wifi-device; it was skipped") end
+		elseif counts[radio]~=1 or invalid[radio] then log("a duplicate or invalid schedule was skipped") end
+	end
+	if #changes==0 then return end
+	for _, c in ipairs(changes) do
+		local ok, result
+		if c.desired_disabled then ok,result=pcall(uci.set,uci,"wireless",c.radio,"disabled","1")
+		else ok,result=pcall(uci.delete,uci,"wireless",c.radio,"disabled") end
+		if not ok or result ~= true then pcall(uci.revert,uci,"wireless"); log("radio schedule changes could not be staged; no reload was attempted"); return end
+	end
+	local commit_ok, committed=pcall(uci.commit,uci,"wireless")
+	if not commit_ok or committed ~= true then pcall(uci.revert,uci,"wireless"); log("radio schedule changes could not be committed; no reload was attempted"); return end
+	local reload_ok, status=pcall(sys.call,"/sbin/wifi reload >/dev/null 2>&1")
+	if not reload_ok or status ~= 0 then
+		if restore_changes(changes) then log("wifi reload failed; previous radio configuration was restored")
+		else log("wifi reload failed and automatic configuration rollback could not be confirmed") end
+	else log("scheduled radio state applied and Wi-Fi reload completed") end
+end
+while true do
+	local ok, err=pcall(run_once)
+	if not ok then log("scheduler cycle failed safely: " .. tostring(err)) end
+	os.execute("/bin/sleep 30")
+end

@@ -214,6 +214,10 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/remote_syslog.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/snmpv3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/cellular.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/radio_schedule.lua
+          luac5.1 -p files/usr/bin/quantumgrid-radio-scheduler
+          sh -n files/etc/init.d/quantumgrid-radio-scheduler
+          sh -n files/etc/uci-defaults/97-quantumgrid-radio-scheduler
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/acceleration.lua
       - name: Test IPv4 and IPv6 policy rule parser
         run: lua5.1 tests/policy-routing.lua
@@ -221,6 +225,8 @@ jobs:
         run: lua5.1 tests/sqm-controls.lua
       - name: Test per-client DSCP policy validation and inventory
         run: lua5.1 tests/qos.lua
+      - name: Test bounded weekly wireless radio schedules
+        run: lua5.1 tests/radio-schedule.lua
       - name: Test bounded cellular modem telemetry
         run: lua5.1 tests/cellular-status.lua
       - name: Test bounded mwan3 tracker telemetry
