@@ -57,8 +57,8 @@ sh verify-aw1000-release-attestation.sh QuantumGrid-OS-<version>-AW1000-squashfs
 ```
 
 The bundled host-side verifier checks the image digest first, then requires a GitHub artifact
-attestation from this repository. It pins the signer with `--signer-workflow
-NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml`, requires the precise `refs/tags/qg-v…`
+attestation from this repository. It pins the signer with
+`--signer-workflow NetCore-Technologies/QuantumGrid-OS/.github/workflows/firmware-release.yml`, and requires the precise `refs/tags/qg-v…`
 source ref inferred from the versioned image filename, SLSA provenance v1 and a GitHub-hosted
 runner. It rejects manual-build filenames and requires GitHub CLI 2.102.0 or newer because an
 older CLI compared `--source-ref` case-insensitively. The publish job itself runs only for a pushed
