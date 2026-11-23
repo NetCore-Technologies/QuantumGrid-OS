@@ -2110,8 +2110,9 @@ function action_wireless_radio_schedule()
 		local local_time = os.date("%H:%M:%S") or ""
 		-- Use the lightweight radio status RPC; the full iwinfo inventory is already
 		-- available separately to the Wi-Fi page.
-		local live_inventory = ubus_call("network.wireless", "status", {}) or {}
+		local live_inventory = ubus_call("network.wireless", "status", {})
 		local live_inventory_available = type(live_inventory) == "table"
+		if not live_inventory_available then live_inventory = {} end
 		local inventory_ok = pcall(function()
 			uci:foreach("quantumgrid-radio", "schedule", function(section)
 				if type(section) ~= "table" then return end
