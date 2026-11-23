@@ -11551,9 +11551,10 @@ function NetworkRuntimeTuningPanel() {
     }
   };
 
-  const changed = Boolean(inventory) &&
-    (congestionControl !== inventory.current_congestion_control ||
-      defaultQdisc !== inventory.current_default_qdisc);
+  const changed = inventory
+    ? congestionControl !== inventory.current_congestion_control ||
+      defaultQdisc !== inventory.current_default_qdisc
+    : false;
 
   return (
     <Panel title="Runtime TCP and queueing defaults" eyebrow="KERNEL-REPORTED ALLOW-LISTS · RUNTIME ONLY">

@@ -91,10 +91,23 @@ assert(live["/proc/sys/net/core/default_qdisc"] == "cake")
 -- A partial write failure restores both old kernel settings.
 live["/proc/sys/net/ipv4/tcp_congestion_control"] = "bbr"
 live["/proc/sys/net/core/default_qdisc"] = "fq_codel"
+local fail_first_qdisc = true
+local partial_failure_deps = {
+	read = function(path) return live[path] end,
+	write = function(path, value)
+		if path == "/proc/sys/net/core/default_qdisc" and value == "cake" and fail_first_qdisc then
+			fail_first_qdisc = false
+			return false
+		end
+		live[path] = value
+		return true
+	end
+}
 local failed, reason, rolled_back = tuning.apply({
 	congestion_control = "cubic", default_qdisc = "cake", confirmed = "1"
-}, snapshot, fake_deps({ fail_path = "/proc/sys/net/core/default_qdisc", fail_once = true }))
-assert(failed == nil and reason and rolled_back)
+}, snapshot, partial_failure_deps)
+assert(failed == nil and reason and rolled_back,
+	"partial qdisc write failure must restore and verify both original kernel values")
 assert(live["/proc/sys/net/ipv4/tcp_congestion_control"] == "bbr")
 assert(live["/proc/sys/net/core/default_qdisc"] == "fq_codel")
 
