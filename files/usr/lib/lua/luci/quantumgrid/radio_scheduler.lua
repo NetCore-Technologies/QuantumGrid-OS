@@ -88,6 +88,20 @@ function M.run_once(uci, deps, now)
 		return false, "invalid_scheduler_dependencies"
 	end
 
+	-- procd keeps this cursor alive for the lifetime of the worker. Discard cached
+	-- package contents so edits made by LuCI or another process are observed next cycle.
+	if type(uci.unload) ~= "function" then
+		log(deps, "UCI cursor cannot refresh package contents; no radio changes were made")
+		return false, "uci_cache_refresh_unsupported"
+	end
+	for _, package in ipairs({ "quantumgrid-radio", "wireless" }) do
+		local unload_ok = pcall(uci.unload, uci, package)
+		if not unload_ok then
+			log(deps, "UCI package cache could not be refreshed; no radio changes were made")
+			return false, "uci_cache_refresh_failed"
+		end
+	end
+
 	local weekday = ((now.wday + 5) % 7) + 1
 	local minute_of_day = now.hour * 60 + now.min
 	if now.hour < 0 or now.hour > 23 or now.min < 0 or now.min > 59 then
@@ -110,6 +124,13 @@ function M.run_once(uci, deps, now)
 	if not inventory_ok then
 		log(deps, "schedule inventory could not be read; no radio changes were made")
 		return false, "schedule_inventory_unavailable"
+	end
+	if next(counts) == nil then
+		return true, { changed_radios = 0, restored_baselines = 0 }
+	end
+	if next(schedules) == nil then
+		for radio in pairs(invalid) do log(deps, "invalid or duplicate radio schedule skipped: " .. radio) end
+		return true, { changed_radios = 0, restored_baselines = 0 }
 	end
 
 	local runtime_ok, runtime = pcall(deps.runtime_status)

@@ -17,7 +17,12 @@ local function fixture(schedule, disabled, runtime_up)
 		},
 		commits = {},
 		reverts = {},
+		unloaded = {},
 	}
+	function uci:unload(package)
+		self.unloaded[#self.unloaded + 1] = package
+		return true
+	end
 	function uci:foreach(package, section_type, callback)
 		local sections = self.packages[package] or {}
 		for name, value in pairs(sections) do
@@ -84,6 +89,8 @@ do
 	assert(ok and result.changed_radios == 1)
 	assert(uci.packages.wireless.radio0.disabled == "1")
 	assert(runtime.radio0.up == false and state.reloads == 1)
+	assert(uci.unloaded[1] == "quantumgrid-radio" and uci.unloaded[2] == "wireless",
+		"every scheduler cycle must refresh its long-lived UCI cursor")
 end
 
 -- At the inclusive start boundary it is enabled again.
@@ -135,4 +142,23 @@ do
 	assert(uci.packages.wireless.radio0.disabled == nil and state.reloads == 0)
 end
 
-print("radio-scheduler: runtime transitions, restore, rollback and unavailable-state tests passed")
+-- With no policy configured, the worker must not poll ubus or reload Wi-Fi.
+do
+	local uci, deps, runtime, state = fixture(nil, nil, true)
+	uci.packages["quantumgrid-radio"] = {}
+	deps.runtime_status = function() error("runtime polling is unnecessary without a valid schedule") end
+	local ok, result = scheduler.run_once(uci, deps, { wday = 2, hour = 12, min = 0 })
+	assert(ok and result.changed_radios == 0)
+	assert(state.reloads == 0)
+end
+
+-- If package cache refresh is unavailable, the worker must fail closed.
+do
+	local uci, deps, runtime, state = fixture(enabled_schedule, nil, true)
+	uci.unload = nil
+	local ok, err = scheduler.run_once(uci, deps, { wday = 2, hour = 7, min = 0 })
+	assert(not ok and err == "uci_cache_refresh_unsupported")
+	assert(uci.packages.wireless.radio0.disabled == nil and state.reloads == 0)
+end
+
+print("radio-scheduler: UCI refresh, idle no-op, runtime transitions, restore, rollback and fail-closed tests passed")
