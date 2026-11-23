@@ -5340,7 +5340,7 @@ source = pathlib.Path(sys.argv[1]).read_text()
 start = source.index("function action_snmpv3_update()")
 end = source.index("function action_audit_log()", start)
 action = source[start:end]
-prewrite = action.index('fs.chmod("/etc/config/snmpd", 384)')
+prewrite = action.index('pcall(fs.chmod, "/etc/config/snmpd", 384)')
 first_secret_write = action.index('set_option("snmpd", "general", "enabled"')
 assert prewrite < first_secret_write, "SNMP config must be root-only before credentials are committed"
 assert 'payload.lock_released = release_ok and release_status == 0' in action
