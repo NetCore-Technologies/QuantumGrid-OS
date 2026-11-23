@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, updateRouterCakeProfile, updateRouterMwan3Interface, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -1866,6 +1866,8 @@ function Mwan3HealthEditor({ config, refresh }: {
   const [confirmed, setConfirmed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ success: boolean; message: string } | null>(null);
+  const [runtimeSummary, setRuntimeSummary] = useState("Live radio state has not been checked.");
+  const [refreshingRuntime, setRefreshingRuntime] = useState(false);
 
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -4944,6 +4946,17 @@ function WirelessRadioControl({ radio, refresh }: { radio: RouterWirelessRadio; 
 }
 
 
+function describeWirelessScheduleRuntime(schedule: RouterWirelessRadioSchedule): string {
+  const routerTime = schedule.router_local_time ? " · router " + schedule.router_local_time : "";
+  if (!schedule.valid) return "SAVED POLICY INVALID · review the schedule before relying on automatic radio control" + routerTime;
+  if (!schedule.runtime_available) return "LIVE STATE UNKNOWN · radio status or UCI configuration is unavailable" + routerTime;
+  const actual = schedule.runtime_enabled ? "ON" : "OFF";
+  if (!schedule.runtime_managed) return "MANUAL CONTROL · radio is currently " + actual + routerTime;
+  const desired = schedule.desired_enabled ? "ON" : "OFF";
+  if (schedule.runtime_matches) return "LIVE VERIFIED · radio is " + actual + " and matches scheduled " + desired + routerTime;
+  return "PENDING / MISMATCH · schedule expects " + desired + " but radio is " + actual + "; worker checks every 30 seconds" + routerTime;
+}
+
 function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio }) {
   const [enabled, setEnabled] = useState(false);
   const [days, setDays] = useState<number[]>([1, 2, 3, 4, 5]);
@@ -4966,10 +4979,12 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
         setDays([1, 2, 3, 4, 5]);
         setStartTime("08:00");
         setEndTime("22:00");
+        setRuntimeSummary("MANUAL CONTROL · radio is currently " + (radio.up ? "UP" : "DOWN") + " · no saved schedule");
         return;
       }
       setConfigured(true);
       setEnabled(saved.enabled);
+      setRuntimeSummary(describeWirelessScheduleRuntime(saved));
       if (saved.valid) {
         setDays(saved.days);
         setStartTime(saved.start_time);
@@ -5006,6 +5021,7 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
         endTime,
       });
       setConfigured(true);
+      void refreshRuntime();
       setNotice({
         success: true,
         message: result.enabled
@@ -5020,6 +5036,22 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const refreshRuntime = async () => {
+    if (refreshingRuntime) return;
+    setRefreshingRuntime(true);
+    try {
+      const schedules = await getRouterWirelessRadioSchedules();
+      const saved = schedules.find((item) => item.radio === radio.name);
+      setRuntimeSummary(saved
+        ? describeWirelessScheduleRuntime(saved)
+        : "MANUAL CONTROL · radio is currently " + (radio.up ? "UP" : "DOWN") + " · no saved schedule");
+    } catch (error) {
+      setRuntimeSummary(error instanceof Error ? error.message : "Live radio state could not be refreshed.");
+    } finally {
+      setRefreshingRuntime(false);
     }
   };
 
@@ -5038,6 +5070,17 @@ function WirelessRadioScheduleControl({ radio }: { radio: RouterWirelessRadio })
       <summary>
         Weekly radio schedule {configured ? (enabled ? "· ENABLED" : "· DISABLED") : "· NOT CONFIGURED"}
       </summary>
+      <div className="wireless-radio-schedule-runtime" role="status">
+        <span>{runtimeSummary}</span>
+        <button
+          type="button"
+          className="secondary-button"
+          disabled={loading || refreshingRuntime}
+          onClick={() => void refreshRuntime()}
+        >
+          {refreshingRuntime ? "Checking…" : "Refresh live state"}
+        </button>
+      </div>
       {loading ? <div className="module-message">Loading saved schedule…</div> : (
         <>
           <label className="wireless-radio-schedule-enabled">

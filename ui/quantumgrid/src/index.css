@@ -1794,6 +1794,9 @@ button:disabled {
 .wireless-radio-schedule-times label { display: grid; gap: 6px; font-size: 11px; color: var(--muted, #8c98a5); }
 .wireless-radio-schedule-times input { min-width: 0; }
 .wireless-radio-schedule-help { margin: 0; color: var(--muted, #8c98a5); font-size: 11px; line-height: 1.5; }
+.wireless-radio-schedule-runtime { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 11px; line-height: 1.45; }
+.wireless-radio-schedule-runtime > span { min-width: 0; color: var(--muted, #8c98a5); }
+
 @media (max-width: 560px) { .wireless-radio-schedule-times { grid-template-columns: 1fr; } }
 
 .wireless-channel-section { min-width: 0; padding-top: 12px; border-top: 1px solid var(--line); }
