@@ -2248,6 +2248,8 @@ function action_usteer_update()
 				local_node_count = 0,
 				remote_host_count = 0,
 				associated_clients = 0,
+				policy_verified = false,
+				local_ess_verified = false,
 				service_action_completed = true,
 				rolled_back = false
 			})

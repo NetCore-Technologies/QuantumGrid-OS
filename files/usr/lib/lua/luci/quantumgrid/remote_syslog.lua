@@ -326,6 +326,8 @@ function inspect_status(uci, fs, sampled_at, process)
 		result.tls_status = "disabled"
 	elseif not result.tls_process_running then
 		result.tls_status = "review"
+	elseif not result.enabled and result.tls_process_running then
+		result.tls_status = "review"
 	elseif not result.tls_enabled then
 		result.tls_status = "review"
 	else
@@ -341,6 +343,8 @@ function inspect_status(uci, fs, sampled_at, process)
 		result.tls_error = "TLS 1.2, chain verification, local listener or exact remote certificate identity configuration is incomplete."
 	elseif not result.tls_process_running then
 		result.tls_error = "The managed stunnel process is not running with its expected PID, process identity and generated configuration file."
+	elseif not result.enabled and result.tls_process_running then
+		result.tls_error = "The stunnel process is running while remote logging is disabled; inspect for stale tunnel state."
 	elseif not result.tls_enabled then
 		result.tls_error = "The stunnel process is running while the managed service is configured as disabled; inspect for stale tunnel state."
 	end
