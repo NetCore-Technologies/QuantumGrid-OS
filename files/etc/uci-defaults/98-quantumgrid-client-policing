@@ -1,0 +1,4 @@
+#!/bin/sh
+# Safe on first boot: an empty policy inventory creates no tc filters.
+[ -x /etc/init.d/quantumgrid-client-policing ] && /etc/init.d/quantumgrid-client-policing enable
+exit 0
