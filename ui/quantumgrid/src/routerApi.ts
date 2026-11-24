@@ -5543,3 +5543,296 @@ export async function removeRouterStaticRoute(section: string): Promise<RouterSt
   }
   return payload as RouterStaticRouteRemoveResult;
 }
+
+
+export interface RouterSqmClientPolicingPolicy {
+  section: string;
+  slot: number;
+  name: string;
+  mac: string;
+  client_ip: string;
+  source_zone: string;
+  destination_zone: string;
+  upload_kbps?: number;
+  download_kbps?: number;
+  devices: string[];
+  enabled: true;
+  policing: true;
+}
+
+export interface RouterSqmClientPolicingRuntime {
+  available: boolean;
+  ready: boolean;
+  policing_mode?: "drop_excess";
+  policy_count?: number;
+  applied_filter_count?: number;
+  removed_filter_count?: number;
+  sampled_at?: number;
+  stale?: boolean;
+  error?: string;
+  notice?: string;
+}
+
+export interface RouterSqmClientPolicingInventory {
+  ok: true;
+  available: boolean;
+  inventory_available: boolean;
+  policies: RouterSqmClientPolicingPolicy[];
+  runtime: RouterSqmClientPolicingRuntime | null;
+  error?: string;
+}
+
+export interface RouterSqmClientPolicingMutationResult {
+  ok: true;
+  section: string;
+  slot: number;
+  mac: string;
+  client_ip: string;
+  upload_kbps?: number;
+  download_kbps?: number;
+  devices?: string[];
+  mode?: "drop_excess";
+  runtime_verified: true;
+  removed?: true;
+}
+
+const CLIENT_POLICING_URL = "/cgi-bin/luci/admin/services/quantumgrid/client-policing";
+
+function validPolicingRate(value: string): number | undefined {
+  if (value === "") return undefined;
+  if (!/^\d{1,7}$/.test(value)) throw new Error("Rate limits must be whole numbers in kbit/s.");
+  const rate = Number(value);
+  if (!Number.isInteger(rate) || rate < 64 || rate > 1_000_000) {
+    throw new Error("Each per-client rate must be between 64 and 1000000 kbit/s.");
+  }
+  return rate;
+}
+
+function validateUnicastClientMac(value: string): string {
+  if (!/^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$/.test(value)) {
+    throw new Error("Choose one unicast client MAC address in six-octet notation.");
+  }
+  const normalized = value.toLowerCase();
+  const firstOctet = Number.parseInt(normalized.slice(0, 2), 16);
+  if ((firstOctet & 1) !== 0 || normalized === "00:00:00:00:00:00" || normalized === "ff:ff:ff:ff:ff:ff") {
+    throw new Error("Choose one unicast client MAC address in six-octet notation.");
+  }
+  return normalized;
+}
+
+function validateClientPolicingIp(value: string): string {
+  const parts = value.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^(?:0|[1-9]\d{0,2})$/.test(part) || Number(part) > 255)) {
+    throw new Error("Choose a valid reserved client IPv4 address.");
+  }
+  const [first, second, third, fourth] = parts.map(Number);
+  if (first === 0 || first === 127 || first >= 224 || (first === 169 && second === 254) ||
+      (first === 255 && second === 255 && third === 255 && fourth === 255)) {
+    throw new Error("Choose a usable reserved client IPv4 address.");
+  }
+  return value;
+}
+
+function validClientPolicingZone(value: string): boolean {
+  return /^[A-Za-z0-9_.-]{1,64}$/.test(value) && value !== "." && value !== "..";
+}
+
+export async function getRouterSqmClientPolicingStatus(): Promise<RouterSqmClientPolicingInventory> {
+  const response = await fetch(CLIENT_POLICING_URL, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Client policing requires an active router administrator session."
+      : "The router returned an invalid client policing status response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null || !response.ok ||
+      !("ok" in payload) || payload.ok !== true ||
+      !("available" in payload) || typeof payload.available !== "boolean" ||
+      !("inventory_available" in payload) || typeof payload.inventory_available !== "boolean" ||
+      !("policies" in payload) || !Array.isArray(payload.policies)) {
+    throw new Error(typeof payload === "object" && payload !== null && "error" in payload && typeof payload.error === "string"
+      ? payload.error : "The router returned an invalid client policing inventory.");
+  }
+
+  const policies: RouterSqmClientPolicingPolicy[] = [];
+  const sections = new Set<string>();
+  const slots = new Set<number>();
+  const clients = new Set<string>();
+  for (const item of payload.policies) {
+    if (typeof item !== "object" || item === null ||
+        !("section" in item) || typeof item.section !== "string" || !/^qg_rate_\d{2}$/.test(item.section) ||
+        !("slot" in item) || typeof item.slot !== "number" || !Number.isInteger(item.slot) || item.slot < 1 || item.slot > 32 ||
+        !("name" in item) || typeof item.name !== "string" ||
+        !("mac" in item) || typeof item.mac !== "string" ||
+        !("client_ip" in item) || typeof item.client_ip !== "string" ||
+        !("source_zone" in item) || typeof item.source_zone !== "string" ||
+        !("destination_zone" in item) || typeof item.destination_zone !== "string" ||
+        !("devices" in item) || !Array.isArray(item.devices) ||
+        !("enabled" in item) || item.enabled !== true ||
+        !("policing" in item) || item.policing !== true) {
+      throw new Error("The router returned a malformed client policing policy.");
+    }
+    const mac = validateUnicastClientMac(item.mac);
+    const ip = validateClientPolicingIp(item.client_ip);
+    if (!validClientPolicingZone(item.source_zone) || !validClientPolicingZone(item.destination_zone) ||
+        item.source_zone === item.destination_zone ||
+        item.devices.length < 1 || item.devices.length > 8 ||
+        item.devices.some((device) => typeof device !== "string" || !/^[A-Za-z0-9_.:-]{1,15}$/.test(device))) {
+      throw new Error("The router returned an invalid client policing identity or WAN device list.");
+    }
+    const upload = "upload_kbps" in item ? item.upload_kbps : undefined;
+    const download = "download_kbps" in item ? item.download_kbps : undefined;
+    if ((upload !== undefined && (typeof upload !== "number" || !Number.isInteger(upload) || upload < 64 || upload > 1_000_000)) ||
+        (download !== undefined && (typeof download !== "number" || !Number.isInteger(download) || download < 64 || download > 1_000_000)) ||
+        (upload === undefined && download === undefined)) {
+      throw new Error("The router returned an invalid client policing rate.");
+    }
+    const identity = mac + "|" + ip;
+    if (sections.has(item.section) || slots.has(item.slot) || clients.has(identity)) {
+      throw new Error("The router returned duplicate client policing policy identities.");
+    }
+    sections.add(item.section);
+    slots.add(item.slot);
+    clients.add(identity);
+    policies.push({
+      section: item.section, slot: item.slot, name: item.name, mac, client_ip: ip,
+      source_zone: item.source_zone, destination_zone: item.destination_zone,
+      ...(upload === undefined ? {} : { upload_kbps: upload as number }),
+      ...(download === undefined ? {} : { download_kbps: download as number }),
+      devices: [...item.devices] as string[], enabled: true, policing: true,
+    });
+  }
+
+  let runtime: RouterSqmClientPolicingRuntime | null = null;
+  if ("runtime" in payload && payload.runtime !== null) {
+    const value = payload.runtime;
+    if (typeof value !== "object" || typeof value.available !== "boolean" || typeof value.ready !== "boolean") {
+      throw new Error("The router returned an invalid client policing runtime status.");
+    }
+    if ("policing_mode" in value && value.policing_mode !== "drop_excess") {
+      throw new Error("The router reported an unsupported client policing mode.");
+    }
+    runtime = {
+      available: value.available,
+      ready: value.ready,
+      ...("policing_mode" in value && value.policing_mode === "drop_excess" ? { policing_mode: "drop_excess" as const } : {}),
+      ...("policy_count" in value && typeof value.policy_count === "number" ? { policy_count: value.policy_count } : {}),
+      ...("applied_filter_count" in value && typeof value.applied_filter_count === "number" ? { applied_filter_count: value.applied_filter_count } : {}),
+      ...("removed_filter_count" in value && typeof value.removed_filter_count === "number" ? { removed_filter_count: value.removed_filter_count } : {}),
+      ...("sampled_at" in value && typeof value.sampled_at === "number" ? { sampled_at: value.sampled_at } : {}),
+      ...("stale" in value && typeof value.stale === "boolean" ? { stale: value.stale } : {}),
+      ...("error" in value && typeof value.error === "string" ? { error: value.error } : {}),
+      ...("notice" in value && typeof value.notice === "string" ? { notice: value.notice } : {}),
+    };
+  }
+  return {
+    ok: true, available: payload.available, inventory_available: payload.inventory_available,
+    policies, runtime,
+    ...("error" in payload && typeof payload.error === "string" ? { error: payload.error } : {}),
+  };
+}
+
+export async function addRouterSqmClientPolicingPolicy(input: {
+  mac: string;
+  clientIp: string;
+  sourceZone: string;
+  destinationZone: string;
+  uploadKbps: string;
+  downloadKbps: string;
+  name?: string;
+}): Promise<RouterSqmClientPolicingMutationResult> {
+  const mac = validateUnicastClientMac(input.mac);
+  const clientIp = validateClientPolicingIp(input.clientIp);
+  if (!validClientPolicingZone(input.sourceZone) || !validClientPolicingZone(input.destinationZone) ||
+      input.sourceZone === input.destinationZone) {
+    throw new Error("Choose different existing WAN/WWAN and internal firewall zones.");
+  }
+  const upload = validPolicingRate(input.uploadKbps);
+  const download = validPolicingRate(input.downloadKbps);
+  if (upload === undefined && download === undefined) throw new Error("Set an upload cap, a download cap, or both.");
+  if (input.name !== undefined && (input.name.length > 64 || /[\u0000-\u001f\u007f]/.test(input.name))) {
+    throw new Error("Client policy name must be 64 characters or fewer and contain no control characters.");
+  }
+
+  const form = new URLSearchParams();
+  form.set("operation", "add");
+  form.set("mac", mac);
+  form.set("client_ip", clientIp);
+  form.set("source_zone", input.sourceZone);
+  form.set("destination_zone", input.destinationZone);
+  form.set("upload_kbps", input.uploadKbps);
+  form.set("download_kbps", input.downloadKbps);
+  if (input.name) form.set("name", input.name);
+  form.set("confirmed", "1");
+  const response = await fetch(CLIENT_POLICING_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Client policing changes require an active router administrator session."
+      : "The router returned an invalid client policing response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid client policing response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || typeof payload.section !== "string" || !/^qg_rate_\d{2}$/.test(payload.section) ||
+      !("slot" in payload) || typeof payload.slot !== "number" || !Number.isInteger(payload.slot) || payload.slot < 1 || payload.slot > 32 ||
+      !("mac" in payload) || payload.mac !== mac ||
+      !("client_ip" in payload) || payload.client_ip !== clientIp ||
+      !("runtime_verified" in payload) || payload.runtime_verified !== true ||
+      !("mode" in payload) || payload.mode !== "drop_excess" ||
+      ("upload_kbps" in payload && payload.upload_kbps !== upload) ||
+      ("download_kbps" in payload && payload.download_kbps !== download) ||
+      !("devices" in payload) || !Array.isArray(payload.devices) || payload.devices.length < 1 ||
+      payload.devices.some((device) => typeof device !== "string" || !/^[A-Za-z0-9_.:-]{1,15}$/.test(device))) {
+    throw new Error("The router did not confirm the exact client policer and live TC runtime state.");
+  }
+  return {
+    ok: true, section: payload.section, slot: payload.slot, mac, client_ip: clientIp,
+    ...(upload === undefined ? {} : { upload_kbps: upload }),
+    ...(download === undefined ? {} : { download_kbps: download }),
+    devices: [...payload.devices] as string[], mode: "drop_excess", runtime_verified: true,
+  };
+}
+
+export async function removeRouterSqmClientPolicingPolicy(section: string): Promise<RouterSqmClientPolicingMutationResult> {
+  if (!/^qg_rate_\d{2}$/.test(section)) throw new Error("Choose a valid QuantumGrid client policing policy.");
+  const form = new URLSearchParams();
+  form.set("operation", "remove");
+  form.set("section", section);
+  form.set("confirmed", "1");
+  const response = await fetch(CLIENT_POLICING_URL, {
+    method: "POST", credentials: "same-origin", cache: "no-store",
+    headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+    body: form.toString(),
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    throw new Error(response.status === 403
+      ? "Client policing removal requires an active router administrator session."
+      : "The router returned an invalid client policing removal response.");
+  }
+  const payload: unknown = await response.json();
+  if (typeof payload !== "object" || payload === null) throw new Error("The router returned an invalid client policing removal response.");
+  if ("error" in payload && typeof payload.error === "string") throw new Error(payload.error);
+  if (!response.ok || !("ok" in payload) || payload.ok !== true ||
+      !("section" in payload) || payload.section !== section ||
+      !("removed" in payload) || payload.removed !== true ||
+      !("runtime_verified" in payload) || payload.runtime_verified !== true) {
+    throw new Error("The router did not confirm removal of the client policer from the live TC runtime.");
+  }
+  return {
+    ok: true, section, slot: Number(section.slice(-2)), mac: "", client_ip: "",
+    removed: true, runtime_verified: true,
+  };
+}
