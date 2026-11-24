@@ -196,6 +196,7 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/routing.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/sqm.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/qos.lua
+          luac5.1 -p files/usr/lib/lua/luci/quantumgrid/qos_policing.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/mwan3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireguard.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/conntrack.lua
@@ -229,6 +230,8 @@ jobs:
         run: lua5.1 tests/sqm-controls.lua
       - name: Test per-client DSCP policy validation and inventory
         run: lua5.1 tests/qos.lua
+      - name: Test per-client bandwidth policing validation and TC plan
+        run: lua5.1 tests/qos-policing.lua
       - name: Test allowlisted runtime network tuning inventory and validation
         run: lua5.1 tests/network-tuning.lua
       - name: Test runtime network tuning API contract
