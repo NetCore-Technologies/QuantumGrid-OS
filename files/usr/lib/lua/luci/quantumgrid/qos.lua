@@ -62,7 +62,7 @@ end
 
 -- Resolve an external zone to its live L3 devices. Logical network names and
 -- kernel device names are deliberately kept separate.
-function M.resolve_external_zone_devices(zone_name, zones, interfaces)
+function resolve_external_zone_devices(zone_name, zones, interfaces)
 	if not valid_token(zone_name) then return nil, "Choose a valid external firewall zone." end
 	local zone = unique_zone(zones, zone_name)
 	if not zone then return nil, "The selected external firewall zone is missing or ambiguous." end
