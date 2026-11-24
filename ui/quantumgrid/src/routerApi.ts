@@ -5712,7 +5712,9 @@ export async function getRouterSqmClientPolicingStatus(): Promise<RouterSqmClien
   let runtime: RouterSqmClientPolicingRuntime | null = null;
   if ("runtime" in payload && payload.runtime !== null) {
     const value = payload.runtime;
-    if (typeof value !== "object" || typeof value.available !== "boolean" || typeof value.ready !== "boolean") {
+    if (typeof value !== "object" || value === null ||
+        !("available" in value) || typeof value.available !== "boolean" ||
+        !("ready" in value) || typeof value.ready !== "boolean") {
       throw new Error("The router returned an invalid client policing runtime status.");
     }
     if ("policing_mode" in value && value.policing_mode !== "drop_excess") {
@@ -5791,8 +5793,8 @@ export async function addRouterSqmClientPolicingPolicy(input: {
       !("client_ip" in payload) || payload.client_ip !== clientIp ||
       !("runtime_verified" in payload) || payload.runtime_verified !== true ||
       !("mode" in payload) || payload.mode !== "drop_excess" ||
-      ("upload_kbps" in payload && payload.upload_kbps !== upload) ||
-      ("download_kbps" in payload && payload.download_kbps !== download) ||
+      (upload === undefined ? "upload_kbps" in payload : !("upload_kbps" in payload) || payload.upload_kbps !== upload) ||
+      (download === undefined ? "download_kbps" in payload : !("download_kbps" in payload) || payload.download_kbps !== download) ||
       !("devices" in payload) || !Array.isArray(payload.devices) || payload.devices.length < 1 ||
       payload.devices.some((device) => typeof device !== "string" || !/^[A-Za-z0-9_.:-]{1,15}$/.test(device))) {
     throw new Error("The router did not confirm the exact client policer and live TC runtime state.");
