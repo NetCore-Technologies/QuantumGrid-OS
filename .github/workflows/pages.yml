@@ -1,91 +1,33 @@
-name: QuantumGrid GitHub Pages
+name: Deploy website
 
 on:
   push:
     branches: [main]
     paths:
-      - "Docs/**"
-      - "docs/**"
-      - "scripts/check-website.py"
-      - ".github/workflows/pages.yml"
-      - "README.md"
-  pull_request:
-    branches: [main]
-    paths:
-      - "Docs/**"
-      - "docs/**"
-      - "scripts/check-website.py"
-      - ".github/workflows/pages.yml"
-      - "README.md"
+      - docs/**
+      - .github/workflows/pages.yml
   workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
+  id-token: write
 
 concurrency:
-  group: quantumgrid-pages
+  group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
-    name: Validate and package website
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-    outputs:
-      pages_enabled: ${{ steps.pages-check.outputs.enabled }}
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # pinned upstream v4
-      - name: Validate local links, metadata and mirrored site
-        run: python3 scripts/check-website.py
-      - name: Check website JavaScript
-        run: node --check docs/site.js
-      - name: Detect GitHub Pages deployment source
-        id: pages-check
-        shell: bash
-        run: |
-          set -euo pipefail
-          status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")"
-          build_type="disabled"
-          if [[ "$status" == "200" ]]; then
-            pages_json="$(curl --silent --show-error "https://api.github.com/repos/$GITHUB_REPOSITORY/pages")"
-            build_type="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("build_type", "legacy"))' <<<"$pages_json")"
-          fi
-
-          if [[ "$build_type" == "workflow" ]]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "GitHub Pages is configured for GitHub Actions."
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            if [[ "$build_type" == "disabled" ]]; then
-              echo "::notice::GitHub Pages is not enabled. The website was validated and packaged, but deployment is skipped."
-            else
-              echo "::notice::GitHub Pages is configured for branch deployment. GitHub's built-in Pages workflow publishes /docs; this workflow skips deployment to avoid competing publishers. Set Settings > Pages > Source to GitHub Actions to use this workflow instead."
-            fi
-          fi
-      - name: Configure Pages
-        if: steps.pages-check.outputs.enabled == 'true'
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # pinned upstream v5
-      - name: Upload static site
-        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # pinned upstream v4
-        with:
-          path: docs
-
   deploy:
-    name: Publish GitHub Pages
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && needs.build.outputs.pages_enabled == 'true'
-    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy site
-        id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # pinned upstream v4
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
