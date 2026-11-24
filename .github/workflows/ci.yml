@@ -198,6 +198,10 @@ jobs:
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/qos.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/qos_policing.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/client_policing.lua
+          luac5.1 -p files/usr/bin/quantumgrid-client-policing
+          sh -n files/etc/init.d/quantumgrid-client-policing
+          sh -n files/etc/hotplug.d/iface/98-quantumgrid-client-policing
+          sh -n files/etc/uci-defaults/98-quantumgrid-client-policing
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/mwan3.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/wireguard.lua
           luac5.1 -p files/usr/lib/lua/luci/quantumgrid/conntrack.lua
@@ -235,6 +239,8 @@ jobs:
         run: lua5.1 tests/qos-policing.lua
       - name: Test per-client policing runtime reconciliation
         run: lua5.1 tests/qos-policing-runtime.lua
+      - name: Test client policing worker and service installation
+        run: bash tests/client-policing-worker-smoke.sh
       - name: Test allowlisted runtime network tuning inventory and validation
         run: lua5.1 tests/network-tuning.lua
       - name: Test runtime network tuning API contract
