@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORKER="$ROOT/files/usr/bin/quantumgrid-client-policing"
 MANAGER="$ROOT/files/usr/lib/lua/luci/quantumgrid/client_policing.lua"
 POLICY="$ROOT/files/usr/lib/lua/luci/quantumgrid/qos_policing.lua"
