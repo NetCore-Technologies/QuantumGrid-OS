@@ -1,0 +1,3 @@
+# QuantumGrid per-client traffic policing.
+# Rate limits are enforced on WAN interfaces with tc police actions.
+# Policies are created and validated through the authenticated control centre.
