@@ -1,0 +1,21 @@
+#!/bin/sh /etc/rc.common
+START=99
+STOP=10
+
+start() {
+  [ -x /usr/bin/quantumgrid-client-policing ] || return 1
+  /usr/bin/quantumgrid-client-policing
+}
+
+reload() {
+  /usr/bin/quantumgrid-client-policing
+}
+
+restart() {
+  /usr/bin/quantumgrid-client-policing
+}
+
+stop() {
+  # tc rules are removed on interface down/device teardown; policy state is kept.
+  return 0
+}
