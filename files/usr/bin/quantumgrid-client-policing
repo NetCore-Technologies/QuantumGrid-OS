@@ -1,0 +1,272 @@
+#!/usr/bin/lua
+package.path = "/usr/lib/lua/?.lua;/usr/lib/lua/?/init.lua;" .. package.path
+
+local uci = require("luci.model.uci").cursor()
+local sys = require "luci.sys"
+local fs = require "nixio.fs"
+local util = require "luci.util"
+local jsonc = require "luci.jsonc"
+local ubus = require "ubus"
+local policing = require "luci.quantumgrid.client_policing"
+local tc = require "luci.quantumgrid.qos_policing"
+
+local STATE_PATH = "/var/run/quantumgrid-client-policing.state.json"
+local STATUS_PATH = "/var/run/quantumgrid-client-policing.status.json"
+local MAX_FILE = 65536
+
+local function log(message)
+	io.stderr:write("quantumgrid-client-policing: " .. tostring(message) .. "\n")
+end
+
+local function valid_name(value)
+	return type(value) == "string" and #value >= 1 and #value <= 64
+		and value:match("^[%w_.%-]+$") ~= nil
+end
+
+local function valid_device(value)
+	return type(value) == "string" and #value >= 1 and #value <= 15
+		and value:match("^[%w_.:%-]+$") ~= nil
+end
+
+local function bounded_file(path)
+	local content = fs.readfile(path)
+	if type(content) ~= "string" or #content > MAX_FILE then return nil end
+	return content
+end
+
+local function read_json(path, optional)
+	local content = bounded_file(path)
+	if not content then
+		if optional and fs.access(path) ~= true then return {} end
+		return nil
+	end
+	local ok, parsed = pcall(jsonc.parse, content)
+	if not ok or type(parsed) ~= "table" then return nil end
+	return parsed
+end
+
+local function write_json_atomic(path, value)
+	local ok, encoded = pcall(jsonc.stringify, value)
+	if not ok or type(encoded) ~= "string" or #encoded > MAX_FILE then
+		return false, "JSON serialization failed or exceeded the file bound"
+	end
+	local temporary = path .. ".new"
+	local write_ok, written = pcall(fs.writefile, temporary, encoded .. "\n")
+	if not write_ok or written == false then
+		pcall(fs.unlink, temporary)
+		return false, "temporary state file write failed"
+	end
+	pcall(fs.chmod, temporary, 384) -- 0600: runtime policy contains client MAC/IP details.
+	local rename_ok, renamed = pcall(fs.rename, temporary, path)
+	if not rename_ok or renamed == false then
+		pcall(fs.unlink, temporary)
+		return false, "atomic runtime state file replacement failed"
+	end
+	return true
+end
+
+local function call_status(name)
+	if not valid_name(name) then return nil end
+	local connection = ubus.connect()
+	if not connection then return nil end
+	local ok, result = pcall(connection.call, connection, "network.interface." .. name, "status", {})
+	pcall(connection.close, connection)
+	if not ok or type(result) ~= "table" then return nil end
+	return result
+end
+
+local function as_list(value)
+	if type(value) == "string" then return { value } end
+	if type(value) == "table" then return value end
+	return {}
+end
+
+local function collect_inventory()
+	local inventory = {
+		available = false,
+		firewall_available = false,
+		dhcp_available = false,
+		truncated = false,
+		interfaces = {},
+		zones = {},
+		static_leases = {}
+	}
+	local network_ok = pcall(function()
+		uci:foreach("network", "interface", function(section)
+			if #inventory.interfaces >= 64 then inventory.truncated = true; return end
+			local name = section[".name"]
+			if not valid_name(name) then return end
+			local device = section.device
+			if type(device) ~= "string" or not valid_device(device) then
+				device = type(section.ifname) == "string" and section.ifname or ""
+			end
+			if device ~= "" and not valid_device(device) then device = "" end
+			local live = call_status(name) or {}
+			local l3_device = live.l3_device or live.device or device
+			if not valid_device(l3_device) then l3_device = device end
+			local ipv4 = section.ipaddr
+			if type(ipv4) == "string" then ipv4 = { ipv4 } end
+			if type(ipv4) ~= "table" then ipv4 = {} end
+			inventory.interfaces[#inventory.interfaces + 1] = {
+				name = name,
+				protocol = type(section.proto) == "string" and section.proto or "",
+				device = device,
+				l3_device = l3_device,
+				up = live.up == true,
+				ipv4 = ipv4,
+				netmask = type(section.netmask) == "string" and section.netmask or nil,
+				firewall_zones = {}
+			}
+		end)
+	end)
+	inventory.available = network_ok and fs.access("/etc/config/network") == true
+
+	local firewall_ok = pcall(function()
+		uci:foreach("firewall", "zone", function(section)
+			if #inventory.zones >= 32 then inventory.truncated = true; return end
+			local name = section.name or section[".name"]
+			if not valid_name(name) then return end
+			local networks = {}
+			for _, network in ipairs(as_list(section.network)) do
+				if valid_name(network) then networks[#networks + 1] = network end
+			end
+			inventory.zones[#inventory.zones + 1] = {
+				name = name,
+				networks = networks,
+				masquerade = section.masq == "1"
+			}
+			for _, iface in ipairs(inventory.interfaces) do
+				for _, network in ipairs(networks) do
+					if iface.name == network then
+						iface.firewall_zones[#iface.firewall_zones + 1] = name
+						break
+					end
+				end
+			end
+		end)
+	end)
+	inventory.firewall_available = firewall_ok and fs.access("/etc/config/firewall") == true
+
+	local dhcp_ok = pcall(function()
+		uci:foreach("dhcp", "host", function(section)
+			if #inventory.static_leases >= 256 then inventory.truncated = true; return end
+			inventory.static_leases[#inventory.static_leases + 1] = {
+				section = section[".name"],
+				name = section.name or section[".name"],
+				mac = section.mac,
+				ipv4 = section.ip
+			}
+		end)
+	end)
+	inventory.dhcp_available = dhcp_ok and fs.access("/etc/config/dhcp") == true
+	return inventory
+end
+
+local function collect_policies()
+	local result, count, truncated = {}, 0, false
+	local ok = pcall(function()
+		uci:foreach("quantumgrid-qos", "client", function(section)
+			count = count + 1
+			if #result >= 32 then truncated = true; return end
+			local name = section[".name"]
+			if not valid_name(name) then truncated = true; return end
+			result[#result + 1] = {
+				section = name,
+				slot = tonumber(section.slot),
+				name = section.name,
+				mac = section.mac,
+				client_ip = section.client_ip,
+				source_zone = section.source_zone,
+				destination_zone = section.destination_zone,
+				upload_kbps = section.upload_kbps or "",
+				download_kbps = section.download_kbps or "",
+				enabled = section.enabled or "0"
+			}
+		end)
+	end)
+	if not ok or count > 32 or truncated then return nil, "Client rate policy inventory is unavailable, malformed or truncated." end
+	return result
+end
+
+local function ensure_clsact(device)
+	if not valid_device(device) then return false, "invalid device identity" end
+	local ok, output = pcall(util.exec, "/sbin/tc qdisc show dev " .. device .. " 2>/dev/null")
+	if not ok or type(output) ~= "string" or #output > 8192 then return false, "qdisc inventory unavailable" end
+	if output:find("qdisc clsact", 1, true) then return true end
+	-- Never replace an existing ingress qdisc or the root CAKE/SQM qdisc.
+	if output:find("qdisc ingress", 1, true) then return false, "an unmanaged ingress qdisc already owns this device" end
+	local load_ok, load_status = pcall(sys.call, "/sbin/modprobe act_police >/dev/null 2>&1")
+	if not load_ok or load_status ~= 0 then
+		if fs.access("/sys/module/act_police") ~= true then return false, "act_police kernel module is unavailable" end
+	end
+	local add_ok, add_status = pcall(sys.call, "/sbin/tc qdisc add dev " .. device .. " clsact >/dev/null 2>&1")
+	if not add_ok or add_status ~= 0 then return false, "tc could not attach clsact without replacing existing qdiscs" end
+	local verify_ok, verify_output = pcall(util.exec, "/sbin/tc qdisc show dev " .. device .. " 2>/dev/null")
+	return verify_ok and type(verify_output) == "string" and verify_output:find("qdisc clsact", 1, true) ~= nil,
+		"clsact attachment could not be verified"
+end
+
+local function device_has_clsact(device)
+	if not valid_device(device) then return false end
+	local ok, output = pcall(util.exec, "/sbin/tc qdisc show dev " .. device .. " 2>/dev/null")
+	return ok and type(output) == "string" and output:find("qdisc clsact", 1, true) ~= nil
+end
+
+local function replace_filter(command)
+	local ok, status = pcall(sys.call, command .. " >/dev/null 2>&1")
+	return ok and status == 0, ok and status or "tc execution failed"
+end
+
+local function delete_filter(device, slot, direction)
+	local parent = direction == "upload" and "ffff:fff3" or "ffff:fff2"
+	local command, err = tc.build_delete_command(device, parent, slot, direction)
+	if not command then return false, err end
+	local filter_ok, output = pcall(util.exec, "/sbin/tc filter show dev " .. device .. " parent " .. parent .. " 2>/dev/null")
+	if not filter_ok or type(output) ~= "string" or #output > 16384 then return false, "tc filter inventory unavailable" end
+	local offset = direction == "upload" and 0 or 1
+	local pref = 46000 + (slot - 1) * 2 + offset
+	local handle = string.format("0x%08x", 0x51420000 + slot * 2 + offset)
+	local present = false
+	for block in output:gmatch("([^%n]+)") do
+		if block:find("pref " .. tostring(pref), 1, true) and block:find(handle, 1, true) then
+			present = true
+			break
+		end
+	end
+	if not present then return true end
+	local ok, status = pcall(sys.call, command)
+	return ok and status == 0, ok and status or "tc filter deletion failed"
+end
+
+local inventory = collect_inventory()
+local policies, policy_error = collect_policies()
+if not policies then log(policy_error); os.exit(1) end
+
+local previous = read_json(STATE_PATH, true)
+if not previous then log("saved TC ownership state is malformed; refusing to modify filters"); os.exit(1) end
+
+local status, reconcile_error = policing.reconcile(policies, inventory, previous, {
+	ensure_clsact = ensure_clsact,
+	device_has_clsact = device_has_clsact,
+	replace_filter = replace_filter,
+	delete_filter = delete_filter,
+	write_state = function(value) return write_json_atomic(STATE_PATH, value) end,
+	write_status = function(value) return write_json_atomic(STATUS_PATH, value) end
+}, os.time())
+
+if not status then
+	local failure = {
+		available = false,
+		ready = false,
+		sampled_at = os.time(),
+		policy_count = #policies,
+		error = reconcile_error or "Client policing reconciliation failed."
+	}
+	write_json_atomic(STATUS_PATH, failure)
+	log(reconcile_error)
+	os.exit(1)
+end
+
+log("reconciled " .. tostring(status.policy_count) .. " client policy record(s) and " ..
+	tostring(status.applied_filter_count) .. " traffic policer filter(s)")
+os.exit(0)
