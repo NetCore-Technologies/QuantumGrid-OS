@@ -60,6 +60,36 @@ local function is_external_zone(zone, interfaces)
 	return false
 end
 
+-- Resolve an external zone to its live L3 devices. Logical network names and
+-- kernel device names are deliberately kept separate.
+function M.resolve_external_zone_devices(zone_name, zones, interfaces)
+	if not valid_token(zone_name) then return nil, "Choose a valid external firewall zone." end
+	local zone = unique_zone(zones, zone_name)
+	if not zone then return nil, "The selected external firewall zone is missing or ambiguous." end
+	if not is_external_zone(zone, interfaces) then
+		return nil, "The selected source zone is not recognised as an existing WAN/WWAN zone."
+	end
+	local networks, devices = {}, {}
+	for _, network in ipairs(zone_network_list(zone.networks)) do
+		if valid_token(network) then networks[network] = true end
+	end
+	for _, iface in ipairs(type(interfaces) == "table" and interfaces or {}) do
+		if type(iface) == "table" and type(iface.name) == "string" and networks[iface.name] then
+			local device = iface.l3_device
+			if type(device) ~= "string" or device == "" then device = iface.device end
+			if type(device) == "string" and #device <= 15 and device:match("^[%w_.:%-]+$") then
+				devices[device] = true
+			end
+		end
+	end
+	local result = {}
+	for device in pairs(devices) do result[#result + 1] = device end
+	table.sort(result)
+	if #result == 0 then return nil, "The selected WAN/WWAN zone has no resolvable Layer-3 device." end
+	if #result > 8 then return nil, "The selected WAN/WWAN zone has too many device members." end
+	return result
+end
+
 local function normalize_unicast_mac(value)
 	if type(value) ~= "string" or #value ~= 17
 		or not value:match("^%x%x:%x%x:%x%x:%x%x:%x%x:%x%x$") then return nil end
