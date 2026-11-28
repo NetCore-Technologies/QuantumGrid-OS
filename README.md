@@ -341,7 +341,7 @@ it does not replace a recoverable UART path and hardware validation.
 For the original standard AW1000 layout, boot the matching initramfs temporarily over UART/TFTP.
 Run `inspect-aw1000-install-target.sh` to record board identity and MTD layout, verify the
 release checksum and attestation on the host, then transfer the factory UBI image, manifest,
-installer and verifier into `/tmp`. Run the installer without `--write` first. It accepts
+installer and verifier into `/tmp`. First, run the installer once without `--write`. It accepts
 only the expected AW1000 board identity and standard `mtd18`/`mtd20` 100 MiB rootfs layout;
 expanded layouts are refused. A real write requires `--write` plus typing `ERASE rootfs` at
 the router console. It writes only `rootfs` (`mtd18`) and leaves `rootfs_1` (`mtd20`)
