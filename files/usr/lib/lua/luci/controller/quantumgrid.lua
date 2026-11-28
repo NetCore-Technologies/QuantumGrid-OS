@@ -3958,10 +3958,28 @@ function action_package_catalog()
 		respond(400, { ok = false, error = "Search terms may contain only letters, numbers, spaces, plus, underscore, dot and hyphen (maximum 64 characters)." })
 		return
 	end
+	local category = http.formvalue("category", true) or ""
+	local allowed_categories = {
+		[""] = true,
+		["LuCI applications"] = true,
+		["Network protocols"] = true,
+		["VPN and tunnels"] = true,
+		["DNS and DHCP"] = true,
+		["Security"] = true,
+		["Routing"] = true,
+		["Quality of service"] = true,
+		["Kernel modules"] = true,
+		["LuCI components"] = true,
+		["System and networking"] = true
+	}
+	if not allowed_categories[category] then
+		respond(400, { ok = false, error = "Choose a supported OpenWrt package category." })
+		return
+	end
 	local limit = tonumber(http.formvalue("limit")) or 40
 	local offset = tonumber(http.formvalue("offset")) or 0
 	if limit ~= math.floor(limit) or limit < 1 or limit > 100
-		or offset ~= math.floor(offset) or offset < 0 or offset > 5000 then
+		or offset ~= math.floor(offset) or offset < 0 or offset > 1000000 then
 		respond(400, { ok = false, error = "Package catalogue page bounds are invalid." })
 		return
 	end
@@ -4007,7 +4025,7 @@ function action_package_catalog()
 	local installed_ok, installed_output = pcall(util.exec, installed_command)
 	local installed = installed_ok and type(installed_output) == "string"
 		and parser.parse(manager, installed_output, 2000) or { packages = {} }
-	local catalogue = parser.parse_available(manager, source, installed, limit, offset, query)
+	local catalogue = parser.parse_available(manager, source, installed, limit, offset, query, category)
 	if not catalogue.available then
 		respond(502, { ok = false, error = "The available package catalogue could not be parsed." })
 		return
@@ -4019,6 +4037,7 @@ function action_package_catalog()
 		count = catalogue.count,
 		offset = catalogue.offset,
 		limit = catalogue.limit,
+		category = category,
 		truncated = catalogue.truncated,
 		packages = catalogue.packages,
 		sampled_at = os.time()
