@@ -141,6 +141,8 @@ jobs:
           sudo apt-get install -y lua5.1
       - name: Test AW1000 release attestation verification
         run: bash tests/verify-aw1000-release-attestation-smoke.sh
+      - name: Test AW1000 sysupgrade archive validation
+        run: bash tests/verify-aw1000-sysupgrade-smoke.sh
       - name: Test AW1000 CycloneDX SBOM generation
         run: |
           python3 -m py_compile scripts/generate-aw1000-sbom.py tests/test_aw1000_sbom.py
@@ -158,6 +160,8 @@ jobs:
           bash -n tests/phone-feed-pin-smoke.sh
           bash tests/phone-feed-pin-smoke.sh
           bash -n scripts/verify-aw1000-ubi.sh
+          bash -n scripts/verify-aw1000-sysupgrade.sh
+          bash -n tests/verify-aw1000-sysupgrade-smoke.sh
           bash -n scripts/install-aw1000-ubi.sh
           sh -n scripts/inspect-aw1000-install-target.sh
           sh -n files/etc/uci-defaults/91-quantumgrid-usteer-safe
