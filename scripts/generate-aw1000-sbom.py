@@ -85,6 +85,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", required=True, type=Path)
     parser.add_argument("--firmware-image", required=True, type=Path)
+    parser.add_argument("--sysupgrade-image", required=True, type=Path)
     parser.add_argument("--packages-archive", required=True, type=Path)
     parser.add_argument("--feeds-report", required=True, type=Path)
     parser.add_argument("--phone-source-archive", required=True, type=Path)
@@ -114,6 +115,7 @@ def build_sbom(args: argparse.Namespace) -> dict:
 
     packages = parse_manifest(args.manifest)
     firmware_sha = sha256_file(args.firmware_image)
+    sysupgrade_sha = sha256_file(args.sysupgrade_image)
     package_archive_sha = sha256_file(args.packages_archive)
     manifest_sha = sha256_file(args.manifest)
     feeds_report_sha = sha256_file(args.feeds_report)
@@ -152,6 +154,16 @@ def build_sbom(args: argparse.Namespace) -> dict:
             "name": "QuantumGrid OS AW1000 squashfs factory UBI image",
             "version": args.version,
             "hashes": [{"alg": "SHA-256", "content": firmware_sha}],
+        },
+        {
+            "type": "firmware",
+            "bom-ref": f"{firmware_ref}:sysupgrade",
+            "name": "QuantumGrid OS AW1000 squashfs sysupgrade image",
+            "version": args.version,
+            "hashes": [{"alg": "SHA-256", "content": sysupgrade_sha}],
+            "properties": [
+                {"name": "quantumgrid:artifact-role", "value": "In-service AW1000 sysupgrade image"},
+            ],
         },
         {
             "type": "file",
@@ -212,6 +224,7 @@ def build_sbom(args: argparse.Namespace) -> dict:
                     {"name": "quantumgrid:openwrt-commit", "value": args.openwrt_commit},
                     {"name": "quantumgrid:package-count", "value": str(len(packages))},
                     {"name": "quantumgrid:firmware-image-sha256", "value": firmware_sha},
+                    {"name": "quantumgrid:sysupgrade-image-sha256", "value": sysupgrade_sha},
                     {"name": "quantumgrid:package-archive-sha256", "value": package_archive_sha},
                     {"name": "quantumgrid:package-manifest-sha256", "value": manifest_sha},
                     {"name": "quantumgrid:openwrt-feed-report-sha256", "value": feeds_report_sha},
