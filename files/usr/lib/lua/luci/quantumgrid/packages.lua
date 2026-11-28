@@ -122,9 +122,8 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 	page_offset = math.max(0, math.min(5000, math.floor(page_offset)))
 	local search = type(query) == "string" and query:sub(1, 64) or ""
 	local installed = installed_names(installed_inventory)
-	local packages = {}
+	local matched = {}
 	local seen = {}
-	local count = 0
 
 	local function add(name, version, description, metadata)
 		if not valid_name(name) or seen[name] then return end
@@ -132,8 +131,6 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 		description = safe_text(description, 320)
 		if not matches_query(name, version, description, search) then return end
 		seen[name] = true
-		count = count + 1
-		if count <= page_offset or #packages >= limit then return end
 
 		metadata = type(metadata) == "table" and metadata or {}
 		local item = {
@@ -154,7 +151,7 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 		if installed_size and installed_size >= 0 and installed_size <= 4294967295 then
 			item.installed_size = math.floor(installed_size)
 		end
-		table.insert(packages, item)
+		table.insert(matched, item)
 	end
 
 	if manager == "apk" then
@@ -174,16 +171,20 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 		end
 	end
 
-	table.sort(packages, function(left, right)
+	table.sort(matched, function(left, right)
 		return left.name < right.name
 	end)
+	local packages = {}
+	for index = page_offset + 1, math.min(#matched, page_offset + limit) do
+		table.insert(packages, matched[index])
+	end
 	return {
 		available = true,
 		manager = manager,
-		count = count,
+		count = #matched,
 		offset = page_offset,
 		limit = limit,
-		truncated = page_offset + #packages < count,
+		truncated = page_offset + #packages < #matched,
 		packages = packages
 	}
 end
