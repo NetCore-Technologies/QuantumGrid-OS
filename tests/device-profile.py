@@ -70,6 +70,15 @@ class DeviceProfileTests(unittest.TestCase):
         )
         self.assertEqual(len(result.stdout.rstrip("\n").split("\t")), 18)
 
+    def test_profile_config_enables_devel_to_preserve_openwrt_target_choice(self) -> None:
+        profile = self.profile()
+        config_path = self.temp_path / "aw1000-without-devel.config"
+        config_source = (ROOT / profile["platform"]["config_file"]).read_text(encoding="utf-8")
+        config_path.write_text(config_source.replace("CONFIG_DEVEL=y", "# CONFIG_DEVEL is not set"), encoding="utf-8")
+        profile["platform"]["config_file"] = str(config_path.relative_to(ROOT))
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "must enable CONFIG_DEVEL=y"):
+            VALIDATOR.validate(self.write_profile(profile))
+
     def test_device_must_be_selected_by_the_profile_config(self) -> None:
         profile = self.profile()
         profile["platform"]["openwrt_device"] = "another_device"
