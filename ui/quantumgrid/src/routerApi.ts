@@ -863,6 +863,30 @@ export interface RouterPackageInventory {
   sampled_at: number;
 }
 
+export interface RouterPackageCatalogItem {
+  name: string;
+  version: string;
+  description: string;
+  manager: "apk" | "opkg";
+  category: string;
+  installed: boolean;
+  architecture?: string;
+  license?: string;
+  size?: number;
+  installed_size?: number;
+}
+
+export interface RouterPackageCatalog {
+  ok: true;
+  manager: "apk" | "opkg";
+  count: number;
+  offset: number;
+  limit: number;
+  truncated: boolean;
+  packages: RouterPackageCatalogItem[];
+  sampled_at: number;
+}
+
 export interface RouterGpioLine {
   number: number;
   label: string;
@@ -1732,6 +1756,7 @@ const WIRELESS_RADIO_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wire
 const WIRELESS_RADIO_SCHEDULE_URL = "/cgi-bin/luci/admin/services/quantumgrid/wireless-radio-schedule";
 const PACKAGES_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages";
 const PACKAGES_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-update";
+const PACKAGES_CATALOG_URL = "/cgi-bin/luci/admin/services/quantumgrid/packages-catalog";
 const LED_UPDATE_URL = "/cgi-bin/luci/admin/services/quantumgrid/led-update";
 const CONFIG_BACKUP_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-backup";
 const CONFIG_RESTORE_URL = "/cgi-bin/luci/admin/services/quantumgrid/config-restore";
@@ -2065,6 +2090,68 @@ export async function fetchRouterPackages(): Promise<RouterPackageInventory> {
     throw new Error("The router returned an invalid package inventory response.");
   }
   return payload as RouterPackageInventory;
+}
+
+export async function fetchRouterPackageCatalog(
+  query = "",
+  offset = 0,
+  limit = 40,
+): Promise<RouterPackageCatalog> {
+  if (query.length > 64 || /[^A-Za-z0-9+_.\\- ]/.test(query)) {
+    throw new Error("Use letters, numbers, spaces, plus, underscore, dot and hyphen to search packages.");
+  }
+  if (!Number.isInteger(offset) || offset < 0 || offset > 5000 ||
+      !Number.isInteger(limit) || limit < 1 || limit > 100) {
+    throw new Error("The package catalogue page request is outside the supported range.");
+  }
+  const params = new URLSearchParams({ q: query, offset: String(offset), limit: String(limit) });
+  const response = await fetch(`${PACKAGES_CATALOG_URL}?${params.toString()}`, {
+    method: "GET",
+    credentials: "same-origin",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.includes("application/json")) {
+    if (response.status === 403) {
+      throw new Error("The package catalogue requires an active router administrator session.");
+    }
+    throw new Error("The router could not read the configured package repositories.");
+  }
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== "object" || payload === null ||
+    !("ok" in payload) || payload.ok !== true ||
+    !("manager" in payload) || (payload.manager !== "apk" && payload.manager !== "opkg") ||
+    !("count" in payload) || typeof payload.count !== "number" ||
+    !("offset" in payload) || typeof payload.offset !== "number" ||
+    !("limit" in payload) || typeof payload.limit !== "number" ||
+    !("truncated" in payload) || typeof payload.truncated !== "boolean" ||
+    !("packages" in payload) || !Array.isArray(payload.packages) ||
+    !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
+  ) {
+    throw new Error("The router returned an invalid available-package catalogue.");
+  }
+  for (const item of payload.packages) {
+    if (
+      typeof item !== "object" || item === null ||
+      !("name" in item) || typeof item.name !== "string" ||
+      !("version" in item) || typeof item.version !== "string" ||
+      !("description" in item) || typeof item.description !== "string" ||
+      !("manager" in item) || item.manager !== payload.manager ||
+      !("category" in item) || typeof item.category !== "string" ||
+      !("installed" in item) || typeof item.installed !== "boolean"
+    ) {
+      throw new Error("The router returned malformed package metadata.");
+    }
+    for (const field of ["size", "installed_size"] as const) {
+      if (field in item && item[field] !== undefined &&
+          (typeof item[field] !== "number" || !Number.isFinite(item[field]) || item[field] < 0)) {
+        throw new Error("The router returned invalid package size metadata.");
+      }
+    }
+  }
+  return payload as RouterPackageCatalog;
 }
 
 export async function scanRouterWifi(): Promise<RouterWifiScan> {
