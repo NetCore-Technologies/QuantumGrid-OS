@@ -96,6 +96,27 @@ assert(legacy.packages[1].name == "luci-app-pbr")
 assert(legacy.packages[1].description == "Policy based routing interface")
 assert(legacy.packages[2].installed == true)
 
+local ecosystem_source = {
+	{ name = "hostapd-utils", version = "2.11-r1", description = "Wireless access point tools" },
+	{ name = "samba4-server", version = "4.20-r1", description = "SMB file server" },
+	{ name = "dockerd", version = "27.0-r1", description = "Docker container engine" },
+	{ name = "asterisk", version = "20.0-r1", description = "SIP telephony server" },
+	{ name = "nginx", version = "1.26-r1", description = "HTTP server" },
+	{ name = "htop", version = "3.4-r1", description = "Interactive process viewer" }
+}
+local wireless = packages.parse_available("apk", ecosystem_source, installed, 20, 0, "", "Wireless")
+assert(wireless.count == 1 and wireless.packages[1].name == "hostapd-utils")
+local storage = packages.parse_available("apk", ecosystem_source, installed, 20, 0, "", "Storage and filesystems")
+assert(storage.count == 1 and storage.packages[1].name == "samba4-server")
+local containers = packages.parse_available("apk", ecosystem_source, installed, 20, 0, "", "Containers")
+assert(containers.count == 1 and containers.packages[1].name == "dockerd")
+local telephony = packages.parse_available("apk", ecosystem_source, installed, 20, 0, "", "Telephony")
+assert(telephony.count == 1 and telephony.packages[1].name == "asterisk")
+local web_tools = packages.parse_available("apk", ecosystem_source, installed, 20, 0, "", "Web and remote access")
+assert(web_tools.count == 1 and web_tools.packages[1].name == "nginx")
+local monitoring = packages.parse_available("apk", ecosystem_source, installed, 20, 0, "", "Monitoring and diagnostics")
+assert(monitoring.count == 1 and monitoring.packages[1].name == "htop")
+
 local no_source = packages.parse_available("apk", "not-json", installed, 20, 0, "")
 assert(no_source.available == false and no_source.count == 0)
 local unknown = packages.parse_available("unknown", {}, installed, 20, 0, "")
