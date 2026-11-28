@@ -5683,7 +5683,7 @@ export async function getRouterSqmClientPolicingStatus(): Promise<RouterSqmClien
     if (!validClientPolicingZone(item.source_zone) || !validClientPolicingZone(item.destination_zone) ||
         item.source_zone === item.destination_zone ||
         item.devices.length < 1 || item.devices.length > 8 ||
-        item.devices.some((device) => typeof device !== "string" || !/^[A-Za-z0-9_.:-]{1,15}$/.test(device))) {
+        item.devices.some((device: unknown) => typeof device !== "string" || !/^[A-Za-z0-9_.:-]{1,15}$/.test(device))) {
       throw new Error("The router returned an invalid client policing identity or WAN device list.");
     }
     const upload = "upload_kbps" in item ? item.upload_kbps : undefined;
