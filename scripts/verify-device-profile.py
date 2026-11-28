@@ -152,15 +152,17 @@ def validate(profile_path: Path) -> list[str]:
     artifacts = require_object(
         root["artifacts"],
         "artifacts",
-        {"output_directory", "factory_glob", "initramfs_glob"},
+        {"output_directory", "factory_glob", "initramfs_glob", "sysupgrade_glob"},
     )
     output_directory = safe_repo_directory(artifacts["output_directory"], "artifacts.output_directory")
     factory_glob = require_string(artifacts["factory_glob"], "artifacts.factory_glob", ARTIFACT_GLOB)
     initramfs_glob = require_string(artifacts["initramfs_glob"], "artifacts.initramfs_glob", ARTIFACT_GLOB)
-    if device not in factory_glob or device not in initramfs_glob:
-        raise ProfileError("firmware artifact globs must both include the OpenWrt device profile")
-    if factory_glob == initramfs_glob:
-        raise ProfileError("factory and initramfs artifact globs must be distinct")
+    sysupgrade_glob = require_string(artifacts["sysupgrade_glob"], "artifacts.sysupgrade_glob", ARTIFACT_GLOB)
+    artifact_globs = (factory_glob, initramfs_glob, sysupgrade_glob)
+    if any(device not in glob for glob in artifact_globs):
+        raise ProfileError("all firmware artifact globs must include the OpenWrt device profile")
+    if len(set(artifact_globs)) != len(artifact_globs):
+        raise ProfileError("factory, initramfs and sysupgrade artifact globs must be distinct")
 
     config_text = (ROOT / config_file).read_text(encoding="utf-8")
     expected_config = (
@@ -190,6 +192,7 @@ def validate(profile_path: Path) -> list[str]:
         output_directory,
         factory_glob,
         initramfs_glob,
+        sysupgrade_glob,
     ]
 
 
