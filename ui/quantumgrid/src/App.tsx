@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, setRouterOfficeInterZoneRuleEnabled, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, getRouterNetworkTuning, updateRouterNetworkTuning, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterNetworkTuningInventory, type RouterOverview, type RouterPackageInventory, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
+import { createRouterDhcpReservation, downloadRouterConfigBackup, decryptRouterConfigBackup, restoreRouterConfigBackup, removeRouterDhcpReservation, createRouterOfficeSegment, createRouterStaticRoute, removeRouterStaticRoute, createRouterOfficeForwarding, removeRouterOfficeForwarding, createRouterOfficeInterZoneRule, removeRouterOfficeInterZoneRule, setRouterOfficeInterZoneRuleEnabled, createRouterOfficePortForward, removeRouterOfficePortForward, setRouterOfficePortForwardEnabled, createRouterOfficeIpv6Pinhole, removeRouterOfficeIpv6Pinhole, setRouterOfficeIpv6PinholeEnabled, updateRouterOfficeZonePolicy, updateRouterOfficeVlan, updateRouterOfficeWifiNetwork, removeRouterOfficeVlan, updateRouterDhcpReservation, updateRouterDhcpScopeEnabled, createRouterDhcpScope, updateRouterDhcpScope, removeRouterDhcpScope, fetchRouterAuditLog, fetchRouterOverview, fetchRouterPackages, fetchRouterPackageCatalog, loginToRouter, runRouterPackageOperation, runRouterLatencyTest, getRouterNetworkTuning, updateRouterNetworkTuning, scanRouterWifi, updateRouterLedBrightness, updateRouterRemoteSyslog, updateRouterSnmpv3, updateRouterUsteer, updateRouterWirelessRadio, getRouterWirelessRadioSchedules, updateRouterWirelessRadioSchedule, createRouterWirelessAp, removeRouterWirelessAp, updateRouterCakeProfile, updateRouterMwan3Interface, updateRouterMwan3Member, addRouterSqmClientPolicy, addRouterSqmClientDownloadPolicy, removeRouterSqmClientPolicy, updateRouterSqmQueue, updateRouterWirelessConfig, type RouterMwan3InterfaceConfig, type RouterMwan3MemberConfig, type RouterAuditLog, type RouterClient, type RouterLatencyTest, type RouterOfficeDhcpScope, type RouterOfficeBridge, type RouterOfficeVlan, type RouterOfficeFirewallZone, type RouterOfficeForwarding, type RouterOfficeInterZoneRule, type RouterOfficePortForward, type RouterOfficeIpv6Pinhole, type RouterOfficePortForwardProtocol, type RouterBoardGpioLineReference, type RouterOfficeInterface, type RouterOfficeStaticLease, type RouterOfficeNetworks, type RouterStaticRoute, type RouterInterface, type RouterNetworkTuningInventory, type RouterOverview, type RouterPackageInventory, type RouterPackageCatalog, type RouterRemoteSyslogStatus, type RouterSnmpv3Status, type RouterUsteerStatus, type RouterWifiScan, type RouterWifiRateDetails, type RouterWirelessClient, type RouterWirelessConfig, type RouterWirelessRadio, type RouterWirelessRadioSchedule, type RouterSqmCakeProfileChoice, type RouterSqmCakeProfile, type RouterSqmClientDscpClass, type RouterSqmClientPolicy, type RouterSqmQueue } from "./routerApi";
 import { planWifiChannels, recommendWifiChannel } from "./wifiChannelPlanner";
 import { auditFirewallPosture } from "./firewallPosture";
 import { analyzePolicyRouting } from "./policyRouting";
@@ -4518,6 +4518,11 @@ const nativeOpenWrtApps: NativeOpenWrtApp[] = [
 
 function OpenWrtAppsPage() {
   const [inventory, setInventory] = useState<RouterPackageInventory | null>(null);
+  const [catalog, setCatalog] = useState<RouterPackageCatalog | null>(null);
+  const [catalogSearch, setCatalogSearch] = useState("luci-app-");
+  const [catalogCategory, setCatalogCategory] = useState("All");
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [packageSearch, setPackageSearch] = useState("");
@@ -4528,6 +4533,19 @@ function OpenWrtAppsPage() {
   const [packageActionMessage, setPackageActionMessage] = useState("");
   const [packageActionOutput, setPackageActionOutput] = useState("");
   const [packageActionError, setPackageActionError] = useState(false);
+
+  const loadPackageCatalog = useCallback(async (query: string, offset = 0) => {
+    setCatalogLoading(true);
+    setCatalogError("");
+    try {
+      setCatalog(await fetchRouterPackageCatalog(query, offset, 60));
+    } catch (cause) {
+      setCatalogError(cause instanceof Error ? cause.message : "The available package catalogue is unavailable.");
+      setCatalog(null);
+    } finally {
+      setCatalogLoading(false);
+    }
+  }, []);
 
   const loadPackages = useCallback(async () => {
     setLoading(true);
@@ -4555,8 +4573,12 @@ function OpenWrtAppsPage() {
     };
   }, []);
 
-  const runPackageAction = async (operation: "update" | "install" | "remove") => {
-    const name = packageName.trim();
+  useEffect(() => {
+    void loadPackageCatalog("luci-app-", 0);
+  }, [loadPackageCatalog]);
+
+  const runPackageAction = async (operation: "update" | "install" | "remove", selectedName?: string) => {
+    const name = (selectedName ?? packageName).trim();
     if (operation !== "update" && !/^[A-Za-z0-9][A-Za-z0-9+_.-]{0,127}$/.test(name)) {
       setPackageActionError(true);
       setPackageActionMessage("Enter a valid package name before installing or removing a package.");
@@ -4591,6 +4613,7 @@ function OpenWrtAppsPage() {
       setPackageActionOutput(result.output);
       setConfirmPackageAction(false);
       await loadPackages();
+      await loadPackageCatalog(catalogSearch, 0);
     } catch (cause) {
       setPackageActionError(true);
       setPackageActionMessage(cause instanceof Error ? cause.message : "Package operation failed.");
@@ -4607,6 +4630,10 @@ function OpenWrtAppsPage() {
     appSection === "All" || app.section === appSection
   );
   const installedAppCount = nativeOpenWrtApps.filter((app) => installed.has(app.packageName)).length;
+  const catalogCategories = ["All", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP", "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components", "System and networking"];
+  const visibleCatalogPackages = (catalog?.packages ?? []).filter((item) =>
+    catalogCategory === "All" || item.category === catalogCategory
+  );
 
   return (
     <div className="module-page openwrt-apps-page">
@@ -4707,7 +4734,99 @@ function OpenWrtAppsPage() {
         ) : null}
         {packageActionOutput ? <pre className="openwrt-package-output">{packageActionOutput}</pre> : null}
         <div className="module-message">
-          Package actions use the router's configured APK/OPKG feeds and run one package operation at a time. The in-app remover blocks base services, all kernel modules, wireless supplicants and NSS components; driver and firmware changes must be made in a matching offline image build. A successful package install may still require a service restart or router reboot, as reported by the package manager.
+          Packages are installed from the router's configured, signature-verified OpenWrt repositories. Kernel, wireless, NSS and core platform removals are blocked here; driver and firmware changes belong in a matching offline firmware build. OpenWrt firmware upgrades are not performed with a blind package-wide upgrade command.
+        </div>
+      </Panel>
+
+      <Panel title="OpenWrt repository catalogue" eyebrow={catalog ? catalog.manager.toUpperCase() + " · CONFIGURED SIGNED FEEDS" : "AVAILABLE PACKAGES"}>
+        <div className="openwrt-catalog-intro">
+          Browse the packages published for this router's architecture and configured OpenWrt feeds. Search for LuCI applications, protocols, VPNs, DNS services, monitoring tools, kernel modules and other packages. Refresh feeds first when the repository indexes are stale.
+        </div>
+        <div className="openwrt-package-toolbar">
+          <input
+            type="search"
+            value={catalogSearch}
+            onChange={(event) => setCatalogSearch(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void loadPackageCatalog(catalogSearch, 0);
+            }}
+            placeholder="Search packages (try luci-app-, wireguard, sqm…)"
+            aria-label="Search available OpenWrt packages"
+          />
+          <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, 0)} disabled={catalogLoading || packageBusy}>
+            <RefreshCw size={14} /> {catalogLoading ? "Searching…" : "Search feeds"}
+          </button>
+          <span>{catalogLoading ? "Loading…" : catalog ? catalog.count.toLocaleString() + " matches" : "No catalogue loaded"}</span>
+        </div>
+        <div className="openwrt-app-filter">
+          {catalogCategories.map((category) => (
+            <button
+              key={category}
+              className={catalogCategory === category ? "openwrt-app-filter-button active" : "openwrt-app-filter-button"}
+              onClick={() => setCatalogCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+        {catalogError ? <div className="module-message" role="alert">{catalogError}</div> : null}
+        {!catalog && !catalogLoading ? (
+          <div className="module-message">The repository catalogue is not available. Refresh feeds above, confirm internet connectivity and inspect the configured repositories.</div>
+        ) : visibleCatalogPackages.length === 0 ? (
+          <div className="module-message">{catalogLoading ? "Reading configured repositories…" : "No packages in this page match the selected category. Search a different package name or category."}</div>
+        ) : (
+          <div className="openwrt-catalog-list">
+            {visibleCatalogPackages.map((item) => (
+              <article className="openwrt-catalog-row" key={item.name}>
+                <div className="openwrt-catalog-main">
+                  <div className="openwrt-catalog-meta">
+                    <span>{item.category}</span>
+                    {item.installed ? <Status active>INSTALLED</Status> : <Status active={false}>AVAILABLE</Status>}
+                  </div>
+                  <strong>{item.name}</strong>
+                  <p>{item.description || "No package description is published by this repository."}</p>
+                  <small>
+                    {item.version}
+                    {item.architecture ? " · " + item.architecture : ""}
+                    {item.license ? " · " + item.license : ""}
+                    {typeof item.size === "number" ? " · " + fmtBytes(item.size) + " download" : ""}
+                    {typeof item.installed_size === "number" ? " · " + fmtBytes(item.installed_size) + " installed" : ""}
+                  </small>
+                </div>
+                <div className="openwrt-catalog-action">
+                  {item.installed ? (
+                    <button className="hero-button" disabled>Installed</button>
+                  ) : (
+                    <button
+                      className="hero-button"
+                      onClick={() => {
+                        setPackageName(item.name);
+                        void runPackageAction("install", item.name);
+                      }}
+                      disabled={packageBusy || !confirmPackageAction}
+                      title={confirmPackageAction ? "Install this package" : "Confirm package operations above before installing"}
+                    >
+                      Install
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+        {catalog ? (
+          <div className="openwrt-catalog-pagination">
+            <span>Showing {catalog.count === 0 ? 0 : catalog.offset + 1}–{Math.min(catalog.offset + catalog.packages.length, catalog.count)} of {catalog.count.toLocaleString()}</span>
+            <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, Math.max(0, catalog.offset - catalog.limit))} disabled={catalogLoading || catalog.offset === 0}>
+              Previous
+            </button>
+            <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, catalog.offset + catalog.limit)} disabled={catalogLoading || !catalog.truncated}>
+              Next
+            </button>
+          </div>
+        ) : null}
+        <div className="module-message">
+          The catalogue is read from the router's configured feeds, not a hard-coded package list. Only packages built for the current target and repository set are shown. Installing a package runs its maintainer scripts and may alter services or consume overlay storage; always check free space and dependencies first.
         </div>
       </Panel>
 
