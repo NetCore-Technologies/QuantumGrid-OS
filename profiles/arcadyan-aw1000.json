@@ -48,6 +48,7 @@
   "artifacts": {
     "output_directory": "qualcommax/ipq807x",
     "factory_glob": "*arcadyan_aw1000-squashfs-factory.ubi",
-    "initramfs_glob": "*arcadyan_aw1000-initramfs-uImage.itb"
+    "initramfs_glob": "*arcadyan_aw1000-initramfs-uImage.itb",
+    "sysupgrade_glob": "*arcadyan_aw1000-squashfs-sysupgrade.bin"
   }
 }
