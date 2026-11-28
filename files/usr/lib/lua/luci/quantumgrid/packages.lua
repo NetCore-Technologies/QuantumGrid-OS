@@ -105,7 +105,7 @@ end
 
 -- Parse repository data returned by the native APK query interface or OPKG feed list.
 -- Filtering and paging happen here, never by interpolating browser input into a command.
-function parse_available(manager, source, installed_inventory, maximum, offset, query)
+function parse_available(manager, source, installed_inventory, maximum, offset, query, category)
 	if manager ~= "apk" and manager ~= "opkg" then
 		return { available = false, manager = tostring(manager or "unknown"), count = 0, offset = 0, limit = 0, packages = {} }
 	end
@@ -119,8 +119,9 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 	local limit = tonumber(maximum) or 40
 	limit = math.max(1, math.min(100, math.floor(limit)))
 	local page_offset = tonumber(offset) or 0
-	page_offset = math.max(0, math.min(5000, math.floor(page_offset)))
+	page_offset = math.max(0, math.min(1000000, math.floor(page_offset)))
 	local search = type(query) == "string" and query:sub(1, 64) or ""
+	local selected_category = type(category) == "string" and category or ""
 	local installed = installed_names(installed_inventory)
 	local matched = {}
 	local seen = {}
@@ -130,6 +131,8 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 		version = safe_text(version, 96)
 		description = safe_text(description, 320)
 		if not matches_query(name, version, description, search) then return end
+		local category = package_category(name)
+		if selected_category ~= "" and selected_category ~= category then return end
 		seen[name] = true
 
 		metadata = type(metadata) == "table" and metadata or {}
@@ -138,7 +141,7 @@ function parse_available(manager, source, installed_inventory, maximum, offset, 
 			version = version,
 			description = description,
 			manager = manager,
-			category = package_category(name),
+			category = category,
 			installed = installed[name] == true
 		}
 		local architecture = metadata.arch or metadata.architecture
