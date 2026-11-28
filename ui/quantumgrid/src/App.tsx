@@ -125,6 +125,19 @@ function fmt(value: number, digits = 0) {
   });
 }
 
+function packageRemovalBlocked(name: string): boolean {
+  const protectedPackages = new Set([
+    "base-files", "busybox", "kernel", "libc", "libgcc", "libpthread", "libstdcpp",
+    "procd", "netifd", "firewall4", "fw4", "dnsmasq", "dropbear", "uhttpd", "rpcd",
+    "luci-base", "luci-compat", "luci-lua-runtime", "luci-app-package-manager",
+    "apk", "opkg", "uci", "ubus", "ubox", "libubox", "libubus", "libuci",
+    "libnl-tiny", "rpcd-mod-ucode", "rpcd-mod-iwinfo", "kmod-aw1000-fxs",
+    "luci-app-fxs", "libubus-lua", "libjson-c", "libblobmsg-json", "luci-mod-admin-full",
+  ]);
+  return protectedPackages.has(name) ||
+    /^(kmod-|wpad|qca-nss|ath11k|kernel-|dnsmasq|luci-mod-)/.test(name);
+}
+
 function fmtBytes(value: number): string {
   if (!Number.isFinite(value) || value < 0) return "N/A";
   const units = ["B", "KiB", "MiB", "GiB"];
@@ -4822,7 +4835,22 @@ function OpenWrtAppsPage() {
                 </div>
                 <div className="openwrt-catalog-action">
                   {item.installed ? (
-                    <button className="hero-button" disabled>Installed</button>
+                    <>
+                      <button className="hero-button" disabled>Installed</button>
+                      <button
+                        className="hero-button"
+                        onClick={() => {
+                          setPackageName(item.name);
+                          void runPackageAction("remove", item.name);
+                        }}
+                        disabled={packageBusy || !confirmPackageAction || packageRemovalBlocked(item.name)}
+                        title={packageRemovalBlocked(item.name)
+                          ? "Core, wireless, NSS and kernel packages cannot be removed from the running system"
+                          : confirmPackageAction ? "Remove this package" : "Confirm package operations above before removing"}
+                      >
+                        Remove
+                      </button>
+                    </>
                   ) : (
                     <button
                       className="hero-button"
