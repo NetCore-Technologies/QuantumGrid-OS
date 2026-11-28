@@ -4,8 +4,6 @@ on:
   # Full OpenWrt builds run only for published-version tags or an explicit manual dispatch.
   # Ordinary main-branch changes use the fast CI and firmware-smoke gates instead.
   push:
-    branches:
-      - main
     tags:
       - "qg-v*"
   workflow_dispatch:
