@@ -8097,6 +8097,78 @@ input::placeholder {
   .openwrt-app-actions a, .openwrt-app-actions button { flex: 1 1 100%; }
 }
 
+.openwrt-catalog-intro {
+  margin-bottom: 12px;
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.6;
+}
+.openwrt-catalog-list {
+  display: grid;
+  max-height: 680px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+.openwrt-catalog-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255,255,255,.012);
+}
+.openwrt-catalog-row:last-child { border-bottom: 0; }
+.openwrt-catalog-main { display: grid; gap: 4px; min-width: 0; }
+.openwrt-catalog-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--muted2);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.openwrt-catalog-main > strong {
+  color: var(--text);
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.openwrt-catalog-main > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.openwrt-catalog-main > small {
+  color: var(--muted2);
+  font-size: 7px;
+  overflow-wrap: anywhere;
+}
+.openwrt-catalog-action .hero-button {
+  min-width: 84px;
+  min-height: 31px;
+  padding: 6px 10px;
+}
+.openwrt-catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.openwrt-catalog-pagination > span {
+  margin-right: auto;
+  color: var(--muted2);
+  font-size: 8px;
+}
+
 
 /* NSS / EDMA / PPE component readiness inventory */
 .acceleration-summary {
