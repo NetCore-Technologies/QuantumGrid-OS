@@ -48,7 +48,7 @@ if ! python3 "$PROJECT_ROOT/scripts/verify-device-profile.py" "$DEVICE_PROFILE" 
 fi
 mapfile -t PROFILE_FIELDS < "$PROFILE_FIELDS_FILE"
 rm -f "$PROFILE_FIELDS_FILE"
-((${#PROFILE_FIELDS[@]} == 17)) || die "Device profile returned an incomplete build contract"
+((${#PROFILE_FIELDS[@]} == 18)) || die "Device profile returned an incomplete build contract"
 DEVICE_PROFILE_ID="${PROFILE_FIELDS[0]}"
 PLATFORM_VENDOR="${PROFILE_FIELDS[1]}"
 PLATFORM_MODEL="${PROFILE_FIELDS[2]}"
@@ -66,6 +66,7 @@ FXS_SETUP_SCRIPT="${PROFILE_FIELDS[13]}"
 OUTPUT_DIRECTORY="${PROFILE_FIELDS[14]}"
 FACTORY_GLOB="${PROFILE_FIELDS[15]}"
 INITRAMFS_GLOB="${PROFILE_FIELDS[16]}"
+SYSUPGRADE_GLOB="${PROFILE_FIELDS[17]}"
 [[ "$NSS_SUPPORTED" == "0" || "$NSS_SUPPORTED" == "1" ]] || die "Device profile returned an invalid NSS capability"
 [[ "$FXS_SUPPORTED" == "0" || "$FXS_SUPPORTED" == "1" ]] || die "Device profile returned an invalid FXS capability"
 if [[ "$QG_ENABLE_NSS" == "1" && "$NSS_SUPPORTED" != "1" ]]; then
@@ -195,5 +196,5 @@ printf 'Device profile: %s (%s)\n' "$DEVICE_PROFILE_ID" "$OPENWRT_DEVICE"
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
 printf '\nFirmware outputs:\n'
 find "$OUTPUT_PATH" -maxdepth 1 -type f \
-    \( -name "$FACTORY_GLOB" -o -name "$INITRAMFS_GLOB" \) \
+    \( -name "$FACTORY_GLOB" -o -name "$INITRAMFS_GLOB" -o -name "$SYSUPGRADE_GLOB" \) \
     -print | sort
