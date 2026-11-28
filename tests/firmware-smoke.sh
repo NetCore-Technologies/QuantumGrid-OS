@@ -23,7 +23,7 @@ grep -Fq 'query --fields all --format json --available' "$ROOT/files/usr/lib/lua
 grep -Fq 'binary .. " list"' "$ROOT/files/usr/lib/lua/luci/controller/quantumgrid.lua"
 grep -Fq 'function fetchRouterPackageCatalog' "$ROOT/ui/quantumgrid/src/routerApi.ts"
 grep -Fq 'OpenWrt repository catalogue' "$ROOT/ui/quantumgrid/src/App.tsx"
-grep -Fq 'fetchRouterPackageCatalog("luci-app-", 0, 60)' "$ROOT/ui/quantumgrid/src/App.tsx"
+grep -Fq 'fetchRouterPackageCatalog("luci-app-", 0, 60, "LuCI applications")' "$ROOT/ui/quantumgrid/src/App.tsx"
 grep -Fq 'packages-catalog.lua' "$ROOT/.github/workflows/ci.yml"
 grep -Fq 'for symbol in "${REQUIRED_NSS_SYMBOLS[@]}"' "$ROOT/build.sh"
 grep -Fq '"required_config_symbols": [' "$ROOT/profiles/arcadyan-aw1000.json"
