@@ -4651,8 +4651,7 @@ function OpenWrtAppsPage() {
   const appsInSection = nativeOpenWrtApps.filter((app) =>
     appSection === "All" || app.section === appSection
   );
-  const installedAppCount = nativeOpenWrtApps.filter((app) => installed.has(app.packageName)).length;
-  const catalogCategories = ["All", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP", "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components", "System and networking"];
+  const catalogCategories = ["All", ...Array.from(new Set((catalog?.packages ?? []).map((item) => item.category))).sort()];
   const visibleCatalogPackages = (catalog?.packages ?? []).filter((item) =>
     catalogCategory === "All" || item.category === catalogCategory
   );
@@ -4677,7 +4676,7 @@ function OpenWrtAppsPage() {
       <div className="metrics">
         <Metric title="Package Manager" value={inventory?.manager.toUpperCase() ?? "N/A"} unit="" detail="Detected from the authenticated router" icon={Settings} />
         <Metric title="Installed Packages" value={inventory ? fmt(inventory.count) : "N/A"} unit="" detail={inventory?.truncated ? "Inventory is capped at 1,500 entries" : "Read from the local package database"} icon={HardDrive} />
-        <Metric title="Available LuCI Pages" value={inventory ? fmt(installedAppCount) : "N/A"} unit="" detail={nativeOpenWrtApps.length + " launcher entries"} icon={Monitor} />
+        <Metric title="Feed Search Results" value={catalog ? fmt(catalog.count) : "N/A"} unit="" detail={catalog ? catalog.manager.toUpperCase() + " · configured repositories" : "Reading available packages"} icon={Monitor} />
       </div>
 
       <Panel title="Native OpenWrt applications" eyebrow="SAME-ROUTER LUCI LINKS">
@@ -4777,6 +4776,9 @@ function OpenWrtAppsPage() {
           />
           <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, 0)} disabled={catalogLoading || packageBusy}>
             <RefreshCw size={14} /> {catalogLoading ? "Searching…" : "Search feeds"}
+          </button>
+          <button className="hero-button" onClick={() => { setCatalogSearch(""); setCatalogCategory("All"); void loadPackageCatalog("", 0); }} disabled={catalogLoading || packageBusy}>
+            All packages
           </button>
           <span>{catalogLoading ? "Loading…" : catalog ? catalog.count.toLocaleString() + " matches" : "No catalogue loaded"}</span>
         </div>
