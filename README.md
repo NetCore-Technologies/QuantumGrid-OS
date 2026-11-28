@@ -162,7 +162,7 @@ The manual firmware workflow exposes the same paired inputs and writes both
 the expected and resolved commits to `BUILDINFO.txt`. An unreviewed or moved
 tag therefore fails before the firmware build can continue.
 
-The OpenWrt Apps page includes a 48-entry native LuCI launcher, a bounded APK/OPKG inventory and authenticated package controls for refreshing configured feeds and installing/removing named packages. Removal is blocked for core services, LuCI base/modules, kernel modules, Wi-Fi firmware/supplicants and NSS packages; full catalog search and dependency planning still use native LuCI Software.
+The OpenWrt Apps page includes native LuCI shortcuts and a live repository catalogue. It reads available package metadata from the configured signed APK repositories on OpenWrt 25.12+ or the configured OPKG feed indexes on older releases, with search, category filtering, pagination, version/description/licence/size information, installed-state detection and per-package installation. Feed refresh, installation and removal require an authenticated same-origin administrator action and explicit confirmation. Core services, LuCI base/modules, kernel modules, Wi-Fi firmware/supplicants and NSS packages cannot be removed from the running system. The page is not a replacement for the native LuCI package manager's dependency solver or firmware upgrade UI; it uses the router's own package manager for transactions. Do not run a blanket APK/OPKG upgrade to replace firmware or kernel modules.
 
 The build also compiles the existing React control centre with Node.js 22/npm and copies
 its Vite output into the firmware root filesystem at `/www/quantumgrid`. After boot it is served
@@ -292,6 +292,33 @@ configure client EAP identities/certificates as required by their organisation, 
 to reach the server, and test the authentication path before production rollout. The software
 tests validate configuration and rollback logic; they do not prove radio/driver compatibility or
 successful authentication against a live RADIUS server.
+
+## OpenWrt application and package support
+
+QuantumGrid uses the native OpenWrt package feeds and package manager instead of bundling a
+small private app store. On OpenWrt 25.12 and newer the control centre queries APK's available
+package database; on older OpenWrt installs it reads the OPKG package index. Available packages
+are limited to the feeds configured for the running firmware and its CPU/kernel target. The
+catalogue is refreshed with the same package-index update operation used by the native package
+manager; package installation invokes APK or OPKG directly and respects the repository's
+dependency and signature checks.
+
+To discover applications, open **OpenWrt Apps**, search for `luci-app-` to browse feed-provided
+LuCI applications, or clear the search to browse other package types. Select a category to narrow
+the visible page, inspect the version, description, architecture, licence and storage-size
+metadata, then install only after checking the explicit package-operation confirmation. After
+installation, open **native LuCI** to use the application's own configuration page. Apps that
+need a kernel module, radio driver, firmware blob or ABI-specific package must be selected in
+the offline QuantumGrid image build for the exact AW1000 OpenWrt source revision; live package
+installation does not make an incompatible kernel module safe.
+
+The base AW1000 image includes the core LuCI network/status/system modules, package manager,
+firewall, multi-WAN, SQM, OpenVPN, Unbound, UPnP, uSteer, statistics, watchcat, QMI/MBIM/PPP and
+WireGuard protocol integration, plus the QuantumGrid FXS application. The repository catalogue
+exposes the other compatible apps available in the configured target feeds without forcing
+every optional server, daemon, VPN, storage service or monitoring plugin into the limited
+router flash image. This keeps the base installation manageable while retaining access to the
+larger OpenWrt package ecosystem.
 
 ## Firmware images
 
