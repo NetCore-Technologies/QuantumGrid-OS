@@ -3968,6 +3968,12 @@ function action_package_catalog()
 		["Security"] = true,
 		["Routing"] = true,
 		["Quality of service"] = true,
+		["Wireless"] = true,
+		["Storage and filesystems"] = true,
+		["Monitoring and diagnostics"] = true,
+		["Containers"] = true,
+		["Telephony"] = true,
+		["Web and remote access"] = true,
 		["Kernel modules"] = true,
 		["LuCI components"] = true,
 		["System and networking"] = true
