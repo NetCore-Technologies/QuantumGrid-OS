@@ -1,5 +1,5 @@
 #!/bin/sh
-# Verify the AW1000 factory image checksum and its GitHub build attestation.
+# Verify an AW1000 persistent firmware checksum and its GitHub build attestation.
 set -eu
 
 die() {
@@ -7,23 +7,28 @@ die() {
   exit 1
 }
 
-[ "$#" -eq 2 ] || die "Usage: $0 <QuantumGrid-OS-v<version>-AW1000-squashfs-factory.ubi> <SHA256SUMS>"
+[ "$#" -eq 2 ] || die "Usage: $0 <versioned-AW1000-factory.ubi|versioned-AW1000-sysupgrade.bin> <SHA256SUMS>"
 IMAGE=$1
 MANIFEST=$2
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
-[ -f "$IMAGE" ] && [ -r "$IMAGE" ] && [ ! -L "$IMAGE" ] || die "Factory image must be a readable regular, non-symlink file."
+[ -f "$IMAGE" ] && [ -r "$IMAGE" ] && [ ! -L "$IMAGE" ] || die "Firmware image must be a readable regular, non-symlink file."
 [ -f "$MANIFEST" ] && [ -r "$MANIFEST" ] && [ ! -L "$MANIFEST" ] || die "SHA256SUMS must be a readable regular, non-symlink file."
 
 IMAGE_NAME=${IMAGE##*/}
 case "$IMAGE_NAME" in
-  QuantumGrid-OS-v*-AW1000-squashfs-factory.ubi) ;;
-  *) die "Attestation verification is restricted to versioned QuantumGrid AW1000 release images." ;;
+  QuantumGrid-OS-v*-AW1000-squashfs-factory.ubi)
+    VERSION=${IMAGE_NAME#QuantumGrid-OS-}
+    VERSION=${VERSION%-AW1000-squashfs-factory.ubi}
+    ;;
+  QuantumGrid-OS-v*-AW1000-squashfs-sysupgrade.bin)
+    VERSION=${IMAGE_NAME#QuantumGrid-OS-}
+    VERSION=${VERSION%-AW1000-squashfs-sysupgrade.bin}
+    ;;
+  *) die "Attestation verification is restricted to versioned QuantumGrid AW1000 firmware images." ;;
 esac
-VERSION=${IMAGE_NAME#QuantumGrid-OS-}
-VERSION=${VERSION%-AW1000-squashfs-factory.ubi}
 printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?(\+[A-Za-z0-9.-]+)?$' ||
-  die "The factory image filename does not contain a valid release version."
+  die "Firmware image filename does not contain a valid release version."
 SOURCE_REF="refs/tags/qg-$VERSION"
 
 # Reject transfer corruption before making a network request to GitHub.
