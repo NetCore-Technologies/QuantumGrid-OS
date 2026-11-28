@@ -17,14 +17,28 @@ local function package_category(name)
 	if lower:match("^luci%-proto%-") then return "Network protocols" end
 	if lower:match("^kmod%-") or lower:match("^kernel%-") then return "Kernel modules" end
 	if lower:match("wireguard") or lower:match("openvpn") or lower:match("tailscale")
-		or lower:match("strongswan") or lower:match("ipsec") then return "VPN and tunnels" end
+		or lower:match("strongswan") or lower:match("ipsec") or lower:match("zerotier") then return "VPN and tunnels" end
 	if lower:match("dns") or lower:match("unbound") or lower:match("odhcp")
 		or lower:match("dnsmasq") or lower:match("smartdns") then return "DNS and DHCP" end
 	if lower:match("firewall") or lower:match("banip") or lower:match("adblock")
-		or lower:match("nft") or lower:match("suricata") then return "Security" end
+		or lower:match("nft") or lower:match("suricata") or lower:match("fail2ban") then return "Security" end
 	if lower:match("mwan") or lower:match("route") or lower:match("bird")
-		or lower:match("babeld") or lower:match("batman") then return "Routing" end
+		or lower:match("babeld") or lower:match("batman") or lower:match("%-pbr") then return "Routing" end
 	if lower:match("sqm") or lower:match("qos") or lower:match("cake") then return "Quality of service" end
+	if lower:match("wireless") or lower:match("hostapd") or lower:match("wpad")
+		or lower:match("ath11k") or lower:match("mac80211") or lower:match("^iw") then return "Wireless" end
+	if lower:match("block%-mount") or lower:match("e2fs") or lower:match("ntfs")
+		or lower:match("samba") or lower:match("nfs") or lower:match("usb%-storage")
+		or lower:match("fdisk") or lower:match("lsblk") or lower:match("parted") then return "Storage and filesystems" end
+	if lower:match("collectd") or lower:match("statistics") or lower:match("nlbwmon")
+		or lower:match("vnstat") or lower:match("iperf") or lower:match("tcpdump")
+		or lower:match("htop") or lower:match("btop") or lower:match("netdata") then return "Monitoring and diagnostics" end
+	if lower:match("docker") or lower:match("podman") or lower:match("containerd")
+		or lower:match("lxc") or lower:match("^runc$") then return "Containers" end
+	if lower:match("fxs") or lower:match("asterisk") or lower:match("baresip")
+		or lower:match("sngrep") or lower:match("sip") then return "Telephony" end
+	if lower:match("nginx") or lower:match("lighttpd") or lower:match("ttyd")
+		or lower:match("openssh") or lower:match("dropbear") or lower:match("uhttpd") then return "Web and remote access" end
 	if lower:match("^luci%-") then return "LuCI components" end
 	return "System and networking"
 end
