@@ -62,6 +62,15 @@ local search = packages.parse_available("apk", apk_source, installed, 20, 0, "Lu
 assert(search.count == 1 and #search.packages == 1)
 assert(search.packages[1].name == "luci-app-pbr")
 
+local luci_apps = packages.parse_available("apk", apk_source, installed, 20, 0, "", "LuCI applications")
+assert(luci_apps.count == 2 and #luci_apps.packages == 2)
+assert(luci_apps.packages[1].name == "luci-app-pbr")
+assert(luci_apps.packages[2].name == "luci-app-sqm")
+local vpn_apps = packages.parse_available("apk", apk_source, installed, 20, 0, "", "VPN and tunnels")
+assert(vpn_apps.count == 1 and vpn_apps.packages[1].name == "wireguard-tools")
+local category_page = packages.parse_available("apk", apk_source, installed, 1, 0, "", "LuCI applications")
+assert(category_page.count == 2 and category_page.truncated == true)
+
 local page_one = packages.parse_available("apk", apk_source, installed, 2, 0, "")
 local page_two = packages.parse_available("apk", apk_source, installed, 2, 2, "")
 assert(page_one.count == 5 and page_one.truncated == true)
@@ -91,8 +100,8 @@ local no_source = packages.parse_available("apk", "not-json", installed, 20, 0, 
 assert(no_source.available == false and no_source.count == 0)
 local unknown = packages.parse_available("unknown", {}, installed, 20, 0, "")
 assert(unknown.available == false)
-local bounded = packages.parse_available("apk", apk_source, installed, 1000, 100000, "")
-assert(bounded.limit == 100 and bounded.offset == 5000 and #bounded.packages == 0)
+local bounded = packages.parse_available("apk", apk_source, installed, 1000, 10000000, "")
+assert(bounded.limit == 100 and bounded.offset == 1000000 and #bounded.packages == 0)
 local invalid_names = packages.parse_available("apk", {
 	{ name = "../escape", version = "1", description = "invalid package name" },
 	{ name = "-option", version = "1" },
