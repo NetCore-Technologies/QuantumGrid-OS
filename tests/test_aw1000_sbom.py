@@ -25,6 +25,7 @@ class Aw1000SbomTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.manifest = self.root / "aw1000.manifest"
         self.firmware = self.root / "factory.ubi"
+        self.sysupgrade = self.root / "sysupgrade.bin"
         self.packages = self.root / "packages.tar.zst"
         self.feeds = self.root / "OPENWRT-FEEDS.txt"
         self.phone_source = self.root / "phone-source.tar.gz"
@@ -38,6 +39,7 @@ class Aw1000SbomTests(unittest.TestCase):
             encoding="utf-8",
         )
         self.firmware.write_bytes(b"factory-ubi-image")
+        self.sysupgrade.write_bytes(b"sysupgrade-image")
         self.packages.write_bytes(b"apk-ipk-package-archive")
         self.feeds.write_text("openwrt/base revision abc123\\n", encoding="utf-8")
         self.phone_source.write_bytes(b"pinned-phone-source-archive")
@@ -46,6 +48,7 @@ class Aw1000SbomTests(unittest.TestCase):
         self.args = SBOM.argparse.Namespace(
             manifest=self.manifest,
             firmware_image=self.firmware,
+            sysupgrade_image=self.sysupgrade,
             packages_archive=self.packages,
             feeds_report=self.feeds,
             phone_source_archive=self.phone_source,
@@ -67,7 +70,7 @@ class Aw1000SbomTests(unittest.TestCase):
         sbom = SBOM.build_sbom(self.args)
         self.assertEqual(sbom["bomFormat"], "CycloneDX")
         self.assertEqual(sbom["specVersion"], "1.6")
-        self.assertEqual(len(sbom["components"]), 10)
+        self.assertEqual(len(sbom["components"]), 11)
         packages = [item for item in sbom["components"] if item["type"] == "library"]
         self.assertEqual(
             [(item["name"], item["version"]) for item in packages],
@@ -85,6 +88,12 @@ class Aw1000SbomTests(unittest.TestCase):
             props["quantumgrid:firmware-image-sha256"],
             hashlib.sha256(self.firmware.read_bytes()).hexdigest(),
         )
+        self.assertEqual(
+            props["quantumgrid:sysupgrade-image-sha256"],
+            hashlib.sha256(self.sysupgrade.read_bytes()).hexdigest(),
+        )
+        sysupgrade_component = next(item for item in sbom["components"] if item["name"] == "QuantumGrid OS AW1000 squashfs sysupgrade image")
+        self.assertEqual(sysupgrade_component["hashes"][0]["content"], hashlib.sha256(self.sysupgrade.read_bytes()).hexdigest())
         self.assertEqual(
             props["quantumgrid:package-archive-sha256"],
             hashlib.sha256(self.packages.read_bytes()).hexdigest(),
@@ -135,6 +144,7 @@ class Aw1000SbomTests(unittest.TestCase):
             str(SCRIPT),
             "--manifest", str(self.manifest),
             "--firmware-image", str(self.firmware),
+            "--sysupgrade-image", str(self.sysupgrade),
             "--packages-archive", str(self.packages),
             "--feeds-report", str(self.feeds),
             "--phone-source-archive", str(self.phone_source),
@@ -232,6 +242,12 @@ class Aw1000SbomTests(unittest.TestCase):
         link = self.root / "firmware-link.ubi"
         link.symlink_to(self.firmware)
         self.args.firmware_image = link
+        with self.assertRaises(SBOM.SbomError):
+            SBOM.build_sbom(self.args)
+        self.args.firmware_image = self.firmware
+        sysupgrade_link = self.root / "sysupgrade-link.bin"
+        sysupgrade_link.symlink_to(self.sysupgrade)
+        self.args.sysupgrade_image = sysupgrade_link
         with self.assertRaises(SBOM.SbomError):
             SBOM.build_sbom(self.args)
 
