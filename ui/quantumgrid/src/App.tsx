@@ -4776,7 +4776,7 @@ function OpenWrtAppsPage() {
             placeholder="Search packages (try luci-app-, wireguard, sqm…)"
             aria-label="Search available OpenWrt packages"
           />
-          <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, 0)} disabled={catalogLoading || packageBusy}>
+          <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, 0, catalogCategory)} disabled={catalogLoading || packageBusy}>
             <RefreshCw size={14} /> {catalogLoading ? "Searching…" : "Search feeds"}
           </button>
           <button className="hero-button" onClick={() => { setCatalogSearch(""); setCatalogCategory("All"); void loadPackageCatalog("", 0, "All"); }} disabled={catalogLoading || packageBusy}>
