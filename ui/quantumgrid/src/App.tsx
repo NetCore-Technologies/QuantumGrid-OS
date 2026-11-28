@@ -4586,8 +4586,18 @@ function OpenWrtAppsPage() {
   }, []);
 
   useEffect(() => {
-    void loadPackageCatalog("luci-app-", 0);
-  }, [loadPackageCatalog]);
+    let active = true;
+    fetchRouterPackageCatalog("luci-app-", 0, 60).then((result) => {
+      if (active) setCatalog(result);
+    }).catch((cause) => {
+      if (active) setCatalogError(cause instanceof Error ? cause.message : "The available package catalogue is unavailable.");
+    }).finally(() => {
+      if (active) setCatalogLoading(false);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const runPackageAction = async (operation: "update" | "install" | "remove", selectedName?: string) => {
     const name = (selectedName ?? packageName).trim();
