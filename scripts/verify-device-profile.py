@@ -165,6 +165,8 @@ def validate(profile_path: Path) -> list[str]:
         raise ProfileError("factory, initramfs and sysupgrade artifact globs must be distinct")
 
     config_text = (ROOT / config_file).read_text(encoding="utf-8")
+    if config_text.splitlines().count("CONFIG_DEVEL=y") != 1:
+        raise ProfileError(f"{config_file} must enable CONFIG_DEVEL=y so OpenWrt preserves the selected target during defconfig")
     expected_config = (
         f"CONFIG_TARGET_{target}=y",
         f"CONFIG_TARGET_{target}_{subtarget}=y",
