@@ -5758,7 +5758,10 @@ export async function addRouterSqmClientPolicingPolicy(input: {
   const upload = validPolicingRate(input.uploadKbps);
   const download = validPolicingRate(input.downloadKbps);
   if (upload === undefined && download === undefined) throw new Error("Set an upload cap, a download cap, or both.");
-  if (input.name !== undefined && (input.name.length > 64 || /[\u0000-\u001f\u007f]/.test(input.name))) {
+  if (input.name !== undefined && (input.name.length > 64 || Array.from(input.name).some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 0x1f || code === 0x7f;
+  }))) {
     throw new Error("Client policy name must be 64 characters or fewer and contain no control characters.");
   }
 
