@@ -882,6 +882,7 @@ export interface RouterPackageCatalog {
   count: number;
   offset: number;
   limit: number;
+  category: string;
   truncated: boolean;
   packages: RouterPackageCatalogItem[];
   sampled_at: number;
@@ -2096,15 +2097,24 @@ export async function fetchRouterPackageCatalog(
   query = "",
   offset = 0,
   limit = 40,
+  category = "",
 ): Promise<RouterPackageCatalog> {
   if (query.length > 64 || /[^A-Za-z0-9+_. -]/.test(query)) {
     throw new Error("Use letters, numbers, spaces, plus, underscore, dot and hyphen to search packages.");
   }
-  if (!Number.isInteger(offset) || offset < 0 || offset > 5000 ||
+  if (!Number.isInteger(offset) || offset < 0 || offset > 1000000 ||
       !Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new Error("The package catalogue page request is outside the supported range.");
   }
-  const params = new URLSearchParams({ q: query, offset: String(offset), limit: String(limit) });
+  const supportedCategories = new Set([
+    "", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP",
+    "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components",
+    "System and networking",
+  ]);
+  if (!supportedCategories.has(category)) {
+    throw new Error("Choose a supported OpenWrt package category.");
+  }
+  const params = new URLSearchParams({ q: query, offset: String(offset), limit: String(limit), category });
   const response = await fetch(`${PACKAGES_CATALOG_URL}?${params.toString()}`, {
     method: "GET",
     credentials: "same-origin",
@@ -2126,6 +2136,7 @@ export async function fetchRouterPackageCatalog(
     !("count" in payload) || typeof payload.count !== "number" ||
     !("offset" in payload) || typeof payload.offset !== "number" ||
     !("limit" in payload) || typeof payload.limit !== "number" ||
+    !("category" in payload) || typeof payload.category !== "string" || payload.category !== category ||
     !("truncated" in payload) || typeof payload.truncated !== "boolean" ||
     !("packages" in payload) || !Array.isArray(payload.packages) ||
     !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
