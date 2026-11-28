@@ -4532,7 +4532,7 @@ function OpenWrtAppsPage() {
   const [inventory, setInventory] = useState<RouterPackageInventory | null>(null);
   const [catalog, setCatalog] = useState<RouterPackageCatalog | null>(null);
   const [catalogSearch, setCatalogSearch] = useState("luci-app-");
-  const [catalogCategory, setCatalogCategory] = useState("All");
+  const [catalogCategory, setCatalogCategory] = useState("LuCI applications");
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -4546,11 +4546,11 @@ function OpenWrtAppsPage() {
   const [packageActionOutput, setPackageActionOutput] = useState("");
   const [packageActionError, setPackageActionError] = useState(false);
 
-  const loadPackageCatalog = useCallback(async (query: string, offset = 0) => {
+  const loadPackageCatalog = useCallback(async (query: string, offset = 0, category = "All") => {
     setCatalogLoading(true);
     setCatalogError("");
     try {
-      setCatalog(await fetchRouterPackageCatalog(query, offset, 60));
+      setCatalog(await fetchRouterPackageCatalog(query, offset, 60, category));
     } catch (cause) {
       setCatalogError(cause instanceof Error ? cause.message : "The available package catalogue is unavailable.");
       setCatalog(null);
@@ -4587,7 +4587,7 @@ function OpenWrtAppsPage() {
 
   useEffect(() => {
     let active = true;
-    fetchRouterPackageCatalog("luci-app-", 0, 60).then((result) => {
+    fetchRouterPackageCatalog("luci-app-", 0, 60, "LuCI applications").then((result) => {
       if (active) setCatalog(result);
     }).catch((cause) => {
       if (active) setCatalogError(cause instanceof Error ? cause.message : "The available package catalogue is unavailable.");
@@ -4635,7 +4635,7 @@ function OpenWrtAppsPage() {
       setPackageActionOutput(result.output);
       setConfirmPackageAction(false);
       await loadPackages();
-      await loadPackageCatalog(catalogSearch, 0);
+      await loadPackageCatalog(catalogSearch, 0, catalogCategory);
     } catch (cause) {
       setPackageActionError(true);
       setPackageActionMessage(cause instanceof Error ? cause.message : "Package operation failed.");
@@ -4651,10 +4651,12 @@ function OpenWrtAppsPage() {
   const appsInSection = nativeOpenWrtApps.filter((app) =>
     appSection === "All" || app.section === appSection
   );
-  const catalogCategories = ["All", ...Array.from(new Set((catalog?.packages ?? []).map((item) => item.category))).sort()];
-  const visibleCatalogPackages = (catalog?.packages ?? []).filter((item) =>
-    catalogCategory === "All" || item.category === catalogCategory
-  );
+  const catalogCategories = [
+    "All", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP",
+    "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components",
+    "System and networking",
+  ];
+  const visibleCatalogPackages = catalog?.packages ?? [];
 
   return (
     <div className="module-page openwrt-apps-page">
@@ -4769,7 +4771,7 @@ function OpenWrtAppsPage() {
             value={catalogSearch}
             onChange={(event) => setCatalogSearch(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter") void loadPackageCatalog(catalogSearch, 0);
+              if (event.key === "Enter") void loadPackageCatalog(catalogSearch, 0, catalogCategory);
             }}
             placeholder="Search packages (try luci-app-, wireguard, sqm…)"
             aria-label="Search available OpenWrt packages"
@@ -4777,7 +4779,7 @@ function OpenWrtAppsPage() {
           <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, 0)} disabled={catalogLoading || packageBusy}>
             <RefreshCw size={14} /> {catalogLoading ? "Searching…" : "Search feeds"}
           </button>
-          <button className="hero-button" onClick={() => { setCatalogSearch(""); setCatalogCategory("All"); void loadPackageCatalog("", 0); }} disabled={catalogLoading || packageBusy}>
+          <button className="hero-button" onClick={() => { setCatalogSearch(""); setCatalogCategory("All"); void loadPackageCatalog("", 0, "All"); }} disabled={catalogLoading || packageBusy}>
             All packages
           </button>
           <span>{catalogLoading ? "Loading…" : catalog ? catalog.count.toLocaleString() + " matches" : "No catalogue loaded"}</span>
@@ -4787,7 +4789,7 @@ function OpenWrtAppsPage() {
             <button
               key={category}
               className={catalogCategory === category ? "openwrt-app-filter-button active" : "openwrt-app-filter-button"}
-              onClick={() => setCatalogCategory(category)}
+              onClick={() => { setCatalogCategory(category); void loadPackageCatalog(catalogSearch, 0, category); }}
             >
               {category}
             </button>
@@ -4841,10 +4843,10 @@ function OpenWrtAppsPage() {
         {catalog ? (
           <div className="openwrt-catalog-pagination">
             <span>Showing {catalog.count === 0 ? 0 : catalog.offset + 1}–{Math.min(catalog.offset + catalog.packages.length, catalog.count)} of {catalog.count.toLocaleString()}</span>
-            <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, Math.max(0, catalog.offset - catalog.limit))} disabled={catalogLoading || catalog.offset === 0}>
+            <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, Math.max(0, catalog.offset - catalog.limit), catalogCategory)} disabled={catalogLoading || catalog.offset === 0}>
               Previous
             </button>
-            <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, catalog.offset + catalog.limit)} disabled={catalogLoading || !catalog.truncated}>
+            <button className="hero-button" onClick={() => void loadPackageCatalog(catalogSearch, catalog.offset + catalog.limit, catalogCategory)} disabled={catalogLoading || !catalog.truncated}>
               Next
             </button>
           </div>
