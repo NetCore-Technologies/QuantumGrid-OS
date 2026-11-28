@@ -1,5 +1,5 @@
 #!/bin/sh
-# Verify that an AW1000 factory image exactly matches its release SHA-256 manifest.
+# Verify that an AW1000 UBI or sysupgrade image matches its release SHA-256 manifest.
 set -eu
 
 die() {
@@ -7,7 +7,7 @@ die() {
   exit 1
 }
 
-[ "$#" -eq 2 ] || die "Usage: $0 <AW1000-factory.ubi> <SHA256SUMS>"
+[ "$#" -eq 2 ] || die "Usage: $0 <AW1000-factory.ubi|AW1000-sysupgrade.bin> <SHA256SUMS>"
 IMAGE=$1
 MANIFEST=$2
 
@@ -17,7 +17,8 @@ MANIFEST=$2
 IMAGE_NAME=${IMAGE##*/}
 case "$IMAGE_NAME" in
   *arcadyan_aw1000-squashfs-factory.ubi|QuantumGrid-OS-*-AW1000-squashfs-factory.ubi) ;;
-  *) die "Manifest verification is limited to an Arcadyan AW1000 factory UBI image: $IMAGE_NAME" ;;
+  *arcadyan_aw1000-squashfs-sysupgrade.bin|QuantumGrid-OS-*-AW1000-squashfs-sysupgrade.bin) ;;
+  *) die "Manifest verification is limited to Arcadyan AW1000 factory UBI and sysupgrade images: $IMAGE_NAME" ;;
 esac
 case "$IMAGE_NAME" in
   *[!A-Za-z0-9._+-]*) die "Image filename contains characters not supported by the release manifest verifier." ;;
