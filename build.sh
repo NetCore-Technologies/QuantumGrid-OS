@@ -189,12 +189,40 @@ make download -j"$BUILD_JOBS"
 printf '\n[10/10] Building QuantumGrid %s firmware...\n' "$PLATFORM_MODEL"
 make -j"$BUILD_JOBS" V=s
 
+require_single_image() {
+    local pattern="$1"
+    local description="$2"
+    local -a matches=()
+    mapfile -t matches < <(find "$OUTPUT_PATH" -maxdepth 1 -type f -name "$pattern" -print | sort)
+    if (("${#matches[@]}" != 1)); then
+        printf 'ERROR: expected exactly one %s matching %s; found %s\n' \
+            "$description" "$pattern" "${#matches[@]}" >&2
+        return 1
+    fi
+    if [[ ! -s "${matches[0]}" ]]; then
+        printf 'ERROR: %s is empty: %s\n' "$description" "${matches[0]}" >&2
+        return 1
+    fi
+    printf '%s\n' "${matches[0]}"
+}
+
+FACTORY_IMAGE="$(require_single_image "$FACTORY_GLOB" "factory UBI image")" ||
+    die "OpenWrt did not produce exactly one non-empty factory UBI image"
+INITRAMFS_IMAGE="$(require_single_image "$INITRAMFS_GLOB" "initramfs image")" ||
+    die "OpenWrt did not produce exactly one non-empty initramfs image"
+SYSUPGRADE_IMAGE="$(require_single_image "$SYSUPGRADE_GLOB" "sysupgrade image")" ||
+    die "OpenWrt did not produce exactly one non-empty sysupgrade image"
+
+printf '\nValidating AW1000 firmware image contents...\n'
+bash "$PROJECT_ROOT/scripts/verify-aw1000-ubi.sh" "$FACTORY_IMAGE"
+bash "$PROJECT_ROOT/scripts/verify-aw1000-sysupgrade.sh" "$SYSUPGRADE_IMAGE"
+
 printf '\n==============================================\n'
 printf '       QUANTUMGRID BUILD COMPLETE\n'
 printf '==============================================\n'
 printf 'Device profile: %s (%s)\n' "$DEVICE_PROFILE_ID" "$OPENWRT_DEVICE"
 printf 'OpenWrt commit: %s\n' "$OPENWRT_SHA"
-printf '\nFirmware outputs:\n'
-find "$OUTPUT_PATH" -maxdepth 1 -type f \
-    \( -name "$FACTORY_GLOB" -o -name "$INITRAMFS_GLOB" -o -name "$SYSUPGRADE_GLOB" \) \
-    -print | sort
+printf '\nVerified firmware outputs:\n'
+printf 'Factory UBI:  %s\n' "$FACTORY_IMAGE"
+printf 'Initramfs:    %s\n' "$INITRAMFS_IMAGE"
+printf 'Sysupgrade:   %s\n' "$SYSUPGRADE_IMAGE"
