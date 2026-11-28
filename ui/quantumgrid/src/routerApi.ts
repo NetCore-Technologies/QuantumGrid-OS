@@ -2106,15 +2106,16 @@ export async function fetchRouterPackageCatalog(
       !Number.isInteger(limit) || limit < 1 || limit > 100) {
     throw new Error("The package catalogue page request is outside the supported range.");
   }
+  const requestedCategory = category === "All" ? "" : category;
   const supportedCategories = new Set([
     "", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP",
     "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components",
     "System and networking",
   ]);
-  if (!supportedCategories.has(category)) {
+  if (!supportedCategories.has(requestedCategory)) {
     throw new Error("Choose a supported OpenWrt package category.");
   }
-  const params = new URLSearchParams({ q: query, offset: String(offset), limit: String(limit), category });
+  const params = new URLSearchParams({ q: query, offset: String(offset), limit: String(limit), category: requestedCategory });
   const response = await fetch(`${PACKAGES_CATALOG_URL}?${params.toString()}`, {
     method: "GET",
     credentials: "same-origin",
@@ -2136,7 +2137,7 @@ export async function fetchRouterPackageCatalog(
     !("count" in payload) || typeof payload.count !== "number" ||
     !("offset" in payload) || typeof payload.offset !== "number" ||
     !("limit" in payload) || typeof payload.limit !== "number" ||
-    !("category" in payload) || typeof payload.category !== "string" || payload.category !== category ||
+    !("category" in payload) || typeof payload.category !== "string" || payload.category !== requestedCategory ||
     !("truncated" in payload) || typeof payload.truncated !== "boolean" ||
     !("packages" in payload) || !Array.isArray(payload.packages) ||
     !("sampled_at" in payload) || typeof payload.sampled_at !== "number"
