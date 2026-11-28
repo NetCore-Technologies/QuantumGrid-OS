@@ -2097,7 +2097,7 @@ export async function fetchRouterPackageCatalog(
   offset = 0,
   limit = 40,
 ): Promise<RouterPackageCatalog> {
-  if (query.length > 64 || /[^A-Za-z0-9+_.\\- ]/.test(query)) {
+  if (query.length > 64 || /[^A-Za-z0-9+_. -]/.test(query)) {
     throw new Error("Use letters, numbers, spaces, plus, underscore, dot and hyphen to search packages.");
   }
   if (!Number.isInteger(offset) || offset < 0 || offset > 5000 ||
