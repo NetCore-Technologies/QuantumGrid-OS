@@ -158,8 +158,29 @@ if [[ "$QG_ENABLE_NSS" == "1" ]]; then
     done
 fi
 cd "$OPENWRT_DIR"
+[[ -s .config ]] || die "The validated device configuration was not copied into the OpenWrt build tree"
+grep -Fqx "CONFIG_DEVEL=y" .config || die "The OpenWrt build-tree config lost CONFIG_DEVEL=y before Kconfig generation"
+grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}=y" .config || die "The build-tree config is missing CONFIG_TARGET_${OPENWRT_TARGET}=y before Kconfig generation"
+grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}=y" .config || die "The build-tree config is missing the validated subtarget before Kconfig generation"
+grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}_DEVICE_${OPENWRT_DEVICE}=y" .config || die "The build-tree config is missing the validated AW1000 device before Kconfig generation"
+
+printf '\nGenerating OpenWrt package and target Kconfig metadata...\n'
+make prepare-tmpinfo
+TARGET_KCONFIG="tmp/.config-target.in"
+[[ -s "$TARGET_KCONFIG" ]] || die "OpenWrt did not generate target Kconfig metadata ($TARGET_KCONFIG)"
+for symbol in \
+    "TARGET_${OPENWRT_TARGET}" \
+    "TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}" \
+    "TARGET_${OPENWRT_TARGET}_${OPENWRT_SUBTARGET}_DEVICE_${OPENWRT_DEVICE}"; do
+    if ! grep -Fqx "config $symbol" "$TARGET_KCONFIG"; then
+        printf '\nOpenWrt target metadata is missing required symbol: %s\n' "$symbol" >&2
+        grep -n -F "qualcommax" "$TARGET_KCONFIG" | head -n 40 >&2 || true
+        die "OpenWrt target discovery did not include the validated AW1000 profile"
+    fi
+done
+
 printf '\nPre-defconfig target selection from the validated device profile:\n'
-grep -E '^(CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)|CONFIG_TARGET_[A-Za-z0-9_-]+(_[A-Za-z0-9_-]+)?(_DEVICE_[A-Za-z0-9_-]+)?)=|^# CONFIG_TARGET_' .config | head -n 24 || true
+grep -E '^(CONFIG_DEVEL|CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)|CONFIG_TARGET_[A-Za-z0-9_-]+(_[A-Za-z0-9_-]+)?(_DEVICE_[A-Za-z0-9_-]+)?)=' .config | head -n 24
 make defconfig
 if ! grep -Fqx "CONFIG_TARGET_${OPENWRT_TARGET}=y" .config; then
     printf '\nOpenWrt Kconfig did not retain the selected target. Resolved target symbols:\n' >&2
