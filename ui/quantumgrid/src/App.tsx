@@ -4653,8 +4653,9 @@ function OpenWrtAppsPage() {
   );
   const catalogCategories = [
     "All", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP",
-    "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components",
-    "System and networking",
+    "Security", "Routing", "Quality of service", "Wireless", "Storage and filesystems",
+    "Monitoring and diagnostics", "Containers", "Telephony", "Web and remote access",
+    "Kernel modules", "LuCI components", "System and networking",
   ];
   const visibleCatalogPackages = catalog?.packages ?? [];
 
