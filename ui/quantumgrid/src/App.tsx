@@ -125,6 +125,18 @@ function fmt(value: number, digits = 0) {
   });
 }
 
+function fmtBytes(value: number): string {
+  if (!Number.isFinite(value) || value < 0) return "N/A";
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toLocaleString("en-US", { maximumFractionDigits: size >= 10 || unit === 0 ? 0 : 1 })} ${units[unit]}`;
+}
+
 function formatDurationSeconds(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value) || value < 0) return "N/A";
   let remaining = Math.floor(value);
