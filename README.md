@@ -295,40 +295,58 @@ successful authentication against a live RADIUS server.
 
 ## Firmware images
 
-The Arcadyan AW1000 release has one persistent firmware format: the device-specific
-squashfs factory UBI image. The initramfs image is a temporary RAM-boot recovery/development
-artifact; it is not a persistent firmware installer. Verify downloads on the host with
-`verify-aw1000-release-attestation.sh`, which checks the checksum and the GitHub/Sigstore
-attestation from the exact QuantumGrid release workflow. The release also includes
-`install-aw1000-ubi.sh` and `verify-aw1000-release-manifest.sh`: the on-router installer checks
-the SHA-256 manifest, target board, RAM-boot environment and standard AW1000 MTD geometry before
-it can request a confirmed write. It defaults to read-only preflight. The on-router checksum
-check is not a substitute for host-side attestation verification.
+The Arcadyan AW1000 build publishes two persistent firmware formats and one temporary
+recovery image. Use the factory UBI image for first installation/recovery from the matching
+AW1000 initramfs. Use the OpenWrt sysupgrade archive only to update an already-running,
+compatible OpenWrt/QuantumGrid AW1000 installation. It is not a vendor-firmware installer.
+Verify release downloads on the host with `verify-aw1000-release-attestation.sh`; it checks
+the SHA-256 digest and GitHub/Sigstore attestation from the exact QuantumGrid release workflow.
 
 | Artifact | Intended use |
 |---|---|
-| `*-arcadyan_aw1000-squashfs-factory.ubi` | AW1000 persistent firmware image; use only with the verified AW1000-specific installation route |
+| `*-arcadyan_aw1000-squashfs-factory.ubi` | First installation/recovery through the guarded AW1000 initramfs + UBI path |
+| `*-arcadyan_aw1000-squashfs-sysupgrade.bin` | In-service update from a compatible, already-running OpenWrt/QuantumGrid AW1000 system |
 | `*-arcadyan_aw1000-initramfs-uImage.itb` | Temporary RAM boot for supported recovery and development workflows |
 | `install-aw1000-ubi.sh` | Read-only preflight by default; confirmed factory UBI writer for the standard AW1000 MTD layout |
-| `inspect-aw1000-install-target.sh` | Read-only board, root mount, MTD geometry and required-tool inspection on the currently installed router |
-| `verify-aw1000-release-manifest.sh` | Require one matching SHA-256 manifest entry before the installer proceeds |
+| `verify-aw1000-sysupgrade.sh` | Validates the sysupgrade tar structure and embedded AW1000 board identity |
+| `inspect-aw1000-install-target.sh` | Read-only board, root mount, MTD geometry and required-tool inspection |
+| `verify-aw1000-release-manifest.sh` | Requires one matching SHA-256 manifest entry for either persistent image |
+| `verify-aw1000-release-attestation.sh` | Verifies checksum and publisher/build provenance for a versioned UBI or sysupgrade image |
 | `*-packages.tar.zst` | Package output from the same firmware build |
 | `SHA256SUMS` | Verify the published release assets |
 | `BUILDINFO.txt` | Source commits, configuration hash and build metadata |
-| `QuantumGrid-OS-*-AW1000-SBOM.cdx.json` | CycloneDX 1.6 inventory of image-installed OpenWrt packages and release artifact hashes |
+| `QuantumGrid-OS-*-AW1000-SBOM.cdx.json` | CycloneDX 1.6 inventory, including hashes for both installable firmware images |
 
-QuantumGrid intentionally publishes **no `sysupgrade.bin`** for the AW1000 build. The
-persistent release artifact is the factory `.ubi` image. Do not upload it to a generic LuCI
-sysupgrade form or assume a stock-firmware web installer accepts it.
+### Updating an existing QuantumGrid/OpenWrt installation
 
-For the original standard AW1000 layout, boot the matching initramfs temporarily over UART/TFTP,
-run `inspect-aw1000-install-target.sh` on the currently installed router first, then boot the matching initramfs over UART/TFTP. Verify the release checksum and transfer the factory image, `SHA256SUMS`, `inspect-aw1000-install-target.sh`, `install-aw1000-ubi.sh` and `verify-aw1000-release-manifest.sh` into `/tmp`.
-Then run the installer once without `--write` to inspect its preflight. It accepts only the expected AW1000
-board identity and standard `mtd18`/`mtd20` 100 MiB rootfs layout; it refuses expanded layouts
-and installed squashfs roots. A real write requires `--write` plus typing `ERASE rootfs` at the
-router console. It writes only `rootfs` (`mtd18`) and leaves `rootfs_1` (`mtd20`) untouched.
-This is a destructive recovery/install operation, not a generic in-service upgrade. See
-[Docs/RECOVERY.md](Docs/RECOVERY.md) and back up first.
+Back up the router configuration, verify the release checksum and attestation on your Linux host,
+transfer the sysupgrade image and manifest, then run the target-side manifest check and OpenWrt
+test mode before writing:
+
+```sh
+sh verify-aw1000-release-attestation.sh QuantumGrid-OS-<version>-AW1000-squashfs-sysupgrade.bin SHA256SUMS
+sh /tmp/verify-aw1000-release-manifest.sh /tmp/QuantumGrid-OS-<version>-AW1000-squashfs-sysupgrade.bin /tmp/SHA256SUMS
+sysupgrade -T /tmp/QuantumGrid-OS-<version>-AW1000-squashfs-sysupgrade.bin
+sysupgrade /tmp/QuantumGrid-OS-<version>-AW1000-squashfs-sysupgrade.bin
+```
+
+The final command preserves settings supported by OpenWrt's sysupgrade backup mechanism.
+Use `sysupgrade -n` only when you deliberately want to discard the saved configuration.
+Do not use sysupgrade for first installation, from stock/vendor firmware, or when the device's
+board identity does not match. A passing `sysupgrade -T` is a software compatibility check;
+it does not replace a recoverable UART path and hardware validation.
+
+### First installation or recovery
+
+For the original standard AW1000 layout, boot the matching initramfs temporarily over UART/TFTP.
+Run `inspect-aw1000-install-target.sh` to record board identity and MTD layout, verify the
+release checksum and attestation on the host, then transfer the factory UBI image, manifest,
+installer and verifier into `/tmp`. Run the installer without `--write` first. It accepts
+only the expected AW1000 board identity and standard `mtd18`/`mtd20` 100 MiB rootfs layout;
+expanded layouts are refused. A real write requires `--write` plus typing `ERASE rootfs` at
+the router console. It writes only `rootfs` (`mtd18`) and leaves `rootfs_1` (`mtd20`)
+untouched. This destructive recovery/install operation is separate from an in-service upgrade.
+See [Docs/RECOVERY.md](Docs/RECOVERY.md) and retain a known-good recovery image.
 
 ## Publish the website
 
