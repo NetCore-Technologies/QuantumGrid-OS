@@ -43,6 +43,19 @@ grep -Fxq -- '--source-ref' "$GH_ARGS_LOG"
 grep -Fxq 'refs/tags/qg-v0.4.0' "$GH_ARGS_LOG"
 grep -Fxq -- '--deny-self-hosted-runners' "$GH_ARGS_LOG"
 
+# Sysupgrade release images must bind to the same exact pushed release tag.
+SYSUPGRADE_IMAGE="$WORK/QuantumGrid-OS-v0.4.0-AW1000-squashfs-sysupgrade.bin"
+SYSUPGRADE_MANIFEST="$WORK/SYSUPGRADE-SHA256SUMS"
+printf 'test-sysupgrade-image\\n' > "$SYSUPGRADE_IMAGE"
+(
+  cd "$WORK"
+  sha256sum "$(basename "$SYSUPGRADE_IMAGE")" > "$SYSUPGRADE_MANIFEST"
+)
+: > "$GH_ARGS_LOG"
+sh "$ROOT/scripts/verify-aw1000-release-attestation.sh" "$SYSUPGRADE_IMAGE" "$SYSUPGRADE_MANIFEST"
+grep -Fxq "$SYSUPGRADE_IMAGE" "$GH_ARGS_LOG"
+grep -Fxq 'refs/tags/qg-v0.4.0' "$GH_ARGS_LOG"
+
 # GitHub CLI releases through 2.101.0 have unsafe case-insensitive source-ref comparison.
 for old_version in 1.99.0 2.67.9 2.68.0 2.99.9 2.101.0; do
   : > "$GH_ARGS_LOG"
