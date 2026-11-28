@@ -2109,8 +2109,9 @@ export async function fetchRouterPackageCatalog(
   const requestedCategory = category === "All" ? "" : category;
   const supportedCategories = new Set([
     "", "LuCI applications", "Network protocols", "VPN and tunnels", "DNS and DHCP",
-    "Security", "Routing", "Quality of service", "Kernel modules", "LuCI components",
-    "System and networking",
+    "Security", "Routing", "Quality of service", "Wireless", "Storage and filesystems",
+    "Monitoring and diagnostics", "Containers", "Telephony", "Web and remote access",
+    "Kernel modules", "LuCI components", "System and networking",
   ]);
   if (!supportedCategories.has(requestedCategory)) {
     throw new Error("Choose a supported OpenWrt package category.");
