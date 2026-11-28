@@ -1316,6 +1316,7 @@ function index()
 	entry({"admin", "services", "quantumgrid", "wireless-radio-schedule"}, call("action_wireless_radio_schedule")).leaf = true
 	entry({"admin", "services", "quantumgrid", "usteer-update"}, call("action_usteer_update")).leaf = true
 	entry({"admin", "services", "quantumgrid", "packages"}, call("action_packages")).leaf = true
+	entry({"admin", "services", "quantumgrid", "packages-catalog"}, call("action_package_catalog")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-backup"}, call("action_config_backup")).leaf = true
 	entry({"admin", "services", "quantumgrid", "config-restore"}, call("action_config_restore")).leaf = true
 	entry({"admin", "services", "quantumgrid", "audit"}, call("action_audit_log")).leaf = true
@@ -3926,6 +3927,100 @@ function action_package_operation()
 		package = package ~= "" and package or nil,
 		exit_code = 0,
 		output = output,
+		sampled_at = os.time()
+	})
+end
+
+
+function action_package_catalog()
+	local http = require "luci.http"
+	local fs = require "nixio.fs"
+	local util = require "luci.util"
+
+	local function respond(status, payload)
+		if status then
+			http.status(status, status == 400 and "Bad Request" or
+				status == 405 and "Method Not Allowed" or
+				status == 503 and "Service Unavailable" or "Bad Gateway")
+		end
+		http.header("Cache-Control", "no-store")
+		http.prepare_content("application/json; charset=UTF-8")
+		http.write_json(payload)
+	end
+
+	if http.getenv("REQUEST_METHOD") ~= "GET" then
+		respond(405, { ok = false, error = "GET is required." })
+		return
+	end
+
+	local query = http.formvalue("q", true) or ""
+	if type(query) ~= "string" or #query > 64 or query:match("[^%w%+%._%- ]") then
+		respond(400, { ok = false, error = "Search terms may contain only letters, numbers, spaces, plus, underscore, dot and hyphen (maximum 64 characters)." })
+		return
+	end
+	local limit = tonumber(http.formvalue("limit")) or 40
+	local offset = tonumber(http.formvalue("offset")) or 0
+	if limit ~= math.floor(limit) or limit < 1 or limit > 100
+		or offset ~= math.floor(offset) or offset < 0 or offset > 5000 then
+		respond(400, { ok = false, error = "Package catalogue page bounds are invalid." })
+		return
+	end
+
+	local manager, binary = nil, nil
+	for _, candidate in ipairs({ "/sbin/apk", "/usr/bin/apk" }) do
+		if fs.access(candidate) == true then manager, binary = "apk", candidate break end
+	end
+	if not binary then
+		for _, candidate in ipairs({ "/bin/opkg", "/usr/bin/opkg" }) do
+			if fs.access(candidate) == true then manager, binary = "opkg", candidate break end
+		end
+	end
+	if not binary then
+		respond(503, { ok = false, error = "No supported APK or OPKG package manager was detected." })
+		return
+	end
+
+	local available_command = manager == "apk"
+		and (binary .. " query --fields all --format json --available '*'")
+		or (binary .. " list")
+	local installed_command = manager == "apk"
+		and (binary .. " list -I")
+		or (binary .. " list-installed")
+	local available_ok, available_output = pcall(util.exec, available_command)
+	if not available_ok or type(available_output) ~= "string" or available_output == "" then
+		respond(503, { ok = false, error = "The package manager could not read the available repository indexes. Refresh package feeds and check the configured repositories." })
+		return
+	end
+
+	local parser = require "luci.quantumgrid.packages"
+	local source = available_output
+	if manager == "apk" then
+		local jsonc = require "luci.jsonc"
+		local parse_ok, parsed = pcall(jsonc.parse, available_output)
+		if not parse_ok or type(parsed) ~= "table" then
+			respond(502, { ok = false, error = "APK returned an invalid repository catalogue. Refresh package feeds and inspect the APK database." })
+			return
+		end
+		source = parsed
+	end
+
+	local installed_ok, installed_output = pcall(util.exec, installed_command)
+	local installed = installed_ok and type(installed_output) == "string"
+		and parser.parse(manager, installed_output, 2000) or { packages = {} }
+	local catalogue = parser.parse_available(manager, source, installed, limit, offset, query)
+	if not catalogue.available then
+		respond(502, { ok = false, error = "The available package catalogue could not be parsed." })
+		return
+	end
+
+	respond(nil, {
+		ok = true,
+		manager = catalogue.manager,
+		count = catalogue.count,
+		offset = catalogue.offset,
+		limit = catalogue.limit,
+		truncated = catalogue.truncated,
+		packages = catalogue.packages,
 		sampled_at = os.time()
 	})
 end
