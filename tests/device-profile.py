@@ -41,7 +41,7 @@ class DeviceProfileTests(unittest.TestCase):
 
     def test_aw1000_profile_matches_its_pinned_openwrt_config(self) -> None:
         fields = VALIDATOR.validate(PROFILE)
-        self.assertEqual(len(fields), 17)
+        self.assertEqual(len(fields), 18)
         self.assertEqual(fields[0], "arcadyan-aw1000")
         self.assertEqual(fields[3:6], ["qualcommax", "ipq807x", "arcadyan_aw1000"])
         self.assertEqual(fields[7], "1")
@@ -49,15 +49,17 @@ class DeviceProfileTests(unittest.TestCase):
         self.assertIn("CONFIG_ATH11K_NSS_SUPPORT=y", fields[11])
         self.assertEqual(fields[12], "1")
         self.assertEqual(fields[15], "*arcadyan_aw1000-squashfs-factory.ubi")
+        self.assertEqual(fields[16], "*arcadyan_aw1000-initramfs-uImage.itb")
+        self.assertEqual(fields[17], "*arcadyan_aw1000-squashfs-sysupgrade.bin")
 
-    def test_line_output_is_a_fixed_seventeen_field_contract(self) -> None:
+    def test_line_output_is_a_fixed_eighteen_field_contract(self) -> None:
         result = subprocess.run(
             [sys.executable, str(VALIDATOR_PATH), str(PROFILE), "--lines"],
             check=True,
             capture_output=True,
             text=True,
         )
-        self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 17)
+        self.assertEqual(len(result.stdout.rstrip("\n").splitlines()), 18)
 
     def test_tab_output_is_a_fixed_seventeen_field_contract(self) -> None:
         result = subprocess.run(
@@ -66,13 +68,14 @@ class DeviceProfileTests(unittest.TestCase):
             capture_output=True,
             text=True,
         )
-        self.assertEqual(len(result.stdout.rstrip("\n").split("\t")), 17)
+        self.assertEqual(len(result.stdout.rstrip("\n").split("\t")), 18)
 
     def test_device_must_be_selected_by_the_profile_config(self) -> None:
         profile = self.profile()
         profile["platform"]["openwrt_device"] = "another_device"
         profile["artifacts"]["factory_glob"] = "*another_device-squashfs-factory.ubi"
         profile["artifacts"]["initramfs_glob"] = "*another_device-initramfs-uImage.itb"
+        profile["artifacts"]["sysupgrade_glob"] = "*another_device-squashfs-sysupgrade.bin"
         with self.assertRaisesRegex(VALIDATOR.ProfileError, "must contain exactly one"):
             VALIDATOR.validate(self.write_profile(profile))
 
@@ -85,7 +88,13 @@ class DeviceProfileTests(unittest.TestCase):
     def test_artifact_globs_must_match_the_declared_device(self) -> None:
         profile = self.profile()
         profile["artifacts"]["factory_glob"] = "*another_device-squashfs-factory.ubi"
-        with self.assertRaisesRegex(VALIDATOR.ProfileError, "must both include"):
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "all firmware artifact globs"):
+            VALIDATOR.validate(self.write_profile(profile))
+
+    def test_sysupgrade_artifact_must_be_distinct(self) -> None:
+        profile = self.profile()
+        profile["artifacts"]["sysupgrade_glob"] = profile["artifacts"]["factory_glob"]
+        with self.assertRaisesRegex(VALIDATOR.ProfileError, "must be distinct"):
             VALIDATOR.validate(self.write_profile(profile))
 
     def test_duplicate_board_compatibility_ids_are_rejected(self) -> None:
